@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { getDoc, searchDocs } from '@strummer/core'
+import { getDoc, listVersions, resolveVersion, searchDocs } from '@strummer/core'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
 import type { Embedder } from './embedder.js'
@@ -58,7 +58,14 @@ export function createStrummerServer(
       inputSchema: {
         query: z.string().describe('search terms, e.g. "useState" or "how to memoize a value"'),
         library: z.string().optional().describe('restrict to a library, e.g. "react"'),
-        version: z.string().optional().describe('restrict to a doc version, e.g. "19.0"'),
+        version: z.string().optional().describe('restrict to an exact doc version, e.g. "19.2"'),
+        installed: z
+          .string()
+          .optional()
+          .describe(
+            'the version/range installed in the project (e.g. "^18.2.0"); resolved to the ' +
+              'best matching doc release. Requires `library`. Prefer this over `version`.',
+          ),
         type: z.string().optional().describe('restrict to a kind, e.g. "function" | "guide"'),
         limit: z.number().int().min(1).max(25).optional().describe('max results (default 8)'),
       },
@@ -76,9 +83,26 @@ export function createStrummerServer(
             resourceUri: z.string(),
           }),
         ),
+        resolvedVersion: z.string().nullable().optional(),
+        versionNote: z.string().optional(),
       },
     },
     async (args) => {
+      // Resolve an installed version/range to an indexed doc release.
+      let effectiveVersion = args.version
+      let resolvedVersion: string | null | undefined
+      let versionNote: string | undefined
+      if (args.installed) {
+        if (args.library) {
+          const res = resolveVersion(listVersions(db, args.library), args.installed)
+          resolvedVersion = res.resolved
+          versionNote = res.note
+          if (!args.version && res.resolved) effectiveVersion = res.resolved
+        } else {
+          versionNote = 'provide `library` to resolve an installed version'
+        }
+      }
+
       // Embed the query for hybrid search; fall back to FTS-only if it fails.
       let queryVector: number[] | undefined
       if (embedder) {
@@ -90,12 +114,15 @@ export function createStrummerServer(
       }
       const results = searchDocs(db, args.query, {
         library: args.library,
-        version: args.version,
+        version: effectiveVersion,
         type: args.type,
         limit: args.limit,
         queryVector,
       }).map((r) => ({ ...r, resourceUri: `strummer://doc/${r.id}` }))
-      const structured = { results }
+
+      const structured = args.installed
+        ? { results, resolvedVersion: resolvedVersion ?? null, versionNote }
+        : { results }
       return { content: [text(structured)], structuredContent: structured }
     },
   )
@@ -116,6 +143,20 @@ export function createStrummerServer(
       // Spread to a fresh object literal so it satisfies the SDK's
       // structuredContent index-signature type.
       return { content: [text(doc)], structuredContent: { ...doc } }
+    },
+  )
+
+  server.registerTool(
+    'list_versions',
+    {
+      title: 'List indexed versions',
+      description: 'List the documentation versions indexed for a library, newest first.',
+      inputSchema: { library: z.string().describe('library name, e.g. "react"') },
+      outputSchema: { library: z.string(), versions: z.array(z.string()) },
+    },
+    (args) => {
+      const structured = { library: args.library, versions: listVersions(db, args.library) }
+      return { content: [text(structured)], structuredContent: structured }
     },
   )
 

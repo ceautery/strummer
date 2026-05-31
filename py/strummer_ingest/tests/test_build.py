@@ -70,3 +70,27 @@ def test_build_index_rejects_dim_mismatch(tmp_path):
 
     with pytest.raises(ValueError, match="embed_dim"):
         build_index(_fragments(), FakeEmbedder(dim=EMBED_DIM + 1), tmp_path / "bad.sqlite")
+
+
+def _frag(version: str, title: str) -> Fragment:
+    return Fragment(
+        library="react", version=version, title=title, body=f"{title} body text", type="hook"
+    )
+
+
+def test_append_adds_another_version_to_one_index(tmp_path):
+    out = tmp_path / "react.sqlite"
+    build_index([_frag("19.2", "useState")], FakeEmbedder(), out)
+    build_index([_frag("18.3.1", "useState")], FakeEmbedder(), out, append=True)
+
+    conn = _open(str(out))
+    versions = {v for (v,) in conn.execute("SELECT DISTINCT version FROM docs").fetchall()}
+    assert versions == {"19.2", "18.3.1"}
+    assert conn.execute("SELECT COUNT(*) FROM docs").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM docs_vec").fetchone()[0] == 2
+    # meta seeded exactly once.
+    assert (
+        conn.execute("SELECT COUNT(*) FROM strummer_meta WHERE key='schema_version'").fetchone()[0]
+        == 1
+    )
+    conn.close()

@@ -16,21 +16,37 @@ def build_index(
     out_path: str | Path,
     *,
     builder_version: str = "ingest",
+    append: bool = False,
 ) -> int:
-    """Build a fresh index at ``out_path`` from ``fragments``. Returns doc count."""
+    """Build (or append to) an index at ``out_path`` from ``fragments``.
+
+    With ``append=True`` and an existing file, add fragments to the current index
+    (e.g. another version of the same library) instead of recreating it. Returns
+    the number of fragments written in this call.
+    """
     if embedder.dim != dbmod.EMBED_DIM:
         raise ValueError(f"embedder dim {embedder.dim} != schema embed_dim {dbmod.EMBED_DIM}")
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    for p in (out, out.with_name(out.name + "-wal"), out.with_name(out.name + "-shm")):
-        p.unlink(missing_ok=True)
+    reuse = append and out.exists()
+    if not reuse:
+        for p in (out, out.with_name(out.name + "-wal"), out.with_name(out.name + "-shm")):
+            p.unlink(missing_ok=True)
 
     frags = list(fragments)
     conn = dbmod.open_writer(out)
     try:
-        dbmod.apply_schema(conn)
-        dbmod.seed_meta(conn, builder_version=builder_version)
+        if reuse:
+            existing = dict(conn.execute("SELECT key, value FROM strummer_meta").fetchall())
+            if int(existing.get("schema_version", -1)) != dbmod.SCHEMA_VERSION:
+                raise ValueError(
+                    f"cannot append: existing index is schema "
+                    f"v{existing.get('schema_version')}, expected v{dbmod.SCHEMA_VERSION}"
+                )
+        else:
+            dbmod.apply_schema(conn)
+            dbmod.seed_meta(conn, builder_version=builder_version)
 
         ids = [
             dbmod.insert_doc(

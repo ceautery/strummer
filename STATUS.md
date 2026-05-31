@@ -39,17 +39,23 @@
   the server stays a self-contained Node process, no Python at serve time.
   Verified on the real index: `useState` now ranks the useState hook #1; pure
   semantic queries ("share state between components") hit the right guide.
-- Dev container provisions pnpm + uv. **16 TS + 35 Py tests** (1 skipped real
+- **Version-pinning shipped:** `core.resolveVersion` (semver; exact →
+  nearest-same-major → refuse, never silently wrong) + `listVersions`. The
+  ingester `build --append` puts multiple versions in one index; the real
+  `data/react.sqlite` now holds **19.2 + 18.3.1 + 17.0.2** (2,905 fragments).
+  `search_docs` takes `installed` (version/range) → resolves → filters and
+  reports `resolvedVersion`/`versionNote`; new `list_versions` tool. Verified:
+  installed `^18.2.0` → React 18.3.1 docs; `16.8.0` → flagged, not silently 19.x.
+- Dev container provisions pnpm + uv. **26 TS + 36 Py tests** (1 skipped real
   embed), all green.
 
 ## Next action
 
 1. **`@strummer/cli`** — thin human entry over `core` (search/get from the
    terminal; later `ingest`/`serve` wrappers).
-2. **Version-pin resolution** — map an installed dependency semver to the doc
-   release (nearest-same-major, per ARCHITECTURE §7.2), wired into `search_docs`.
-3. Ingestion refinements: drop the TOC bleed into first sections; richer
-   `symbol` extraction; add the Dash docset adapter (second source).
+2. Ingestion refinements: drop the TOC bleed into first sections; richer
+   `symbol` extraction.
+3. **Dash docset adapter** — second source type (plain-HTML + searchIndex).
 4. Distribution: Homebrew tap; CI mirroring `pnpm gate`.
 
 ## How to build an index / register the server today

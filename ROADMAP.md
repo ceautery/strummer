@@ -35,8 +35,11 @@ installed version Z" and get a precise, cited answer over MCP.
       1,279-fragment index built and served over MCP. (Dash adapter: later.)
 - [x] **Hybrid search:** sqlite-vec KNN + RRF fusion with bm25 in `searchDocs`;
       in-server query embedding via transformers.js (matches fastembed, ADR 0003).
+- [x] **Version pinning:** `resolveVersion` (exact → nearest-same-major →
+      refuse) + multi-version index (`build --append`); `search_docs installed`
+      + `list_versions`. React index holds 19.2/18.3.1/17.0.2.
 - [ ] `@strummer/cli` thin human entry over `core`.
-- [ ] Version pinning: resolve the project's installed dependency versions.
+- [ ] Detect the installed version from a project (package.json/lockfile).
 - [ ] Second source adapter: Dash docsets (plain-HTML + searchIndex).
 - [ ] Ingest existing **Dash** docsets to bootstrap coverage (aspirational).
 - [ ] Reuse/ingest **DevDocs** sources where licensing allows (aspirational).

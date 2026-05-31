@@ -83,4 +83,29 @@ describe('strummer MCP server', () => {
     const doc = JSON.parse(first.text)
     expect(doc).toMatchObject({ id, symbol: 'useState' })
   })
+
+  it('lists the indexed versions for a library', async () => {
+    const res = await client.callTool({ name: 'list_versions', arguments: { library: 'react' } })
+    expect(res.structuredContent).toMatchObject({ library: 'react', versions: ['19.0'] })
+  })
+
+  it('resolves an installed version to a doc release', async () => {
+    const res = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'useState', library: 'react', installed: '19.0.0' },
+    })
+    const sc = res.structuredContent as { resolvedVersion: string; results: unknown[] }
+    expect(sc.resolvedVersion).toBe('19.0')
+    expect(sc.results).toHaveLength(1)
+  })
+
+  it('reports when the installed major is not indexed (no silent wrong version)', async () => {
+    const res = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'useState', library: 'react', installed: '18.0.0' },
+    })
+    const sc = res.structuredContent as { resolvedVersion: string | null; versionNote: string }
+    expect(sc.resolvedVersion).toBeNull()
+    expect(sc.versionNote).toContain('available versions')
+  })
 })

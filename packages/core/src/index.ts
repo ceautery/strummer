@@ -7,3 +7,4 @@ export {
 } from './schema.js'
 export { searchDocs } from './search.js'
 export type { DocFragment, SchemaMeta, SearchOptions, SearchResult } from './types.js'
+export { listVersions, resolveVersion, type VersionResolution } from './version.js'

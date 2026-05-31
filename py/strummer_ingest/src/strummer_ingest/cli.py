@@ -58,7 +58,11 @@ def _cmd_build(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int
     embedder = FakeEmbedder() if args.embedder == "fake" else FastEmbedEmbedder()
     sys.stderr.write(f"embedding with {args.embedder} and building {args.out} ...\n")
     count = build_index(
-        fragments, embedder, args.out, builder_version=f"devdocs:{args.slug or 'local'}"
+        fragments,
+        embedder,
+        args.out,
+        builder_version=f"devdocs:{args.slug or 'local'}",
+        append=args.append,
     )
     _emit(
         {
@@ -95,6 +99,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--embedder", choices=["fastembed", "fake"], default="fastembed", help="embedder to use"
     )
     build.add_argument("--workdir", help="download dir for --slug (default: a temp dir)")
+    build.add_argument(
+        "--append",
+        action="store_true",
+        help="add to an existing index (e.g. another version) instead of recreating it",
+    )
 
     args = parser.parse_args(argv)
 
