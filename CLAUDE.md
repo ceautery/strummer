@@ -59,12 +59,11 @@ vision and `ARCHITECTURE.md` for the technical design.
 - **Python:** docs-ingestion package. Lint/format: **Ruff**. Test: **pytest**.
 - **The green gate (run before every commit):**
   ```
-  # placeholder until scaffold lands — see ARCHITECTURE.md / package scripts
-  pnpm lint && pnpm test         # TypeScript side
-  ruff check . && ruff format --check . && pytest   # Python side
+  pnpm gate
   ```
-  A single top-level task that runs all of the above will be wired up during
-  scaffolding; until then run each side explicitly.
+  Runs Biome (lint+format) → tsc typecheck (all TS packages) → Vitest, then
+  Ruff (lint+format) → pytest. Defined in `scripts/gate.sh`. Nothing commits or
+  pushes unless this is 100% green.
 
 ## Working with Dynamic Workflows
 

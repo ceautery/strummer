@@ -7,6 +7,20 @@ export interface SchemaMeta {
   builderVersion: string | null
 }
 
+/** A full documentation fragment — the complete record for one `docs` row. */
+export interface DocFragment {
+  id: number
+  library: string
+  version: string
+  title: string
+  symbol: string | null
+  type: string | null
+  headingPath: string | null
+  url: string | null
+  attribution: string | null
+  body: string
+}
+
 /** Filters and limits for a docs search. */
 export interface SearchOptions {
   library?: string

@@ -20,23 +20,29 @@
   better-sqlite3 + sqlite-vec, Biome, Vitest, tsdown) and `py/strummer_ingest`
   (uv; Ruff, pytest). `pnpm gate` runs both toolchains.
 - **Polyglot boundary proven (red→green):** Python builds `fixtures/golden.sqlite`
-  (schema + FTS5 + vec0 float[384]); TS `openDb`/`searchDocs` reads it, asserts
-  the schema contract, and finds `react/useState` via FTS with no cross-library
-  leakage. sqlite-vec verified loading on **both** runtimes. 6 TS + 2 Py tests.
-- Dev container (`docker/`) now provisions pnpm + uv for reproducibility.
+  (schema + FTS5 + vec0 float[384]); TS `openDb`/`searchDocs`/`getDoc` reads it,
+  asserts the schema contract, finds `react/useState` via FTS with no
+  cross-library leakage. sqlite-vec verified on **both** runtimes.
+- **`@strummer/mcp` shipped:** MCP server (SDK 1.29) over `core` exposing
+  `search_docs` (compact + `resourceUri`), `get_doc` (full body), and the
+  `strummer://doc/{id}` resource. Tested via in-memory transport AND a real
+  stdio subprocess. License: **Apache-2.0** (ADR 0002).
+- Dev container (`docker/`) provisions pnpm + uv. 13 TS + 2 Py tests, all green.
 
 ## Next action
 
-1. **Add `@strummer/mcp`** — wire `search_docs` + `get_doc` MCP tools (SDK 1.29)
-   over `core`, with resource links and `structuredContent` (TDD).
-2. **Add `@strummer/cli`** — thin human entry over `core`.
-3. **Real ingestion:** implement `get_doc` in core (fetch full body by id), then
-   the first real Python source adapter (Dash docset and/or DevDocs) against
-   **React 19**, plus version-pin resolution.
-4. **Hybrid search:** real bge-small embeddings + sqlite-vec KNN + RRF fusion.
+1. **Add `@strummer/cli`** — thin human entry over `core` (search/get from the
+   terminal; later: `ingest`, `serve`).
+2. **Real ingestion (Python):** first source adapter (Dash docset and/or
+   DevDocs) against **React 19**; HTML → clean fragments → FTS5; version-pin
+   resolution (nearest-same-major, per ARCHITECTURE §7.2).
+3. **Hybrid search:** real bge-small embeddings (fastembed) + sqlite-vec KNN +
+   RRF fusion in `core.searchDocs`, surfaced through `search_docs`.
 
-(Milestone 0 + the boundary proof are committed; push to GitHub at this
-milestone boundary.)
+## How register/run today
+
+`claude mcp add strummer -- strummer-mcp <index.sqlite>` (see
+`packages/mcp/README.md`). Build with `pnpm build`.
 
 ## How to resume cold
 

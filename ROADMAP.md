@@ -28,7 +28,8 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] **Polyglot boundary proof:** Python writes a SQLite index; TS reads it
       back end-to-end (smallest possible red→green step).
 - [x] SQLite index schema (FTS5 + vec0; title/body/symbol/library/version).
-- [ ] MCP tools: `search_docs`, `get_doc` (structured, resource-link output).
+- [x] MCP tools: `search_docs`, `get_doc` + `strummer://doc/{id}` resource
+      (structured, resource-link output; SDK 1.29).
 - [ ] `@strummer/cli` thin human entry over `core`.
 - [ ] Python ingestion pipeline: HTML → clean fragments → FTS5 index.
 - [ ] First real source adapter (Dash docset / DevDocs) against React 19.
