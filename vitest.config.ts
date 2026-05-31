@@ -8,6 +8,9 @@ export default defineConfig({
       '@strummer/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
       '@strummer/embed': fileURLToPath(new URL('./packages/embed/src/index.ts', import.meta.url)),
       '@strummer/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
+      '@strummer/browser': fileURLToPath(
+        new URL('./packages/browser/src/index.ts', import.meta.url),
+      ),
     },
   },
   test: {
