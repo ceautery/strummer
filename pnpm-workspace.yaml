@@ -5,3 +5,8 @@ packages:
 # prebuilt native binary; pnpm requires explicitly approving build scripts.
 allowBuilds:
   better-sqlite3: true
+  onnxruntime-node: true
+  # transformers.js transitive deps; their build scripts aren't needed for
+  # text embedding (sharp = image processing).
+  protobufjs: false
+  sharp: false

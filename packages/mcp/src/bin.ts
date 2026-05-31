@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { openDb } from '@strummer/core'
+import { QueryEmbedder } from './embedder.js'
 import { createStrummerServer } from './index.js'
 
 const indexPath = process.env.STRUMMER_INDEX ?? process.argv[2]
@@ -10,5 +11,5 @@ if (!indexPath) {
 }
 
 const db = openDb(indexPath)
-const server = createStrummerServer(db)
+const server = createStrummerServer(db, { embedder: new QueryEmbedder() })
 await server.connect(new StdioServerTransport())

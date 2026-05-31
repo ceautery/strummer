@@ -6,15 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": [
-      "**/*.ts",
-      "**/*.tsx",
-      "**/*.js",
-      "**/*.json",
-      "**/*.jsonc",
-      "!py/**",
-      "!fixtures/**"
-    ]
+    "includes": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.json", "**/*.jsonc", "!py", "!fixtures"]
   },
   "formatter": {
     "enabled": true,

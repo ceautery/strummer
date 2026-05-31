@@ -18,6 +18,9 @@ venv/
 *.egg-info/
 .python-version
 
+# transformers.js downloads embedding models into a cache dir.
+.cache/
+
 # --- Strummer build artifacts ---
 # Built docset/index databases are reproducible artifacts, never committed.
 /data/

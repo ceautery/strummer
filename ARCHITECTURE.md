@@ -55,6 +55,10 @@ file-as-contract safe.
 - **@modelcontextprotocol/sdk** 1.29.x — v1 subpath imports (`McpServer`,
   `StdioServerTransport`). v2 (split server/client) expected Q1 2026; keep the
   MCP layer thin so a port is contained. Zod 3.25/4.0 peer dep.
+- **@huggingface/transformers** (transformers.js) — the server embeds queries
+  with `Xenova/bge-small-en-v1.5` (CLS pooling + normalize), which reproduces the
+  Python-`fastembed` document vectors exactly (verified cosine 1.0). Keeps the
+  server a self-contained Node process — no Python at serve time (ADR 0003).
 
 **Python (uv-managed, target 3.12):**
 - uv 0.11.x (project + lockfile + interpreter pin) · Ruff 0.15.x (lint+format)

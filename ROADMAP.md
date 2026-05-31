@@ -33,10 +33,11 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] Python ingestion pipeline: HTML → clean fragments → FTS5 + vectors.
 - [x] First real source adapter (**DevDocs**) against **React 19.2** — a
       1,279-fragment index built and served over MCP. (Dash adapter: later.)
-- [ ] **Hybrid search:** sqlite-vec KNN + RRF fusion with bm25 in `searchDocs`
-      (the stored embeddings already exist; ranking needs it).
+- [x] **Hybrid search:** sqlite-vec KNN + RRF fusion with bm25 in `searchDocs`;
+      in-server query embedding via transformers.js (matches fastembed, ADR 0003).
 - [ ] `@strummer/cli` thin human entry over `core`.
 - [ ] Version pinning: resolve the project's installed dependency versions.
+- [ ] Second source adapter: Dash docsets (plain-HTML + searchIndex).
 - [ ] Ingest existing **Dash** docsets to bootstrap coverage (aspirational).
 - [ ] Reuse/ingest **DevDocs** sources where licensing allows (aspirational).
 - [ ] Hybrid semantic search via `sqlite-vec` + local embeddings (aspirational).

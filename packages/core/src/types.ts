@@ -28,6 +28,12 @@ export interface SearchOptions {
   type?: string
   /** Defaults to 8, clamped to 25. */
   limit?: number
+  /**
+   * Optional query embedding (length must equal the schema's embed_dim). When
+   * provided, results fuse FTS (bm25) with vector KNN via reciprocal rank
+   * fusion; when omitted, search is full-text only.
+   */
+  queryVector?: number[]
 }
 
 /** One search hit. Compact by design — full bodies are fetched separately. */
@@ -38,7 +44,7 @@ export interface SearchResult {
   type: string | null
   library: string
   version: string
-  /** FTS5 bm25 score; lower is a better match. */
+  /** Relevance score; higher is better. Results are pre-sorted best-first. */
   score: number
   /** Short highlighted excerpt from the body. */
   snippet: string

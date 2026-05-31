@@ -2,6 +2,12 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import { getDoc, searchDocs } from '@strummer/core'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
+import type { Embedder } from './embedder.js'
+
+export interface ServerOptions {
+  /** When provided, queries are embedded and fused with FTS (hybrid search). */
+  embedder?: Embedder
+}
 
 const INSTRUCTIONS = `Strummer serves version-pinned library documentation.
 
@@ -32,11 +38,15 @@ function text(value: unknown) {
  * Build a Strummer MCP server over an open index. The caller owns the db handle
  * (open it with `openDb` from `@strummer/core`) and its lifecycle.
  */
-export function createStrummerServer(db: DatabaseType.Database): McpServer {
+export function createStrummerServer(
+  db: DatabaseType.Database,
+  options: ServerOptions = {},
+): McpServer {
   const server = new McpServer(
     { name: 'strummer', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
+  const embedder = options.embedder
 
   server.registerTool(
     'search_docs',
@@ -68,12 +78,22 @@ export function createStrummerServer(db: DatabaseType.Database): McpServer {
         ),
       },
     },
-    (args) => {
+    async (args) => {
+      // Embed the query for hybrid search; fall back to FTS-only if it fails.
+      let queryVector: number[] | undefined
+      if (embedder) {
+        try {
+          queryVector = await embedder.embed(args.query)
+        } catch {
+          queryVector = undefined
+        }
+      }
       const results = searchDocs(db, args.query, {
         library: args.library,
         version: args.version,
         type: args.type,
         limit: args.limit,
+        queryVector,
       }).map((r) => ({ ...r, resourceUri: `strummer://doc/${r.id}` }))
       const structured = { results }
       return { content: [text(structured)], structuredContent: structured }

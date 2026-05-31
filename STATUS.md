@@ -32,21 +32,25 @@
   `strummer-ingest build --slug react`. Produced a **1,279-fragment** index
   (`data/react.sqlite`, gitignored/reproducible) and queried it through the MCP
   server. The three leaf modules were built by a **parallel fan-out workflow**.
-- Dev container provisions pnpm + uv. **13 TS + 35 Py tests** (1 skipped real
+- **Hybrid search shipped:** `core.searchDocs` fuses FTS5/bm25 with `sqlite-vec`
+  KNN via reciprocal rank fusion (optional `queryVector`). The MCP server embeds
+  queries in-process with transformers.js (`Xenova/bge-small-en-v1.5`), which
+  reproduces the Python-`fastembed` vectors exactly (cosine 1.0, ADR 0003) — so
+  the server stays a self-contained Node process, no Python at serve time.
+  Verified on the real index: `useState` now ranks the useState hook #1; pure
+  semantic queries ("share state between components") hit the right guide.
+- Dev container provisions pnpm + uv. **16 TS + 35 Py tests** (1 skipped real
   embed), all green.
 
 ## Next action
 
-1. **Hybrid search (highest value):** FTS-only ranking is rough for exact-symbol
-   queries (e.g. `useState` doesn't top the results). Add `sqlite-vec` KNN over
-   the stored 384-d vectors + **RRF fusion** with bm25 in `core.searchDocs`
-   (query embedding via fastembed), surfaced through `search_docs`. TDD.
-2. **`@strummer/cli`** — thin human entry over `core` (search/get; later
-   `ingest`/`serve`).
-3. **Version-pin resolution** — map an installed dependency semver to the doc
-   release (nearest-same-major, per ARCHITECTURE §7.2).
-4. Ingestion refinements: drop TOC bleed into first sections; richer `symbol`
-   extraction.
+1. **`@strummer/cli`** — thin human entry over `core` (search/get from the
+   terminal; later `ingest`/`serve` wrappers).
+2. **Version-pin resolution** — map an installed dependency semver to the doc
+   release (nearest-same-major, per ARCHITECTURE §7.2), wired into `search_docs`.
+3. Ingestion refinements: drop the TOC bleed into first sections; richer
+   `symbol` extraction; add the Dash docset adapter (second source).
+4. Distribution: Homebrew tap; CI mirroring `pnpm gate`.
 
 ## How to build an index / register the server today
 

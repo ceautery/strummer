@@ -6,10 +6,13 @@ file (built by `strummer-ingest`) read-only and serves queries.
 
 ## Tools
 
-- **`search_docs`** — full-text search. Inputs: `query`, optional
-  `library`/`version`/`type`/`limit` (default 8, max 25). Returns **compact**
-  results (`id`, `title`, `symbol`, `type`, `library`, `version`, `score`,
-  `snippet`, `resourceUri`) as `structuredContent` — never full bodies.
+- **`search_docs`** — **hybrid** search: FTS5/bm25 fused with vector KNN via
+  reciprocal rank fusion. Inputs: `query`, optional `library`/`version`/`type`/
+  `limit` (default 8, max 25). Returns **compact** results (`id`, `title`,
+  `symbol`, `type`, `library`, `version`, `score`, `snippet`, `resourceUri`) as
+  `structuredContent` — never full bodies. The query is embedded in-process with
+  transformers.js (`Xenova/bge-small-en-v1.5`), matching the indexed vectors
+  (ADR 0003); the model (~130 MB) downloads once on first query.
 - **`get_doc`** — inputs: `id`. Returns the full fragment (the one place bodies
   are returned). Errors if the id is unknown.
 
