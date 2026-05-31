@@ -244,3 +244,74 @@ network), evaluate declarative assertions (status + jsonpath), and return
 `{ status, latencyMs, assertions[], bodyHandle }` with the body behind a
 `strummer://run/<id>/body` handle. Secrets, mutation gating, scripts, contract
 validation, and MCP/CLI wiring layer on next.
+
+---
+
+## 10. Pillar 3 — Browser / UI testing (`@strummer/browser`)
+
+Decisions in ADR 0006; research in `docs/research/2026-05-31-pillar3-browser-testing.md`.
+All TypeScript, built **thin on stable `playwright-core` 1.60.0** (NOT a wrap of
+`@playwright/mcp`, which pins an alpha core and inlines artifacts).
+
+```
+packages/browser/src/
+  browser/     # browser/context/page lifecycle; one browser/server, ephemeral
+               # isolated context per session; idle reaper; concurrency/timeout caps
+  snapshot/    # ARIA accessibility-tree capture + serializer (copied from
+               # @playwright/mcp, Apache-2.0, attributed); per-snapshot ref-ids,
+               # token-capped scoped diffs + full-tree handle
+  steps/       # imperative step tools over ref-ids -> semantic locators
+               # (navigate/click/fill/select/press/wait_for/snapshot/query/get_*)
+  assert/      # browser assertion sources (text/element-visible/value/url/
+               # ariaSnapshot) — REUSES @strummer/api's declarative engine
+  safety/      # deny-by-default action gate; interception-based mutation dry-run;
+               # Tier-1 route allowlist; Tier-2 loopback DNS-pinning SSRF proxy
+  artifacts/   # ON-DISK ArtifactStore: strummer://browser/run/<id>/<kind>
+               # {path,contentType,byteSize,sha256}; trace/screenshot/video/HAR/
+               # console/network/storageState; redacted before write
+  trace/       # browser_trace_query: wraps `npx playwright trace` CLI
+               # (open/actions/action/snapshot/close) + JSON-lines parser fallback
+  audit/       # a11y (@axe-core/playwright) + perf (lighthouse node API over CDP)
+  index.ts
+
+packages/safety/   # NEW shared module: SSRF range classifier (ipaddr.js) +
+                   # secret-resolution/redaction boundary, used by api + browser
+```
+
+- **Driving model — ARIA-snapshot-first.** The agent perceives the page as the
+  accessibility tree; step tools target per-snapshot **ref-ids** (never persisted —
+  refs invalidate as the DOM changes) resolving to semantic auto-waiting locators.
+  Each step returns a token-capped snapshot **diff + handle**, never the full tree.
+  Vision/coordinate tools ship behind an operator-gated `vision` capability.
+- **Artifacts by handle.** trace.zip / video / HAR / console+network logs /
+  screenshots / storageState / audit reports → `strummer://browser/run/<id>/<kind>`
+  from an on-disk store; tool results carry only structured summaries.
+- **Safety (server-side, deny-by-default, operator-set).** Reads free; navigation/
+  mutation/download/upload/dialog-accept/auth gated behind operator unlock +
+  allowlist with an interception **dry-run** preview. Two-tier SSRF: route
+  allowlist (legible, hostname-level) + a loopback **DNS-pinning proxy** that
+  closes the rebinding hole `route()` can't see (it lacks the resolved IP) and
+  re-checks on redirect. `serviceWorkers:'block'`; container keeps the Chromium
+  sandbox (`--no-sandbox` only as an operator-gated fallback).
+- **Secrets** resolve at the `locator.fill()` boundary (`{{secret:NAME}}`) /
+  origin-scoped `httpCredentials`; every artifact is redacted before any write
+  (Playwright does none). `storageState` is password-equivalent (operator path,
+  by handle).
+- **Audits.** `@axe-core/playwright` 4.11.3 (a11y, free read) + Lighthouse 13.3.0
+  over CDP (perf); cheap summaries, full reports by handle; assert
+  shape/thresholds, never exact perf scores.
+- **MCP surface:** snapshot/step tools, `browser_trace_query`, `audit.a11y`,
+  `audit.perf`, `validate`-style assertions; CLI mirrors these. Browser binaries
+  come from `mcr.microsoft.com/playwright:v1.60.0-noble` (lockstep with the pin).
+
+### First red→green slice
+
+The **a11y-audit summarizer** against an in-process `node:http` fixture (a page
+with one `<img>` missing `alt`): launch headless chromium once via
+`playwright-core` 1.60.0 → `AxeBuilder({page}).analyze()` → assert `summarize()`
+returns `violationCount>=1` + the `image-alt` rule bucketed by impact + the full
+Results addressable by a `strummer://browser/run/<id>/a11y` handle. No pixels, no
+perf, no network — deterministic and offline. Exercises every seam (launch,
+fixture server, audit, token-efficient summary, on-disk handle store) at minimum
+size; visual baselines and Lighthouse scores (the flaky parts) come in later
+slices.

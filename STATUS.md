@@ -5,14 +5,26 @@
 
 ## Current phase
 
+**Phase 3 — Browser/UI testing pillar: DESIGN LOCKED, first slice next.** The
+design is grounded by a 5-stream research workflow with adversarial verification
+(archived in `docs/research/2026-05-31-pillar3-browser-testing.md`) and captured
+in **ADR 0006 + ARCHITECTURE §10 + ROADMAP Phase 3**. Decision: a new pure-TS
+**`@strummer/browser`** package built **thin on stable `playwright-core` 1.60.0**
+(NOT a wrap of `@playwright/mcp` — it pins an alpha core + inlines artifacts);
+ARIA-snapshot-first driving model; artifacts by handle (on-disk store);
+deny-by-default operator-set safety with a two-tier SSRF defense (route allowlist
++ loopback DNS-pinning proxy); secrets at the fill boundary, redacted before any
+write; a11y (`@axe-core/playwright`) + perf (Lighthouse over CDP) audits. A shared
+**`@strummer/safety`** module (SSRF classifier + redaction) will be factored out
+of `@strummer/api`. **Next action:** the first red→green slice (a11y-audit
+summarizer — see below).
+
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
-items remain — see Next action). **Pillar 1 (docs/idioms) is functionally
-complete _and all its deferred polish is done_** (non-Node version detection,
-TOC-bleed/symbol ingestion refinements, Dash docset adapter). The project sits
-at a decision point: start **Phase 3 (browser/UI)** or pick up Pillar-2 tail.
-Pillar 2 design is locked (ADR 0004 + 0005 + ARCHITECTURE §9, grounded by a
-4-stream research workflow archived in
+items remain). **Pillar 1 (docs/idioms) is functionally complete _and all its
+deferred polish is done_** (non-Node version detection, TOC-bleed/symbol
+ingestion refinements, Dash docset adapter). Pillar 2 design is locked (ADR 0004
++ 0005 + ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
 `docs/research/2026-05-31-pillar2-api-testing.md`).
 
 **`@strummer/api` so far (TDD, offline tests):**
@@ -137,6 +149,22 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
   embed), all green. **Pillar 1 (docs/idioms) is functionally complete.**
 
 ## Next action
+
+**Phase 3, Slice 1 (first red→green): the a11y-audit summarizer.** Scaffold
+`@strummer/browser` (Apache-2.0, ESM, tsdown, Biome+Vitest; pin `playwright-core`
+1.60.0; add to the pnpm workspace + `pnpm gate` + CI). Write a failing Vitest in
+`packages/browser/src` that: (1) starts a `node:http` `createServer` returning a
+tiny HTML page with one `<img>` missing `alt`, `listen(0,'127.0.0.1')`, reads
+`address().port` (the `packages/api/src/runner.test.ts` pattern); (2) launches
+headless chromium once via `playwright-core` 1.60.0, navigates to
+`http://127.0.0.1:{port}`; (3) runs `AxeBuilder({page}).analyze()`; (4) asserts
+`summarize(results)` returns `violationCount>=1`, includes the `image-alt` rule
+id bucketed by impact, and that the full Results are addressable by a
+`strummer://browser/run/<id>/a11y` handle. Make it pass with the smallest
+`summarize()` + an on-disk-backed `ArtifactStore.put/get`. No pixels/perf/network
+— deterministic + offline. See ADR 0006 + ROADMAP Phase 3 for what layers on next.
+
+---
 
 Pillar 2 (`@strummer/api`) **engine + agent/human surfaces are complete**: the
 MCP tools (`strummer-api-mcp`) and CLI (`strummer api …`) both ship over the

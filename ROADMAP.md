@@ -87,13 +87,78 @@ installed version Z" and get a precise, cited answer over MCP.
 - [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
       deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
 
-## Phase 3 — Browser / UI testing pillar
+## Phase 3 — Browser / UI testing pillar  *(design locked: ADR 0006 + ARCHITECTURE §10)*
 
-- [ ] Playwright orchestration exposed over MCP.
-- [ ] Traces, screenshots, console & network capture as agent-readable
-      artifacts (by handle).
-- [ ] Visual regression / perceptual screenshot diffing (aspirational).
-- [ ] Accessibility (axe-core) & performance (Lighthouse) audits (aspirational).
+New pure-TS `@strummer/browser`, thin on **stable `playwright-core` 1.60.0** (not
+a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow with
+adversarial verification (`docs/research/2026-05-31-pillar3-browser-testing.md`).
+Staged below; aspirational items are scheduled, not cut.
+
+- [ ] **Slice 1 (first red→green):** a11y-audit summarizer + on-disk
+      `ArtifactStore` + handle resolution, against an in-process `node:http`
+      fixture (no pixels/perf/network).
+- [ ] **Scaffold `@strummer/browser`** (Apache-2.0, ESM, tsdown, Biome+Vitest);
+      add to the pnpm workspace + `pnpm gate` + CI; pin `playwright-core` 1.60.0
+      and `mcr.microsoft.com/playwright:v1.60.0-noble` in lockstep.
+- [ ] **Browser lifecycle manager** — one browser/server, ephemeral isolated
+      context per session, idle-context reaper, concurrency + timeout caps,
+      session wall-clock/TTL.
+- [ ] **ARIA-snapshot capture + serializer** (copied Apache-2.0, attributed)
+      emitting token-capped scoped diffs + a full-snapshot handle; per-snapshot
+      ref-id minting (non-persisted).
+- [ ] **Imperative step tools** over refs/semantic locators (navigate, click,
+      fill, fill_form batch, select, press, wait_for, snapshot, query,
+      get_text/attr) with auto-waiting.
+- [ ] **Deny-by-default action gate** — reads free; navigation/mutation/download/
+      upload/dialog-accept/auth gated by operator unlock + allowlist;
+      interception-based `dry_run` mutation preview.
+- [ ] **Tier-1 route allowlist** — `browserContext.route` deny-by-default +
+      private/link-local/metadata literal block; `serviceWorkers:'block'`; dialog
+      auto-dismiss.
+- [ ] **Tier-2 loopback DNS-pinning SSRF proxy** reusing the shared range
+      classifier; redirect re-check. **Factor `@strummer/safety`** (SSRF +
+      redaction) shared by `api` + `browser`.
+- [ ] **Secret boundary** — `{{secret:NAME}}` fill resolution + origin-scoped
+      `httpCredentials`; redaction over console/network/HAR/trace/storageState
+      before any write; `storageState` by handle only.
+- [ ] **Artifact capture pipeline** — trace.zip (screenshots+snapshots+sources),
+      own console/network logs, screenshots — all by
+      `strummer://browser/run/<id>/<kind>` handle with structured summaries;
+      capture-level operator gating (`STRUMMER_BROWSER_ARTIFACTS`).
+- [ ] **`browser_trace_query`** — wraps `npx playwright trace` subcommands
+      (`open`/`actions`/`action`/`snapshot`/`close`) + direct trace.zip JSON-lines
+      parser fallback. (Console/network/errors come from within actions/snapshot,
+      not dedicated subcommands.)
+- [ ] **Browser assertions** — reuse + extend the `@strummer/api` engine
+      (text/element-visible/value/url/ariaSnapshot) with auto-waiting; one
+      assertion engine across pillars.
+- [ ] **Perf-audit tool** — Lighthouse 13.3.0 node API over CDP; scores +
+      core-metrics summary, full LHR JSON+HTML by handle; assert
+      shape/thresholds, never exact scores.
+- [ ] **Network heavy mode** — `recordHar content:'attach' .zip` (or
+      `tracing.startHar`) behind operator unlock; HAR replay/mocking via
+      `page.route` for offline determinism.
+- [ ] **Downloads quarantine** dir + saveAs path validation; uploads confined to
+      an operator upload-allowlist dir; download/upload as gated structured events.
+- [ ] **Container hardening ADR** — seccomp profile + dropped caps + read-only FS
+      + non-root by default; `--no-sandbox` as documented operator-gated fallback;
+      disable WebRTC/QUIC in the hardened profile.
+- [ ] **Vision/coordinate capability** behind operator-gated `--caps=vision` for
+      canvas/non-AX-tree UI (screenshot-pixel click/move), off by default.
+- [ ] **Video capture** (webm, retain-on-failure) operator-gated with size caps.
+- [ ] **Visual regression** — `toHaveScreenshot` (pixelmatch) default with
+      `animations:'disabled'`/`caret:'hide'`/`mask[]`/`maxDiffPixelRatio`;
+      baselines generated in the pinned Docker image keyed by (name,browser,
+      platform); `odiff` opt-in for large corpora.
+- [ ] **`.bru` + sidecar persistence** for replayable browser step flows
+      (semantic locators, not persisted refs) — mirrors ADR 0004.
+- [ ] **Multi-engine** (firefox/webkit) install + cross-engine determinism
+      (chromium-only for v1).
+- [ ] *(aspirational, scheduled not cut)* optional `@playwright/mcp` embed via
+      `createConnection()` behind a feature flag for parity testing; autonomous
+      self-healing "act"/locator-cache behind a strong operator gate; cross-pillar
+      verification tying browser network capture to the API pillar's contract
+      validation.
 
 ## Phase 4 — Cross-cutting verification tools
 
