@@ -92,8 +92,9 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `ROADMAP.md` — phased plan.
 - `STATUS.md` — current phase + how to resume. **Always current.**
 - `docs/decisions/` — Architecture Decision Records (ADRs).
-- `packages/` — TS workspace: `core` (domain + SQLite), `embed` (query
-  embedding), `mcp` (server), `cli` (terminal).
+- `packages/` — TS workspace: `core` (docs domain + SQLite), `embed` (query
+  embedding), `api` (API-testing engine: `.bru`, runner, assertions, secrets,
+  safety, scripts), `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
 - `.github/workflows/ci.yml` — CI mirroring `pnpm gate` on push/PR.

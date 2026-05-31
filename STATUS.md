@@ -44,9 +44,12 @@ Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 `*.strummer.yml`**; **deny-by-default** mutation safety (dry-run + allowlist +
 `--unsafe`); secrets via `@napi-rs/keyring` + env fallback, value-redacted;
-**QuickJS-sandboxed** JS scripts in v1. Engine: **undici 7**.
+**QuickJS-sandboxed** JS scripts in v1. Engine: **undici 8**.
 
-## Where we are
+## Milestone log (historical)
+
+> Pillar-by-pillar history. The **authoritative current state + test counts** are
+> in the top block above; test counts in these bullets are point-in-time.
 
 - Decisions locked (see ADR 0001 + ARCHITECTURE.md §7): **Strummer**, polyglot
   core, headless MCP+CLI, docs pillar first, **bge-small-en-v1.5 / 384-dim**
@@ -101,11 +104,17 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 
 ## Next action
 
-Pillar 1 is closed out. Options for what's next:
-1. **Pillar 2 — API testing** (Postman/Insomnia/Bruno-class): git-friendly
-   collections, environments, Keychain-backed secrets, an agent-drivable runner.
-2. Pillar-1 polish: ingestion refinements (TOC bleed, richer `symbol`); a **Dash
-   docset** adapter; non-Node version detection; Homebrew tap distribution.
+Pillar 2 (`@strummer/api`) engine is feature-complete for v1. Next, in order:
+1. **Contract validation** — OpenAPI 3.1 (`openapi-backend`) / GraphQL response
+   checks; surface drift. The last pure-engine piece.
+2. **MCP tools + CLI commands** over `@strummer/api` (`run_request`,
+   `run_collection`, `validate_response`, …) — the agent/human surfaces.
+   Planned **fan-out** (independent surfaces over the engine).
+3. Tail: wire the keyring secret store into CLI/MCP (opt-in), SSRF/redirect
+   re-checks, multipart/file/graphql bodies, Postman/Insomnia/OpenAPI import.
+
+Deferred Pillar-1 polish (not blocking): Dash docset adapter, non-Node version
+detection, ingestion TOC-bleed/`symbol` refinements, Homebrew tap.
 
 ## How to build an index / register the server today
 
@@ -128,6 +137,11 @@ See `py/strummer_ingest/README.md` and `packages/mcp/README.md`.
 
 - npm publishing: scope packages under `@strummer/*` (bare `strummer` is taken
   on npm). Name confirmed fine for repo + Homebrew tap.
-- Version-pin fallback policy (nearest-same-major, warn, refuse-if-none) is a
-  documented default in ARCHITECTURE §7.2 — validate against real React docs.
-- License chosen for the repo itself: still TBD.
+- Captured/script-set values flow through `response.captured` unredacted (needed
+  for chaining); the MCP/CLI surface layer must decide how to expose them.
+
+## Resolved (was open)
+
+- **Repo license: Apache-2.0** (ADR 0002; `LICENSE` + `NOTICE` committed).
+- **Version-pin fallback** (nearest-same-major → refuse) validated on the real
+  React index: `^18.2.0` → 18.3.1, `16.8.0` → flagged.

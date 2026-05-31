@@ -18,9 +18,9 @@ that make the project resumable and aspirational.
 - [x] Polyglot boundary proven red→green (Python writes index, TS reads it).
 - [x] Top-level "green gate" (`pnpm gate`) runs both languages.
 - [x] Dev container provisions pnpm + uv.
-- [ ] Milestone push to GitHub.
+- [x] Milestone push to GitHub.
 
-## Phase 1 — Docs / idioms pillar  *(first vertical slice)*
+## Phase 1 — Docs / idioms pillar  *(functionally complete)*
 
 Goal: an agent can ask "the current idiomatic way to do X in library Y at the
 installed version Z" and get a precise, cited answer over MCP.
@@ -45,9 +45,7 @@ installed version Z" and get a precise, cited answer over MCP.
       `detect`); query embedder extracted to `@strummer/embed`.
 - [ ] Second source adapter: Dash docsets (plain-HTML + searchIndex).
 - [ ] Detect installed versions for non-Node ecosystems (Python, Ruby, …).
-- [ ] Ingest existing **Dash** docsets to bootstrap coverage (aspirational).
-- [ ] Reuse/ingest **DevDocs** sources where licensing allows (aspirational).
-- [ ] Hybrid semantic search via `sqlite-vec` + local embeddings (aspirational).
+- [ ] Ingestion refinements: drop TOC bleed into first sections; richer `symbol`.
 
 ## Phase 2 — API testing pillar  *(in progress; design = ADR 0004)*
 

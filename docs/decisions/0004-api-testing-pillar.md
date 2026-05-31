@@ -59,8 +59,9 @@ escape hatch.
 
 ## Stack picks
 
-`@usebruno/lang` 0.36.x (V2 fns) · `@usebruno/converters` 0.20.x · **undici 7.x**
-(not bare fetch) · `jsonpath-plus` 10.4.0 (pinned, eval off) · `ajv` 8.20.x
+`@usebruno/lang` 0.36.x (V2 fns) · `@usebruno/converters` 0.20.x · **undici 8.x**
+(installed; research recommended 7.x) (not bare fetch) · `jsonpath-plus` 10.4.0
+(pinned, eval off) · `ajv` 8.20.x
 (2020-12) · `openapi-backend` 5.x + `graphql-js` 16.x (contract) ·
 `@napi-rs/keyring` 1.3.x · `quickjs-emscripten` · `yaml` (sidecars). **Avoid:**
 keytar, vm2, `node:vm`, bare global fetch.

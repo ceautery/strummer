@@ -28,23 +28,29 @@ generation, mutation testing, and flaky-test detection.
 
 ## Status
 
-This is a greenfield project under active design. **The single source of truth
-for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
+Under active development: the **docs/idioms pillar is functionally complete**
+(version-pinned hybrid search over MCP + CLI) and the **API-testing engine** is
+well underway. **The single source of truth for "what phase are we on" is
+[`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
 
-- **Polyglot core.** TypeScript owns the MCP server, CLI, and (later) the API
-  and browser pillars. **Python owns documentation ingestion** (scraping,
+- **Polyglot core.** TypeScript owns the MCP server, CLI, the API-testing engine,
+  and (later) browser testing. **Python owns documentation ingestion** (scraping,
   parsing, indexing, embeddings).
-- **The boundary is a file, not a service.** Python builds a SQLite index
-  (FTS5 + optional `sqlite-vec` vectors) on disk; the TypeScript server reads it
-  at query time. No Python process sits in the request path. See
+- **The boundary is a file, not a service.** For docs, Python builds a SQLite
+  index (FTS5 + optional `sqlite-vec` vectors) on disk; the TypeScript server
+  reads it at query time. No Python process sits in the request path. See
   [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 - **Target platform: macOS** (developed inside a Linux dev container).
 
 ## Try it (docs pillar)
 
 ```bash
+# one-time setup
+pnpm install && pnpm build          # TypeScript packages
+( cd py/strummer_ingest && uv sync )  # Python ingester
+
 # build a version-pinned React docs index (Python ingester)
 cd py/strummer_ingest
 uv run strummer-ingest build --slug react   --library react --out ../../data/react.sqlite

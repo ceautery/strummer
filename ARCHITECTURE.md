@@ -218,7 +218,7 @@ packages/api/src/
 - **Format:** Bruno `.bru` (mirror Bruno's on-disk layout) parsed by `@usebruno/lang`
   V2 fns → a thin internal model. Strummer's richer assertions/captures live in a
   sidecar `<request>.strummer.yml` so the `.bru` stays Bruno-compatible.
-- **Runner:** `undici` 7 `request()` (control over body consumption + TTFB/full
+- **Runner:** `undici` 8 `request()` (control over body consumption + TTFB/full
   timing; proxy/mTLS). Layered var resolution
   `runtime/captured > request > folder > collection > environment`.
 - **Assertions (declarative, first-class):** `{ source, op, value }` where source ∈
