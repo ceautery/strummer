@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: green gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm via corepack (version pinned by package.json "packageManager").
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync Python environment
+        working-directory: py/strummer_ingest
+        run: uv sync
+
+      # Mirrors `pnpm gate`: Biome + tsc + Vitest, then Ruff + pytest.
+      - name: Green gate
+        run: pnpm gate
+
+      # Ensure every package still builds.
+      - name: Build
+        run: pnpm build
