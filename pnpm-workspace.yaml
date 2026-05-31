@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+
+# better-sqlite3 runs an install script (prebuild-install) to fetch its
+# prebuilt native binary; pnpm requires explicitly approving build scripts.
+allowBuilds:
+  better-sqlite3: true

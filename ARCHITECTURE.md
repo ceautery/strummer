@@ -1,0 +1,192 @@
+# ARCHITECTURE
+
+Authoritative technical design. Distilled from the design-research workflow
+(raw findings archived in `docs/research/2026-05-31-design-research.md`). When
+this disagrees with that archive, this file wins.
+
+## 1. Shape
+
+Strummer is a **headless MCP server + CLI**, agent-first. Capabilities are MCP
+tools/resources with structured, token-efficient output; large artifacts are
+returned by **handle/resource link**, never inlined.
+
+**Polyglot core, file-based boundary.** TypeScript serves; Python ingests; they
+meet only at a SQLite file on disk and the schema that defines it. No live RPC.
+
+```
+strummer/
+  pnpm-workspace.yaml
+  package.json                 # private root; scripts; packageManager pnpm@11.4.0
+  biome.json                   # lint + format (TS)
+  tsconfig.base.json
+  packages/
+    core/                      # TS domain logic; THE ONLY package that opens SQLite
+      src/{db,search,schema,types}.ts
+    mcp/                       # thin MCP stdio adapter over core
+      src/server.ts
+    cli/                       # thin CLI adapter over core (shebang bin)
+      src/index.ts
+  py/
+    strummer_ingest/           # uv-managed Python package; console_scripts CLI
+      pyproject.toml
+      src/strummer_ingest/{cli,sources,extract,chunk,embed,db}.py
+  schema/
+    strummer.schema.sql        # THE CONTRACT — single source of truth DDL
+    strummer.schema.json       # machine-readable: schema_version, embed_dim, embed_model
+  fixtures/                    # tiny committed fixtures + golden .sqlite for tests
+```
+
+**Invariant:** only `packages/core` touches SQLite. `mcp` and `cli` depend on
+`core` via `workspace:*` and stay thin. Both languages read
+`schema/strummer.schema.json` and **refuse to operate on a DB whose
+`strummer_meta.schema_version` doesn't match** — that is what makes
+file-as-contract safe.
+
+## 2. Stack & versions (current as of 2026-05-31)
+
+**TypeScript (Node 22 LTS):**
+- pnpm 11.4.0 · Biome 2.4.x (lint+format, replaces ESLint+Prettier) · Vitest 4.1.x
+  + @vitest/coverage-v8 (use `test.projects`, not the deprecated `workspace`)
+- tsdown 0.20.x (ESM + d.ts; CLI emits a shebang bin)
+- **better-sqlite3** (current major) — chosen over `node:sqlite` because loading
+  the `sqlite-vec` extension needs Node ≥23.5 with `node:sqlite`; we're on 22.
+  Allowlist it in pnpm `onlyBuiltDependencies`.
+- **sqlite-vec** 0.1.x — `sqliteVec.load(db)`
+- **@modelcontextprotocol/sdk** 1.29.x — v1 subpath imports (`McpServer`,
+  `StdioServerTransport`). v2 (split server/client) expected Q1 2026; keep the
+  MCP layer thin so a port is contained. Zod 3.25/4.0 peer dep.
+
+**Python (uv-managed, target 3.12):**
+- uv 0.11.x (project + lockfile + interpreter pin) · Ruff 0.15.x (lint+format)
+- trafilatura 2.0.x (main-content extraction, `favor_recall` for docs)
+- selectolax 0.4.x (LexborHTMLParser — preserves code blocks/anchors)
+- sqlite-vec 0.1.9 (PyPI) · stdlib sqlite3 (FTS5 built in)
+- **fastembed** with **bge-small-en-v1.5** (ONNX, contextual, **384-dim**) as the
+  embedder (decided — see §7.1). Local/offline after a one-time model download.
+- **uv-managed CPython 3.12**, not the distro Python — its `sqlite3` must allow
+  `enable_load_extension` to create the `vec0` table (Debian's build often does
+  not; this is the macOS/Linux extension-loading footgun).
+
+**Footgun (the #1 macOS risk):** SQLite extension loading. better-sqlite3 bundles
+its own SQLite; the Python side must run on an interpreter whose `sqlite3` allows
+`enable_load_extension` (Homebrew/python.org, not all distro builds). Both sides
+assert `sqlite-vec` loads at startup.
+
+## 3. The contract — SQLite schema
+
+`schema/strummer.schema.sql` (Python writes, TS reads read-only). Highlights:
+
+- `strummer_meta(key,value)` — seeded with `schema_version`, `embed_model`,
+  `embed_dim`, `built_at`, `builder_version`. Both sides assert compatibility.
+- `docs(id, library, version, title, symbol, type, heading_path, url,
+  attribution, body)` — canonical fragments; `version` is the pinned doc release.
+- `docs_fts` — FTS5 **external-content** over `docs` (no body duplication),
+  `tokenize='porter unicode61'`, `prefix='2 3'`, kept in sync by triggers.
+- `docs_vec` — `vec0` virtual table, `embedding float[384] distance_metric=cosine`,
+  with `library/version/type` as KNN-pushdown filter columns.
+
+**Tested invariants on both sides:** `strummer_meta.embed_dim` == the `float[N]`
+in the vec0 DDL; `docs.id == docs_fts.rowid == docs_vec.doc_id`; FTS triggers
+exist; shipped DB is checkpointed (`wal_checkpoint(TRUNCATE)`) + `VACUUM`ed into
+a single clean file opened read-only by TS.
+
+## 4. MCP tools (token economy)
+
+Two tools. Search returns **compact metadata + resource links only** — full
+bodies are fetched on demand. (Claude Code warns >10k tokens, caps at 25k,
+persists oversized output to disk.) Always emit `structuredContent` **and** a
+matching JSON text block (some clients break on structuredContent alone).
+
+- `strummer.search_docs` — in: `query`, optional `library`/`version`/`type`,
+  `limit` (default 8, max 25), `cursor`. Hybrid **RRF** (FTS5 `bm25` + vec0 KNN),
+  version filter pushed to **both** halves. Out: `{ results: [{ id, title,
+  symbol, type, library, version, score, snippet, resourceUri }], nextCursor? }`
+  where `snippet` is a short FTS `snippet()` excerpt and `resourceUri` is
+  `strummer://doc/{id}`.
+- `strummer.get_doc` — in: `id` (or the `strummer://doc/{id}` URI). Out: the full
+  fragment incl. `body`, `heading_path`, `url`, `attribution`. The **only** place
+  full body text is returned.
+- Resource `strummer://doc/{id}` mirrors `get_doc` for link-following.
+
+Server `instructions` (≤2KB): explain search-returns-summaries+links, the
+version-pin semantics, and pagination.
+
+## 5. Ingestion pipeline (Python CLI)
+
+`strummer-ingest build --source <docset|devdocs> --in <path> --out X.sqlite
+[--library L --version V]`
+
+1. **Acquire/identify** via two adapters behind one interface, normalizing to a
+   single record `(library, version, title, symbol, type, url, attribution,
+   html)`:
+   - *Dash docset* — parse `Info.plist`; probe `sqlite_master` for `searchIndex`
+     (canonical, ~99% of community docsets) vs the `ZTOKEN` Core Data join.
+     **M1: plain-HTML + `searchIndex` only**; tarix/brotli/Core Data are later.
+   - *DevDocs* — ingest prebuilt `index.json` + `db.json`; carry `release` as
+     `version`.
+2. **Resolve + extract** — resolve relative file / `#anchor` / http paths;
+   trafilatura for main content; selectolax to retain code/tables/anchors; split
+   shared pages by `#anchor`.
+3. **Chunk** by heading/section with overlap; compute `heading_path`.
+4. **Type-normalize** Dash's ~76-value enum / DevDocs types onto Strummer's
+   taxonomy via a mapping table.
+5. **Embed** chunks (model2vec → float32, 512-dim).
+6. **Write DB** — apply schema, seed meta, insert `docs` (triggers fill FTS),
+   insert vectors; WAL → checkpoint → VACUUM.
+7. **Emit** a machine-readable stdout summary (counts, schema_version), logs on
+   stderr, meaningful exit codes. Ingestion is resumable/incremental.
+
+**Licensing gate (must-have):** record per-doc `attribution`; respect upstream
+licenses (DevDocs excludes Microsoft/Apple/Oracle; Dash licenses are per-folder).
+M1 posture is **local-index-only, no redistribution** — see open decision #4.
+
+## 6. The green gate
+
+Run before every commit (wired into root scripts during scaffold):
+
+```
+pnpm lint && pnpm test                              # Biome + Vitest, all TS packages
+cd py/strummer_ingest && uv run ruff check . \
+  && uv run ruff format --check . && uv run pytest  # Ruff + pytest
+```
+
+A single `pnpm gate` (or `make gate`) will fan both out. Nothing commits/pushes
+unless this is 100% green (per `CLAUDE.md`).
+
+## 7. Open decisions (defaults chosen; veto welcome)
+
+These came out of the research as genuine forks.
+
+1. **Embedding model + dimension — RESOLVED.** **fastembed / bge-small-en-v1.5,
+   384-dim.** Contextual, strong on "how-do-I" queries, local/offline after a
+   one-time download. `embed_dim=384` and `embed_model="bge-small-en-v1.5"` are
+   frozen into the schema; pluggable via `strummer_meta.embed_model`, but a
+   dimension change is a migration.
+2. **Version-pin fallback.** Decided default: resolve installed semver to the
+   nearest **same-major** doc release, record the resolved version in results,
+   warn on inexact match, **refuse** (never silently wrong) if no same-major doc
+   exists.
+3. **First real corpus — RESOLVED.** **React 19** (MIT, excellent versioned
+   docs) is the first ingested target — drives the real adapters + licensing
+   review. (The boundary proof uses a hand-crafted `react/19.0/useState`
+   fixture, so no corpus is needed for the first cycle.)
+4. **License posture.** Decided default: **local-index-only for M1**, attribution
+   recorded and surfaced; no redistribution of doc bodies.
+
+## 8. First red→green (proves the whole boundary)
+
+1. Author `schema/strummer.schema.sql` + `schema/strummer.schema.json`
+   (`{schema_version:1, embed_dim:384, embed_model:"bge-small-en-v1.5"}`).
+2. **RED (TS/core):** Vitest opens `fixtures/golden.sqlite`, loads sqlite-vec,
+   asserts `schema_version==1`, runs `searchDocs("useState", {library:"react"})`,
+   expects one row `{symbol:"useState", version:"19.0"}`. Fails (no fixture/code).
+3. **GREEN (Python):** minimal `strummer-ingest` applies the schema, seeds meta,
+   inserts one literal `docs` row + one constant 512-dim vector, checkpoints +
+   VACUUMs into `fixtures/golden.sqlite`. (No real scraping/embedding yet.)
+4. **GREEN (TS):** implement `core.openDb()` + `core.searchDocs()` (FTS branch;
+   vec optional) until the test passes.
+
+This single cycle exercises every contract surface — schema file, meta/version
+guard, id alignment across `docs`/`docs_fts`/`docs_vec`, sqlite-vec loading on
+both runtimes, and the search result shape the MCP tool wraps — before
+committing to real adapters, embeddings, or RRF tuning.

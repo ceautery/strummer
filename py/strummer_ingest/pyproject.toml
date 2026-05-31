@@ -1,0 +1,32 @@
+[project]
+name = "strummer-ingest"
+version = "0.0.0"
+description = "Strummer documentation ingestion & indexing (writes the SQLite index the TS server reads)"
+requires-python = ">=3.12"
+dependencies = [
+  "sqlite-vec>=0.1.9",
+]
+
+[project.scripts]
+strummer-ingest = "strummer_ingest.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "ruff>=0.15",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

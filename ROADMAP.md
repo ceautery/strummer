@@ -4,18 +4,20 @@ Phased plan. Phases are sequenced but the design is aspirational — items aren'
 cut for being "v1-hard", they're scheduled. `STATUS.md` says which phase is
 live right now.
 
-## Phase 0 — Design & Scaffold  *(in progress)*
+## Phase 0 — Design & Scaffold  *(complete)*
 
 Goal: a reproducible, 100%-green polyglot monorepo skeleton and the design docs
 that make the project resumable and aspirational.
 
 - [x] Decisions captured (stack, surface, first pillar, polyglot boundary, name).
-- [ ] Design research fan-out → `ARCHITECTURE.md` with exact stack & versions.
-- [ ] pnpm workspace scaffold: `core`, `mcp`, `cli` packages (TS).
-- [ ] Python `ingest` package scaffold (uv-managed).
-- [ ] Biome + Ruff configured; Vitest + pytest wired.
-- [ ] One trivial red→green test per language proving the toolchains run.
-- [ ] Top-level "green gate" command runs both languages.
+- [x] Design research fan-out → `ARCHITECTURE.md` with exact stack & versions.
+- [x] pnpm workspace scaffold: `@strummer/core` (mcp/cli land in Phase 1 with
+      real behavior — no fake-stub packages).
+- [x] Python `ingest` package scaffold (uv-managed).
+- [x] Biome + Ruff configured; Vitest + pytest wired.
+- [x] Polyglot boundary proven red→green (Python writes index, TS reads it).
+- [x] Top-level "green gate" (`pnpm gate`) runs both languages.
+- [x] Dev container provisions pnpm + uv.
 - [ ] Milestone push to GitHub.
 
 ## Phase 1 — Docs / idioms pillar  *(first vertical slice)*
@@ -23,11 +25,13 @@ that make the project resumable and aspirational.
 Goal: an agent can ask "the current idiomatic way to do X in library Y at the
 installed version Z" and get a precise, cited answer over MCP.
 
-- [ ] **Polyglot boundary proof:** Python writes a SQLite index; TS reads it
+- [x] **Polyglot boundary proof:** Python writes a SQLite index; TS reads it
       back end-to-end (smallest possible red→green step).
+- [x] SQLite index schema (FTS5 + vec0; title/body/symbol/library/version).
+- [ ] MCP tools: `search_docs`, `get_doc` (structured, resource-link output).
+- [ ] `@strummer/cli` thin human entry over `core`.
 - [ ] Python ingestion pipeline: HTML → clean fragments → FTS5 index.
-- [ ] SQLite index schema (FTS5; title/body/symbol/library/version).
-- [ ] MCP tools: `docs.search`, `docs.get` (structured, handle-based output).
+- [ ] First real source adapter (Dash docset / DevDocs) against React 19.
 - [ ] Version pinning: resolve the project's installed dependency versions.
 - [ ] Ingest existing **Dash** docsets to bootstrap coverage (aspirational).
 - [ ] Reuse/ingest **DevDocs** sources where licensing allows (aspirational).

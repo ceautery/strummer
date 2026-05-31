@@ -5,26 +5,38 @@
 
 ## Current phase
 
-**Phase 0 — Design & Scaffold** (in progress)
+**Phase 1 — Docs / idioms pillar** (in progress). Phase 0 (Design & Scaffold) is
+**complete** and the polyglot boundary is **proven end to end**.
 
 ## Where we are
 
-- Project decided: name **Strummer**, polyglot core (TS MCP+CLI / Python docs
-  ingestion), headless MCP+CLI surface, **docs pillar first**.
-- Repo initialized on `main`, remote wired to `ceautery/strummer` (nothing
-  pushed yet).
-- Durable docs written: `README.md`, `CLAUDE.md`, `ROADMAP.md`, this file, and
-  ADR `docs/decisions/0001-foundational-choices.md`.
-- A **design-research workflow** (6 parallel streams + synthesis) is grounding
-  the exact stack/versions; `ARCHITECTURE.md` will be authored from its results.
+- Decisions locked (see ADR 0001 + ARCHITECTURE.md §7): **Strummer**, polyglot
+  core, headless MCP+CLI, docs pillar first, **bge-small-en-v1.5 / 384-dim**
+  embeddings, **React 19** first corpus, license posture local-index-only.
+- Design grounded by a 6-stream research workflow → `ARCHITECTURE.md` (exact
+  stack/versions, the SQLite contract, MCP tool shapes). Raw research archived in
+  `docs/research/2026-05-31-design-research.md`.
+- **Monorepo scaffolded and 100% green:** pnpm workspace + `@strummer/core` (TS;
+  better-sqlite3 + sqlite-vec, Biome, Vitest, tsdown) and `py/strummer_ingest`
+  (uv; Ruff, pytest). `pnpm gate` runs both toolchains.
+- **Polyglot boundary proven (red→green):** Python builds `fixtures/golden.sqlite`
+  (schema + FTS5 + vec0 float[384]); TS `openDb`/`searchDocs` reads it, asserts
+  the schema contract, and finds `react/useState` via FTS with no cross-library
+  leakage. sqlite-vec verified loading on **both** runtimes. 6 TS + 2 Py tests.
+- Dev container (`docker/`) now provisions pnpm + uv for reproducibility.
 
 ## Next action
 
-1. Consume the design-research synthesis → write `ARCHITECTURE.md` (exact stack,
-   versions, SQLite contract schema, MCP tool shapes).
-2. Scaffold the pnpm workspace (`core`/`mcp`/`cli`) + Python `ingest` package.
-3. Land one trivial red→green test per language + the top-level green gate.
-4. First milestone push to GitHub.
+1. **Add `@strummer/mcp`** — wire `search_docs` + `get_doc` MCP tools (SDK 1.29)
+   over `core`, with resource links and `structuredContent` (TDD).
+2. **Add `@strummer/cli`** — thin human entry over `core`.
+3. **Real ingestion:** implement `get_doc` in core (fetch full body by id), then
+   the first real Python source adapter (Dash docset and/or DevDocs) against
+   **React 19**, plus version-pin resolution.
+4. **Hybrid search:** real bge-small embeddings + sqlite-vec KNN + RRF fusion.
+
+(Milestone 0 + the boundary proof are committed; push to GitHub at this
+milestone boundary.)
 
 ## How to resume cold
 
@@ -36,6 +48,8 @@
 
 ## Known open questions
 
-- Exact stack versions — pending design-research synthesis.
 - npm publishing: scope packages under `@strummer/*` (bare `strummer` is taken
-  on npm). Confirmed name is fine for repo + Homebrew tap.
+  on npm). Name confirmed fine for repo + Homebrew tap.
+- Version-pin fallback policy (nearest-same-major, warn, refuse-if-none) is a
+  documented default in ARCHITECTURE §7.2 — validate against real React docs.
+- License chosen for the repo itself: still TBD.

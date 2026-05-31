@@ -34,8 +34,14 @@ ENV GIT_CONFIG_GLOBAL=/home/$USERNAME/.claude/.gitconfig
 
 # GOTCHA: install the CLI OUTSIDE ~/.claude, or the volume mount masks the binary
 ENV NPM_CONFIG_PREFIX=/home/$USERNAME/.npm-global
-ENV PATH=/home/$USERNAME/.npm-global/bin:$PATH
+ENV PATH=/home/$USERNAME/.local/bin:/home/$USERNAME/.npm-global/bin:$PATH
 RUN mkdir -p $NPM_CONFIG_PREFIX \
     && npm install -g @anthropic-ai/claude-code
+
+# Strummer toolchain: pnpm (via corepack, into the PATH'd npm-global bin so the
+# volume mount can't mask it) and uv (Python project/dep manager + interpreter).
+RUN corepack enable --install-directory $NPM_CONFIG_PREFIX/bin pnpm \
+    && corepack prepare pnpm@11.4.0 --activate \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh
 
 WORKDIR /workspace

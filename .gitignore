@@ -22,6 +22,10 @@ venv/
 # Built docset/index databases are reproducible artifacts, never committed.
 /data/
 /var/
+# SQLite sidecar files (the committed fixtures/*.sqlite are single clean files).
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
 *.dsidx-wal
 *.dsidx-shm
 

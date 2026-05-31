@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "embed_model": "bge-small-en-v1.5",
+  "embed_dim": 384,
+  "fts_tokenize": "porter unicode61"
+}
