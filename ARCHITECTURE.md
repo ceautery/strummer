@@ -194,3 +194,53 @@ This single cycle exercises every contract surface — schema file, meta/version
 guard, id alignment across `docs`/`docs_fts`/`docs_vec`, sqlite-vec loading on
 both runtimes, and the search result shape the MCP tool wraps — before
 committing to real adapters, embeddings, or RRF tuning.
+
+---
+
+## 9. Pillar 2 — Web API testing (`@strummer/api`)
+
+Decisions in ADR 0004; research in `docs/research/2026-05-31-pillar2-api-testing.md`.
+All TypeScript — collections are git-friendly files, no Python/SQLite.
+
+```
+packages/api/src/
+  collection/  # .bru <-> thin domain model (via @usebruno/lang); sidecar *.strummer.yml
+  vars/        # layered scope resolver + {{var}} / {{secret:NAME}} interpolation, captures
+  runner/      # undici dispatcher: execute request, capture status/headers/body/timing
+  assert/      # declarative assertion engine (status/header/jsonpath/schema/responseTime)
+  secrets/     # SecretStore (keyring | env) + value Redactor
+  script/      # QuickJS-sandboxed pre/post scripts (curated bru/expect API)
+  contract/    # OpenAPI 3.1 (openapi-backend) + GraphQL response validation
+  artifacts/   # resource-handle store: strummer://run/<id>/body  (bodies never inlined)
+  index.ts
+```
+
+- **Format:** Bruno `.bru` (mirror Bruno's on-disk layout) parsed by `@usebruno/lang`
+  V2 fns → a thin internal model. Strummer's richer assertions/captures live in a
+  sidecar `<request>.strummer.yml` so the `.bru` stays Bruno-compatible.
+- **Runner:** `undici` 7 `request()` (control over body consumption + TTFB/full
+  timing; proxy/mTLS). Layered var resolution
+  `runtime/captured > request > folder > collection > environment`.
+- **Assertions (declarative, first-class):** `{ source, op, value }` where source ∈
+  `status|statusText|header|body|jsonpath|responseTime|schema`; jsonpath via
+  `jsonpath-plus` (eval off), schema via `ajv` 2020-12. Captures write into the
+  runtime scope for request chaining.
+- **Scripts (opt-in power):** pre/post JS in a QuickJS WASM sandbox.
+- **Secrets:** `{{secret:NAME}}` resolved only at the transport boundary;
+  `@napi-rs/keyring` with mandatory `STRUMMER_SECRET_<NAME>` env fallback (Linux/
+  CI); values redacted (incl. base64/url encodings) from all returned artifacts.
+- **Safety (server-side, deny-by-default):** GET/HEAD/OPTIONS free; mutations
+  dry-run unless `allowUnsafe` + host/method allowlist; SSRF range-block;
+  post-redirect re-check; no auto-retry for non-idempotent.
+- **MCP surface:** `list_requests`, `get_request` (reports required secret *names*,
+  not values), `run_request` (structured result + `resource_link` body handle),
+  `run_collection`, `validate_response`. CLI mirrors these.
+
+### First red→green slice
+
+Load a request from a `.bru` collection + its sidecar, interpolate `{{baseUrl}}`,
+execute against an **in-process** `node:http` server (ephemeral port, no external
+network), evaluate declarative assertions (status + jsonpath), and return
+`{ status, latencyMs, assertions[], bodyHandle }` with the body behind a
+`strummer://run/<id>/body` handle. Secrets, mutation gating, scripts, contract
+validation, and MCP/CLI wiring layer on next.
