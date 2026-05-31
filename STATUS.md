@@ -5,8 +5,27 @@
 
 ## Current phase
 
-**Phase 1 — Docs / idioms pillar** (in progress). Phase 0 (Design & Scaffold) is
-**complete** and the polyglot boundary is **proven end to end**.
+**Phase 2 — Web API testing pillar** (in progress). Pillar 1 (docs/idioms) is
+**functionally complete and CI-gated**. Pillar 2 design is locked (ADR 0004 +
+ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
+`docs/research/2026-05-31-pillar2-api-testing.md`).
+
+**First slice green:** `@strummer/api` loads a Bruno `.bru` request + its
+`*.strummer.yml` sidecar, interpolates `{{baseUrl}}`, runs it via **undici**
+against an in-process server, evaluates declarative assertions
+(status/jsonpath/header), and returns the body by `strummer://run/<id>/body`
+handle. 2 offline tests.
+
+**Next (Pillar 2 layers):** secret resolution (`@napi-rs/keyring` + env fallback,
+redaction) → mutation safety gate (dry-run/allowlist/`--unsafe`) → captures +
+request chaining → QuickJS scripts → contract validation → MCP tools
+(`run_request`/`run_collection`/…) + CLI commands.
+
+Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
+thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
+`*.strummer.yml`**; **deny-by-default** mutation safety (dry-run + allowlist +
+`--unsafe`); secrets via `@napi-rs/keyring` + env fallback, value-redacted;
+**QuickJS-sandboxed** JS scripts in v1. Engine: **undici 7**.
 
 ## Where we are
 

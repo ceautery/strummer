@@ -1,0 +1,27 @@
+{
+  "name": "@strummer/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown src/index.ts --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@usebruno/lang": "^0.36.0",
+    "jsonpath-plus": "^10.4.0",
+    "undici": "^8.3.0",
+    "yaml": "^2.9.0"
+  }
+}

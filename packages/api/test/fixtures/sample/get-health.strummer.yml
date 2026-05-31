@@ -1,0 +1,8 @@
+# Strummer-specific declarative assertions/captures for get-health.bru.
+# Kept in a sidecar so the .bru stays Bruno-GUI compatible (ADR 0004).
+assertions:
+  - { source: status, op: equals, value: 200 }
+  - { source: jsonpath, path: "$.ok", op: equals, value: true }
+  - { source: header, name: content-type, op: contains, value: application/json }
+captures:
+  - { var: healthy, source: jsonpath, path: "$.ok" }

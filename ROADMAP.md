@@ -49,14 +49,19 @@ installed version Z" and get a precise, cited answer over MCP.
 - [ ] Reuse/ingest **DevDocs** sources where licensing allows (aspirational).
 - [ ] Hybrid semantic search via `sqlite-vec` + local embeddings (aspirational).
 
-## Phase 2 — API testing pillar
+## Phase 2 — API testing pillar  *(in progress; design = ADR 0004)*
 
-- [ ] Git-friendly collection format (Bruno-`.bru`-compatible where sensible).
-- [ ] Environments & variables; macOS **Keychain**-backed secrets (agent drives
-      authenticated requests without seeing raw secrets).
-- [ ] Assertion engine; agent-drivable runner; structured run artifacts.
-- [ ] Traffic record (HAR) → test/mock generation (aspirational).
-- [ ] OpenAPI/GraphQL contract validation & drift detection (aspirational).
+- [x] `@strummer/api` package + Bruno `.bru` format (via `@usebruno/lang`) +
+      thin domain model; Strummer assertions/captures in `*.strummer.yml` sidecar.
+- [x] Declarative assertion engine (status/header/jsonpath; ajv/responseTime
+      next) + undici runner + resource-handle artifacts. First slice green.
+- [ ] Environments & variables file loading; request chaining via captures.
+- [ ] macOS **Keychain** secrets (`@napi-rs/keyring`) + env fallback; redaction.
+- [ ] Mutation safety gate (dry-run / allowlist / `--unsafe`; SSRF block).
+- [ ] QuickJS-sandboxed pre/post scripts (curated `bru`/`expect` API).
+- [ ] MCP tools (`run_request`/`run_collection`/`validate_response`/…) + CLI.
+- [ ] Import: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
+- [ ] OpenAPI/GraphQL contract validation & drift detection.
 
 ## Phase 3 — Browser / UI testing pillar
 
