@@ -41,7 +41,8 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] **Detect the installed version from a project** — `detectInstalledVersion`
       (node_modules/lockfile/package.json); `detect_version` tool + `search_docs
       project` input (auto-pin with zero ceremony).
-- [ ] `@strummer/cli` thin human entry over `core`.
+- [x] `@strummer/cli` thin human entry over `core` (`search`/`get`/`versions`/
+      `detect`); query embedder extracted to `@strummer/embed`.
 - [ ] Second source adapter: Dash docsets (plain-HTML + searchIndex).
 - [ ] Detect installed versions for non-Node ecosystems (Python, Ruby, …).
 - [ ] Ingest existing **Dash** docsets to bootstrap coverage (aspirational).
@@ -80,4 +81,4 @@ Drawn from the brainstorm; sequence TBD by leverage.
 
 - [ ] Distribution: Homebrew tap; single-binary CLI for macOS.
 - [ ] Project documentation site.
-- [ ] CI mirroring the local green gate.
+- [x] CI mirroring the local green gate (`.github/workflows/ci.yml`).

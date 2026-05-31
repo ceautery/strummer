@@ -1,5 +1,7 @@
 # Strummer
 
+[![CI](https://github.com/ceautery/strummer/actions/workflows/ci.yml/badge.svg)](https://github.com/ceautery/strummer/actions/workflows/ci.yml)
+
 **An LLM-agent-first developer testing & verification toolkit.**
 
 Strummer gives a coding agent (Claude Code) the capabilities it struggles with
@@ -39,6 +41,28 @@ for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
   at query time. No Python process sits in the request path. See
   [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 - **Target platform: macOS** (developed inside a Linux dev container).
+
+## Try it (docs pillar)
+
+```bash
+# build a version-pinned React docs index (Python ingester)
+cd py/strummer_ingest
+uv run strummer-ingest build --slug react   --library react --out ../../data/react.sqlite
+uv run strummer-ingest build --slug react~18 --library react --out ../../data/react.sqlite --append
+
+# search it from the terminal (hybrid FTS + vector ranking)
+cd ../..
+export STRUMMER_INDEX=$PWD/data/react.sqlite
+node packages/cli/dist/bin.mjs versions react
+node packages/cli/dist/bin.mjs search "run code after render" --library react --installed ^18.0.0
+
+# or expose it to an agent over MCP
+claude mcp add strummer -- strummer-mcp $STRUMMER_INDEX
+```
+
+The CLI (`@strummer/cli`) and MCP server (`@strummer/mcp`) are thin surfaces over
+`@strummer/core`; query embedding lives in `@strummer/embed`; ingestion is the
+Python `py/strummer_ingest`.
 
 ## For contributors / agents
 

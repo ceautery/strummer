@@ -27,6 +27,19 @@ importers:
         specifier: ^4.1.7
         version: 4.1.7(@types/node@25.9.1)(@vitest/coverage-v8@4.1.7)(vite@8.0.14(@types/node@25.9.1))
 
+  packages/cli:
+    dependencies:
+      '@strummer/core':
+        specifier: workspace:*
+        version: link:../core
+      '@strummer/embed':
+        specifier: workspace:*
+        version: link:../embed
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
   packages/core:
     dependencies:
       better-sqlite3:
@@ -46,17 +59,23 @@ importers:
         specifier: ^7.7.1
         version: 7.7.1
 
-  packages/mcp:
+  packages/embed:
     dependencies:
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0
+
+  packages/mcp:
+    dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
       '@strummer/core':
         specifier: workspace:*
         version: link:../core
+      '@strummer/embed':
+        specifier: workspace:*
+        version: link:../embed
       zod:
         specifier: ^4.4.3
         version: 4.4.3

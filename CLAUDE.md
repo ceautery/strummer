@@ -92,6 +92,11 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `ROADMAP.md` — phased plan.
 - `STATUS.md` — current phase + how to resume. **Always current.**
 - `docs/decisions/` — Architecture Decision Records (ADRs).
+- `packages/` — TS workspace: `core` (domain + SQLite), `embed` (query
+  embedding), `mcp` (server), `cli` (terminal).
+- `py/strummer_ingest/` — Python ingester (uv).
+- `schema/` — the SQLite contract (`*.sql` + `*.json`).
+- `.github/workflows/ci.yml` — CI mirroring `pnpm gate` on push/PR.
 - The Linux dev-container harness (`docker/`, `docker-compose.yml`) that hosts
   Claude Code is **untracked** (gitignored) — local tooling for creating the
   container, not part of Strummer.

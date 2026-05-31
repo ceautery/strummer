@@ -52,17 +52,22 @@
   (precedence version > installed > project). Verified end to end: pointing at a
   project with React 18 installed, with no version supplied, returns React
   18.3.1 docs.
-- Dev container provisions pnpm + uv. **33 TS + 36 Py tests** (1 skipped real
-  embed), all green.
+- **`@strummer/cli` shipped:** `strummer search|get|versions|detect` over `core`
+  (hybrid via `@strummer/embed`, `--json`, version flags). The query embedder was
+  extracted into **`@strummer/embed`** (transformers.js, dynamic import) shared
+  by cli + mcp.
+- **CI gate:** `.github/workflows/ci.yml` mirrors `pnpm gate` (both toolchains)
+  on push/PR.
+- Dev container provisions pnpm + uv. **39 TS + 36 Py tests** (1 skipped real
+  embed), all green. **Pillar 1 (docs/idioms) is functionally complete.**
 
 ## Next action
 
-1. **`@strummer/cli`** — thin human entry over `core` (search/get from the
-   terminal; later `ingest`/`serve` wrappers). Last "no human surface" gap.
-2. Ingestion refinements: drop the TOC bleed into first sections; richer
-   `symbol` extraction.
-3. **Dash docset adapter** — second source type (plain-HTML + searchIndex).
-4. Distribution: Homebrew tap; CI mirroring `pnpm gate`.
+Pillar 1 is closed out. Options for what's next:
+1. **Pillar 2 — API testing** (Postman/Insomnia/Bruno-class): git-friendly
+   collections, environments, Keychain-backed secrets, an agent-drivable runner.
+2. Pillar-1 polish: ingestion refinements (TOC bleed, richer `symbol`); a **Dash
+   docset** adapter; non-Node version detection; Homebrew tap distribution.
 
 ## How to build an index / register the server today
 

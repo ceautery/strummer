@@ -6,9 +6,9 @@ import {
   resolveVersion,
   searchDocs,
 } from '@strummer/core'
+import type { Embedder } from '@strummer/embed'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
-import type { Embedder } from './embedder.js'
 
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */

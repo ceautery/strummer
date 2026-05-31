@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       // Run internal packages from source — no build step in the test loop.
       '@strummer/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@strummer/embed': fileURLToPath(new URL('./packages/embed/src/index.ts', import.meta.url)),
     },
   },
   test: {

@@ -1,15 +1,15 @@
 {
-  "name": "@strummer/mcp",
+  "name": "@strummer/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "strummer-mcp": "./dist/bin.mjs"
+    "strummer": "./dist/bin.mjs"
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
+      "types": "./src/index.ts",
       "default": "./dist/index.mjs"
     }
   },
@@ -22,10 +22,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@strummer/core": "workspace:*",
-    "@strummer/embed": "workspace:*",
-    "zod": "^4.4.3"
+    "@strummer/embed": "workspace:*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13"

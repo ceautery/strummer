@@ -1,0 +1,229 @@
+import { parseArgs } from 'node:util'
+import {
+  detectInstalledVersion,
+  getDoc,
+  listVersions,
+  openDb,
+  resolveVersion,
+  searchDocs,
+} from '@strummer/core'
+import type { Embedder } from '@strummer/embed'
+import type DatabaseType from 'better-sqlite3'
+
+/** Output sinks and dependencies injected into `run` (so it is testable). */
+export interface CliIO {
+  out: (text: string) => void
+  err: (text: string) => void
+  /** When present, queries are embedded for hybrid search. */
+  embedder?: Embedder
+  env?: Record<string, string | undefined>
+}
+
+const HELP = `strummer — version-pinned documentation search
+
+Usage:
+  strummer search <query…>  [-l <lib>] [--version <v>] [--installed <v>] [-p <dir>] [--type <t>] [--limit <n>] [--json]
+  strummer get <id>         [--json]
+  strummer versions <library>
+  strummer detect <project> <library>
+
+Global:
+  -i, --index <file>   index to query (or set STRUMMER_INDEX)
+`
+
+export async function run(argv: string[], io: CliIO): Promise<number> {
+  const [command, ...rest] = argv
+  switch (command) {
+    case 'search':
+      return cmdSearch(rest, io)
+    case 'get':
+      return cmdGet(rest, io)
+    case 'versions':
+      return cmdVersions(rest, io)
+    case 'detect':
+      return cmdDetect(rest, io)
+    case 'help':
+    case '--help':
+    case '-h':
+      io.out(HELP)
+      return 0
+    case undefined:
+      io.err(HELP)
+      return 1
+    default:
+      io.err(`unknown command: ${command}\n`)
+      io.err(HELP)
+      return 1
+  }
+}
+
+function openIndex(indexFlag: string | undefined, io: CliIO): DatabaseType.Database | null {
+  const path = indexFlag ?? io.env?.STRUMMER_INDEX
+  if (!path) {
+    io.err('no index given: pass --index <file> or set STRUMMER_INDEX\n')
+    return null
+  }
+  return openDb(path)
+}
+
+async function cmdSearch(args: string[], io: CliIO): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      index: { type: 'string', short: 'i' },
+      library: { type: 'string', short: 'l' },
+      version: { type: 'string' },
+      installed: { type: 'string' },
+      project: { type: 'string', short: 'p' },
+      type: { type: 'string' },
+      limit: { type: 'string' },
+      json: { type: 'boolean' },
+    },
+  })
+  const query = positionals.join(' ').trim()
+  if (!query) {
+    io.err('search needs a query\n')
+    return 1
+  }
+  const db = openIndex(values.index, io)
+  if (!db) return 1
+
+  try {
+    // Version precedence: --version > --installed > --project (auto-detect).
+    let effectiveVersion = values.version
+    let note: string | undefined
+    if (!values.version && (values.installed || values.project) && values.library) {
+      let requested = values.installed
+      if (!requested && values.project) {
+        const detected = detectInstalledVersion(values.project, values.library)
+        requested = detected.version ?? undefined
+        if (!requested) note = `could not detect ${values.library} in ${values.project}`
+      }
+      if (requested) {
+        const res = resolveVersion(listVersions(db, values.library), requested)
+        note = res.note
+        if (res.resolved) effectiveVersion = res.resolved
+      }
+    }
+
+    let queryVector: number[] | undefined
+    if (io.embedder) {
+      try {
+        queryVector = await io.embedder.embed(query)
+      } catch {
+        queryVector = undefined
+      }
+    }
+
+    const results = searchDocs(db, query, {
+      library: values.library,
+      version: effectiveVersion,
+      type: values.type,
+      limit: values.limit ? Number(values.limit) : undefined,
+      queryVector,
+    })
+
+    if (values.json) {
+      io.out(
+        `${JSON.stringify({ query, version: effectiveVersion ?? null, note, results }, null, 2)}\n`,
+      )
+      return 0
+    }
+    if (note) io.err(`${note}\n`)
+    if (results.length === 0) {
+      io.out('no matches\n')
+      return 0
+    }
+    for (const r of results) {
+      const sym = r.symbol ? `  (${r.symbol})` : ''
+      io.out(`${r.version}  [${r.type ?? '-'}]  ${r.title}${sym}\n`)
+      io.out(`    ${r.snippet}\n`)
+      io.out(`    strummer://doc/${r.id}\n`)
+    }
+    return 0
+  } finally {
+    db.close()
+  }
+}
+
+function cmdGet(args: string[], io: CliIO): number {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: { index: { type: 'string', short: 'i' }, json: { type: 'boolean' } },
+  })
+  const id = Number(positionals[0])
+  if (!Number.isInteger(id)) {
+    io.err('get needs a numeric id\n')
+    return 1
+  }
+  const db = openIndex(values.index, io)
+  if (!db) return 1
+  try {
+    const doc = getDoc(db, id)
+    if (!doc) {
+      io.err(`no document with id ${id}\n`)
+      return 1
+    }
+    if (values.json) {
+      io.out(`${JSON.stringify(doc, null, 2)}\n`)
+      return 0
+    }
+    io.out(`${doc.title}  [${doc.type ?? '-'}]  ${doc.library} ${doc.version}\n`)
+    if (doc.headingPath) io.out(`${doc.headingPath}\n`)
+    if (doc.url) io.out(`${doc.url}\n`)
+    io.out(`\n${doc.body}\n`)
+    if (doc.attribution) io.out(`\n— ${doc.attribution}\n`)
+    return 0
+  } finally {
+    db.close()
+  }
+}
+
+function cmdVersions(args: string[], io: CliIO): number {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: { index: { type: 'string', short: 'i' } },
+  })
+  const library = positionals[0]
+  if (!library) {
+    io.err('versions needs a library\n')
+    return 1
+  }
+  const db = openIndex(values.index, io)
+  if (!db) return 1
+  try {
+    const versions = listVersions(db, library)
+    io.out(versions.length ? `${versions.join('\n')}\n` : `no versions indexed for ${library}\n`)
+    return 0
+  } finally {
+    db.close()
+  }
+}
+
+function cmdDetect(args: string[], io: CliIO): number {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: { index: { type: 'string', short: 'i' } },
+  })
+  const [project, library] = positionals
+  if (!project || !library) {
+    io.err('detect needs <project> <library>\n')
+    return 1
+  }
+  const db = openIndex(values.index, io)
+  if (!db) return 1
+  try {
+    const detected = detectInstalledVersion(project, library)
+    const res = resolveVersion(listVersions(db, library), detected.version ?? '')
+    io.out(`detected: ${detected.version ?? '(none)'} (${detected.source})\n`)
+    io.out(`resolved: ${res.resolved ?? '(none)'}\n`)
+    io.out(`${res.note}\n`)
+    return 0
+  } finally {
+    db.close()
+  }
+}
