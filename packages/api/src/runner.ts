@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { type Dispatcher, request } from 'undici'
 import { ArtifactStore } from './artifacts.js'
-import { evaluateAssertions } from './assert.js'
+import { evaluateAssertions, extractCaptures } from './assert.js'
 import type { Collection, PreparedRequest, RunResult, SecretStore } from './model.js'
 import { prepareRequest } from './prepare.js'
 import { checkGate } from './safety.js'
@@ -89,15 +89,11 @@ export async function runRequest(
     json = undefined
   }
 
-  // Assertions evaluate the REAL response; only surfaced strings are redacted.
-  const assertions = evaluateAssertions(entry.assertions, {
-    status: res.statusCode,
-    statusText: '',
-    headers,
-    bodyText,
-    json,
-    latencyMs,
-  })
+  // Assertions/captures evaluate the REAL response; only surfaced strings are
+  // redacted. Captures feed later requests in a sequence (see runSequence).
+  const ctx = { status: res.statusCode, statusText: '', headers, bodyText, json, latencyMs }
+  const assertions = evaluateAssertions(entry.assertions, ctx)
+  const captured = extractCaptures(entry.captures, ctx)
 
   const store = opts.artifacts ?? new ArtifactStore()
   const bodyHandle = store.put(
@@ -115,7 +111,7 @@ export async function runRequest(
       latencyMs,
       headers: redactor.redactHeaders(headers),
       assertions,
-      captured: {},
+      captured,
       bodyHandle,
     },
   }

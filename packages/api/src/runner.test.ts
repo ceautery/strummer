@@ -7,6 +7,7 @@ import { ArtifactStore } from './artifacts.js'
 import { loadCollection } from './collection.js'
 import { runRequest } from './runner.js'
 import { StaticSecretStore } from './secrets.js'
+import { runSequence } from './sequence.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const FIXTURE = resolve(here, '../test/fixtures/sample')
@@ -23,6 +24,9 @@ describe('runRequest (offline, in-process server)', () => {
       } else if (req.url === '/echo') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ headers: req.headers }))
+      } else if (req.url === '/token') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ token: 'tok-123' }))
       } else if (req.url === '/things' && req.method === 'POST') {
         res.writeHead(201, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ id: 1 }))
@@ -90,5 +94,25 @@ describe('runRequest (offline, in-process server)', () => {
     })
     expect(result.sent).toBe(true)
     expect(result.response?.status).toBe(201)
+  })
+
+  it('captures a value from a response', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'get-token', { vars: { baseUrl } })
+    expect(result.response?.captured).toEqual({ token: 'tok-123' })
+  })
+
+  it('chains a captured value into a later request', async () => {
+    const artifacts = new ArtifactStore()
+    const seq = await runSequence(loadCollection(FIXTURE), ['get-token', 'use-token'], {
+      vars: { baseUrl },
+      artifacts,
+    })
+    expect(seq.captured).toEqual({ token: 'tok-123' })
+    expect(seq.steps).toHaveLength(2)
+
+    // use-token sent `Authorization: Bearer {{token}}` with the captured token.
+    const echo = seq.steps[1]?.result.response?.bodyHandle ?? ''
+    const body = artifacts.get(echo)?.body ?? ''
+    expect(body).toContain('Bearer tok-123')
   })
 })

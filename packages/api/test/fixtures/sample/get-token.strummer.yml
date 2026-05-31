@@ -1,0 +1,4 @@
+assertions:
+  - { source: status, op: equals, value: 200 }
+captures:
+  - { var: token, source: jsonpath, path: "$.token" }

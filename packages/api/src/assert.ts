@@ -1,5 +1,5 @@
 import { JSONPath } from 'jsonpath-plus'
-import type { AssertionOp, AssertionResult, AssertionSpec } from './model.js'
+import type { AssertionOp, AssertionResult, AssertionSpec, CaptureSpec } from './model.js'
 
 export interface ResponseContext {
   status: number
@@ -10,13 +10,44 @@ export interface ResponseContext {
   latencyMs: number
 }
 
+/** Resolve a value from a response by source kind (shared by assertions + captures). */
+function valueFrom(
+  source: string,
+  ctx: ResponseContext,
+  opts: { path?: string; name?: string },
+): unknown {
+  switch (source) {
+    case 'status':
+      return ctx.status
+    case 'statusText':
+      return ctx.statusText
+    case 'responseTime':
+      return ctx.latencyMs
+    case 'body':
+      return ctx.bodyText
+    case 'header':
+      return opts.name ? ctx.headers[opts.name.toLowerCase()] : undefined
+    case 'jsonpath':
+      // eval disabled: no script (`()`/`?()`) expressions — jsonpath-plus has a
+      // history of eval CVEs; only plain path navigation is allowed.
+      return JSONPath({
+        path: opts.path ?? '$',
+        json: ctx.json as object,
+        wrap: false,
+        eval: false,
+      })
+    default:
+      return undefined
+  }
+}
+
 /** Evaluate declarative assertions against a response. */
 export function evaluateAssertions(
   specs: AssertionSpec[],
   ctx: ResponseContext,
 ): AssertionResult[] {
   return specs.map((spec) => {
-    const actual = resolveSource(spec, ctx)
+    const actual = valueFrom(spec.source, ctx, spec)
     return {
       source: spec.source,
       op: spec.op,
@@ -29,30 +60,16 @@ export function evaluateAssertions(
   })
 }
 
-function resolveSource(spec: AssertionSpec, ctx: ResponseContext): unknown {
-  switch (spec.source) {
-    case 'status':
-      return ctx.status
-    case 'statusText':
-      return ctx.statusText
-    case 'responseTime':
-      return ctx.latencyMs
-    case 'body':
-      return ctx.bodyText
-    case 'header':
-      return spec.name ? ctx.headers[spec.name.toLowerCase()] : undefined
-    case 'jsonpath':
-      // eval disabled: no script (`()`/`?()`) expressions — jsonpath-plus has a
-      // history of eval CVEs; we only allow plain path navigation.
-      return JSONPath({
-        path: spec.path ?? '$',
-        json: ctx.json as object,
-        wrap: false,
-        eval: false,
-      })
-    default:
-      return undefined
+/** Extract captured variables from a response into a name→value map. */
+export function extractCaptures(
+  specs: CaptureSpec[],
+  ctx: ResponseContext,
+): Record<string, unknown> {
+  const captured: Record<string, unknown> = {}
+  for (const spec of specs) {
+    captured[spec.var] = valueFrom(spec.source, ctx, spec)
   }
+  return captured
 }
 
 function applyOp(op: AssertionOp, actual: unknown, expected: unknown): boolean {

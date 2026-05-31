@@ -59,7 +59,9 @@ installed version Z" and get a precise, cited answer over MCP.
       chained), fail-closed, value-redaction (raw + base64/url encodings).
 - [x] Mutation safety gate: dry-run by default; send only with `allowUnsafe` +
       host allowlist. (SSRF/redirect re-check still to add.)
-- [ ] Environments & variables file loading; request chaining via captures.
+- [x] Request chaining via captures (`extractCaptures` + `runSequence`).
+- [ ] Environment-file loading (`environments/<Env>.bru`); request **body**
+      sending (.bru body:json/form/etc.).
 - [ ] QuickJS-sandboxed pre/post scripts (curated `bru`/`expect` API).
 - [ ] MCP tools (`run_request`/`run_collection`/`validate_response`/…) + CLI.
 - [ ] Import: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.

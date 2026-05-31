@@ -1,5 +1,5 @@
 export { type Artifact, ArtifactStore } from './artifacts.js'
-export { evaluateAssertions, type ResponseContext } from './assert.js'
+export { evaluateAssertions, extractCaptures, type ResponseContext } from './assert.js'
 export { loadCollection } from './collection.js'
 export type {
   ApiRequest,
@@ -26,4 +26,10 @@ export {
   resolveSecretStore,
   StaticSecretStore,
 } from './secrets.js'
+export {
+  runSequence,
+  type SequenceOptions,
+  type SequenceResult,
+  type SequenceStep,
+} from './sequence.js'
 export { interpolate } from './vars.js'
