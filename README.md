@@ -28,9 +28,13 @@ generation, mutation testing, and flaky-test detection.
 
 ## Status
 
-Under active development: the **docs/idioms pillar is functionally complete**
-(version-pinned hybrid search over MCP + CLI) and the **API-testing engine** is
-well underway. **The single source of truth for "what phase are we on" is
+Under active development. The **docs/idioms pillar is complete** (version-pinned
+hybrid search over MCP + CLI, multi-ecosystem version detection, DevDocs + Dash
+adapters). The **API-testing pillar's core is complete** too — `.bru` runner,
+secrets, deny-by-default mutation safety, captures/chaining, QuickJS scripts,
+OpenAPI/GraphQL contract validation, and both an MCP tool surface and a
+`strummer api …` CLI. Next up is the **browser/UI pillar** (or optional API tail
+items). **The single source of truth for "what phase are we on" is
 [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance

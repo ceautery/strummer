@@ -20,7 +20,7 @@ that make the project resumable and aspirational.
 - [x] Dev container provisions pnpm + uv.
 - [x] Milestone push to GitHub.
 
-## Phase 1 — Docs / idioms pillar  *(functionally complete)*
+## Phase 1 — Docs / idioms pillar  *(complete, incl. deferred polish)*
 
 Goal: an agent can ask "the current idiomatic way to do X in library Y at the
 installed version Z" and get a precise, cited answer over MCP.
@@ -32,7 +32,7 @@ installed version Z" and get a precise, cited answer over MCP.
       (structured, resource-link output; SDK 1.29).
 - [x] Python ingestion pipeline: HTML → clean fragments → FTS5 + vectors.
 - [x] First real source adapter (**DevDocs**) against **React 19.2** — a
-      1,279-fragment index built and served over MCP. (Dash adapter: later.)
+      1,279-fragment index built and served over MCP.
 - [x] **Hybrid search:** sqlite-vec KNN + RRF fusion with bm25 in `searchDocs`;
       in-server query embedding via transformers.js (matches fastembed, ADR 0003).
 - [x] **Version pinning:** `resolveVersion` (exact → nearest-same-major →
@@ -58,12 +58,12 @@ installed version Z" and get a precise, cited answer over MCP.
       headings (`useState(initialState)` → `useState`) as a fallback when a section
       has no source-index entry.
 
-## Phase 2 — API testing pillar  *(in progress; design = ADR 0004)*
+## Phase 2 — API testing pillar  *(core complete; optional tail remains; design = ADR 0004 + 0005)*
 
 - [x] `@strummer/api` package + Bruno `.bru` format (via `@usebruno/lang`) +
       thin domain model; Strummer assertions/captures in `*.strummer.yml` sidecar.
-- [x] Declarative assertion engine (status/header/jsonpath; ajv/responseTime
-      next) + undici runner + resource-handle artifacts. First slice green.
+- [x] Declarative assertion engine (status/statusText/header/jsonpath/responseTime/
+      schema) + undici runner + resource-handle artifacts.
 - [x] Secrets: `{{secret:NAME}}` + `SecretStore` (`@napi-rs/keyring`/env/static/
       chained), fail-closed, value-redaction (raw + base64/url encodings).
 - [x] Mutation safety gate: dry-run by default; send only with `allowUnsafe` +

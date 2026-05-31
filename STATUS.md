@@ -5,9 +5,14 @@
 
 ## Current phase
 
-**Phase 2 — Web API testing pillar** (in progress). Pillar 1 (docs/idioms) is
-**functionally complete and CI-gated**. Pillar 2 design is locked (ADR 0004 +
-ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
+**Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
+contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
+items remain — see Next action). **Pillar 1 (docs/idioms) is functionally
+complete _and all its deferred polish is done_** (non-Node version detection,
+TOC-bleed/symbol ingestion refinements, Dash docset adapter). The project sits
+at a decision point: start **Phase 3 (browser/UI)** or pick up Pillar-2 tail.
+Pillar 2 design is locked (ADR 0004 + 0005 + ARCHITECTURE §9, grounded by a
+4-stream research workflow archived in
 `docs/research/2026-05-31-pillar2-api-testing.md`).
 
 **`@strummer/api` so far (TDD, offline tests):**
@@ -58,8 +63,11 @@ ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
     `--json`), `run-collection` (`--stop-on-failure`), `validate --graphql
     <schema> --query <q>` (offline drift). Exit 0 only when sent + assertions
     pass (+ contract valid when checked).
-- 115 TS tests (engine + both surfaces; contract validators adversarially
-  verified). Both bins smoke-tested end-to-end.
+- A runnable sample collection (`examples/api/jsonplaceholder`) + an API-testing
+  quickstart in `packages/cli/README.md`; an offline guard test keeps the sample
+  in sync with the `.bru` format.
+- **127 TS + 45 Py tests** (1 skipped real-embed), all green. Contract validators
+  adversarially verified; both API bins smoke-tested end-to-end.
 
 **Next (Pillar 2 tail):** keyring secret-store wiring into CLI/MCP (opt-in),
 SSRF/redirect re-checks, remaining body types (multipart/file/graphql),
