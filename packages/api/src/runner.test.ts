@@ -28,8 +28,14 @@ describe('runRequest (offline, in-process server)', () => {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ token: 'tok-123' }))
       } else if (req.url === '/things' && req.method === 'POST') {
-        res.writeHead(201, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ id: 1 }))
+        let received = ''
+        req.on('data', (c) => {
+          received += c
+        })
+        req.on('end', () => {
+          res.writeHead(201, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ received, contentType: req.headers['content-type'] ?? null }))
+        })
       } else {
         res.writeHead(404)
         res.end()
@@ -114,5 +120,37 @@ describe('runRequest (offline, in-process server)', () => {
     const echo = seq.steps[1]?.result.response?.bodyHandle ?? ''
     const body = artifacts.get(echo)?.body ?? ''
     expect(body).toContain('Bearer tok-123')
+  })
+
+  it('loads environments and lets runtime vars override them', async () => {
+    const collection = loadCollection(FIXTURE)
+    expect(collection.environments.get('Local')).toEqual({
+      apiVersion: 'v2',
+      baseUrl: 'http://example.invalid',
+    })
+    // env baseUrl is a dead host; the runtime var must win and hit the real server.
+    const result = await runRequest(collection, 'get-health', {
+      env: 'Local',
+      vars: { baseUrl },
+    })
+    expect(result.response?.status).toBe(200)
+  })
+
+  it('sends a JSON body with interpolation and a default content-type', async () => {
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'create-thing-json', {
+      vars: { baseUrl, thingName: 'widget' },
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'],
+      artifacts,
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(201)
+    expect(result.request.body).toContain('"name": "widget"')
+
+    // The server echoed the received body + content-type.
+    const echoed = artifacts.get(result.response?.bodyHandle ?? '')?.body ?? ''
+    expect(echoed).toContain('widget')
+    expect(echoed).toContain('application/json')
   })
 })

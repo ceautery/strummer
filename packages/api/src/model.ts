@@ -41,11 +41,19 @@ export interface CaptureSpec {
   name?: string
 }
 
+/** A request body. Raw types carry `content`; form-urlencoded carries `params`. */
+export interface RequestBody {
+  type: string
+  content?: string
+  params?: { name: string; value: string }[]
+}
+
 export interface ApiRequest {
   name: string
   method: string
   url: string
   headers: { name: string; value: string }[]
+  body?: RequestBody
 }
 
 export interface RequestEntry {
@@ -57,6 +65,8 @@ export interface RequestEntry {
 export interface Collection {
   dir: string
   requests: Map<string, RequestEntry>
+  /** Environment name → its (non-secret) variables. */
+  environments: Map<string, Record<string, string>>
 }
 
 export interface AssertionResult {
@@ -80,6 +90,8 @@ export interface PreparedRequest {
   method: string
   url: string
   headers: Record<string, string>
+  /** Materialized body (redacted), if any. */
+  body?: string
 }
 
 export interface RunResponse {

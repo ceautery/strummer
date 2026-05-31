@@ -11,6 +11,8 @@ import { EnvSecretStore, Redactor } from './secrets.js'
 export interface RunOptions {
   /** Variable scope for `{{var}}` interpolation. */
   vars?: Record<string, unknown>
+  /** Name of a collection environment whose vars seed the scope (lowest precedence). */
+  env?: string
   /** Secret store for `{{secret:NAME}}` resolution (defaults to env). */
   secrets?: SecretStore
   /** Artifact store for the response body (a fresh one is used if omitted). */
@@ -19,6 +21,11 @@ export interface RunOptions {
   allowUnsafe?: boolean
   /** Hostnames a mutating request may reach. */
   allowedHosts?: string[]
+}
+
+function hasHeader(headers: Record<string, string>, name: string): boolean {
+  const lower = name.toLowerCase()
+  return Object.keys(headers).some((k) => k.toLowerCase() === lower)
 }
 
 function hostOf(url: string): string {
@@ -57,12 +64,22 @@ export async function runRequest(
 
   const secrets = opts.secrets ?? new EnvSecretStore()
   const redactor = new Redactor()
-  const prepared = await prepareRequest(entry.request, opts.vars ?? {}, secrets, redactor)
+  // Scope precedence: explicit/captured vars override the chosen environment.
+  const envVars = opts.env ? (collection.environments.get(opts.env) ?? {}) : {}
+  const scope = { ...envVars, ...(opts.vars ?? {}) }
+  const prepared = await prepareRequest(entry.request, scope, secrets, redactor)
+
+  // Headers actually sent: add a default Content-Type for the body if unset.
+  const sendHeaders = { ...prepared.headers }
+  if (prepared.body && !hasHeader(sendHeaders, 'content-type')) {
+    sendHeaders['Content-Type'] = prepared.body.contentType
+  }
 
   const redactedRequest: PreparedRequest = {
     method: prepared.method,
     url: redactor.redact(prepared.url),
-    headers: redactor.redactHeaders(prepared.headers),
+    headers: redactor.redactHeaders(sendHeaders),
+    body: prepared.body ? redactor.redact(prepared.body.content) : undefined,
   }
 
   const gate = checkGate(prepared.method, hostOf(prepared.url), {
@@ -76,7 +93,8 @@ export async function runRequest(
   const started = performance.now()
   const res = await request(prepared.url, {
     method: prepared.method as Dispatcher.HttpMethod,
-    headers: prepared.headers,
+    headers: sendHeaders,
+    body: prepared.body?.content,
   })
   const bodyText = await res.body.text()
   const latencyMs = performance.now() - started

@@ -22,15 +22,18 @@ ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
 - **Mutation safety:** GET/HEAD/OPTIONS run; POST/PUT/PATCH/DELETE **dry-run** by
   default and only send with `allowUnsafe` + a host allowlist (`checkGate`).
 - **Captures + chaining:** sidecar `captures` extract values from a response
-  (`extractCaptures`); `runSequence` threads them into later requests' scope
-  (e.g. capture `token`, then `Authorization: Bearer {{token}}`).
-- 59 TS tests (incl. dedicated assert/secrets/safety units).
+  (`extractCaptures`); `runSequence` threads them into later requests' scope.
+- **Request bodies:** `.bru` `body:json/text/xml/sparql` (raw) + `form-urlencoded`
+  sent via undici with a default `Content-Type`; vars/secrets interpolated in the
+  body; redacted body shown in the result. (multipart/file/graphql still TODO.)
+- **Environments:** `environments/<Env>.bru` loaded into `collection.environments`;
+  `runRequest`/`runSequence` take `env` (lowest precedence; runtime vars win).
+- 61 TS tests (incl. dedicated assert/secrets/safety units).
 
 **Next (Pillar 2 layers):** QuickJS-sandboxed scripts → contract validation
 (OpenAPI/GraphQL) → **MCP tools + CLI commands** (planned fan-out: independent
-surfaces over the engine); then secret-store wiring into CLI/MCP (keyring opt-in)
-and SSRF/redirect re-checks. Request **body** sending (.bru body blocks) is also
-still TODO.
+surfaces over the engine); then secret-store wiring into CLI/MCP (keyring opt-in),
+SSRF/redirect re-checks, and remaining body types (multipart/file/graphql).
 
 Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar

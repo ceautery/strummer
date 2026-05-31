@@ -1,0 +1,17 @@
+meta {
+  name: Create Thing JSON
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/things
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "{{thingName}}"
+  }
+}

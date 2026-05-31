@@ -10,12 +10,13 @@ export type {
   CaptureSpec,
   Collection,
   PreparedRequest,
+  RequestBody,
   RequestEntry,
   RunResponse,
   RunResult,
   SecretStore,
 } from './model.js'
-export { type Prepared, prepareRequest } from './prepare.js'
+export { type Prepared, type PreparedBody, prepareRequest } from './prepare.js'
 export { type RunOptions, runRequest } from './runner.js'
 export { checkGate, isMutating, type SafetyDecision, type SafetyOptions } from './safety.js'
 export {
