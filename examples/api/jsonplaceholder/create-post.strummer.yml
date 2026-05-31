@@ -1,0 +1,5 @@
+# POST is a mutating method: it DRY-RUNS by default and only sends with
+# `--unsafe --allow-host jsonplaceholder.typicode.com` (ADR 0004).
+assertions:
+  - { source: status, op: equals, value: 201 }
+  - { source: jsonpath, path: "$.id", op: exists }

@@ -1,0 +1,8 @@
+# Strummer declarative assertions + captures, in a sidecar so the .bru stays
+# Bruno-GUI compatible (ADR 0004).
+assertions:
+  - { source: status, op: equals, value: 200 }
+  - { source: header, name: content-type, op: contains, value: application/json }
+  - { source: jsonpath, path: "$.name", op: exists }
+captures:
+  - { var: userName, source: jsonpath, path: "$.name" }

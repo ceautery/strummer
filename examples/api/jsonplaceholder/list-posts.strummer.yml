@@ -1,0 +1,3 @@
+assertions:
+  - { source: status, op: equals, value: 200 }
+  - { source: jsonpath, path: "$[0].userId", op: equals, value: 1 }

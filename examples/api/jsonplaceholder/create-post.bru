@@ -1,0 +1,19 @@
+meta {
+  name: create-post
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/posts
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "title": "strummer",
+    "body": "hello from a .bru file",
+    "userId": 1
+  }
+}

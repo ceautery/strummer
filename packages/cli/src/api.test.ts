@@ -259,3 +259,24 @@ describe('docs commands still work', () => {
     expect(c.out()).toContain('19.0')
   })
 })
+
+// Guards the shipped sample (and the CLI quickstart) against .bru-format drift.
+// Offline only: `list`/`get` never make a network request.
+describe('bundled example collection', () => {
+  const example = resolve(here, '../../../examples/api/jsonplaceholder')
+
+  it('list shows the documented requests', async () => {
+    const c = capture()
+    expect(await run(['api', 'list', example], c.io)).toBe(0)
+    for (const name of ['get-user', 'list-posts', 'create-post']) {
+      expect(c.out()).toContain(name)
+    }
+  })
+
+  it('get reports a request with no required secrets', async () => {
+    const c = capture()
+    expect(await run(['api', 'get', example, 'get-user'], c.io)).toBe(0)
+    expect(c.out()).toContain('/users/1')
+    expect(c.out()).toContain('required secrets')
+  })
+})

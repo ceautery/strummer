@@ -97,6 +97,8 @@ vision and `ARCHITECTURE.md` for the technical design.
   safety, scripts), `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
+- `examples/` — runnable sample collections (e.g. `examples/api/jsonplaceholder`,
+  used by the `@strummer/cli` API quickstart).
 - `.github/workflows/ci.yml` — CI mirroring `pnpm gate` on push/PR.
 - The Linux dev-container harness (`docker/`, `docker-compose.yml`) that hosts
   Claude Code is **untracked** (gitignored) — local tooling for creating the
