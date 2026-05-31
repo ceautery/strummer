@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util'
 import {
   detectInstalledVersion,
+  type Ecosystem,
   getDoc,
   listVersions,
   openDb,
@@ -23,10 +24,10 @@ export interface CliIO {
 const HELP = `strummer — version-pinned documentation search
 
 Usage:
-  strummer search <query…>  [-l <lib>] [--version <v>] [--installed <v>] [-p <dir>] [--type <t>] [--limit <n>] [--json]
+  strummer search <query…>  [-l <lib>] [--version <v>] [--installed <v>] [-p <dir>] [--ecosystem <e>] [--type <t>] [--limit <n>] [--json]
   strummer get <id>         [--json]
   strummer versions <library>
-  strummer detect <project> <library>
+  strummer detect <project> <library>  [--ecosystem <node|python|ruby>]
 
 API testing:
   strummer api list <dir>                               [--json]
@@ -86,6 +87,7 @@ async function cmdSearch(args: string[], io: CliIO): Promise<number> {
       version: { type: 'string' },
       installed: { type: 'string' },
       project: { type: 'string', short: 'p' },
+      ecosystem: { type: 'string' },
       type: { type: 'string' },
       limit: { type: 'string' },
       json: { type: 'boolean' },
@@ -106,7 +108,9 @@ async function cmdSearch(args: string[], io: CliIO): Promise<number> {
     if (!values.version && (values.installed || values.project) && values.library) {
       let requested = values.installed
       if (!requested && values.project) {
-        const detected = detectInstalledVersion(values.project, values.library)
+        const detected = detectInstalledVersion(values.project, values.library, {
+          ecosystem: values.ecosystem as Ecosystem | undefined,
+        })
         requested = detected.version ?? undefined
         if (!requested) note = `could not detect ${values.library} in ${values.project}`
       }
@@ -217,7 +221,7 @@ function cmdDetect(args: string[], io: CliIO): number {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: { index: { type: 'string', short: 'i' } },
+    options: { index: { type: 'string', short: 'i' }, ecosystem: { type: 'string' } },
   })
   const [project, library] = positionals
   if (!project || !library) {
@@ -227,7 +231,9 @@ function cmdDetect(args: string[], io: CliIO): number {
   const db = openIndex(values.index, io)
   if (!db) return 1
   try {
-    const detected = detectInstalledVersion(project, library)
+    const detected = detectInstalledVersion(project, library, {
+      ecosystem: values.ecosystem as Ecosystem | undefined,
+    })
     const res = resolveVersion(listVersions(db, library), detected.version ?? '')
     io.out(`detected: ${detected.version ?? '(none)'} (${detected.source})\n`)
     io.out(`resolved: ${res.resolved ?? '(none)'}\n`)

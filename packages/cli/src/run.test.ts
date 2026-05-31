@@ -1,4 +1,6 @@
-import { dirname, resolve } from 'node:path'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { run } from './index.js'
@@ -54,5 +56,22 @@ describe('cli run', () => {
   it('unknown command returns non-zero', async () => {
     const c = capture()
     expect(await run(['frobnicate'], c.io)).toBe(1)
+  })
+
+  it('detect --ecosystem python reads a non-Node manifest', async () => {
+    const proj = mkdtempSync(join(tmpdir(), 'strummer-pyproj-'))
+    try {
+      writeFileSync(join(proj, 'requirements.txt'), 'django==5.0.1\n')
+      const c = capture()
+      const code = await run(
+        ['detect', proj, 'django', '--ecosystem', 'python', '--index', FIXTURE],
+        c.io,
+      )
+      expect(code).toBe(0)
+      expect(c.out()).toContain('5.0.1')
+      expect(c.out()).toContain('python:requirements')
+    } finally {
+      rmSync(proj, { recursive: true, force: true })
+    }
   })
 })

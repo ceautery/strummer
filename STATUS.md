@@ -145,8 +145,9 @@ any; none blocking):
 
 Or start **Phase 3 (browser/UI testing, Playwright over MCP)** — see ROADMAP.
 
-Deferred Pillar-1 polish (not blocking): Dash docset adapter, non-Node version
-detection, ingestion TOC-bleed/`symbol` refinements, Homebrew tap.
+Deferred Pillar-1 polish (in progress): **non-Node version detection — DONE**
+(Python/Ruby ecosystems in `detectInstalledVersion`, wired into MCP/CLI). Still
+open: Dash docset adapter, ingestion TOC-bleed/`symbol` refinements, Homebrew tap.
 
 ## How to build an index / register the server today
 

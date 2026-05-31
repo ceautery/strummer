@@ -2,7 +2,9 @@ export { type OpenOptions, openDb, readMeta } from './db.js'
 export { getDoc } from './doc.js'
 export {
   type DetectedVersion,
+  type DetectOptions,
   detectInstalledVersion,
+  type Ecosystem,
   type VersionSource,
 } from './project.js'
 export {

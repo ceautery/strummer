@@ -79,8 +79,12 @@ export function createStrummerServer(
           .optional()
           .describe(
             'absolute path to the project root; auto-detects the installed version of `library` ' +
-              'from node_modules/lockfile/package.json. Precedence: version > installed > project.',
+              'from the project manifests. Precedence: version > installed > project.',
           ),
+        ecosystem: z
+          .enum(['node', 'python', 'ruby'])
+          .optional()
+          .describe('restrict project auto-detection to one ecosystem (default: auto-probe)'),
         type: z.string().optional().describe('restrict to a kind, e.g. "function" | "guide"'),
         limit: z.number().int().min(1).max(25).optional().describe('max results (default 8)'),
       },
@@ -115,7 +119,9 @@ export function createStrummerServer(
         } else {
           let requested = args.installed
           if (!requested && args.project) {
-            const detected = detectInstalledVersion(args.project, args.library)
+            const detected = detectInstalledVersion(args.project, args.library, {
+              ecosystem: args.ecosystem,
+            })
             detectedVersion = detected.version
             if (detected.version) {
               requested = detected.version
@@ -186,11 +192,17 @@ export function createStrummerServer(
     {
       title: 'Detect installed version',
       description:
-        'Detect the installed version of a library in a project (node_modules / lockfile / ' +
-        'package.json) and resolve it to the best matching indexed doc release.',
+        'Detect the installed version of a library in a project (Node, Python, or Ruby ' +
+        'manifests) and resolve it to the best matching indexed doc release.',
       inputSchema: {
         project: z.string().describe('absolute path to the project root'),
-        library: z.string().describe('library / npm package name, e.g. "react"'),
+        library: z.string().describe('library / package name, e.g. "react" or "django"'),
+        ecosystem: z
+          .enum(['node', 'python', 'ruby'])
+          .optional()
+          .describe(
+            'restrict detection to one ecosystem (default: auto-probe node → python → ruby)',
+          ),
       },
       outputSchema: {
         library: z.string(),
@@ -203,7 +215,9 @@ export function createStrummerServer(
       },
     },
     (args) => {
-      const detected = detectInstalledVersion(args.project, args.library)
+      const detected = detectInstalledVersion(args.project, args.library, {
+        ecosystem: args.ecosystem,
+      })
       const available = listVersions(db, args.library)
       const res = detected.version
         ? resolveVersion(available, detected.version)

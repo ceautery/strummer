@@ -44,7 +44,11 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] `@strummer/cli` thin human entry over `core` (`search`/`get`/`versions`/
       `detect`); query embedder extracted to `@strummer/embed`.
 - [ ] Second source adapter: Dash docsets (plain-HTML + searchIndex).
-- [ ] Detect installed versions for non-Node ecosystems (Python, Ruby, …).
+- [x] **Detect installed versions for non-Node ecosystems** — `detectInstalledVersion`
+      now dispatches by ecosystem (auto-probe node → python → ruby, or explicit):
+      Python (dist-info METADATA, uv/poetry/Pipfile locks, requirements.txt,
+      pyproject.toml) + Ruby (Gemfile.lock, Gemfile). `ecosystem` wired into the
+      `detect_version`/`search_docs` MCP tools + CLI `detect`/`search`.
 - [ ] Ingestion refinements: drop TOC bleed into first sections; richer `symbol`.
 
 ## Phase 2 — API testing pillar  *(in progress; design = ADR 0004)*
