@@ -5,7 +5,7 @@
 
 ## Current phase
 
-**Phase 3 — Browser/UI testing pillar: DESIGN LOCKED, first slice next.** The
+**Phase 3 — Browser/UI testing pillar: DESIGN LOCKED + first slice SHIPPED.** The
 design is grounded by a 5-stream research workflow with adversarial verification
 (archived in `docs/research/2026-05-31-pillar3-browser-testing.md`) and captured
 in **ADR 0006 + ARCHITECTURE §10 + ROADMAP Phase 3**. Decision: a new pure-TS
@@ -16,8 +16,14 @@ deny-by-default operator-set safety with a two-tier SSRF defense (route allowlis
 + loopback DNS-pinning proxy); secrets at the fill boundary, redacted before any
 write; a11y (`@axe-core/playwright`) + perf (Lighthouse over CDP) audits. A shared
 **`@strummer/safety`** module (SSRF classifier + redaction) will be factored out
-of `@strummer/api`. **Next action:** the first red→green slice (a11y-audit
-summarizer — see below).
+of `@strummer/api`. **First slice SHIPPED:** `@strummer/browser` scaffolded
+(thin on `playwright-core` 1.60.0); `ArtifactStore` (on-disk,
+`strummer://browser/run/<id>/<kind>` handles), `summarizeA11y`, and `auditA11y`
+(via `@axe-core/playwright`) all TDD'd against an offline in-process fixture +
+real headless Chromium. CI + the (gitignored) docker harness now provision
+Chromium + its system libs. **128 TS + 45 Py tests green.** **Next action:** the
+browser lifecycle manager + ARIA-snapshot capture/serializer (see ROADMAP
+Phase 3).
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -150,19 +156,19 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 
 ## Next action
 
-**Phase 3, Slice 1 (first red→green): the a11y-audit summarizer.** Scaffold
-`@strummer/browser` (Apache-2.0, ESM, tsdown, Biome+Vitest; pin `playwright-core`
-1.60.0; add to the pnpm workspace + `pnpm gate` + CI). Write a failing Vitest in
-`packages/browser/src` that: (1) starts a `node:http` `createServer` returning a
-tiny HTML page with one `<img>` missing `alt`, `listen(0,'127.0.0.1')`, reads
-`address().port` (the `packages/api/src/runner.test.ts` pattern); (2) launches
-headless chromium once via `playwright-core` 1.60.0, navigates to
-`http://127.0.0.1:{port}`; (3) runs `AxeBuilder({page}).analyze()`; (4) asserts
-`summarize(results)` returns `violationCount>=1`, includes the `image-alt` rule
-id bucketed by impact, and that the full Results are addressable by a
-`strummer://browser/run/<id>/a11y` handle. Make it pass with the smallest
-`summarize()` + an on-disk-backed `ArtifactStore.put/get`. No pixels/perf/network
-— deterministic + offline. See ADR 0006 + ROADMAP Phase 3 for what layers on next.
+**Phase 3, Slice 1 (a11y-audit summarizer): DONE & committed** (`@strummer/browser`
+scaffolded; `ArtifactStore`/`summarizeA11y`/`auditA11y`, TDD against an offline
+fixture + real headless Chromium; CI + docker harness provision Chromium). The
+slice deliberately deferred visual baselines + Lighthouse scores (the flaky parts).
+
+**Next, per ROADMAP Phase 3 (in rough order):** (1) **browser lifecycle manager**
+— one browser/server, ephemeral isolated context per session, idle reaper +
+timeout/concurrency caps; (2) **ARIA-snapshot capture + serializer** (copy
+`@playwright/mcp`'s Apache-2.0 serializer with attribution) → token-capped diff +
+full-snapshot handle, per-snapshot ref-ids; (3) **imperative step tools** over
+refs; then the safety gate, the two-tier SSRF defense (factoring `@strummer/safety`
+out of `@strummer/api`), and the artifact-capture pipeline. Continue TDD
+red→green; `pnpm gate` must be 100% green before each commit.
 
 ---
 

@@ -35,6 +35,12 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
 
+      # Browser pillar (@strummer/browser) tests launch a real headless Chromium.
+      # Install the binary + its system libs; the revision is pinned by
+      # playwright-core's version in packages/browser/package.json.
+      - name: Install Playwright Chromium + system deps
+        run: pnpm --filter @strummer/browser exec playwright-core install --with-deps chromium
+
       - name: Sync Python environment
         working-directory: py/strummer_ingest
         run: uv sync
