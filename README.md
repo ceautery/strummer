@@ -48,4 +48,5 @@ the always-green gate, milestone discipline, and how to resume cold).
 
 ## License
 
-TBD.
+[Apache-2.0](./LICENSE) © 2026 Curtis Autery. See [`NOTICE`](./NOTICE) — indexed
+third-party documentation remains under its own upstream license.
