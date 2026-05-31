@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@strummer/api": "workspace:*",
     "@strummer/core": "workspace:*",
     "@strummer/embed": "workspace:*"
   },

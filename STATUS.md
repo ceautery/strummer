@@ -44,13 +44,27 @@ ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
   missing root types, plus response `errors`. Shared `ContractResult`/
   `ContractFinding`. Adversarially verified (3 bugs found + fixed: lowercase
   `2xx`, `$defs` clobber, mutation/subscription drift miss).
-- 84 TS tests (incl. dedicated assert/secrets/safety/script/contract/graphql).
+- **MCP tools + CLI commands (fan-out, two independent surfaces over the
+  engine):**
+  - **MCP** (`@strummer/mcp` `registerApiTools`/`createApiServer`, new
+    `strummer-api-mcp` bin): tools `list_requests`, `get_request` (reports
+    required secret **names** only, never values), `run_request`, `run_collection`,
+    `validate_response` (OpenAPI or GraphQL), + `strummer://run/{runId}/body`
+    resource over a shared `ArtifactStore`. **`allowUnsafe`/`allowedHosts` are
+    operator-set via `ApiToolsOptions` (env on the bin), never agent inputs** —
+    the safety gate can't be self-authorized.
+  - **CLI** (`strummer api …`): `list`, `get`, `run` (`--var k=v`, `--env`,
+    `--unsafe`, `--allow-host`, `--openapi <spec>` for live response validation,
+    `--json`), `run-collection` (`--stop-on-failure`), `validate --graphql
+    <schema> --query <q>` (offline drift). Exit 0 only when sent + assertions
+    pass (+ contract valid when checked).
+- 115 TS tests (engine + both surfaces; contract validators adversarially
+  verified). Both bins smoke-tested end-to-end.
 
-**Next (Pillar 2 layers):** **MCP tools + CLI commands** (planned fan-out:
-independent surfaces over the engine); then secret-store wiring into CLI/MCP
-(keyring opt-in), SSRF/redirect re-checks, remaining body types (multipart/file/
-graphql), and OpenAPI/Postman/Insomnia import. Contract-validation scope notes
-(local `$ref`s only, 3.1-only, ajv `strict:false`) are in ADR 0005.
+**Next (Pillar 2 tail):** keyring secret-store wiring into CLI/MCP (opt-in),
+SSRF/redirect re-checks, remaining body types (multipart/file/graphql),
+Postman/Insomnia/OpenAPI/HAR import. Contract-validation scope notes (local
+`$ref`s only, 3.1-only, ajv `strict:false`) are in ADR 0005.
 
 Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
@@ -116,14 +130,20 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 
 ## Next action
 
-Pillar 2 (`@strummer/api`) **engine is complete** (incl. contract validation,
-ADR 0005). Next, in order:
-1. **MCP tools + CLI commands** over `@strummer/api` (`list_requests`,
-   `get_request`, `run_request`, `run_collection`, `validate_response`) — the
-   agent/human surfaces. Planned **fan-out** (independent surfaces over the
-   engine).
-2. Tail: wire the keyring secret store into CLI/MCP (opt-in), SSRF/redirect
-   re-checks, multipart/file/graphql bodies, Postman/Insomnia/OpenAPI import.
+Pillar 2 (`@strummer/api`) **engine + agent/human surfaces are complete**: the
+MCP tools (`strummer-api-mcp`) and CLI (`strummer api …`) both ship over the
+engine, fan-out built and integrated, all green. Remaining Pillar-2 tail (pick
+any; none blocking):
+1. Wire the **keyring** secret store into CLI/MCP (opt-in `--keyring` / env);
+   today both default to `EnvSecretStore` (`STRUMMER_SECRET_<NAME>`).
+2. **SSRF range-block + post-redirect re-check** in the safety gate (currently
+   method + host-allowlist only).
+3. Remaining request **body types**: multipart-form, file, graphql.
+4. **Import**: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
+5. Contract-validation reach (ADR 0005): external/remote `$ref` deref; OpenAPI
+   3.0 `nullable` shim; `operationName`-scoped GraphQL.
+
+Or start **Phase 3 (browser/UI testing, Playwright over MCP)** — see ROADMAP.
 
 Deferred Pillar-1 polish (not blocking): Dash docset adapter, non-Node version
 detection, ingestion TOC-bleed/`symbol` refinements, Homebrew tap.

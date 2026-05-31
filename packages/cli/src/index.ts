@@ -9,6 +9,7 @@ import {
 } from '@strummer/core'
 import type { Embedder } from '@strummer/embed'
 import type DatabaseType from 'better-sqlite3'
+import { runApi } from './api.js'
 
 /** Output sinks and dependencies injected into `run` (so it is testable). */
 export interface CliIO {
@@ -27,6 +28,13 @@ Usage:
   strummer versions <library>
   strummer detect <project> <library>
 
+API testing:
+  strummer api list <dir>                               [--json]
+  strummer api get <dir> <name>                         [--json]
+  strummer api run <dir> <name>                         [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--openapi <spec.json>] [--json]
+  strummer api run-collection <dir> <name…>             [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--stop-on-failure] [--json]
+  strummer api validate --graphql <schema> --query <q>  [--json]
+
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)
 `
@@ -42,6 +50,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return cmdVersions(rest, io)
     case 'detect':
       return cmdDetect(rest, io)
+    case 'api':
+      return runApi(rest, io)
     case 'help':
     case '--help':
     case '-h':

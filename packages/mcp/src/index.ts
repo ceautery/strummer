@@ -10,6 +10,8 @@ import type { Embedder } from '@strummer/embed'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
 
+export { type ApiToolsOptions, createApiServer, registerApiTools } from './api.js'
+
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */
   embedder?: Embedder

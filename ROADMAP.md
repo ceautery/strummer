@@ -68,8 +68,10 @@ installed version Z" and get a precise, cited answer over MCP.
       match, response-schema validation, local `$ref`→`$defs`); `validateGraphql
       Operation` (graphql-js: query-vs-schema drift incl. missing root types +
       response `errors`). Adversarially verified.
-- [ ] MCP tools (`list_requests`/`get_request`/`run_request`/`run_collection`/
-      `validate_response`) + CLI mirrors.
+- [x] **MCP tools** (`list_requests`/`get_request`/`run_request`/`run_collection`/
+      `validate_response` + `strummer://run/{id}/body` resource; `strummer-api-mcp`
+      bin; safety operator-set, not agent-set) **+ CLI** (`strummer api list|get|
+      run|run-collection|validate`). Built as a parallel fan-out, integrated green.
 - [ ] Import: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
 - [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
       deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
