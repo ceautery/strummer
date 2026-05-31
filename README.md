@@ -38,8 +38,7 @@ for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
   (FTS5 + optional `sqlite-vec` vectors) on disk; the TypeScript server reads it
   at query time. No Python process sits in the request path. See
   [`ARCHITECTURE.md`](./ARCHITECTURE.md).
-- **Target platform: macOS** (developed inside a Linux dev container — see
-  [`docker/README.md`](./docker/README.md)).
+- **Target platform: macOS** (developed inside a Linux dev container).
 
 ## For contributors / agents
 

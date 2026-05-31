@@ -37,6 +37,12 @@ venv/
 .env.*
 !.env.example
 
+# --- Dev-container harness (local only) ---
+# Tooling used to create the Claude Code container that develops this project;
+# not part of Strummer itself. Kept on disk, out of the repo.
+/docker/
+/docker-compose.yml
+
 # --- macOS ---
 .DS_Store
 

@@ -92,7 +92,6 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `ROADMAP.md` — phased plan.
 - `STATUS.md` — current phase + how to resume. **Always current.**
 - `docs/decisions/` — Architecture Decision Records (ADRs).
-- `docker/` — the Linux dev-container harness that hosts Claude Code
-  (`docker-compose.yml` lives at the repo root). Not part of the shipped tool;
-  see `docker/README.md`. The `greenfield-claude-auth` Docker volume is external
-  and never enters the tree.
+- The Linux dev-container harness (`docker/`, `docker-compose.yml`) that hosts
+  Claude Code is **untracked** (gitignored) — local tooling for creating the
+  container, not part of Strummer.
