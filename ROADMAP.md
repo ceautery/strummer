@@ -49,7 +49,11 @@ installed version Z" and get a precise, cited answer over MCP.
       Python (dist-info METADATA, uv/poetry/Pipfile locks, requirements.txt,
       pyproject.toml) + Ruby (Gemfile.lock, Gemfile). `ecosystem` wired into the
       `detect_version`/`search_docs` MCP tools + CLI `detect`/`search`.
-- [ ] Ingestion refinements: drop TOC bleed into first sections; richer `symbol`.
+- [x] **Ingestion refinements** — `split_sections` strips on-page table-of-contents
+      lists (intra-page-anchor `<ul>`/`<ol>`) so their titles stop bleeding into the
+      first section; `symbol_from_heading` recovers a code symbol from signature
+      headings (`useState(initialState)` → `useState`) as a fallback when a section
+      has no source-index entry.
 
 ## Phase 2 — API testing pillar  *(in progress; design = ADR 0004)*
 

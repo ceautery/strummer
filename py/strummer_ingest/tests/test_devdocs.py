@@ -44,6 +44,24 @@ def test_usestate_fragment_is_a_hook_with_recovered_url():
     assert intro.url == "https://react.dev/reference/react/useState"
 
 
+def test_symbol_derived_from_signature_heading_without_entry():
+    # The h3 signature section has no DevDocs entry of its own; the symbol is
+    # recovered from the heading's call signature.
+    index = {"entries": [{"name": "Thing", "path": "api/thing", "type": "class"}]}
+    db = {
+        "api/thing": (
+            "<h1>Thing</h1><p>A thing.</p>"
+            '<h2 id="methods">Methods</h2>'
+            '<h3 id="render">render(props)</h3><p>Renders the thing.</p>'
+        )
+    }
+    frags = list(
+        iter_fragments(index, db, library="x", version="1", home="https://e/", attribution="a")
+    )
+    render = next(f for f in frags if "Renders the thing." in f.body)
+    assert render.symbol == "render"
+
+
 def test_learn_page_is_a_guide():
     frags = _load_fragments()
     guide = [f for f in frags if f.url and "state-a-components-memory" in f.url]

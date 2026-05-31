@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from .extract import split_sections
+from .extract import split_sections, symbol_from_heading
 from .model import Fragment
 from .types_map import normalize_type
 
@@ -81,13 +81,16 @@ def iter_fragments(
 
             doc_type = normalize_type(matched["type"]) if matched else default_type
 
+            # Prefer the matched entry's name as the symbol; otherwise recover
+            # one from a signature-style heading (e.g. "render(props)").
             if matched:
-                symbol = matched["name"] if doc_type in _SYMBOL_TYPES else None
+                entry_symbol = matched["name"] if doc_type in _SYMBOL_TYPES else None
+                symbol = entry_symbol or symbol_from_heading(section.heading)
                 title = (
                     matched["name"] if section.level == 1 else (section.heading or matched["name"])
                 )
             else:
-                symbol = None
+                symbol = symbol_from_heading(section.heading)
                 title = section.heading or page_title
 
             heading_path = page_title if section.level == 1 else f"{page_title} > {section.heading}"
