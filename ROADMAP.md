@@ -30,9 +30,12 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] SQLite index schema (FTS5 + vec0; title/body/symbol/library/version).
 - [x] MCP tools: `search_docs`, `get_doc` + `strummer://doc/{id}` resource
       (structured, resource-link output; SDK 1.29).
+- [x] Python ingestion pipeline: HTML → clean fragments → FTS5 + vectors.
+- [x] First real source adapter (**DevDocs**) against **React 19.2** — a
+      1,279-fragment index built and served over MCP. (Dash adapter: later.)
+- [ ] **Hybrid search:** sqlite-vec KNN + RRF fusion with bm25 in `searchDocs`
+      (the stored embeddings already exist; ranking needs it).
 - [ ] `@strummer/cli` thin human entry over `core`.
-- [ ] Python ingestion pipeline: HTML → clean fragments → FTS5 index.
-- [ ] First real source adapter (Dash docset / DevDocs) against React 19.
 - [ ] Version pinning: resolve the project's installed dependency versions.
 - [ ] Ingest existing **Dash** docsets to bootstrap coverage (aspirational).
 - [ ] Reuse/ingest **DevDocs** sources where licensing allows (aspirational).

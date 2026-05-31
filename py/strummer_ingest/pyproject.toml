@@ -7,6 +7,8 @@ authors = [{ name = "Curtis Autery" }]
 requires-python = ">=3.12"
 dependencies = [
   "sqlite-vec>=0.1.9",
+  "selectolax>=0.3.21",
+  "fastembed>=0.4",
 ]
 
 [project.scripts]

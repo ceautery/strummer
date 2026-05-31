@@ -25,24 +25,37 @@
   cross-library leakage. sqlite-vec verified on **both** runtimes.
 - **`@strummer/mcp` shipped:** MCP server (SDK 1.29) over `core` exposing
   `search_docs` (compact + `resourceUri`), `get_doc` (full body), and the
-  `strummer://doc/{id}` resource. Tested via in-memory transport AND a real
-  stdio subprocess. License: **Apache-2.0** (ADR 0002).
-- Dev container (`docker/`) provisions pnpm + uv. 13 TS + 2 Py tests, all green.
+  `strummer://doc/{id}` resource. License: **Apache-2.0** (ADR 0002).
+- **Real React 19.2 ingestion working end to end:** DevDocs adapter (`react`
+  slug = 19.2, CC-BY-4.0) → section chunking (`extract`) → type normalization
+  (`types_map`) → bge-small embeddings (`embed`) → SQLite (`build`), driven by
+  `strummer-ingest build --slug react`. Produced a **1,279-fragment** index
+  (`data/react.sqlite`, gitignored/reproducible) and queried it through the MCP
+  server. The three leaf modules were built by a **parallel fan-out workflow**.
+- Dev container provisions pnpm + uv. **13 TS + 35 Py tests** (1 skipped real
+  embed), all green.
 
 ## Next action
 
-1. **Add `@strummer/cli`** — thin human entry over `core` (search/get from the
-   terminal; later: `ingest`, `serve`).
-2. **Real ingestion (Python):** first source adapter (Dash docset and/or
-   DevDocs) against **React 19**; HTML → clean fragments → FTS5; version-pin
-   resolution (nearest-same-major, per ARCHITECTURE §7.2).
-3. **Hybrid search:** real bge-small embeddings (fastembed) + sqlite-vec KNN +
-   RRF fusion in `core.searchDocs`, surfaced through `search_docs`.
+1. **Hybrid search (highest value):** FTS-only ranking is rough for exact-symbol
+   queries (e.g. `useState` doesn't top the results). Add `sqlite-vec` KNN over
+   the stored 384-d vectors + **RRF fusion** with bm25 in `core.searchDocs`
+   (query embedding via fastembed), surfaced through `search_docs`. TDD.
+2. **`@strummer/cli`** — thin human entry over `core` (search/get; later
+   `ingest`/`serve`).
+3. **Version-pin resolution** — map an installed dependency semver to the doc
+   release (nearest-same-major, per ARCHITECTURE §7.2).
+4. Ingestion refinements: drop TOC bleed into first sections; richer `symbol`
+   extraction.
 
-## How register/run today
+## How to build an index / register the server today
 
-`claude mcp add strummer -- strummer-mcp <index.sqlite>` (see
-`packages/mcp/README.md`). Build with `pnpm build`.
+```bash
+cd py/strummer_ingest && uv run strummer-ingest build --slug react --library react \
+  --out ../../data/react.sqlite        # ~1,279 fragments, bge-small embeddings
+claude mcp add strummer -- strummer-mcp /abs/path/to/data/react.sqlite
+```
+See `py/strummer_ingest/README.md` and `packages/mcp/README.md`.
 
 ## How to resume cold
 
