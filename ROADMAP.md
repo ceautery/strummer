@@ -43,7 +43,10 @@ installed version Z" and get a precise, cited answer over MCP.
       project` input (auto-pin with zero ceremony).
 - [x] `@strummer/cli` thin human entry over `core` (`search`/`get`/`versions`/
       `detect`); query embedder extracted to `@strummer/embed`.
-- [ ] Second source adapter: Dash docsets (plain-HTML + searchIndex).
+- [x] **Second source adapter: Dash docsets** — `dash.iter_fragments` reads a
+      `.docset` bundle (`searchIndex` + `Documents/*.html`), reuses
+      `split_sections`/`symbol_from_heading`, `normalize_dash_type` for the type
+      taxonomy; `build --docset` CLI source. (Core Data docsets: future.)
 - [x] **Detect installed versions for non-Node ecosystems** — `detectInstalledVersion`
       now dispatches by ecosystem (auto-probe node → python → ruby, or explicit):
       Python (dist-info METADATA, uv/poetry/Pipfile locks, requirements.txt,

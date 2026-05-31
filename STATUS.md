@@ -145,11 +145,11 @@ any; none blocking):
 
 Or start **Phase 3 (browser/UI testing, Playwright over MCP)** — see ROADMAP.
 
-Deferred Pillar-1 polish: **non-Node version detection — DONE** (Python/Ruby in
-`detectInstalledVersion`, wired into MCP/CLI); **ingestion TOC-bleed + richer
-`symbol` — DONE** (`split_sections` strips on-page TOC lists; `symbol_from_heading`
-recovers symbols from signature headings). Still open: **Dash docset adapter**
-(in progress), Homebrew tap.
+Deferred Pillar-1 polish — **all DONE**: non-Node version detection (Python/Ruby
+in `detectInstalledVersion`, wired into MCP/CLI); ingestion TOC-bleed + richer
+`symbol` (`split_sections` strips on-page TOC lists; `symbol_from_heading`);
+**Dash docset adapter** (`dash.iter_fragments` + `build --docset`, searchIndex
+schema). Remaining Pillar-1 nice-to-haves: Homebrew tap; Dash Core Data docsets.
 
 ## How to build an index / register the server today
 

@@ -38,3 +38,36 @@ def normalize_type(devdocs_type: str) -> str:
     if lowered.startswith("learn:") or lowered.startswith("learn "):
         return "guide"
     return "reference"
+
+
+# Dash docset `type` strings are a fixed single-word vocabulary (the Dash entry
+# types), unlike DevDocs' "Namespace: Category". Map them to the same taxonomy.
+_DASH_TYPE_MAP = {
+    "function": "function",
+    "func": "function",
+    "constructor": "function",
+    "method": "method",
+    "class": "class",
+    "interface": "class",
+    "struct": "class",
+    "type": "class",
+    "protocol": "class",
+    "enum": "class",
+    "trait": "class",
+    "exception": "class",
+    "component": "component",
+    "directive": "directive",
+    "hook": "hook",
+    "guide": "guide",
+    "section": "guide",
+    "sample": "guide",
+}
+
+
+def normalize_dash_type(dash_type: str) -> str:
+    """Map a Dash docset ``type`` token to a normalized Strummer taxonomy label.
+
+    Case-insensitive; unrecognized tokens (Module, Constant, Property, Command, …)
+    fall back to ``"reference"``.
+    """
+    return _DASH_TYPE_MAP.get((dash_type or "").strip().lower(), "reference")

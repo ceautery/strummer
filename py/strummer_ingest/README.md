@@ -11,9 +11,15 @@ index (the on-disk contract) that `@strummer/mcp` serves. See `ARCHITECTURE.md`.
   manifest metadata (release, attribution).
 - **`devdocs`** — adapter: pages → `Fragment`s, chunked at heading boundaries,
   with the matching entry's name/type attached.
-- **`extract`** — `split_sections(html)` via selectolax (code blocks preserved).
-- **`types_map`** — DevDocs type strings → Strummer taxonomy
-  (`hook`/`component`/`directive`/`api`/`guide`/`lint`/`legacy`/`reference`).
+- **`dash`** — adapter: a Dash `.docset` bundle (`searchIndex` + `Documents/*.html`)
+  → `Fragment`s, mirroring the DevDocs adapter. (Core Data docsets: not yet.)
+- **`extract`** — `split_sections(html)` via selectolax (code blocks preserved;
+  on-page table-of-contents lists stripped); `symbol_from_heading` recovers a
+  symbol from signature headings.
+- **`types_map`** — DevDocs (`normalize_type`) and Dash (`normalize_dash_type`)
+  type strings → Strummer taxonomy
+  (`hook`/`component`/`directive`/`api`/`guide`/`lint`/`legacy`/`function`/
+  `method`/`class`/`reference`).
 - **`embed`** — `FastEmbedEmbedder` (bge-small-en-v1.5, 384-d) for real builds;
   `FakeEmbedder` (deterministic) for tests/offline.
 - **`build`** — applies the schema, inserts docs (FTS auto-syncs via triggers),
@@ -30,14 +36,19 @@ uv run strummer-ingest build --slug react --library react --out ../../data/react
 `--slug` auto-fills version/attribution/home from the DevDocs manifest. The
 output (multi-MB) is a reproducible artifact under `data/` (gitignored).
 
+```bash
+# From a Dash docset bundle instead (version is required; --home optional):
+uv run strummer-ingest build --docset path/to/Widget.docset \
+  --library widget --version 1.0 --home https://widget.dev/ --out ../../data/widget.sqlite
+```
+
 Then serve it: `strummer-mcp ../../data/react.sqlite` (see `packages/mcp`).
 
 ## Known rough edges (tracked for refinement)
 
 - Ranking is FTS-only today; hybrid vector + RRF reranking is the next step
   (embeddings are already stored in `docs_vec`).
-- A page's table-of-contents list can bleed into its first section's text.
-- `symbol` is populated for top-level API entries, sparse for sub-sections.
+- Dash Core Data docsets (`ZTOKEN` schema) aren't read yet — only `searchIndex`.
 
 ## Develop
 
