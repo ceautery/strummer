@@ -69,7 +69,20 @@ export interface AssertionResult {
   pass: boolean
 }
 
-export interface RunResult {
+/** Resolves named secrets at the transport boundary. */
+export interface SecretStore {
+  get(name: string): Promise<string | undefined>
+}
+
+/** The request as prepared for the wire — headers/url here are REDACTED for
+ * agent-facing output (secret values never appear). */
+export interface PreparedRequest {
+  method: string
+  url: string
+  headers: Record<string, string>
+}
+
+export interface RunResponse {
   status: number
   latencyMs: number
   headers: Record<string, string>
@@ -77,4 +90,17 @@ export interface RunResult {
   captured: Record<string, unknown>
   /** Resource handle for the response body — never inlined. */
   bodyHandle: string
+}
+
+export interface RunResult {
+  /** What was (or, for a dry-run, would be) sent — redacted. */
+  request: PreparedRequest
+  /** Whether the request was actually dispatched. */
+  sent: boolean
+  /** True when a mutating request was withheld (dry-run). */
+  dryRun: boolean
+  /** Why it was withheld, when applicable. */
+  reason?: string
+  /** Present only when `sent`. */
+  response?: RunResponse
 }

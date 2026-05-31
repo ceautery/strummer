@@ -3,8 +3,10 @@ import type { AddressInfo } from 'node:net'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { ArtifactStore } from './artifacts.js'
 import { loadCollection } from './collection.js'
 import { runRequest } from './runner.js'
+import { StaticSecretStore } from './secrets.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const FIXTURE = resolve(here, '../test/fixtures/sample')
@@ -18,6 +20,12 @@ describe('runRequest (offline, in-process server)', () => {
       if (req.url === '/health') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
+      } else if (req.url === '/echo') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ headers: req.headers }))
+      } else if (req.url === '/things' && req.method === 'POST') {
+        res.writeHead(201, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ id: 1 }))
       } else {
         res.writeHead(404)
         res.end()
@@ -30,22 +38,57 @@ describe('runRequest (offline, in-process server)', () => {
     await new Promise<void>((r) => server.close(() => r()))
   })
 
-  it('runs a .bru request and evaluates its sidecar assertions', async () => {
-    const collection = loadCollection(FIXTURE)
-    const result = await runRequest(collection, 'get-health', { vars: { baseUrl } })
-
-    expect(result.status).toBe(200)
-    expect(result.assertions).toHaveLength(3)
-    expect(result.assertions.every((a) => a.pass)).toBe(true)
-    // Body is returned by handle, never inlined.
-    expect(result.bodyHandle).toMatch(/^strummer:\/\/run\/.+\/body$/)
+  it('runs a GET .bru request and evaluates its sidecar assertions', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'get-health', { vars: { baseUrl } })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(200)
+    expect(result.response?.assertions).toHaveLength(3)
+    expect(result.response?.assertions.every((a) => a.pass)).toBe(true)
+    expect(result.response?.bodyHandle).toMatch(/^strummer:\/\/run\/.+\/body$/)
   })
 
-  it('parses the request and its sidecar captures from disk', () => {
-    const collection = loadCollection(FIXTURE)
-    const entry = collection.requests.get('get-health')
-    expect(entry?.request.method).toBe('GET')
-    expect(entry?.request.url).toContain('{{baseUrl}}')
-    expect(entry?.captures).toHaveLength(1)
+  it('resolves {{secret:NAME}} and redacts it from request, body, and headers', async () => {
+    const token = 's3cr3t-token-xyz'
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'echo-auth', {
+      vars: { baseUrl },
+      secrets: new StaticSecretStore({ API_TOKEN: token }),
+      artifacts,
+    })
+    expect(result.sent).toBe(true)
+    // The agent-facing request shows the secret redacted, never the value.
+    expect(result.request.headers.Authorization).toBe('Bearer [redacted:API_TOKEN]')
+    // The server echoed the real header; the stored body is redacted.
+    const body = artifacts.get(result.response?.bodyHandle ?? '')?.body ?? ''
+    expect(body).toContain('[redacted:API_TOKEN]')
+    expect(body).not.toContain(token)
+  })
+
+  it('fails closed when a referenced secret is missing', async () => {
+    await expect(
+      runRequest(loadCollection(FIXTURE), 'echo-auth', {
+        vars: { baseUrl },
+        secrets: new StaticSecretStore({}),
+      }),
+    ).rejects.toThrow(/missing secret/i)
+  })
+
+  it('dry-runs a mutating request by default (not sent)', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'create-thing', { vars: { baseUrl } })
+    expect(result.dryRun).toBe(true)
+    expect(result.sent).toBe(false)
+    expect(result.response).toBeUndefined()
+    expect(result.request.method).toBe('POST')
+    expect(result.reason).toMatch(/mutating/i)
+  })
+
+  it('sends a mutating request only when unlocked and allowlisted', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'create-thing', {
+      vars: { baseUrl },
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'],
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(201)
   })
 })

@@ -1,0 +1,15 @@
+meta {
+  name: Echo Auth
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/echo
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{secret:API_TOKEN}}
+}

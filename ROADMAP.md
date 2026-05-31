@@ -55,9 +55,11 @@ installed version Z" and get a precise, cited answer over MCP.
       thin domain model; Strummer assertions/captures in `*.strummer.yml` sidecar.
 - [x] Declarative assertion engine (status/header/jsonpath; ajv/responseTime
       next) + undici runner + resource-handle artifacts. First slice green.
+- [x] Secrets: `{{secret:NAME}}` + `SecretStore` (`@napi-rs/keyring`/env/static/
+      chained), fail-closed, value-redaction (raw + base64/url encodings).
+- [x] Mutation safety gate: dry-run by default; send only with `allowUnsafe` +
+      host allowlist. (SSRF/redirect re-check still to add.)
 - [ ] Environments & variables file loading; request chaining via captures.
-- [ ] macOS **Keychain** secrets (`@napi-rs/keyring`) + env fallback; redaction.
-- [ ] Mutation safety gate (dry-run / allowlist / `--unsafe`; SSRF block).
 - [ ] QuickJS-sandboxed pre/post scripts (curated `bru`/`expect` API).
 - [ ] MCP tools (`run_request`/`run_collection`/`validate_response`/…) + CLI.
 - [ ] Import: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.

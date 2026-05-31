@@ -10,16 +10,23 @@
 ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
 `docs/research/2026-05-31-pillar2-api-testing.md`).
 
-**First slice green:** `@strummer/api` loads a Bruno `.bru` request + its
-`*.strummer.yml` sidecar, interpolates `{{baseUrl}}`, runs it via **undici**
-against an in-process server, evaluates declarative assertions
-(status/jsonpath/header), and returns the body by `strummer://run/<id>/body`
-handle. 2 offline tests.
+**`@strummer/api` so far (TDD, offline tests):**
+- Loads Bruno `.bru` + `*.strummer.yml` sidecar; var interpolation; **undici**
+  runner; declarative assertions (status/jsonpath/header); body by
+  `strummer://run/<id>/body` handle.
+- **Secrets:** `{{secret:NAME}}` resolved at the transport boundary from a
+  `SecretStore` (`StaticSecretStore`/`EnvSecretStore`/`KeyringSecretStore`-lazy/
+  `ChainedSecretStore`); **fails closed** on a missing secret; a `Redactor`
+  scrubs values + base64/url encodings from request/headers/body before anything
+  reaches the agent.
+- **Mutation safety:** GET/HEAD/OPTIONS run; POST/PUT/PATCH/DELETE **dry-run** by
+  default and only send with `allowUnsafe` + a host allowlist (`checkGate`).
+- 54 TS tests (incl. dedicated secrets/safety units).
 
-**Next (Pillar 2 layers):** secret resolution (`@napi-rs/keyring` + env fallback,
-redaction) → mutation safety gate (dry-run/allowlist/`--unsafe`) → captures +
-request chaining → QuickJS scripts → contract validation → MCP tools
-(`run_request`/`run_collection`/…) + CLI commands.
+**Next (Pillar 2 layers):** captures + request chaining → QuickJS-sandboxed
+scripts → contract validation (OpenAPI/GraphQL) → MCP tools
+(`run_request`/`run_collection`/`validate_response`/…) + CLI commands; then
+secret-store wiring into CLI/MCP (keyring opt-in) and SSRF/redirect re-checks.
 
 Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
