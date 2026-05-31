@@ -38,9 +38,12 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] **Version pinning:** `resolveVersion` (exact → nearest-same-major →
       refuse) + multi-version index (`build --append`); `search_docs installed`
       + `list_versions`. React index holds 19.2/18.3.1/17.0.2.
+- [x] **Detect the installed version from a project** — `detectInstalledVersion`
+      (node_modules/lockfile/package.json); `detect_version` tool + `search_docs
+      project` input (auto-pin with zero ceremony).
 - [ ] `@strummer/cli` thin human entry over `core`.
-- [ ] Detect the installed version from a project (package.json/lockfile).
 - [ ] Second source adapter: Dash docsets (plain-HTML + searchIndex).
+- [ ] Detect installed versions for non-Node ecosystems (Python, Ruby, …).
 - [ ] Ingest existing **Dash** docsets to bootstrap coverage (aspirational).
 - [ ] Reuse/ingest **DevDocs** sources where licensing allows (aspirational).
 - [ ] Hybrid semantic search via `sqlite-vec` + local embeddings (aspirational).

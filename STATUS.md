@@ -46,13 +46,19 @@
   `search_docs` takes `installed` (version/range) → resolves → filters and
   reports `resolvedVersion`/`versionNote`; new `list_versions` tool. Verified:
   installed `^18.2.0` → React 18.3.1 docs; `16.8.0` → flagged, not silently 19.x.
-- Dev container provisions pnpm + uv. **26 TS + 36 Py tests** (1 skipped real
+- **Auto-detect installed version shipped:** `core.detectInstalledVersion`
+  (node_modules → package-lock.json → package.json range; works for npm/pnpm/
+  yarn). New `detect_version` MCP tool; `search_docs` gains a `project` input
+  (precedence version > installed > project). Verified end to end: pointing at a
+  project with React 18 installed, with no version supplied, returns React
+  18.3.1 docs.
+- Dev container provisions pnpm + uv. **33 TS + 36 Py tests** (1 skipped real
   embed), all green.
 
 ## Next action
 
 1. **`@strummer/cli`** — thin human entry over `core` (search/get from the
-   terminal; later `ingest`/`serve` wrappers).
+   terminal; later `ingest`/`serve` wrappers). Last "no human surface" gap.
 2. Ingestion refinements: drop the TOC bleed into first sections; richer
    `symbol` extraction.
 3. **Dash docset adapter** — second source type (plain-HTML + searchIndex).

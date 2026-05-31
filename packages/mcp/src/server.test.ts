@@ -1,4 +1,6 @@
-import { dirname, resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
@@ -9,6 +11,24 @@ import { createStrummerServer } from './index.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const FIXTURE = resolve(here, '../../../fixtures/golden.sqlite')
+
+const tempProjects: string[] = []
+
+/** Create a temp project with `react` installed at the given concrete version. */
+function makeReactProject(version: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'strummer-proj-'))
+  tempProjects.push(dir)
+  writeFileSync(
+    join(dir, 'package.json'),
+    JSON.stringify({ dependencies: { react: `^${version}` } }),
+  )
+  mkdirSync(join(dir, 'node_modules', 'react'), { recursive: true })
+  writeFileSync(
+    join(dir, 'node_modules', 'react', 'package.json'),
+    JSON.stringify({ name: 'react', version }),
+  )
+  return dir
+}
 
 describe('strummer MCP server', () => {
   let db: DatabaseType.Database
@@ -24,6 +44,7 @@ describe('strummer MCP server', () => {
   afterAll(async () => {
     await client?.close()
     db?.close()
+    for (const dir of tempProjects) rmSync(dir, { recursive: true, force: true })
   })
 
   it('exposes the search_docs and get_doc tools', async () => {
@@ -107,5 +128,35 @@ describe('strummer MCP server', () => {
     const sc = res.structuredContent as { resolvedVersion: string | null; versionNote: string }
     expect(sc.resolvedVersion).toBeNull()
     expect(sc.versionNote).toContain('available versions')
+  })
+
+  it('detect_version detects an installed version and resolves it', async () => {
+    const project = makeReactProject('19.0.0')
+    const res = await client.callTool({
+      name: 'detect_version',
+      arguments: { project, library: 'react' },
+    })
+    expect(res.structuredContent).toMatchObject({
+      detectedVersion: '19.0.0',
+      detectedSource: 'node_modules',
+      resolvedVersion: '19.0',
+      exact: true,
+    })
+  })
+
+  it('search_docs auto-detects the version from a project path', async () => {
+    const project = makeReactProject('19.0.0')
+    const res = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'useState', library: 'react', project },
+    })
+    const sc = res.structuredContent as {
+      detectedVersion: string
+      resolvedVersion: string
+      results: unknown[]
+    }
+    expect(sc.detectedVersion).toBe('19.0.0')
+    expect(sc.resolvedVersion).toBe('19.0')
+    expect(sc.results).toHaveLength(1)
   })
 })

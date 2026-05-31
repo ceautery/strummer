@@ -1,6 +1,11 @@
 export { type OpenOptions, openDb, readMeta } from './db.js'
 export { getDoc } from './doc.js'
 export {
+  type DetectedVersion,
+  detectInstalledVersion,
+  type VersionSource,
+} from './project.js'
+export {
   EXPECTED_EMBED_DIM,
   EXPECTED_EMBED_MODEL,
   EXPECTED_SCHEMA_VERSION,

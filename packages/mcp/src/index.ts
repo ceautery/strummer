@@ -1,5 +1,11 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { getDoc, listVersions, resolveVersion, searchDocs } from '@strummer/core'
+import {
+  detectInstalledVersion,
+  getDoc,
+  listVersions,
+  resolveVersion,
+  searchDocs,
+} from '@strummer/core'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
 import type { Embedder } from './embedder.js'
@@ -64,7 +70,14 @@ export function createStrummerServer(
           .optional()
           .describe(
             'the version/range installed in the project (e.g. "^18.2.0"); resolved to the ' +
-              'best matching doc release. Requires `library`. Prefer this over `version`.',
+              'best matching doc release. Requires `library`.',
+          ),
+        project: z
+          .string()
+          .optional()
+          .describe(
+            'absolute path to the project root; auto-detects the installed version of `library` ' +
+              'from node_modules/lockfile/package.json. Precedence: version > installed > project.',
           ),
         type: z.string().optional().describe('restrict to a kind, e.g. "function" | "guide"'),
         limit: z.number().int().min(1).max(25).optional().describe('max results (default 8)'),
@@ -84,22 +97,36 @@ export function createStrummerServer(
           }),
         ),
         resolvedVersion: z.string().nullable().optional(),
+        detectedVersion: z.string().nullable().optional(),
         versionNote: z.string().optional(),
       },
     },
     async (args) => {
-      // Resolve an installed version/range to an indexed doc release.
+      // Version filter precedence: explicit version > installed range > auto-detect.
       let effectiveVersion = args.version
       let resolvedVersion: string | null | undefined
+      let detectedVersion: string | null | undefined
       let versionNote: string | undefined
-      if (args.installed) {
-        if (args.library) {
-          const res = resolveVersion(listVersions(db, args.library), args.installed)
-          resolvedVersion = res.resolved
-          versionNote = res.note
-          if (!args.version && res.resolved) effectiveVersion = res.resolved
+      if (!args.version && (args.installed || args.project)) {
+        if (!args.library) {
+          versionNote = 'provide `library` to resolve a version'
         } else {
-          versionNote = 'provide `library` to resolve an installed version'
+          let requested = args.installed
+          if (!requested && args.project) {
+            const detected = detectInstalledVersion(args.project, args.library)
+            detectedVersion = detected.version
+            if (detected.version) {
+              requested = detected.version
+            } else {
+              versionNote = `could not detect ${args.library} in ${args.project}`
+            }
+          }
+          if (requested) {
+            const res = resolveVersion(listVersions(db, args.library), requested)
+            resolvedVersion = res.resolved
+            versionNote = res.note
+            if (res.resolved) effectiveVersion = res.resolved
+          }
         }
       }
 
@@ -120,9 +147,15 @@ export function createStrummerServer(
         queryVector,
       }).map((r) => ({ ...r, resourceUri: `strummer://doc/${r.id}` }))
 
-      const structured = args.installed
-        ? { results, resolvedVersion: resolvedVersion ?? null, versionNote }
-        : { results }
+      const structured =
+        args.installed || args.project
+          ? {
+              results,
+              resolvedVersion: resolvedVersion ?? null,
+              detectedVersion: detectedVersion ?? null,
+              versionNote,
+            }
+          : { results }
       return { content: [text(structured)], structuredContent: structured }
     },
   )
@@ -143,6 +176,51 @@ export function createStrummerServer(
       // Spread to a fresh object literal so it satisfies the SDK's
       // structuredContent index-signature type.
       return { content: [text(doc)], structuredContent: { ...doc } }
+    },
+  )
+
+  server.registerTool(
+    'detect_version',
+    {
+      title: 'Detect installed version',
+      description:
+        'Detect the installed version of a library in a project (node_modules / lockfile / ' +
+        'package.json) and resolve it to the best matching indexed doc release.',
+      inputSchema: {
+        project: z.string().describe('absolute path to the project root'),
+        library: z.string().describe('library / npm package name, e.g. "react"'),
+      },
+      outputSchema: {
+        library: z.string(),
+        detectedVersion: z.string().nullable(),
+        detectedSource: z.string(),
+        resolvedVersion: z.string().nullable(),
+        exact: z.boolean(),
+        note: z.string(),
+        available: z.array(z.string()),
+      },
+    },
+    (args) => {
+      const detected = detectInstalledVersion(args.project, args.library)
+      const available = listVersions(db, args.library)
+      const res = detected.version
+        ? resolveVersion(available, detected.version)
+        : {
+            resolved: null,
+            exact: false,
+            note: `could not detect ${args.library} in ${args.project}`,
+            available,
+          }
+      const structured = {
+        library: args.library,
+        detectedVersion: detected.version,
+        detectedSource: detected.source,
+        resolvedVersion: res.resolved,
+        exact: res.exact,
+        note: res.note,
+        available: res.available,
+      }
+      return { content: [text(structured)], structuredContent: structured }
     },
   )
 
