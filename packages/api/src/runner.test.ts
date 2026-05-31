@@ -153,4 +153,25 @@ describe('runRequest (offline, in-process server)', () => {
     expect(echoed).toContain('widget')
     expect(echoed).toContain('application/json')
   })
+
+  it('runs a post-response script: tests + programmatic capture', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'script-demo', { vars: { baseUrl } })
+    expect(result.response?.scriptTests).toEqual([
+      { name: 'token present', pass: true, error: undefined },
+      { name: 'intentional fail', pass: false, error: expect.stringContaining('to be') },
+    ])
+    expect(result.response?.captured.capturedToken).toBe('tok-123')
+  })
+
+  it('runs a pre-request script that sets a variable used in the request', async () => {
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'pre-demo', {
+      vars: { baseUrl },
+      artifacts,
+    })
+    expect(result.sent).toBe(true)
+    // pre-script set `mode` = turbo, interpolated into the X-Mode header the server echoed.
+    const echoed = artifacts.get(result.response?.bodyHandle ?? '')?.body ?? ''
+    expect(echoed).toContain('"x-mode":"turbo"')
+  })
 })

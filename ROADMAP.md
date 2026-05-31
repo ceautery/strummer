@@ -63,7 +63,8 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] Environment-file loading (`environments/<Env>.bru`, lowest precedence) +
       request **body** sending (json/text/xml/sparql/form-urlencoded). multipart/
       file/graphql bodies still TODO.
-- [ ] QuickJS-sandboxed pre/post scripts (curated `bru`/`expect` API).
+- [x] QuickJS-sandboxed pre/post scripts (curated `bru`/`expect`/`test` API;
+      JSON-only boundary, 1s interrupt). Sidecar `preScript`/`postScript`.
 - [ ] MCP tools (`run_request`/`run_collection`/`validate_response`/…) + CLI.
 - [ ] Import: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
 - [ ] OpenAPI/GraphQL contract validation & drift detection.

@@ -28,12 +28,17 @@ ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
   body; redacted body shown in the result. (multipart/file/graphql still TODO.)
 - **Environments:** `environments/<Env>.bru` loaded into `collection.environments`;
   `runRequest`/`runSequence` take `env` (lowest precedence; runtime vars win).
-- 61 TS tests (incl. dedicated assert/secrets/safety units).
+- **Scripts (QuickJS sandbox):** sidecar `preScript`/`postScript` run in a WASM
+  isolate (`quickjs-emscripten`, 1s interrupt) with a curated `bru`/`expect`/
+  `test`/`console` API — data crosses the boundary only as JSON (no host
+  bindings). Pre-script sets vars used in interpolation; post-script sees `res`,
+  records `scriptTests` (redacted), and `bru.setVar` feeds captures/chaining.
+- 68 TS tests (incl. dedicated assert/secrets/safety/script units).
 
-**Next (Pillar 2 layers):** QuickJS-sandboxed scripts → contract validation
-(OpenAPI/GraphQL) → **MCP tools + CLI commands** (planned fan-out: independent
-surfaces over the engine); then secret-store wiring into CLI/MCP (keyring opt-in),
-SSRF/redirect re-checks, and remaining body types (multipart/file/graphql).
+**Next (Pillar 2 layers):** contract validation (OpenAPI 3.1/GraphQL) → **MCP
+tools + CLI commands** (planned fan-out: independent surfaces over the engine);
+then secret-store wiring into CLI/MCP (keyring opt-in), SSRF/redirect re-checks,
+remaining body types (multipart/file/graphql).
 
 Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar

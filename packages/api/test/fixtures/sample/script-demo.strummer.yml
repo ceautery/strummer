@@ -1,0 +1,4 @@
+postScript: |
+  test('token present', () => expect(res.json.token).toBe('tok-123'))
+  test('intentional fail', () => expect(res.status).toBe(500))
+  bru.setVar('capturedToken', res.json.token)

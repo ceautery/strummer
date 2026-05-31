@@ -1,0 +1,2 @@
+preScript: |
+  bru.setVar('mode', 'turbo')

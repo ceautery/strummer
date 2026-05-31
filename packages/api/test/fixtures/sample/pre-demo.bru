@@ -1,0 +1,15 @@
+meta {
+  name: Pre Demo
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/echo
+  body: none
+  auth: none
+}
+
+headers {
+  X-Mode: {{mode}}
+}

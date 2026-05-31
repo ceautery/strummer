@@ -35,6 +35,8 @@ interface BruJson {
 interface Sidecar {
   assertions?: AssertionSpec[]
   captures?: CaptureSpec[]
+  preScript?: string
+  postScript?: string
 }
 
 interface EnvJson {
@@ -53,15 +55,16 @@ export function loadCollection(dir: string): Collection {
     const parsed = bruToJsonV2(readFileSync(join(dir, file), 'utf8')) as BruJson
     const request = toRequest(stem, parsed)
 
-    let assertions: AssertionSpec[] = []
-    let captures: CaptureSpec[] = []
+    const entry: RequestEntry = { request, assertions: [], captures: [] }
     const sidecar = join(dir, `${stem}.strummer.yml`)
     if (existsSync(sidecar)) {
       const yaml = (parseYaml(readFileSync(sidecar, 'utf8')) ?? {}) as Sidecar
-      assertions = yaml.assertions ?? []
-      captures = yaml.captures ?? []
+      entry.assertions = yaml.assertions ?? []
+      entry.captures = yaml.captures ?? []
+      entry.preScript = yaml.preScript
+      entry.postScript = yaml.postScript
     }
-    requests.set(stem, { request, assertions, captures })
+    requests.set(stem, entry)
   }
   return { dir, requests, environments: loadEnvironments(dir) }
 }

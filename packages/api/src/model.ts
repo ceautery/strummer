@@ -60,6 +60,16 @@ export interface RequestEntry {
   request: ApiRequest
   assertions: AssertionSpec[]
   captures: CaptureSpec[]
+  /** Optional pre-request / post-response sandboxed scripts (from the sidecar). */
+  preScript?: string
+  postScript?: string
+}
+
+/** Result of a `test(name, fn)` in a sandboxed script. */
+export interface ScriptTest {
+  name: string
+  pass: boolean
+  error?: string
 }
 
 export interface Collection {
@@ -99,6 +109,8 @@ export interface RunResponse {
   latencyMs: number
   headers: Record<string, string>
   assertions: AssertionResult[]
+  /** Results of `test(...)` calls in the post-response script (if any). */
+  scriptTests: ScriptTest[]
   captured: Record<string, unknown>
   /** Resource handle for the response body — never inlined. */
   bodyHandle: string

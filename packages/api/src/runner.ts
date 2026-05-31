@@ -3,9 +3,10 @@ import { performance } from 'node:perf_hooks'
 import { type Dispatcher, request } from 'undici'
 import { ArtifactStore } from './artifacts.js'
 import { evaluateAssertions, extractCaptures } from './assert.js'
-import type { Collection, PreparedRequest, RunResult, SecretStore } from './model.js'
+import type { Collection, PreparedRequest, RunResult, ScriptTest, SecretStore } from './model.js'
 import { prepareRequest } from './prepare.js'
 import { checkGate } from './safety.js'
+import { runScript } from './script.js'
 import { EnvSecretStore, Redactor } from './secrets.js'
 
 export interface RunOptions {
@@ -67,6 +68,13 @@ export async function runRequest(
   // Scope precedence: explicit/captured vars override the chosen environment.
   const envVars = opts.env ? (collection.environments.get(opts.env) ?? {}) : {}
   const scope = { ...envVars, ...(opts.vars ?? {}) }
+
+  // Pre-request script may set variables used in interpolation.
+  if (entry.preScript) {
+    const pre = await runScript(entry.preScript, { vars: scope })
+    Object.assign(scope, pre.vars)
+  }
+
   const prepared = await prepareRequest(entry.request, scope, secrets, redactor)
 
   // Headers actually sent: add a default Content-Type for the body if unset.
@@ -113,6 +121,27 @@ export async function runRequest(
   const assertions = evaluateAssertions(entry.assertions, ctx)
   const captured = extractCaptures(entry.captures, ctx)
 
+  // Post-response script: programmatic tests + captures over the REAL response.
+  let scriptTests: ScriptTest[] = []
+  if (entry.postScript) {
+    const before = { ...scope }
+    const post = await runScript(entry.postScript, {
+      vars: scope,
+      res: { status: res.statusCode, headers, body: bodyText, json },
+    })
+    scriptTests = post.tests.map((t) => ({
+      name: redactor.redact(t.name),
+      pass: t.pass,
+      error: t.error ? redactor.redact(t.error) : undefined,
+    }))
+    for (const [key, value] of Object.entries(post.vars)) {
+      if (!(key in before) || before[key] !== value) {
+        captured[key] = value
+        scope[key] = value
+      }
+    }
+  }
+
   const store = opts.artifacts ?? new ArtifactStore()
   const bodyHandle = store.put(
     randomUUID(),
@@ -129,6 +158,7 @@ export async function runRequest(
       latencyMs,
       headers: redactor.redactHeaders(headers),
       assertions,
+      scriptTests,
       captured,
       bodyHandle,
     },
