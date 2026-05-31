@@ -1,6 +1,8 @@
 export { type Artifact, ArtifactStore } from './artifacts.js'
 export { evaluateAssertions, extractCaptures, type ResponseContext } from './assert.js'
 export { loadCollection } from './collection.js'
+export { type ResponseFacts, validateOpenApiResponse } from './contract.js'
+export { validateGraphqlOperation } from './graphql.js'
 export type {
   ApiRequest,
   AssertionOp,
@@ -9,6 +11,9 @@ export type {
   AssertionSpec,
   CaptureSpec,
   Collection,
+  ContractFinding,
+  ContractFindingKind,
+  ContractResult,
   PreparedRequest,
   RequestBody,
   RequestEntry,
@@ -20,6 +25,7 @@ export type {
 export { type Prepared, type PreparedBody, prepareRequest } from './prepare.js'
 export { type RunOptions, runRequest } from './runner.js'
 export { checkGate, isMutating, type SafetyDecision, type SafetyOptions } from './safety.js'
+export { type SchemaError, type SchemaValidation, validateSchema } from './schema.js'
 export { runScript, type ScriptResponseView, type ScriptResult } from './script.js'
 export {
   ChainedSecretStore,

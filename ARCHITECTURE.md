@@ -210,7 +210,7 @@ packages/api/src/
   assert/      # declarative assertion engine (status/header/jsonpath/schema/responseTime)
   secrets/     # SecretStore (keyring | env) + value Redactor
   script/      # QuickJS-sandboxed pre/post scripts (curated bru/expect API)
-  contract/    # OpenAPI 3.1 (openapi-backend) + GraphQL response validation
+  contract/    # OpenAPI 3.1 (ajv-direct, ADR 0005) + GraphQL (graphql-js) validation
   artifacts/   # resource-handle store: strummer://run/<id>/body  (bodies never inlined)
   index.ts
 ```

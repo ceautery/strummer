@@ -33,12 +33,24 @@ ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
   `test`/`console` API — data crosses the boundary only as JSON (no host
   bindings). Pre-script sets vars used in interpolation; post-script sees `res`,
   records `scriptTests` (redacted), and `bru.setVar` feeds captures/chaining.
-- 68 TS tests (incl. dedicated assert/secrets/safety/script units).
+- **Contract validation (ADR 0005, ajv-direct not openapi-backend):** the
+  `schema` assertion source validates a body (or jsonpath subtree) against an
+  inline JSON Schema via **ajv 2020-12** (`schema.ts`/`validateSchema`).
+  `validateOpenApiResponse` matches path-template + status (incl. `2XX`/`2xx`
+  ranges + `default`) and validates the body against the **OpenAPI 3.1** response
+  schema (local `#/components/schemas` `$ref`s rewritten into `$defs`); surfaces
+  drift as `missing-operation`/`undocumented-status`/`response-schema` findings.
+  `validateGraphqlOperation` (graphql-js) catches query-vs-schema drift incl.
+  missing root types, plus response `errors`. Shared `ContractResult`/
+  `ContractFinding`. Adversarially verified (3 bugs found + fixed: lowercase
+  `2xx`, `$defs` clobber, mutation/subscription drift miss).
+- 84 TS tests (incl. dedicated assert/secrets/safety/script/contract/graphql).
 
-**Next (Pillar 2 layers):** contract validation (OpenAPI 3.1/GraphQL) → **MCP
-tools + CLI commands** (planned fan-out: independent surfaces over the engine);
-then secret-store wiring into CLI/MCP (keyring opt-in), SSRF/redirect re-checks,
-remaining body types (multipart/file/graphql).
+**Next (Pillar 2 layers):** **MCP tools + CLI commands** (planned fan-out:
+independent surfaces over the engine); then secret-store wiring into CLI/MCP
+(keyring opt-in), SSRF/redirect re-checks, remaining body types (multipart/file/
+graphql), and OpenAPI/Postman/Insomnia import. Contract-validation scope notes
+(local `$ref`s only, 3.1-only, ajv `strict:false`) are in ADR 0005.
 
 Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
@@ -104,13 +116,13 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 
 ## Next action
 
-Pillar 2 (`@strummer/api`) engine is feature-complete for v1. Next, in order:
-1. **Contract validation** — OpenAPI 3.1 (`openapi-backend`) / GraphQL response
-   checks; surface drift. The last pure-engine piece.
-2. **MCP tools + CLI commands** over `@strummer/api` (`run_request`,
-   `run_collection`, `validate_response`, …) — the agent/human surfaces.
-   Planned **fan-out** (independent surfaces over the engine).
-3. Tail: wire the keyring secret store into CLI/MCP (opt-in), SSRF/redirect
+Pillar 2 (`@strummer/api`) **engine is complete** (incl. contract validation,
+ADR 0005). Next, in order:
+1. **MCP tools + CLI commands** over `@strummer/api` (`list_requests`,
+   `get_request`, `run_request`, `run_collection`, `validate_response`) — the
+   agent/human surfaces. Planned **fan-out** (independent surfaces over the
+   engine).
+2. Tail: wire the keyring secret store into CLI/MCP (opt-in), SSRF/redirect
    re-checks, multipart/file/graphql bodies, Postman/Insomnia/OpenAPI import.
 
 Deferred Pillar-1 polish (not blocking): Dash docset adapter, non-Node version

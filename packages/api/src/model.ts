@@ -89,6 +89,32 @@ export interface AssertionResult {
   pass: boolean
 }
 
+/** Contract-validation finding kinds (OpenAPI + GraphQL drift). */
+export type ContractFindingKind =
+  | 'missing-operation'
+  | 'undocumented-status'
+  | 'response-schema'
+  | 'graphql-syntax'
+  | 'graphql-validation'
+  | 'graphql-errors'
+
+/** A single contract discrepancy between a response and its declared shape. */
+export interface ContractFinding {
+  kind: ContractFindingKind
+  message: string
+  /** JSON Pointer / field path to the offending value, when applicable. */
+  path?: string
+  severity: 'error' | 'warning'
+}
+
+/** Result of validating a response against a contract (OpenAPI/GraphQL). */
+export interface ContractResult {
+  valid: boolean
+  findings: ContractFinding[]
+  /** Matched OpenAPI operation (lowercased method + path template), when found. */
+  operation?: { method: string; path: string }
+}
+
 /** Resolves named secrets at the transport boundary. */
 export interface SecretStore {
   get(name: string): Promise<string | undefined>

@@ -63,9 +63,16 @@ installed version Z" and get a precise, cited answer over MCP.
       file/graphql bodies still TODO.
 - [x] QuickJS-sandboxed pre/post scripts (curated `bru`/`expect`/`test` API;
       JSON-only boundary, 1s interrupt). Sidecar `preScript`/`postScript`.
-- [ ] MCP tools (`run_request`/`run_collection`/`validate_response`/…) + CLI.
+- [x] **Contract validation & drift detection** (ADR 0005, ajv-direct): `schema`
+      assertion (ajv 2020-12); `validateOpenApiResponse` (OpenAPI 3.1: path/status
+      match, response-schema validation, local `$ref`→`$defs`); `validateGraphql
+      Operation` (graphql-js: query-vs-schema drift incl. missing root types +
+      response `errors`). Adversarially verified.
+- [ ] MCP tools (`list_requests`/`get_request`/`run_request`/`run_collection`/
+      `validate_response`) + CLI mirrors.
 - [ ] Import: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
-- [ ] OpenAPI/GraphQL contract validation & drift detection.
+- [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
+      deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
 
 ## Phase 3 — Browser / UI testing pillar
 

@@ -32,6 +32,60 @@ describe('evaluateAssertions', () => {
   })
 })
 
+describe('schema assertion (ajv 2020-12)', () => {
+  it('passes when the response body matches an inline JSON Schema', () => {
+    const [r] = evaluateAssertions(
+      [
+        {
+          source: 'schema',
+          op: 'matches',
+          value: {
+            type: 'object',
+            required: ['id', 'items'],
+            properties: {
+              id: { type: 'integer' },
+              items: { type: 'array', items: { type: 'integer' } },
+            },
+          },
+        },
+      ],
+      ctx,
+    )
+    expect(r?.pass).toBe(true)
+    expect(r?.actual).toBeNull()
+  })
+
+  it('fails and reports the offending instance path when the body violates the schema', () => {
+    const [r] = evaluateAssertions(
+      [
+        {
+          source: 'schema',
+          op: 'matches',
+          value: { type: 'object', properties: { id: { type: 'string' } } },
+        },
+      ],
+      ctx,
+    )
+    expect(r?.pass).toBe(false)
+    expect(JSON.stringify(r?.actual)).toContain('/id')
+  })
+
+  it('validates a jsonpath-extracted subtree against a schema', () => {
+    const [r] = evaluateAssertions(
+      [
+        {
+          source: 'schema',
+          path: '$.items',
+          op: 'matches',
+          value: { type: 'array', items: { type: 'integer' } },
+        },
+      ],
+      ctx,
+    )
+    expect(r?.pass).toBe(true)
+  })
+})
+
 describe('extractCaptures', () => {
   it('captures by jsonpath, status, and header', () => {
     const captured = extractCaptures(

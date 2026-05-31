@@ -1,5 +1,6 @@
 import { JSONPath } from 'jsonpath-plus'
 import type { AssertionOp, AssertionResult, AssertionSpec, CaptureSpec } from './model.js'
+import { validateSchema } from './schema.js'
 
 export interface ResponseContext {
   status: number
@@ -47,6 +48,20 @@ export function evaluateAssertions(
   ctx: ResponseContext,
 ): AssertionResult[] {
   return specs.map((spec) => {
+    // 'schema' is pass/fail against a JSON Schema, not an op comparison: the
+    // schema lives in `value`, the subject is the body (or a jsonpath subtree).
+    if (spec.source === 'schema') {
+      const subject = spec.path ? valueFrom('jsonpath', ctx, spec) : ctx.json
+      const { valid, errors } = validateSchema(spec.value, subject)
+      return {
+        source: spec.source,
+        op: spec.op,
+        path: spec.path,
+        expected: spec.value,
+        actual: valid ? null : errors,
+        pass: valid,
+      }
+    }
     const actual = valueFrom(spec.source, ctx, spec)
     return {
       source: spec.source,
