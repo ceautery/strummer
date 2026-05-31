@@ -1,0 +1,23 @@
+name: greenfield
+
+services:
+  claude:
+    container_name: greenfield-claude
+    build:
+      context: docker
+      dockerfile: Dockerfile
+    entrypoint: /workspace/docker/entrypoint.sh
+    command: sleep infinity
+    volumes:
+      - .:/workspace:cached                       # your greenfield project, live-mounted
+      - greenfield-claude-auth:/home/claude/.claude   # auth + gh config + skills + memories
+    # HTTP to the host: reach it at http://host.docker.internal:<port>
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stdin_open: true
+    tty: true
+
+volumes:
+  greenfield-claude-auth:
+    external: true   # unique name → its own dir under ~/OrbStack/docker/volumes/;
+                     # survives `docker compose down -v` and image rebuilds
