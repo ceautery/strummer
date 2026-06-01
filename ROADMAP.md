@@ -100,9 +100,11 @@ Staged below; aspirational items are scheduled, not cut.
 - [ ] **Scaffold `@strummer/browser`** (Apache-2.0, ESM, tsdown, Biome+Vitest);
       add to the pnpm workspace + `pnpm gate` + CI; pin `playwright-core` 1.60.0
       and `mcr.microsoft.com/playwright:v1.60.0-noble` in lockstep.
-- [ ] **Browser lifecycle manager** — one browser/server, ephemeral isolated
-      context per session, idle-context reaper, concurrency + timeout caps,
-      session wall-clock/TTL.
+- [x] **Browser lifecycle manager** (`BrowserManager`) — lazy single shared
+      browser, ephemeral isolated context per session, `maxContexts` cap,
+      idle-TTL `sweepIdle` + `startReaper`, per-context default action/navigation
+      timeouts, `closeSession`/`shutdown`. (Session wall-clock cap + max-pages
+      land with the step tools.)
 - [ ] **ARIA-snapshot capture + serializer** (copied Apache-2.0, attributed)
       emitting token-capped scoped diffs + a full-snapshot handle; per-snapshot
       ref-id minting (non-persisted).
@@ -146,6 +148,12 @@ Staged below; aspirational items are scheduled, not cut.
 - [ ] **Vision/coordinate capability** behind operator-gated `--caps=vision` for
       canvas/non-AX-tree UI (screenshot-pixel click/move), off by default.
 - [ ] **Video capture** (webm, retain-on-failure) operator-gated with size caps.
+- [ ] **Developer live-view** (observability, not the agent path) — primary:
+      headless + `--remote-debugging-port` so a developer can attach DevTools /
+      `chrome://inspect` to watch the live session with no extra infra; optional
+      operator-gated **headed profile** (Xvfb → x11vnc → noVNC) for in-browser
+      watching. Default remains headless; for *reviewing* a run, the trace viewer
+      + video are the deterministic, CI-friendly path.
 - [ ] **Visual regression** — `toHaveScreenshot` (pixelmatch) default with
       `animations:'disabled'`/`caret:'hide'`/`mask[]`/`maxDiffPixelRatio`;
       baselines generated in the pinned Docker image keyed by (name,browser,

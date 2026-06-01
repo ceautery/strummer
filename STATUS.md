@@ -161,14 +161,19 @@ scaffolded; `ArtifactStore`/`summarizeA11y`/`auditA11y`, TDD against an offline
 fixture + real headless Chromium; CI + docker harness provision Chromium). The
 slice deliberately deferred visual baselines + Lighthouse scores (the flaky parts).
 
-**Next, per ROADMAP Phase 3 (in rough order):** (1) **browser lifecycle manager**
-— one browser/server, ephemeral isolated context per session, idle reaper +
-timeout/concurrency caps; (2) **ARIA-snapshot capture + serializer** (copy
-`@playwright/mcp`'s Apache-2.0 serializer with attribution) → token-capped diff +
-full-snapshot handle, per-snapshot ref-ids; (3) **imperative step tools** over
-refs; then the safety gate, the two-tier SSRF defense (factoring `@strummer/safety`
-out of `@strummer/api`), and the artifact-capture pipeline. Continue TDD
-red→green; `pnpm gate` must be 100% green before each commit.
+**Slice 2 (browser lifecycle manager): DONE & committed.** `BrowserManager` —
+lazy single shared browser, ephemeral isolated context per session, `maxContexts`
+cap, idle-TTL `sweepIdle` + `startReaper`, per-context default timeouts,
+`closeSession`/`shutdown`. TDD with a fake browser (deterministic clock) + a
+real-chromium integration test. **138 TS + 45 Py green.**
+
+**Next, per ROADMAP Phase 3 (in rough order):** (1) **ARIA-snapshot capture +
+serializer** (copy `@playwright/mcp`'s Apache-2.0 serializer with attribution) →
+token-capped diff + full-snapshot handle, per-snapshot ref-ids; (2) **imperative
+step tools** over refs (these also bring the session wall-clock cap + max-pages);
+then the safety gate, the two-tier SSRF defense (factoring `@strummer/safety` out
+of `@strummer/api`), and the artifact-capture pipeline. Continue TDD red→green;
+`pnpm gate` must be 100% green before each commit.
 
 ---
 
