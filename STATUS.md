@@ -106,12 +106,19 @@ against in-process fixtures):
    accepted}`. Surfaced by the race-free **`browser_downloads`** read tool
    (`collectDownloads(waitMs?)` awaits in-flight saves; optional bounded wait) —
    **metadata only, bytes never served** to the agent.
+21. **Upload gating — confined to an operator allowlist dir:** `PageDriver.uploadFiles`
+   (MCP `browser_upload`) sets files on a file-input ref but is **deny-by-default** —
+   it requires an operator `uploadDir` and every requested path must resolve to
+   within it (no `..` traversal, no absolute escape), throwing `GateError` otherwise.
+   This is the exfiltration control: an agent cannot upload arbitrary local files
+   (`~/.ssh/id_rsa`, `/etc/passwd`). Selecting a file makes no network request; the
+   later submit is gated separately by the mutation gate. Bin-wired via
+   `STRUMMER_BROWSER_UPLOAD_DIR` (unset ⇒ uploads denied). **The downloads/uploads/
+   dialog/auth gating bundle is now COMPLETE** (auth = origin-scoped `httpCredentials`).
 
-**240 TS + 45 Py tests green; committed to `main`.** **Next action:** uploads gating
-(a `setInputFiles` tool confined to an operator allowlist dir) — auth is already
-covered by origin-scoped `httpCredentials` — and (deferred) the human
-**`strummer browser` CLI**. See the detailed "Next action" section below + ROADMAP
-Phase 3.
+**245 TS + 45 Py tests green; committed to `main`.** **Next action:** the only
+remaining Phase 3 item is the deferred human **`strummer browser` CLI**. See the
+detailed "Next action" section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -411,9 +418,13 @@ a download is saved under a sanitized indexed name and recorded as a `DownloadEv
 Surfaced by the race-free `browser_downloads` read tool (metadata only — bytes never
 served).
 
-**Next (later Phase 3):** uploads gating (`setInputFiles` confined to an operator
-allowlist dir; auth = origin-scoped `httpCredentials`, done); and the deferred human
-**`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before each commit.
+**Upload gating: DONE.** `PageDriver.uploadFiles` / MCP `browser_upload` —
+deny-by-default (requires operator `STRUMMER_BROWSER_UPLOAD_DIR`); every path must
+resolve within that dir (no traversal/absolute escape) so an agent can't exfiltrate
+arbitrary local files. **The downloads/uploads/dialog/auth gating bundle is COMPLETE.**
+
+**Next (later Phase 3):** only the deferred human **`strummer browser` CLI** remains.
+TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

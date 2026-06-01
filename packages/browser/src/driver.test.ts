@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -22,6 +22,7 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>Steps</title></head
   <button id="later">Later</button>
   <button id="del">Delete</button>
   <a id="dl" href="/download.bin" download="report.txt">Get file</a>
+  <input type="file" aria-label="Attach">
   <script>
     const $ = (id) => document.getElementById(id)
     $('add').addEventListener('click', () => {
@@ -279,5 +280,37 @@ describe('PageDriver — step tools (real headless chromium)', () => {
     } finally {
       await dlContext.close()
     }
+  })
+
+  it('uploads a file from the operator allowlist dir; rejects paths outside it', async () => {
+    const upDir = mkdtempSync(join(tmpdir(), 'strummer-up-'))
+    writeFileSync(join(upDir, 'ok.txt'), 'hello')
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowedHosts: ['127.0.0.1'] }),
+      uploadDir: upDir,
+    })
+    await driver.navigate(baseUrl)
+
+    // accepts a file inside the allowlist dir (relative to it)
+    const result = await driver.uploadFiles(refFor(driver, 'button', 'Attach'), ['ok.txt'])
+    expect(result.action).toBe('upload')
+    // the file input now reports the chosen file (browsers expose a fakepath value)
+    expect(await driver.getValue(refFor(driver, 'button', 'Attach'))).toMatch(/ok\.txt$/)
+
+    // traversal + absolute paths outside the dir are denied (no setInputFiles)
+    await expect(
+      driver.uploadFiles(refFor(driver, 'button', 'Attach'), ['../../etc/passwd']),
+    ).rejects.toThrow(/allowlist/i)
+    await expect(
+      driver.uploadFiles(refFor(driver, 'button', 'Attach'), ['/etc/passwd']),
+    ).rejects.toThrow(/allowlist/i)
+  })
+
+  it('denies uploads entirely when no operator upload dir is configured', async () => {
+    const driver = await gatedDriver(new BrowserGate({ allowedHosts: ['127.0.0.1'] }))
+    await expect(driver.uploadFiles(refFor(driver, 'button', 'Attach'), ['x'])).rejects.toThrow(
+      /not enabled/i,
+    )
   })
 })

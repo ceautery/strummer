@@ -68,6 +68,9 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
 - **`browser_screenshot`** — operator-gated (off by default; pixels can't be
   redacted, like the trace.zip); captures a PNG to a `screenshot-s<n>` handle
   (summary only, never inlined) and does not invalidate refs.
+- **`browser_upload`** — set file(s) on a file-input ref. Deny-by-default: requires
+  an operator upload-allowlist dir and confines every path within it (no traversal/
+  absolute escape), so an agent can't upload arbitrary local files.
 - **`browser_downloads`** — collect file downloads since the last call (a free read).
   Downloads are denied by default (cancelled); with an operator quarantine dir set
   they're saved there under a sanitized name and reported as filename/path/size —
@@ -86,6 +89,7 @@ DNS-pinning SSRF proxy (loopback forced through it; `ALLOW_PRIVATE` opt-in);
 service-workers blocked + WebRTC egress neutralized; JS dialogs dismissed by
 default (`ALLOW_DIALOGS` to accept; each recorded, redacted, on the step result);
 downloads cancelled unless an operator quarantine dir (`DOWNLOAD_DIR`) is set;
+uploads confined to an operator allowlist dir (`UPLOAD_DIR`, denied when unset);
 secret redaction across every artifact + the trace.zip; `{{secret:NAME}}` fill +
 origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
 `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/

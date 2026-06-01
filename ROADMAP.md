@@ -204,15 +204,17 @@ Staged below; aspirational items are scheduled, not cut.
 - [ ] **Network heavy mode** — `recordHar content:'attach' .zip` (or
       `tracing.startHar`) behind operator unlock; HAR replay/mocking via
       `page.route` for offline determinism.
-- [~] **Downloads quarantine** dir + saveAs path validation; uploads confined to
+- [x] **Downloads quarantine** dir + saveAs path validation; uploads confined to
       an operator upload-allowlist dir; download/upload as gated structured events.
-      _(Downloads DONE: `BrowserManager` `acceptDownloads:false` cancels by default;
+      _(Downloads: `BrowserManager` `acceptDownloads:false` cancels by default;
       operator `DOWNLOAD_DIR` flips it on + `PageDriver` saves under a sanitized,
       indexed name (no traversal) and records a `DownloadEvent`; race-free
       `browser_downloads` read tool surfaces metadata only, bytes never served.
-      Dialog gating also shipped — dismiss by default, `ALLOW_DIALOGS` to accept.
-      Remaining: uploads — a `setInputFiles` tool confined to an operator
-      upload-allowlist dir.)_
+      Uploads: `PageDriver.uploadFiles` / MCP `browser_upload` is deny-by-default —
+      requires operator `UPLOAD_DIR` and confines every path within it (no
+      traversal/absolute escape), the exfiltration control. Dialog gating: dismiss
+      by default, `ALLOW_DIALOGS` to accept, recorded as `DialogEvent`s. Auth:
+      origin-scoped `httpCredentials`. The full gating bundle is complete.)_
 - [ ] **Container hardening ADR** — seccomp profile + dropped caps + read-only FS
       + non-root by default; `--no-sandbox` as documented operator-gated fallback;
       disable WebRTC/QUIC in the hardened profile.

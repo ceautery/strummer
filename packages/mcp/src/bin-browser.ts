@@ -69,6 +69,8 @@ export interface BrowserBinConfig {
   allowScreenshots: boolean
   /** Operator download-quarantine dir (downloads denied/cancelled when unset). */
   downloadDir?: string
+  /** Operator upload-allowlist dir (uploads denied when unset). */
+  uploadDir?: string
 }
 
 export interface BuiltBrowserServer {
@@ -137,6 +139,8 @@ export async function buildBrowserServerFromEnv(
   // AND tells the driver where to save; unset ⇒ contexts cancel every download.
   const downloadDir = env.STRUMMER_BROWSER_DOWNLOAD_DIR || undefined
   const acceptDownloads = downloadDir !== undefined
+  // Uploads: deny-by-default. An operator allowlist dir is the exfiltration control.
+  const uploadDir = env.STRUMMER_BROWSER_UPLOAD_DIR || undefined
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -200,6 +204,7 @@ export async function buildBrowserServerFromEnv(
     allowStorageState,
     allowScreenshots,
     downloadDir,
+    uploadDir,
     capture,
     maxNodes,
   })
@@ -226,6 +231,7 @@ export async function buildBrowserServerFromEnv(
     allowStorageState,
     allowScreenshots,
     downloadDir,
+    uploadDir,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

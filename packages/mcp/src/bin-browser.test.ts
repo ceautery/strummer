@@ -127,4 +127,10 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'strummer-dlq-'))
     expect((await build({ STRUMMER_BROWSER_DOWNLOAD_DIR: dir })).config.downloadDir).toBe(dir)
   })
+
+  it('denies uploads unless STRUMMER_BROWSER_UPLOAD_DIR sets an allowlist dir', async () => {
+    expect((await build({})).config.uploadDir).toBeUndefined()
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-upq-'))
+    expect((await build({ STRUMMER_BROWSER_UPLOAD_DIR: dir })).config.uploadDir).toBe(dir)
+  })
 })

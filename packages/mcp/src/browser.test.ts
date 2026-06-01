@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -23,6 +23,7 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>MCP</title></head><
   <button id="login">Login</button>
   <button id="del">Delete</button>
   <a id="dl" href="/download.bin" download="report.txt">Get file</a>
+  <input type="file" aria-label="Attach">
   <script>
     document.cookie = 'sid=secret-cookie'
     localStorage.setItem('token', 'secret-cookie')
@@ -67,6 +68,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     allowScreenshots?: boolean
     allowDialogs?: boolean
     downloadDir?: string
+    uploadDir?: string
   }) {
     const gate = new BrowserGate({
       allowUnsafe: config.allowUnsafe,
@@ -94,6 +96,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       allowStorageState: config.allowStorageState,
       allowScreenshots: config.allowScreenshots,
       downloadDir: config.downloadDir,
+      uploadDir: config.uploadDir,
     })
     const [ct, st] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test', version: '0.0.0' })
@@ -148,6 +151,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_fill_form',
       'browser_select',
       'browser_press',
+      'browser_upload',
       'browser_wait_for',
       'browser_get_text',
       'browser_get_value',
@@ -449,6 +453,53 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(existsSync(dl.downloads[0]?.savedAs as string)).toBe(true)
     // metadata only — the downloaded bytes are never returned to the agent
     expect(JSON.stringify(dl)).not.toContain('downloaded-bytes')
+    await client.close()
+  })
+
+  it('uploads only from the operator allowlist dir; denies traversal and when unset', async () => {
+    const upDir = mkdtempSync(join(baseDir, 'up-'))
+    writeFileSync(join(upDir, 'ok.txt'), 'hello')
+    const { client } = await connect({ uploadDir: upDir })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
+      .structuredContent as StepSC
+    const attachRef = refByName(nav.snapshot, 'button', 'Attach')
+
+    const ok = await call(client, 'browser_upload', {
+      sessionId,
+      ref: attachRef,
+      files: ['ok.txt'],
+    })
+    expect((ok.structuredContent as StepSC).snapshot).toContain('[ref=')
+    expect(ok.isError).toBeFalsy()
+
+    // a traversal path outside the allowlist is denied
+    const outside = await call(client, 'browser_upload', {
+      sessionId,
+      ref: refByName((ok.structuredContent as StepSC).snapshot, 'button', 'Attach'),
+      files: ['../../../etc/passwd'],
+    })
+    expect(outside.isError).toBe(true)
+    expect(JSON.stringify(outside.content)).toMatch(/allowlist/i)
+
+    // with no operator upload dir, uploads are denied entirely
+    const noDir = await connect({})
+    const nd = (await call(noDir.client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const ndNav = (
+      await call(noDir.client, 'browser_navigate', { sessionId: nd.sessionId, url: baseUrl })
+    ).structuredContent as StepSC
+    const denied = await call(noDir.client, 'browser_upload', {
+      sessionId: nd.sessionId,
+      ref: refByName(ndNav.snapshot, 'button', 'Attach'),
+      files: ['x'],
+    })
+    expect(denied.isError).toBe(true)
+    expect(JSON.stringify(denied.content)).toMatch(/not enabled/i)
+    await noDir.client.close()
     await client.close()
   })
 

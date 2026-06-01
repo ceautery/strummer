@@ -1,8 +1,8 @@
 import { stat } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join, resolve, sep } from 'node:path'
 import type { Dialog, Download, Locator, Page, Route } from 'playwright-core'
 import type { ArtifactStore } from './artifacts.js'
-import type { BrowserGate } from './gate.js'
+import { type BrowserGate, GateError } from './gate.js'
 import { captureSnapshot, diffSnapshots, type RefDescriptor, type Snapshot } from './snapshot.js'
 
 type Role = Parameters<Page['getByRole']>[0]
@@ -42,6 +42,16 @@ function sanitizeFilename(name: string): string {
     .replace(/[^\w.-]+/g, '_')
     .replace(/^\.+/, '')
   return safe || 'download'
+}
+
+/** Resolve `file` (relative → under `root`) and confirm it stays inside `root`. */
+function resolveWithin(root: string, file: string): string {
+  const r = resolve(root)
+  const abs = isAbsolute(file) ? resolve(file) : resolve(r, file)
+  if (abs !== r && !abs.startsWith(r + sep)) {
+    throw new GateError(`upload "${file}" denied — outside the operator upload allowlist`)
+  }
+  return abs
 }
 
 export interface StepResult {
@@ -91,6 +101,11 @@ export interface PageDriverOptions {
    * indexed name and recorded; when unset, downloads are denied (the manager's
    * `acceptDownloads: false` already cancels them). Operator config, never a tool input. */
   downloadDir?: string
+  /** Operator upload-allowlist dir. `uploadFiles` may only set files resolving to
+   * within this dir; unset ⇒ uploads denied entirely (deny-by-default). This is the
+   * exfiltration control — an agent cannot upload arbitrary local files. Operator
+   * config, never a tool input. */
+  uploadDir?: string
 }
 
 export interface ScreenshotOptions {
@@ -358,6 +373,24 @@ export class PageDriver {
   async selectOption(ref: string, values: string | string[]): Promise<StepResult> {
     const locator = this.locator(ref)
     return this.interact('select', ref, () => locator.selectOption(values))
+  }
+
+  /**
+   * Set files on a file-input ref. **Deny-by-default:** requires an operator
+   * upload-allowlist dir, and every path must resolve to within it (no `..`
+   * traversal, no absolute escape) — so an agent cannot exfiltrate arbitrary local
+   * files. Selecting a file makes no network request; the subsequent submit is
+   * gated separately by the mutation gate. Re-snapshots like other interactions.
+   */
+  async uploadFiles(ref: string, files: string[]): Promise<StepResult> {
+    if (this.opts.uploadDir === undefined) {
+      throw new GateError('uploads not enabled — no operator upload dir configured')
+    }
+    const dir = this.opts.uploadDir
+    const resolved = files.map((f) => resolveWithin(dir, f)) // throws on escape, before any DOM change
+    const locator = this.locator(ref)
+    await locator.setInputFiles(resolved)
+    return this.settle('upload', ref)
   }
 
   /** Press a key on a ref's element, or on the page when `ref` is null. */

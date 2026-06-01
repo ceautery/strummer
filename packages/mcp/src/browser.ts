@@ -55,6 +55,9 @@ export interface BrowserToolsOptions {
    * `acceptDownloads` on), started downloads are saved here and surfaced by
    * `browser_downloads`; when unset, downloads are denied (cancelled). */
   downloadDir?: string
+  /** Operator upload-allowlist dir. When set, `browser_upload` may set files
+   * resolving to within it; unset ⇒ uploads denied (deny-by-default). */
+  uploadDir?: string
   /** Token cap on inlined snapshot text. */
   maxNodes?: number
   /** Exact accessible-name matching when resolving refs. Default true. */
@@ -216,6 +219,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         maxNodes: opts.maxNodes,
         exact: opts.exact,
         downloadDir: opts.downloadDir,
+        uploadDir: opts.uploadDir,
       })
       registry.set(id, {
         runId,
@@ -400,6 +404,27 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     async (args) => {
       const session = requireSession(args.sessionId)
       const result = await enqueue(session, () => session.driver.press(args.ref ?? null, args.key))
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_upload',
+    {
+      title: 'Upload file(s)',
+      description:
+        'Set file(s) on a file-input ref. Deny-by-default: requires an operator upload-allowlist dir, ' +
+        'and every path must resolve to within it (no traversal/absolute escape) — an agent cannot ' +
+        'upload arbitrary local files. Paths are relative to that dir. The later submit is gated separately.',
+      inputSchema: {
+        sessionId,
+        ref,
+        files: z.array(z.string()).describe('file path(s) within the operator upload dir'),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.uploadFiles(args.ref, args.files))
       return reply({ ...result })
     },
   )
