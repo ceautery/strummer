@@ -100,7 +100,19 @@ in the gate). **MCP surface landed:** `uncovered_in_diff` (free, read-only) + `r
 (gated, registered only when the operator set `allowRun` + a non-empty root allowlist) in
 `packages/mcp/src/coverage.ts` + the `strummer-coverage-mcp` bin (`STRUMMER_COVERAGE_ALLOW_RUN`
 / `_PROJECT_ROOTS` / `_TIMEOUT_MS`, wires the live vitest runner). **The coverage pillar's
-agent surface is complete.** 495 TS + 45 Py green.)_
+agent surface is complete.** **`@strummer/flake` is now open (slice 1):** the pure
+`wilsonInterval(failures, runs, z=1.96)` (Wilson score interval for a binomial proportion,
+clamped to [0,1], degenerate-zero for zero runs — chosen over naive p̂=failures/runs, which
+is overconfident at small n and collapses at the p̂=0/1 boundaries) + `classifyHistory`/
+`classifyHistories` over per-test run histories → `FlakeVerdict {state, runs, passes,
+failures, failureRate, wilson, flakeScore}`. Policy: a **mixed** history is `flaky` at any
+run count (observed inconsistency = flaky); an all-pass/all-fail history is `reliable`/
+`broken` only after it clears `minRuns` (default 5), else `insufficient-data`; empty →
+`insufficient-data`. `flakeScore` = the Wilson lower bound of the failure rate — the
+conservative, sample-size-aware magnitude the (later, operator-gated) quarantine slice
+thresholds on. Pure/offline over a committed `run-history.json` fixture shaped like the
+future private better-sqlite3 history store ({passed, at} runs; `at` ignored). No runtime
+deps yet (better-sqlite3 arrives with the history-DB slice). 509 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -440,10 +452,14 @@ landed**, **and the MCP surface + `strummer-coverage-mcp` bin landed** — so **
 `@strummer/coverage` pillar (engine + agent surface) is complete** (`uncovered_in_diff`
 free/read-only + gated `run_scoped`). **Next for deps/coverage:** the staged
 **Python/PyPI + RubyGems advisory adapters** (deps) and, optionally, a `strummer coverage`
-human CLI / `istanbul-lib-coverage` for `CoverageMap` merging. The test-quality chain is
-next — **`@strummer/flake`** (pure Wilson/binomial classifier over a run-history fixture
-first; quarantine writes operator-gated; its own private better-sqlite3 history DB per ADR
-0010) → `@strummer/mutate` (after a Stryker/Vitest-4 compat spike) → `@strummer/lsp` (last).
+human CLI / `istanbul-lib-coverage` for `CoverageMap` merging. **The test-quality chain is
+now open — `@strummer/flake` slice 1 landed:** the pure `wilsonInterval` + `classifyHistory`/
+`classifyHistories` classifier (states `flaky`/`reliable`/`broken`/`insufficient-data`;
+`flakeScore` = Wilson lower bound of the failure rate) over a committed `run-history.json`
+fixture; pure/offline, no runtime deps yet. **Next for flake:** the private better-sqlite3
+run-history store (record/query runs) feeding the classifier → operator-gated quarantine
+**writes** (paired gate + mandatory expiry) → MCP surface; then `@strummer/mutate` (after a
+Stryker/Vitest-4 compat spike) → `@strummer/lsp` (last).
 Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
 (`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in). The

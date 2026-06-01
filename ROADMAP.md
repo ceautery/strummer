@@ -490,6 +490,21 @@ Two independent tracks, then the test-quality chain, then LSP last:
       fixture first; quarantine **writes** are operator-gated (paired) with mandatory
       expiry. Opens its own private `better-sqlite3` history DB (a second SQLite owner,
       outside the docs-pillar core invariant — noted in ADR 0010).
+  - [x] **Slice 1 — pure `wilsonInterval` + `classifyHistory`/`classifyHistories`.**
+        The Wilson score interval for a binomial proportion (clamped to [0,1], degenerate
+        zero for zero runs — chosen over naive p̂=failures/runs, which is overconfident at
+        small n and collapses at the p̂=0/1 boundaries) + a classifier over per-test run
+        histories → `FlakeVerdict {state, runs, passes, failures, failureRate, wilson,
+        flakeScore}`. Policy: a **mixed** history is `flaky` at any run count (observed
+        inconsistency = flaky); an all-pass/all-fail history is `reliable`/`broken` only
+        once it clears `minRuns` (default 5), else `insufficient-data`. `flakeScore` = the
+        Wilson lower bound of the failure rate — the conservative, sample-size-aware
+        magnitude the (later, operator-gated) quarantine slice thresholds on. Pure/offline
+        over a committed `run-history.json` fixture shaped like the future history store
+        ({passed, at} runs; `at` ignored). No runtime deps yet.
+  - [ ] *(next)* the private `better-sqlite3` run-history store (record/query runs) feeding
+        the classifier; then the operator-gated quarantine **writes** (paired gate +
+        mandatory expiry); then the MCP surface; Python (pytest-json) adapter staged.
 - [ ] **Mutation testing** (`@strummer/mutate`) — are the tests meaningful? Run a
       **Stryker/Vitest-4 compat spike first** (Stryker's vitest-runner advertises
       Vitest v1–3; we are pinned to 4.1.x) before committing the slot. Pure

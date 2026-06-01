@@ -109,6 +109,10 @@ vision and `ARCHITECTURE.md` for the technical design.
   `coverage` (Phase-4 track A: the forgotten-assertion catch — `parseUnifiedDiff` +
   `uncoveredNewLines` + `uncoveredInDiff` pure differs, plus gated impact-scoped
   `runScoped`; `uncovered_in_diff`/`run_scoped` MCP surface),
+  `flake` (Phase-4 test-quality chain: flaky-test detection — pure Wilson/binomial
+  `classifyHistory` over per-test run histories → `flaky`/`reliable`/`broken`/
+  `insufficient-data` + `flakeScore`; quarantine writes operator-gated, opens its own
+  private better-sqlite3 history DB per ADR 0010 — slice 1 = pure classifier only),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
