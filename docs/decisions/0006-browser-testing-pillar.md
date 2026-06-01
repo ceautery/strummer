@@ -136,6 +136,43 @@ the hardened profile disables WebRTC (scheduled).
 > `serviceWorkers:'block'`, WebRTC/QUIC disable, and wiring the proxy into the
 > server bin's launch.
 
+> **Update (2026-06-01) — MCP surface + server bin (grounded by the
+> `browser-mcp-design` fan-out: 3 designs → 2 adversarial critics → synthesis).**
+> Shipped **MCP-only** (human CLI deferred): `registerBrowserTools`/
+> `createBrowserServer` (`packages/mcp/src/browser.ts`) + the `strummer-browser-mcp`
+> bin (`bin-browser.ts`). Load-bearing decisions and adversarial corrections:
+> - **Loopback proxy-bypass gap (real).** Chromium bypasses `proxy.server` for
+>   loopback literals (documented in `proxy.test.ts`), so an operator allowlisting
+>   `127.0.0.1` could pivot to any loopback port unpinned. The bin now launches
+>   with `--proxy-bypass-list=<-loopback>` so loopback ALSO traverses the pinning
+>   proxy, and `allowPrivate` genuinely governs loopback reachability. The Tier-2
+>   proxy is **mandatory — no disable env** (rebinding protection can't be turned
+>   off from env).
+> - **Redaction boundary made precise.** Anything **written to disk** is redacted
+>   in the engine (the new `buildSnapshot` redact seam scrubs the snapshot text +
+>   stored tree; `RunRecorder` redacts console/network before write); anything only
+>   **returned** is redacted at the surface (free reads `get_text`/`get_value`/
+>   `get_attribute`). A secret reflected in the DOM no longer leaks via a snapshot.
+> - **Per-generation immutable artifact handles** (`snapshot-s<gen>` / `a11y-s<n>`)
+>   so a handle returned in one step never resolves to a later generation's tree.
+> - **Dry-run scope, honestly:** the dry-run route aborts **every** request (the
+>   critic's "only the first" was a verified misread — only the *capture* is
+>   first-only); the genuine gaps were **popups** (now closed via the context
+>   `page` event) and a `crossOriginEgress` flag (the gate authorizes on the
+>   document host, so a would-be request to a different host is surfaced).
+> - **Session model:** a surface `Map<sessionId,BrowserSession>` with a
+>   **per-session async mutex**; `sessionId`+`runId` are **server-minted UUIDs,
+>   never agent input**; reaper reconciliation via a new `BrowserManager.onReap`
+>   hook (flush the recorder before `context.close`) + `hasSession` eviction (a
+>   reaped session is refused, never silently re-created).
+> - **Namespaced `STRUMMER_BROWSER_*` operator env with NO fallback** to the api
+>   pillar's unprefixed vars, so unlocking API writes never unlocks browser
+>   mutations. Trace capture is **off by default** (unredacted binary); sandbox is
+>   **on by default** (`--no-sandbox` is an explicit operator opt-in).
+> - **Eager locator resolution:** `PageDriver` resolves a ref's locator before the
+>   gate/dry-run branch, so a no-snapshot/stale-ref error propagates instead of
+>   being swallowed by the dry-run try/catch.
+
 ### 6. Secrets at the fill/auth boundary; redact before any write
 
 `{{secret:NAME}}` form-fill placeholders resolve server-side immediately before

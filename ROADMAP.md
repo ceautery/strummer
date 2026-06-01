@@ -87,7 +87,7 @@ installed version Z" and get a precise, cited answer over MCP.
 - [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
       deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
 
-## Phase 3 — Browser / UI testing pillar  *(engine core + safety + artifact pipeline complete; agent surface (MCP/CLI) remains; design = ADR 0006 + ARCHITECTURE §10)*
+## Phase 3 — Browser / UI testing pillar  *(engine + safety + artifact pipeline + MCP surface complete; CLI + secret-boundary + hardening remain; design = ADR 0006 + ARCHITECTURE §10)*
 
 New pure-TS `@strummer/browser`, thin on **stable `playwright-core` 1.60.0** (not
 a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow with
@@ -159,6 +159,17 @@ Staged below; aspirational items are scheduled, not cut.
       flag (A4); no-snapshot vs stale-ref error in `PageDriver` (A5);
       `BrowserManager.onReap` flush hook so a reaped recording session writes its
       artifacts before the context closes (A6).
+- [x] **Browser MCP surface + server bin** (Milestones B+C; design = the
+      `browser-mcp-design` fan-out, MCP-only this pass) — `registerBrowserTools`/
+      `createBrowserServer` (`packages/mcp/src/browser.ts`): 15 session-oriented
+      tools over a per-session-mutex registry; server-minted UUID sessionId+runId
+      (never agent input); reads redacted at the surface; reaper reconciliation
+      (`manager.onReap` flush + `hasSession` eviction); the two-variable
+      `strummer://browser/run/{runId}/{kind}` resource. `strummer-browser-mcp` bin
+      (`bin-browser.ts`): namespaced `STRUMMER_BROWSER_*` env (no api-var fallback),
+      **mandatory** SSRF proxy + `--proxy-bypass-list=<-loopback>`, trace-off
+      default, sandbox-on default. Safety is operator-set; no tool input flips a
+      flag. _(Human `strummer browser` CLI deferred to a later pass.)_
 - [x] **Artifact capture pipeline** — `RunRecorder` (`recorder.ts`) captures a
       Playwright trace.zip (screenshots+snapshots+sources) + own console/network
       logs, all by `strummer://browser/run/<id>/<kind>` handle with structured
