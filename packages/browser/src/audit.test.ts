@@ -64,4 +64,14 @@ describe('auditA11y (offline, in-process server + headless chromium)', () => {
     const parsed = JSON.parse(stored?.body.toString('utf8') ?? '{}')
     expect(parsed.violations.some((v: { id: string }) => v.id === 'image-alt')).toBe(true)
   }, 60_000)
+
+  it('keys repeated audits by an index so handles do not overwrite each other', async () => {
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-')))
+    const first = await auditA11y(page, { runId: 'run-2', store, index: 1 })
+    const second = await auditA11y(page, { runId: 'run-2', store, index: 2 })
+    expect(first.resultsHandle).toBe('strummer://browser/run/run-2/a11y-s1')
+    expect(second.resultsHandle).toBe('strummer://browser/run/run-2/a11y-s2')
+    expect(store.get(first.resultsHandle)).toBeDefined()
+    expect(store.get(second.resultsHandle)).toBeDefined()
+  }, 60_000)
 })

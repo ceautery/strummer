@@ -120,6 +120,7 @@ export class PageDriver {
       runId: this.opts.runId,
       maxNodes: this.opts.maxNodes,
       idPrefix: `s${this.generation}e`,
+      generation: this.generation,
       redact: this.redact,
     })
   }

@@ -88,6 +88,38 @@ describe('snapshot redaction seam', () => {
   })
 })
 
+describe('per-generation immutable snapshot handles', () => {
+  it('keys the stored snapshot by generation so a later capture does not overwrite an earlier handle', async () => {
+    const { ArtifactStore } = await import('./artifacts.js')
+    const store = new ArtifactStore(
+      (await import('node:fs')).mkdtempSync(
+        (await import('node:path')).join((await import('node:os')).tmpdir(), 'strummer-snap-'),
+      ),
+    )
+    const s1 = await captureSnapshot(
+      { ariaSnapshot: async () => '- button "One"' },
+      {
+        runId: 'r',
+        store,
+        generation: 1,
+      },
+    )
+    const s2 = await captureSnapshot(
+      { ariaSnapshot: async () => '- button "Two"' },
+      {
+        runId: 'r',
+        store,
+        generation: 2,
+      },
+    )
+    expect(s1.fullHandle).toBe('strummer://browser/run/r/snapshot-s1')
+    expect(s2.fullHandle).toBe('strummer://browser/run/r/snapshot-s2')
+    // both still resolve to their own distinct trees (no overwrite)
+    expect(store.get(s1.fullHandle as string)?.body.toString('utf8')).toContain('button "One"')
+    expect(store.get(s2.fullHandle as string)?.body.toString('utf8')).toContain('button "Two"')
+  })
+})
+
 describe('diffSnapshots (scoped, ref-independent)', () => {
   it('reports added and removed semantic nodes', () => {
     const a = buildSnapshot('- button "Sign in"\n- textbox "Email"')
