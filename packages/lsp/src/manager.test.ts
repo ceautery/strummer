@@ -182,6 +182,23 @@ describe('LanguageServerManager reaper', () => {
   })
 })
 
+describe('LanguageServerManager.describe', () => {
+  it('reports live servers with provenance + capability flags (for lsp_languages)', async () => {
+    const { spawn } = makeSpawn()
+    const { mgr } = makeManager(spawn)
+    expect(mgr.describe()).toEqual([]) // none live yet
+    await mgr.run(INPUT, async () => 'x')
+    const desc = mgr.describe()
+    expect(desc).toHaveLength(1)
+    expect(desc[0]).toMatchObject({
+      language: 'typescript',
+      projectRoot: ROOT,
+      // default INIT fixture advertises definition/references/hover.
+      capabilities: { definition: true, references: true, hover: true },
+    })
+  })
+})
+
 describe('LanguageServerManager.shutdown', () => {
   it('gracefully stops and disposes every server', async () => {
     const { spawn, spawns } = makeSpawn()

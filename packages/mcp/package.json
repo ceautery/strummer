@@ -11,7 +11,8 @@
     "strummer-deps-mcp": "./dist/bin-deps.mjs",
     "strummer-coverage-mcp": "./dist/bin-coverage.mjs",
     "strummer-flake-mcp": "./dist/bin-flake.mjs",
-    "strummer-mutate-mcp": "./dist/bin-mutate.mjs"
+    "strummer-mutate-mcp": "./dist/bin-mutate.mjs",
+    "strummer-lsp-mcp": "./dist/bin-lsp.mjs"
   },
   "exports": {
     ".": {
@@ -24,7 +25,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts src/bin-deps.ts src/bin-coverage.ts src/bin-flake.ts src/bin-mutate.ts --dts",
+    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts src/bin-deps.ts src/bin-coverage.ts src/bin-flake.ts src/bin-mutate.ts src/bin-lsp.ts --dts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
     "@strummer/deps": "workspace:*",
     "@strummer/embed": "workspace:*",
     "@strummer/flake": "workspace:*",
+    "@strummer/lsp": "workspace:*",
     "@strummer/mutate": "workspace:*",
     "@strummer/safety": "workspace:*",
     "playwright-core": "1.60.0",

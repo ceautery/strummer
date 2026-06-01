@@ -26,6 +26,7 @@ export {
   type LanguageServerManagerOptions,
   LspManagerError,
   type QueryInput,
+  type ServerDescription,
 } from './manager.js'
 export {
   type DocumentSymbol,

@@ -538,7 +538,8 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `mutateFiles`→`--mutate` + `--incremental`. `mutate_summarize` (free) +
         `mutate_run` (gated) MCP tools + `strummer-mutate-mcp` bin.
   - [ ] *(staged)* Python (mutmut / cosmic-ray) adapter; a `strummer mutate` human CLI.
-- [ ] **LSP bridge** (`@strummer/lsp`) — semantic code navigation. Highest *raw*
+- [x] **LSP bridge** (`@strummer/lsp`) — semantic code navigation. **COMPLETE (engine +
+      agent surface), slices 1–5.** Highest *raw*
       leverage but **last**: the documented exception to ARCHITECTURE §1's no-live-RPC
       rule (a live, version-coupled subprocess). **Design DONE — ADR 0011** (3-stream
       research → synthesis → 2 adversarial critics; the adversarial pass reshaped it).
@@ -582,12 +583,15 @@ Two independent tracks, then the test-quality chain, then LSP last:
         serverInfo-absent `versionWarning`; echoes optional `toolchain` provenance. 10 tests.
         (The warn-on-toolchain-mismatch heuristic reusing `core.detectInstalledVersion` is
         staged to the surface slice, which has the `core` dep.)
-  - [ ] **Slice 5 — MCP surface + `strummer-lsp-mcp` bin.** `lsp_find_definition`/
-        `lsp_find_references`/`lsp_hover` (gated as a group); always-on `lsp_languages`
-        (reports bound languages + advertised capabilities + server version, never
-        commands/paths); large results by handle (`strummer://lsp/{id}/{kind}`). Env
-        `STRUMMER_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/`_SERVERS`(JSON)/
-        `_ARTIFACT_DIR`.
+  - [x] **Slice 5 — MCP surface + `strummer-lsp-mcp` bin.** `lsp_find_definition`/
+        `lsp_find_references`/`lsp_hover` (gated as a group — no free-read tier); always-on
+        no-spawn `lsp_languages` (bound languages + live capabilities + server version via
+        `manager.describe()`, never commands/paths); large reference lists by handle
+        (`strummer://lsp/{id}/{kind}`). Surface is pure wiring over an injected
+        `query`+`describeServers`; the bin builds the real manager/engine + reaper/shutdown.
+        Env `STRUMMER_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/`_SERVERS`(JSON)/
+        `_ARTIFACT_DIR`/`_MAX_SERVERS`/`_IDLE_TTL_MS`; toolchain provenance via
+        `core.detectInstalledVersion`. 7 surface + 6 bin tests.
   - [ ] *(staged, not amputated)* `lsp_type_definition`/`lsp_document_symbols`/
         `lsp_call_hierarchy` (behind per-server capability detection); then write-mode
         (`rename`), `workspace/symbol` search, `diagnostics`, multi-root, full

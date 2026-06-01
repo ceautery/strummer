@@ -1,0 +1,233 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { ArtifactStore } from '@strummer/artifacts'
+import type {
+  LspQueryInput,
+  LspQueryResult,
+  ServerDescription,
+  ServerRegistry,
+} from '@strummer/lsp'
+import { afterAll, describe, expect, it } from 'vitest'
+import { createLspServer, type LspToolsOptions } from './lsp.js'
+
+const REGISTRY: ServerRegistry = {
+  typescript: { command: 'tsls', args: ['--stdio'] },
+  go: { command: 'gopls', args: [] },
+}
+
+interface ToolJson {
+  status?: string
+  kind?: string
+  encoding?: string
+  serverInfo?: { name: string; version?: string }
+  toolchain?: { name: string; version: string | null }
+  versionWarning?: string
+  locationCount?: number
+  locations?: Array<{ uri: string; range: { start: { line: number; column: number } } }>
+  truncated?: boolean
+  fullHandle?: string
+  hover?: { value: string }
+  languages?: string[]
+  servers?: unknown
+}
+
+/** Parse the first text block of an MCP content/contents array. */
+function firstJson<T = ToolJson>(arr: unknown): T {
+  const first = (arr as Array<{ text: string }>)[0]
+  if (!first) throw new Error('no content')
+  return JSON.parse(first.text) as T
+}
+
+const tmpDirs: string[] = []
+function tmp(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'strummer-lsp-mcp-'))
+  tmpDirs.push(dir)
+  return dir
+}
+
+const clients: Client[] = []
+async function connect(opts: LspToolsOptions): Promise<Client> {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const client = new Client({ name: 'test', version: '0.0.0' })
+  await Promise.all([
+    createLspServer(opts).connect(serverTransport),
+    client.connect(clientTransport),
+  ])
+  clients.push(client)
+  return client
+}
+
+afterAll(async () => {
+  for (const c of clients) await c.close()
+  for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true })
+})
+
+const okDefinition: LspQueryResult = {
+  status: 'ok',
+  kind: 'definition',
+  encoding: 'utf-16',
+  serverInfo: { name: 'typescript-language-server', version: '5.3.0' },
+  locations: [
+    {
+      uri: 'file:///project/src/greeter.ts',
+      range: { start: { line: 1, column: 14 }, end: { line: 1, column: 21 } },
+      mapped: true,
+    },
+  ],
+}
+
+/** A stubbed query engine that records the last input and returns a canned result. */
+function stubQuery(result: LspQueryResult): {
+  query: (input: LspQueryInput) => Promise<LspQueryResult>
+  last: () => LspQueryInput | undefined
+} {
+  let last: LspQueryInput | undefined
+  return {
+    query: async (input) => {
+      last = input
+      return { ...result, kind: input.kind }
+    },
+    last: () => last,
+  }
+}
+
+const GATED: Omit<LspToolsOptions, 'query'> = {
+  registry: REGISTRY,
+  allowRun: true,
+  allowedRoots: ['/project'],
+}
+
+const DEF_ARGS = {
+  language: 'typescript',
+  projectRoot: '/project',
+  file: 'src/index.ts',
+  line: 3,
+  column: 17,
+}
+
+describe('lsp MCP surface gating', () => {
+  it('always exposes lsp_languages; gates the navigation tools as a group', async () => {
+    const free = await connect({ registry: REGISTRY })
+    expect((await free.listTools()).tools.map((t) => t.name)).toEqual(['lsp_languages'])
+
+    const gated = await connect({ ...GATED, query: stubQuery(okDefinition).query })
+    expect((await gated.listTools()).tools.map((t) => t.name).sort()).toEqual([
+      'lsp_find_definition',
+      'lsp_find_references',
+      'lsp_hover',
+      'lsp_languages',
+    ])
+
+    // allowRun without an allowlist must NOT register the navigation tools.
+    const half = await connect({ ...GATED, allowedRoots: [], query: stubQuery(okDefinition).query })
+    expect((await half.listTools()).tools.map((t) => t.name)).toEqual(['lsp_languages'])
+
+    // No registry ⇒ nothing is bindable, so the navigation tools stay off.
+    const noReg = await connect({
+      allowRun: true,
+      allowedRoots: ['/project'],
+      query: stubQuery(okDefinition).query,
+    })
+    expect((await noReg.listTools()).tools.map((t) => t.name)).toEqual(['lsp_languages'])
+  })
+})
+
+describe('lsp_languages', () => {
+  it('reports the bound languages and any live-server provenance (never the command/path)', async () => {
+    const servers: ServerDescription[] = [
+      {
+        language: 'typescript',
+        projectRoot: '/project',
+        serverInfo: { name: 'typescript-language-server', version: '5.3.0' },
+        capabilities: { definition: true, references: true, hover: true },
+      },
+    ]
+    const client = await connect({ registry: REGISTRY, describeServers: () => servers })
+    const res = await client.callTool({ name: 'lsp_languages', arguments: {} })
+    const data = firstJson(res.content)
+    expect(data.languages).toEqual(['go', 'typescript'])
+    expect(data.servers).toEqual(servers)
+    // The serialized output must never leak the operator command/argv.
+    expect(JSON.stringify(data)).not.toContain('tsls')
+    expect(JSON.stringify(data)).not.toContain('gopls')
+  })
+})
+
+describe('lsp navigation tools', () => {
+  it('lsp_find_definition returns mapped locations + provenance', async () => {
+    const stub = stubQuery(okDefinition)
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({ name: 'lsp_find_definition', arguments: DEF_ARGS })
+    const data = firstJson(res.content)
+    expect(stub.last()?.kind).toBe('definition')
+    expect(data.status).toBe('ok')
+    expect(data.locationCount).toBe(1)
+    expect(data.locations?.[0]?.range.start).toEqual({ line: 1, column: 14 })
+    expect(data.serverInfo).toEqual({ name: 'typescript-language-server', version: '5.3.0' })
+  })
+
+  it('lsp_hover returns the hover value', async () => {
+    const stub = stubQuery({
+      status: 'ok',
+      kind: 'hover',
+      encoding: 'utf-16',
+      hover: { value: '(alias) class Greeter' },
+    })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({ name: 'lsp_hover', arguments: DEF_ARGS })
+    const data = firstJson(res.content)
+    expect(stub.last()?.kind).toBe('hover')
+    expect(data.hover?.value).toContain('Greeter')
+  })
+
+  it('passes through detected toolchain provenance', async () => {
+    const stub = stubQuery(okDefinition)
+    const client = await connect({
+      ...GATED,
+      query: stub.query,
+      detectToolchain: (_root, language) => ({
+        name: language === 'typescript' ? 'typescript' : language,
+        version: '5.7.2',
+      }),
+    })
+    await client.callTool({ name: 'lsp_find_definition', arguments: DEF_ARGS })
+    expect(stub.last()?.toolchain).toEqual({ name: 'typescript', version: '5.7.2' })
+  })
+
+  it('surfaces a versionWarning from the engine', async () => {
+    const stub = stubQuery({ ...okDefinition, serverInfo: undefined, versionWarning: 'no version' })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({ name: 'lsp_find_definition', arguments: DEF_ARGS })
+    const data = firstJson(res.content)
+    expect(data.versionWarning).toMatch(/version/i)
+  })
+
+  it('stores a large reference list by handle and serves it via the resource', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      uri: `file:///project/src/f${i}.ts`,
+      range: { start: { line: i + 1, column: 1 }, end: { line: i + 1, column: 5 } },
+      mapped: true,
+    }))
+    const stub = stubQuery({
+      status: 'ok',
+      kind: 'references',
+      encoding: 'utf-16',
+      locations: many,
+    })
+    const artifacts = new ArtifactStore(tmp(), 'lsp')
+    const client = await connect({ ...GATED, query: stub.query, artifacts })
+    const res = await client.callTool({ name: 'lsp_find_references', arguments: DEF_ARGS })
+    const data = firstJson(res.content)
+    expect(data.locationCount).toBe(120)
+    expect(data.locations?.length).toBeLessThan(120) // only the head is inlined
+    expect(data.truncated).toBe(true)
+    expect(data.fullHandle).toMatch(/^strummer:\/\/lsp\//)
+
+    const full = await client.readResource({ uri: data.fullHandle as string })
+    const served = firstJson<unknown[]>(full.contents)
+    expect(served).toHaveLength(120)
+  })
+})

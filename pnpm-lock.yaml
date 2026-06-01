@@ -226,6 +226,9 @@ importers:
       '@strummer/flake':
         specifier: workspace:*
         version: link:../flake
+      '@strummer/lsp':
+        specifier: workspace:*
+        version: link:../lsp
       '@strummer/mutate':
         specifier: workspace:*
         version: link:../mutate

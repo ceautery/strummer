@@ -5,13 +5,14 @@
 
 ## Current phase
 
-**Phase 4 — Cross-cutting verification: UNDERWAY (4 of 5 pillars complete; LSP — the last —
-in progress, slices 1–4 landed; only the MCP surface + bin remain).** _(`@strummer/deps`,
-`@strummer/coverage`, `@strummer/flake`, and `@strummer/mutate` are all COMPLETE (engine + agent
-surface); `@strummer/lsp` is the only remaining candidate — design locked in **ADR 0011**, slices
-1–4 landed: pure encoding + normalize (1), `client.ts` LSP JSON-RPC client (2), `registry.ts` +
-`manager.ts` lifecycle (3), and the gated `query.ts` engine (4) — all over the fake-peer harness.
-Design pass done via the `phase4-design-research` fan-out — 5 parallel research
+**Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
+_(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now
+`@strummer/lsp` are all COMPLETE; only explicitly-staged, non-blocking tails remain — see the
+end of the Next-action block. `@strummer/lsp` (the last pillar) shipped as **ADR 0011** slices
+1–5: pure encoding + normalize (1), `client.ts` LSP JSON-RPC client (2), `registry.ts` +
+`manager.ts` lifecycle (3), the gated `query.ts` engine (4), and the MCP surface + `strummer-lsp-mcp`
+bin (5) — all over a fake-peer harness replaying recorded `typescript-language-server` payloads
+(NO real server in `pnpm gate`). Design pass done via the `phase4-design-research` fan-out — 5 parallel research
 streams → synthesis → 3 adversarial critics → corrected synthesis; captured in **ADR
 0010**. Sequence (by leverage-per-effort): **`@strummer/deps` (dependency/version
 intelligence) first** ∥ `@strummer/coverage` (parallel track), then `@strummer/flake`
@@ -144,8 +145,8 @@ catch); slice 2 the gated `runMutation` (spawn `stryker run --reporters json`, r
 summarize; paired `allowRun`+`allowedRoots` gate + injected MutationRunner so no real
 Stryker in the gate; diff-scoped via `mutateFiles`→`--mutate` + `--incremental`) + the
 `mutate_summarize`(free)/`mutate_run`(gated) MCP surface + `strummer-mutate-mcp` bin. With LSP
-slices 1–4 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts` + gated `query.ts`)
-now also landed, **646 TS + 45 Py green**.)_
+slices 1–5 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts` + gated `query.ts` +
+MCP surface/bin) now also landed — Phase 4 is COMPLETE, **659 TS + 45 Py green**.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -569,18 +570,29 @@ collapsed), and version provenance (`serverInfo` on every result + a `versionWar
 server reports none; echoes optional caller-supplied `toolchain` provenance). 10 query tests; **646
 TS + 45 Py green**. The richer **warn-on-toolchain-mismatch** heuristic (reusing
 `core.detectInstalledVersion`) is deliberately staged to the surface (it has the `core` dep + is
-genuinely per-server heuristic). **Next action: code ADR-0011 slice 5 — the MCP surface +
-`strummer-lsp-mcp` bin** (`packages/mcp/src/lsp.ts` + `bin-lsp.ts`): `lsp_find_definition`/
-`lsp_find_references`/`lsp_hover` **gated as a group** (registered only when `allowRun` + a non-empty
-root allowlist + a non-empty server registry are set — there is NO free-read tier); the always-on,
-no-spawn **`lsp_languages`** (reports bound languages + — once a server has initialized in-session —
-its advertised capabilities + `serverInfo.version`, **never** the command/path); large results
-(hundreds of references) as a compact head inline + the full list **by handle** via
-`@strummer/artifacts` (`lsp` prefix, `strummer://lsp/{id}/{kind}` resource, registered only when a
-store is set); the bin is the sole reader of `STRUMMER_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/
-`_SERVERS`(JSON)/`_ARTIFACT_DIR` (+ optional `_MAX_SERVERS`/`_IDLE_TTL_MS`), parsed with the shared
-`bool`/`csv`/`num` helpers + the executable-tail guard copied verbatim, and wires the `toolchain`
-provenance via `core.detectInstalledVersion`. **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
+genuinely per-server heuristic). **Slice 5 is LANDED — the `@strummer/lsp` pillar is COMPLETE
+(engine + agent surface):** the MCP surface (`packages/mcp/src/lsp.ts`,
+`registerLspTools`/`createLspServer`) + the `strummer-lsp-mcp` bin (`bin-lsp.ts`,
+`buildLspServerFromEnv`). `lsp_find_definition`/`lsp_find_references`/`lsp_hover` are **gated as a
+group** (registered only when `allowRun` + a non-empty root allowlist + a non-empty server registry
+are all set — there is NO free-read tier, since every answer needs a live indexing daemon); the
+always-on, no-spawn **`lsp_languages`** reports the bound languages + (once a server is live in-session)
+its advertised capabilities + `serverInfo.version` via `manager.describe()` — **never** the
+command/path. A long reference list is capped inline (head of 50) + the full list emitted **by handle**
+via `@strummer/artifacts` (`lsp` prefix; `strummer://lsp/{id}/{kind}` resource, registered only when a
+store is set). The surface is **pure wiring over an injected `query` + `describeServers`** (so the mcp
+tests use stubs — no peer harness reach-in); the bin builds the real `LanguageServerManager` +
+`LspQueryEngine` (the sole reader of `STRUMMER_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/
+`_SERVERS`(JSON)/`_ARTIFACT_DIR`/`_MAX_SERVERS`/`_IDLE_TTL_MS`; `bool`/`csv`/`num` helpers +
+executable-tail guard; `startReaper`+SIGINT/SIGTERM `shutdown`), and wires the `toolchain` provenance
+via `core.detectInstalledVersion` (language→toolchain map; the conservative v1 warn — full
+mismatch heuristic still staged). 7 surface + 6 bin tests; **659 TS + 45 Py green**. **Next action:
+Phase 4 is DONE — pick the next milestone (a Phase-5 boundary or the explicitly-staged tails).**
+**LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
+`lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
+exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full
+toolchain-version-resolution matrix (the richer warn-on-mismatch), and a Python adapter posture; a
+human `strummer lsp` CLI mirroring the surface. **Other Phase-4 staged tails:** deps PyPI/RubyGems
 adapters; coverage `strummer coverage` CLI / `istanbul-lib-coverage` merging; flake Python
 (pytest-json) adapter; mutate Python (mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
 Phase 3

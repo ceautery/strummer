@@ -34,6 +34,12 @@ export {
   registerFlakeTools,
 } from './flake.js'
 export {
+  createLspServer,
+  type LspToolsOptions,
+  registerLspTools,
+  type ToolchainDetector,
+} from './lsp.js'
+export {
   createMutateServer,
   type MutateToolsOptions,
   registerMutateTools,

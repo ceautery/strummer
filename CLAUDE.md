@@ -120,8 +120,8 @@ vision and `ARCHITECTURE.md` for the technical design.
   (no `@stryker-mutator` import) → mutationScore + survivors; gated diff-scoped `runMutation`
   spawning `stryker run` (injected runner, not a gate dep); `mutate_summarize`/`mutate_run`
   MCP surface),
-  `lsp` (Phase-4, IN PROGRESS — semantic code navigation via a live LSP subprocess; the
-  documented, fenced exception to ARCHITECTURE §1's no-live-RPC rule, design = ADR 0011.
+  `lsp` (Phase-4, COMPLETE (engine + agent surface) — semantic code navigation via a live LSP
+  subprocess; the documented, fenced exception to ARCHITECTURE §1's no-live-RPC rule, design = ADR 0011.
   Slice 1 landed: pure `encoding.ts` (the position-encoding correctness core, utf-8/16/32)
   + `normalize.ts` (Location/LocationLink, hover, document-symbol shapes, tri-state). Slice 2
   landed: `client.ts` — the LSP JSON-RPC client over an injected `serverSpawn` seam (handshake
@@ -142,8 +142,14 @@ vision and `ARCHITECTURE.md` for the technical design.
   confinement to the project root; human↔LSP position mapping via `toLspPosition`/`fromLspPosition`
   + the negotiated `client.encoding` — result ranges mapped back per target file, best-effort `+1`
   when unreadable; tri-state passthrough; `serverInfo` provenance + serverInfo-absent
-  `versionWarning`; echoes optional `toolchain` provenance). Staged: `lsp_find_definition`/
-  `_references`/`_hover` + `lsp_languages` MCP surface + `strummer-lsp-mcp` bin),
+  `versionWarning`; echoes optional `toolchain` provenance). Slice 5 landed (agent surface):
+  `lsp_find_definition`/`_references`/`_hover` (gated as a group — no free-read tier) + the
+  always-on no-spawn `lsp_languages` (bound languages + live capabilities/`serverInfo.version`
+  via `manager.describe()`, never the command/path); large reference lists by handle via
+  `@strummer/artifacts` (`lsp` prefix); `packages/mcp/src/lsp.ts` (pure wiring over an injected
+  `query`+`describeServers`) + `strummer-lsp-mcp` bin (`STRUMMER_LSP_*`; toolchain provenance via
+  `core.detectInstalledVersion`). Staged: `lsp_type_definition`/`_document_symbols`/`_call_hierarchy`
+  (capability-gated), write-mode, `workspace/symbol`, diagnostics, a `strummer lsp` CLI),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
