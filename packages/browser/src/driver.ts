@@ -44,8 +44,9 @@ export interface PageDriverOptions {
   /** Operator-set deny-by-default gate. Omit for the raw, ungated layer (the MCP
    * surface always supplies one). */
   gate?: BrowserGate
-  /** Redactor applied to dry-run `postData` before it surfaces. Default identity;
-   * the real secret-redactor is wired in with `@strummer/safety`. */
+  /** Redactor applied to the dry-run preview (both `url` and `postData`) before it
+   * surfaces. Default identity; the server bin wires the real `@strummer/safety`
+   * `Redactor` here so registered secrets never leak via a query string or body. */
   redact?: (value: string) => string
 }
 
@@ -202,7 +203,7 @@ export class PageDriver {
         const body = req.postData()
         captured = {
           method: req.method(),
-          url: req.url(),
+          url: this.redact(req.url()),
           ...(body ? { postData: this.redact(body) } : {}),
         }
       }

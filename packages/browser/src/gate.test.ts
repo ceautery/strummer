@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { Redactor } from '@strummer/safety'
 import { type Browser, type BrowserContext, chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PageDriver } from './driver.js'
@@ -49,9 +50,12 @@ describe('BrowserGate × PageDriver (real headless chromium)', () => {
 
   const FIXTURE = `<!doctype html><html lang="en"><head><title>Gate</title></head><body>
     <button id="go">Submit</button>
+    <button id="leak">Leak</button>
     <script>
       document.getElementById('go').addEventListener('click', () =>
-        fetch('/submit', { method: 'POST', body: 'payload=1' }).catch(() => {}))
+        fetch('/submit', { method: 'POST', body: 'token=s3cr3t-value&n=1' }).catch(() => {}))
+      document.getElementById('leak').addEventListener('click', () =>
+        fetch('/q?token=s3cr3t-value', { method: 'GET' }).catch(() => {}))
     </script>
   </body></html>`
 
@@ -79,12 +83,14 @@ describe('BrowserGate × PageDriver (real headless chromium)', () => {
     await new Promise<void>((r) => server.close(() => r()))
   })
 
-  function submitRef(driver: PageDriver): string {
-    const hit = [...driver.refs.entries()].find(
-      ([, d]) => d.role === 'button' && d.name === 'Submit',
-    )
-    if (!hit) throw new Error('no Submit button ref')
+  function buttonRef(driver: PageDriver, name: string): string {
+    const hit = [...driver.refs.entries()].find(([, d]) => d.role === 'button' && d.name === name)
+    if (!hit) throw new Error(`no ${name} button ref`)
     return hit[0]
+  }
+
+  function submitRef(driver: PageDriver): string {
+    return buttonRef(driver, 'Submit')
   }
 
   it('allows navigation only to allowlisted hosts', async () => {
@@ -111,6 +117,25 @@ describe('BrowserGate × PageDriver (real headless chromium)', () => {
     expect(result.wouldRequest?.method).toBe('POST')
     expect(result.wouldRequest?.url).toContain('/submit')
     expect(posts).toHaveLength(0) // the POST never reached the server
+  })
+
+  it('redacts secrets from the dry-run preview — both postData and the URL query', async () => {
+    const redactor = new Redactor()
+    redactor.register('token', 's3cr3t-value')
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowUnsafe: false, allowedHosts: ['127.0.0.1'] }),
+      redact: (v) => redactor.redact(v),
+    })
+    await driver.navigate(baseUrl)
+
+    const post = await driver.click(submitRef(driver))
+    expect(post.wouldRequest?.postData).toBe('token=[redacted:token]&n=1')
+    expect(post.wouldRequest?.postData).not.toContain('s3cr3t-value')
+
+    const get = await driver.click(buttonRef(driver, 'Leak'))
+    expect(get.wouldRequest?.url).toContain('/q?token=[redacted:token]')
+    expect(get.wouldRequest?.url).not.toContain('s3cr3t-value')
   })
 
   it('executes a mutation with allowUnsafe on an allowlisted host', async () => {
