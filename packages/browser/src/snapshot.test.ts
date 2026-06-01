@@ -61,6 +61,33 @@ describe('buildSnapshot (pure: parse → mint refs → serialize)', () => {
   })
 })
 
+describe('snapshot redaction seam', () => {
+  const mask = (s: string) => s.split('SEKRET').join('[redacted:token]')
+  const SECRET_YAML = '- heading "Hello"\n- text: my token is SEKRET\n- textbox "SEKRET"'
+
+  it('redacts both the capped text and the full text via the redact hook', () => {
+    const snap = buildSnapshot(SECRET_YAML, { redact: mask })
+    expect(snap.text).not.toContain('SEKRET')
+    expect(snap.fullText).not.toContain('SEKRET')
+    expect(snap.text).toContain('[redacted:token]')
+    expect(snap.fullText).toContain('[redacted:token]')
+  })
+
+  it('redacts the stored snapshot artifact before it is written to disk', async () => {
+    const source = { ariaSnapshot: async () => SECRET_YAML }
+    const { ArtifactStore } = await import('./artifacts.js')
+    const store = new ArtifactStore(
+      (await import('node:fs')).mkdtempSync(
+        (await import('node:path')).join((await import('node:os')).tmpdir(), 'strummer-snap-'),
+      ),
+    )
+    const snap = await captureSnapshot(source, { runId: 'r1', store, redact: mask })
+    const stored = store.get(snap.fullHandle as string)
+    expect(stored?.body.toString('utf8')).not.toContain('SEKRET')
+    expect(stored?.body.toString('utf8')).toContain('[redacted:token]')
+  })
+})
+
 describe('diffSnapshots (scoped, ref-independent)', () => {
   it('reports added and removed semantic nodes', () => {
     const a = buildSnapshot('- button "Sign in"\n- textbox "Email"')
