@@ -212,7 +212,9 @@ against in-process fixtures):
    resolves from the operator secret store (fail-closed); the driver redacts surfaced
    values and the surface additionally redacts step `error` strings. Deny-by-default:
    no operator flows dir ⇒ both tools report "not enabled". Bin: `STRUMMER_BROWSER_
-   FLOWS_DIR`. (TDD, real-chromium against the in-process fixture.)
+   FLOWS_DIR`. (TDD, real-chromium against the in-process fixture.) Both surfaces are
+   documented side-by-side in `examples/browser/README.md` (CLI `strummer browser run`
+   + the MCP `browser_list_flows`→`browser_run_flow` sequence over the login example).
 
 **305 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
 aspirational Phase-3 tail (ROADMAP: visual regression — the flake-prone one;
