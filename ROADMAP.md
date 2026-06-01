@@ -470,11 +470,18 @@ Two independent tracks, then the test-quality chain, then LSP last:
         new line across the diff + a per-file breakdown + aggregate summary. Path
         reconciliation: exact `<projectRoot>/<path>` when given, else a **unique** path-suffix
         match (refuses an ambiguous >1-key match); cross-platform path normalization. Pure.
-  - [ ] live `runScoped` — run only the tests a diff touches. Needs a **child-process**
-        boundary (single root vitest.config → no Vitest-in-Vitest); pin `istanbul-lib-coverage`
-        when `CoverageMap` merging/summaries are needed.
-  - [ ] MCP surface + bin (paired deny-by-default operator gate for the code-running
-        `runScoped`, per ADR 0010).
+  - [x] **Slice 4 — `runScoped`.** Runs only the tests a change touches (`vitest related
+        <changed files>`) with v8 JSON coverage, then feeds `coverage-final.json` into
+        `uncoveredInDiff`. Behind a **paired deny-by-default** operator gate (`allowRun` +
+        `allowedRoots` allowlist + wall-clock cap; `CoverageGateError` on denial). The
+        `vitest` run is an **injected `TestRunner`** (default spawns a subprocess — the
+        child-process boundary that avoids in-process Vitest-in-Vitest); the engine owns the
+        gate/argv/collection/diff-wiring and is unit-tested with a fake runner (no real
+        spawn in the gate).
+  - [ ] MCP surface + `strummer-coverage-mcp` bin — `uncovered_in_diff` (free, read-only)
+        + `run_scoped` (gated; bin reads `STRUMMER_COVERAGE_ALLOW_RUN` /
+        `_PROJECT_ROOTS` / `_TIMEOUT_MS`). Pin `istanbul-lib-coverage` if `CoverageMap`
+        merging/summaries are needed.
 - [ ] **Flaky-test detection & quarantine** (`@strummer/flake`) — protects the
       deterministic green gate. Pure Wilson/binomial classifier over a run-history
       fixture first; quarantine **writes** are operator-gated (paired) with mandatory

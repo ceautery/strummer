@@ -90,7 +90,13 @@ new/deleted files). **Slice 3 landed:** `uncoveredInDiff` joins the two halves �
 diff → match each file to its `coverage-final.json` entry (path reconciliation: exact
 `<projectRoot>/<path>` else a unique path-suffix match, ambiguous refused) → classify →
 report every executable-but-unhit new line + per-file breakdown + aggregate summary. The
-pure offline core of the forgotten-assertion catch is now complete. 478 TS + 45 Py green.)_
+pure offline core of the forgotten-assertion catch is complete. **Slice 4 landed:**
+`runScoped` runs only the tests a change touches (`vitest related`) with v8 JSON coverage
+→ feeds `coverage-final.json` into `uncoveredInDiff`; behind a paired deny-by-default
+operator gate (`allowRun` + `allowedRoots` + timeout, `CoverageGateError`), with the
+`vitest` run an injected `TestRunner` (default spawns a subprocess — the child-process
+boundary that dodges Vitest-in-Vitest; engine unit-tested with a fake runner, no real spawn
+in the gate). 486 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -425,10 +431,12 @@ falls back to the CVSS vector's bucket when no qualitative GHSA string is presen
 ecosystems — `audit_project` is npm-only today; `detectInstalledVersion` already dispatches
 by ecosystem). **Track A `@strummer/coverage` is open** — slices 1–3 landed (`uncoveredNewLines` differ,
 `parseUnifiedDiff`, and the `uncoveredInDiff` integrator) — **the pure offline core of the
-forgotten-assertion catch is complete.** Next coverage slices: the live **`runScoped`**
-child-process runner (run only the tests a diff touches; single root vitest.config ⇒ no
-Vitest-in-Vitest; pin `istanbul-lib-coverage` when `CoverageMap` merging is needed) behind a
-paired deny-by-default operator gate, then its MCP surface. In parallel, the
+forgotten-assertion catch is complete**, **and the live `runScoped` engine (slice 4) has
+landed** (gated, impact-scoped `vitest related` + coverage → `uncoveredInDiff`; injected
+child-process runner). Next coverage slice: the **MCP surface + `strummer-coverage-mcp`
+bin** — `uncovered_in_diff` (free, read-only) + `run_scoped` (the bin reads the paired
+gate env `STRUMMER_COVERAGE_ALLOW_RUN` / `_PROJECT_ROOTS` / `_TIMEOUT_MS` + wires
+`defaultVitestRunner`). In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
