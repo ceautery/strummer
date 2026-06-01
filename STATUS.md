@@ -75,7 +75,9 @@ without a store, `detailHandle` is omitted — `audit_project` is not gated on a
 The `strummer://deps/{id}/{kind}` resource now serves both audit detail + changelog slices
 (decoupled from the changelog fetcher; emits each artifact's own contentType). The
 vuln-aware `minimumSafeUpgrade` target also landed (lowest release clearing all known
-vulns, distinct from `recommendedTarget`). 446 TS + 45 Py green.)_
+vulns, distinct from `recommendedTarget`), and the `behindBy` freshness metric
+(`FreshnessVerdict.behindBy`: upgrade distance by semver component — releases/major/minor/
+patch). 448 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -401,9 +403,10 @@ full `audit_project` detail is DONE** (`detailHandle` → the `strummer://deps` 
 lowest stable release newer than installed that re-matches ZERO advisories — re-evaluated
 per candidate against the full set, so a release fixing the original vuln but hit by another
 is skipped; distinct from the conservative same-major `recommendedTarget`; surfaced in
-`audit_dependency` + the `audit_project` roll-up). **Next for deps:** the remaining staged
-deferrals — `behindBy` freshness vs the `resolveVersion` policy, CVSS-vector → bucket
-scoring (slices 2–4 bucket the GHSA string; CVSS vectors → `unknown`), and the staged
+`audit_dependency` + the `audit_project` roll-up), **and the `behindBy` freshness metric is
+DONE** (`FreshnessVerdict.behindBy`: upgrade distance by semver component). **Next for deps:**
+the remaining staged deferrals — CVSS-vector → bucket scoring (slices 2–4 bucket the GHSA
+`database_specific.severity` string; CVSS vectors currently → `unknown`), and the staged
 Python/PyPI + RubyGems advisory adapters. In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3

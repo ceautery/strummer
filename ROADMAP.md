@@ -404,7 +404,12 @@ Two independent tracks, then the test-quality chain, then LSP last:
         is vulnerable or no release clears them. Distinct from the conservative same-major
         `recommendedTarget` (a security fix may cross a major). Surfaced in
         `audit_dependency` + the `audit_project` roll-up.
-  - [ ] `behindBy` freshness vs the `resolveVersion` policy; `recommendedTarget`.
+  - [x] **`behindBy` freshness metric** — `FreshnessVerdict.behindBy` breaks upgrade
+        distance down by semver component (`releases` newer / `major` / `minor` within the
+        installed major line / `patch` within the installed `major.minor`), each floored at
+        0, `undefined` for a non-semver installed version. Lets a caller judge upgrade
+        risk (patch bump vs major jump), not just the binary `isOutdated`. Carried through
+        `audit_dependency` + `audit_project`'s by-handle detail.
   - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
         SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice
         (the first handle-emitting deps slice; lands with the shared `@strummer/artifacts`
