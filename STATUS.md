@@ -5,8 +5,8 @@
 
 ## Current phase
 
-**Phase 3 — Browser/UI testing pillar: ENGINE CORE + SAFETY COMPLETE; agent
-surface (MCP/CLI) + artifact pipeline remain.** Design locked by a 5-stream
+**Phase 3 — Browser/UI testing pillar: ENGINE CORE + SAFETY + ARTIFACT PIPELINE
+COMPLETE; agent surface (MCP/CLI) remains.** Design locked by a 5-stream
 research workflow w/ adversarial verification (`docs/research/2026-05-31-pillar3-
 browser-testing.md`); captured in **ADR 0006 (+ dated updates) + ARCHITECTURE §10
 + ROADMAP Phase 3**. A new pure-TS **`@strummer/browser`** built **thin on stable
@@ -28,11 +28,16 @@ against in-process fixtures):
    `api`) + Tier-1 `installSafetyRoutes` allowlist (allowlist-authoritative).
 7. Tier-2 `createSsrfProxy` — loopback DNS-pinning forward proxy; `allowPrivate`
    opt-in for local-app testing (never link-local/metadata).
+8. Dry-run preview redaction completeness (`url` + `postData`, slice 8a) + the
+   **artifact-capture pipeline** `RunRecorder` (slice 8b): trace.zip / console /
+   network by `strummer://browser/run/<id>/<kind>` handle with compact summaries;
+   text channels redacted before write; per-channel enable flags.
 
-**181 TS + 45 Py tests green; all pushed to `main`.** **Next action:** wire the
-`Redactor` into the gate's dry-run preview + build the **artifact-capture
-pipeline** (trace/console/network by handle), then the **MCP + CLI surface** over
-the browser engine. See the detailed "Next action" section below + ROADMAP Phase 3.
+**184 TS + 45 Py tests green; all pushed to `main`.** **Next action:** build the
+**MCP + CLI surface** over the browser engine (mirror how `@strummer/api` exposed
+`strummer-api-mcp` + `strummer api …`) — assemble the server bin wiring manager +
+gate + proxy + `RunRecorder` capture into an operator-configured surface. See the
+detailed "Next action" section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -235,13 +240,34 @@ a real Chromium-through-proxy test (hostnames, so no loopback-bypass). **181 TS 
 45 Py green.** The **two-tier SSRF defense is now complete.** Committed to `main`;
 pushing as the milestone.
 
-**Next, per ROADMAP Phase 3:** (1) **wire the `Redactor`** into the gate's dry-run
-`postData` preview (currently identity) and build the **artifact-capture pipeline**
-(trace.zip / console / network by `strummer://browser/run/<id>/<kind>` handle,
-redacted before write). (2) `serviceWorkers:'block'` + WebRTC disable + assemble
-the server bin (manager + gate + proxy + capture) — the MCP/CLI surface over the
-browser engine. (3) Downloads/uploads/dialog/auth gating; session wall-clock +
-max-pages. TDD red→green; `pnpm gate` 100% green before each commit.
+**Slice 8a (dry-run redaction completeness): DONE.** `PageDriver`'s dry-run
+preview now applies the `redact` hook to the would-be request **`url`** as well as
+its `postData` (a secret in a GET query string previously leaked into the preview);
+the option doc records that the server bin wires the real `@strummer/safety`
+`Redactor` there. Test wires a real `Redactor` through the hook → both body and
+`?token=` query scrubbed. (ef5cd81)
+
+**Slice 8b (artifact-capture pipeline): DONE.** `RunRecorder` (`recorder.ts`) —
+attaches to a page + its context tracer for a run's lifetime and captures three
+channels, each returned **by handle** (`strummer://browser/run/<id>/<kind>`) with
+a compact summary (never inlined): a Playwright **trace.zip**
+(screenshots+snapshots+sources), the **console** stream (incl. uncaught
+`pageerror`s, tallied `byType`), and the **network** log (method/url/status/
+failure, tallied `byStatus` + `failed`). Text channels pass through the operator's
+`redact` hook **before** write (so a registered secret never lands in an artifact
+via a logged value or query string); trace is binary (deep trace-internal
+redaction is the secret-boundary slice). Per-channel enable flags. Real-chromium
+tested against a fixture that logs a secret, fetches a secret-bearing URL, and
+throws. **184 TS + 45 Py green.** (9a0a810)
+
+**Next, per ROADMAP Phase 3:** the **MCP + CLI surface** over the browser engine
+— assemble the server bin (manager + gate + proxy + `RunRecorder` capture +
+`ArtifactStore`) into an operator-configured surface, mirroring `strummer-api-mcp`
++ `strummer api …`; safety config operator-set (env on the bin), never an agent
+input. Then: `serviceWorkers:'block'` + WebRTC disable; downloads/uploads/dialog/
+auth gating; session wall-clock + max-pages; the secret-boundary slice (`{{secret:
+NAME}}` fill resolution + `httpCredentials` + `storageState`/trace-internal
+redaction). TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

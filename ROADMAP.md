@@ -87,7 +87,7 @@ installed version Z" and get a precise, cited answer over MCP.
 - [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
       deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
 
-## Phase 3 — Browser / UI testing pillar  *(engine core + safety complete; agent surface + artifact pipeline remain; design = ADR 0006 + ARCHITECTURE §10)*
+## Phase 3 — Browser / UI testing pillar  *(engine core + safety + artifact pipeline complete; agent surface (MCP/CLI) remains; design = ADR 0006 + ARCHITECTURE §10)*
 
 New pure-TS `@strummer/browser`, thin on **stable `playwright-core` 1.60.0** (not
 a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow with
@@ -145,11 +145,18 @@ Staged below; aspirational items are scheduled, not cut.
       WebRTC disable + wiring the proxy into the server bin still scheduled.)
 - [ ] **Secret boundary** — `{{secret:NAME}}` fill resolution + origin-scoped
       `httpCredentials`; redaction over console/network/HAR/trace/storageState
-      before any write; `storageState` by handle only.
-- [ ] **Artifact capture pipeline** — trace.zip (screenshots+snapshots+sources),
-      own console/network logs, screenshots — all by
-      `strummer://browser/run/<id>/<kind>` handle with structured summaries;
-      capture-level operator gating (`STRUMMER_BROWSER_ARTIFACTS`).
+      before any write; `storageState` by handle only. _(Partial: console+network
+      text artifacts are redacted before write via the `RunRecorder` `redact`
+      hook — slice 8b; the dry-run preview redacts `url`+`postData` — slice 8a.
+      `{{secret:NAME}}` fill / `httpCredentials` / `storageState` / trace-internal
+      redaction still to come.)_
+- [x] **Artifact capture pipeline** — `RunRecorder` (`recorder.ts`) captures a
+      Playwright trace.zip (screenshots+snapshots+sources) + own console/network
+      logs, all by `strummer://browser/run/<id>/<kind>` handle with structured
+      summaries (`byType`/`byStatus`/`failed`/`byteSize`); text channels redacted
+      before write; per-channel enable flags. _(Remaining: on-demand screenshot
+      capture as a step tool; the bin-level `STRUMMER_BROWSER_ARTIFACTS` operator
+      gate lands when the server bin is assembled.)_
 - [ ] **`browser_trace_query`** — wraps `npx playwright trace` subcommands
       (`open`/`actions`/`action`/`snapshot`/`close`) + direct trace.zip JSON-lines
       parser fallback. (Console/network/errors come from within actions/snapshot,
