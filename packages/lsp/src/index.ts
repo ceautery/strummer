@@ -91,3 +91,15 @@ export {
   type ServerRegistry,
   type ServerRegistryEntry,
 } from './registry.js'
+export {
+  defaultRenameWriter,
+  type FileWrite,
+  LspRenameEngine,
+  type LspRenameEngineOptions,
+  type LspRenameInput,
+  type LspRenameResult,
+  type RenameDigest,
+  type RenamePreviewEdit,
+  type RenamePreviewFile,
+  type RenameWriter,
+} from './rename.js'
