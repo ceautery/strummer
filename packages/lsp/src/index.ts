@@ -1,4 +1,16 @@
 export {
+  defaultServerSpawn,
+  type InitializeSummary,
+  LspClient,
+  type LspClientOptions,
+  type LspConnection,
+  LspUnsupportedError,
+  type NavResult,
+  type ServerInfo,
+  type ServerSpawn,
+  type ServerSpec,
+} from './client.js'
+export {
   fromLspCharacter,
   fromLspPosition,
   type HumanPosition,

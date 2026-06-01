@@ -1,0 +1,41 @@
+[
+  {
+    "uri": "file:///project/src/greeter.ts",
+    "range": {
+      "start": {
+        "line": 0,
+        "character": 13
+      },
+      "end": {
+        "line": 0,
+        "character": 20
+      }
+    }
+  },
+  {
+    "uri": "file:///project/src/index.ts",
+    "range": {
+      "start": {
+        "line": 0,
+        "character": 9
+      },
+      "end": {
+        "line": 0,
+        "character": 16
+      }
+    }
+  },
+  {
+    "uri": "file:///project/src/index.ts",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 14
+      },
+      "end": {
+        "line": 2,
+        "character": 21
+      }
+    }
+  }
+]

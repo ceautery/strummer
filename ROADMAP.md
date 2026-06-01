@@ -555,12 +555,16 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `toLspPosition`/`fromLspPosition` (LF/CR/CRLF split, no doc normalization, BOM
         strip) + result normalizers (`Location` vs `LocationLink`, `DocumentSymbol` vs
         `SymbolInformation`, hover, tri-state `decideStatus`). No spawn, no network; 31 tests.
-  - [ ] **Slice 2 — `client.ts`.** Handshake (initialize advertising
-        `positionEncodings:["utf-16","utf-8"]` → read back the negotiated encoding;
-        initialized; didOpen full-text once, refcounted, no didClose by default),
-        capability-gated requests, deadlock-safe inbound replies, tri-state readiness
-        gated on `$/progress` inside the single operator deadline; injected `serverSpawn`
-        seam tested against the fake in-process peer.
+  - [x] **Slice 2 — `client.ts`.** Handshake (initialize advertising
+        `positionEncodings:["utf-16","utf-8"]` → read back the negotiated encoding +
+        `serverInfo` provenance + capabilities; initialized; didOpen full-text once,
+        refcounted, no didClose by default), capability-gated requests
+        (`LspUnsupportedError`), deadlock-safe inbound `null` replies, tri-state readiness
+        gated on `$/progress` inside the single operator deadline (injected clock). The
+        injected `serverSpawn` seam (`defaultServerSpawn` = `child_process.spawn`) tested
+        against a fake in-process JSON-RPC peer (paired `PassThrough` streams) replaying
+        RECORDED `typescript-language-server` 5.3.0 payloads. `vscode-jsonrpc` +
+        `vscode-languageserver-protocol` added as explicit pins; 13 tests.
   - [ ] **Slice 3 — `manager.ts` + gated `query.ts`.** `LanguageServerManager` keyed by
         (language, projectRoot), per-(server,uri) mutex, in-flight-aware reaper with a
         clock-driven shutdown→exit grace; `LspGateError`, `assertAllowed`, `rootUri`

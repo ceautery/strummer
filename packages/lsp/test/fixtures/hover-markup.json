@@ -1,0 +1,16 @@
+{
+  "contents": {
+    "kind": "markdown",
+    "value": "\n```typescript\n(alias) new Greeter(name: string): Greeter\nimport Greeter\n```\n"
+  },
+  "range": {
+    "start": {
+      "line": 2,
+      "character": 14
+    },
+    "end": {
+      "line": 2,
+      "character": 21
+    }
+  }
+}

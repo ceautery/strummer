@@ -1,0 +1,68 @@
+[
+  {
+    "originSelectionRange": {
+      "start": {
+        "line": 2,
+        "character": 14
+      },
+      "end": {
+        "line": 2,
+        "character": 21
+      }
+    },
+    "targetRange": {
+      "start": {
+        "line": 0,
+        "character": 0
+      },
+      "end": {
+        "line": 5,
+        "character": 1
+      }
+    },
+    "targetUri": "file:///project/src/greeter.ts",
+    "targetSelectionRange": {
+      "start": {
+        "line": 0,
+        "character": 13
+      },
+      "end": {
+        "line": 0,
+        "character": 20
+      }
+    }
+  },
+  {
+    "originSelectionRange": {
+      "start": {
+        "line": 2,
+        "character": 14
+      },
+      "end": {
+        "line": 2,
+        "character": 21
+      }
+    },
+    "targetRange": {
+      "start": {
+        "line": 1,
+        "character": 2
+      },
+      "end": {
+        "line": 1,
+        "character": 38
+      }
+    },
+    "targetUri": "file:///project/src/greeter.ts",
+    "targetSelectionRange": {
+      "start": {
+        "line": 1,
+        "character": 2
+      },
+      "end": {
+        "line": 1,
+        "character": 38
+      }
+    }
+  }
+]

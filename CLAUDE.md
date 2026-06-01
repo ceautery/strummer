@@ -123,8 +123,15 @@ vision and `ARCHITECTURE.md` for the technical design.
   `lsp` (Phase-4, IN PROGRESS — semantic code navigation via a live LSP subprocess; the
   documented, fenced exception to ARCHITECTURE §1's no-live-RPC rule, design = ADR 0011.
   Slice 1 landed: pure `encoding.ts` (the position-encoding correctness core, utf-8/16/32)
-  + `normalize.ts` (Location/LocationLink, hover, document-symbol shapes, tri-state). Staged:
-  client.ts/manager.ts/query.ts + `lsp_find_definition`/`_references`/`_hover` MCP surface),
+  + `normalize.ts` (Location/LocationLink, hover, document-symbol shapes, tri-state). Slice 2
+  landed: `client.ts` — the LSP JSON-RPC client over an injected `serverSpawn` seam (handshake
+  advertising `positionEncodings` + read-back; `initialized`; refcounted open-once `didOpen`/
+  no-didClose; capability-gated requests; deadlock-safe null replies to inbound server requests;
+  tri-state readiness gated on `$/progress` within one operator deadline + injected clock).
+  `vscode-jsonrpc` + `vscode-languageserver-protocol` added as explicit pins; tested against a
+  fake in-process JSON-RPC peer (paired duplex streams) replaying RECORDED real-server payloads
+  (captured from `typescript-language-server` 5.3.0; see `test/fixtures/README.md`). Staged:
+  manager.ts/query.ts + `lsp_find_definition`/`_references`/`_hover` MCP surface),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
