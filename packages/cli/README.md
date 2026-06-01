@@ -171,12 +171,31 @@ $ strummer browser screenshot https://example.com --out shot.png
 $ strummer browser snapshot http://127.0.0.1:3000 --allow-private --no-sandbox
 ```
 
+### Replaying a persisted flow
+
+A **flow** is a Bruno-openable `<name>.bru` (meta) + a `<name>.strummer.yml`
+sidecar holding ordered `steps` keyed by semantic locators (role + accessible
+name), not ephemeral snapshot refs — so it replays stably. See
+[`examples/browser/login`](../../examples/browser/login). The flow drives its own
+navigations, so allowlist each target host with `--allow-host`; mutations
+(`click`/`fill`/…) **dry-run** unless `--unsafe`. `{{var}}` comes from `--var`;
+`{{secret:NAME}}` from `STRUMMER_BROWSER_SECRET_<NAME>` (redacted from output).
+Exits non-zero on any step error or failed assertion (a CI gate).
+
+```bash
+$ STRUMMER_BROWSER_SECRET_PASSWORD=hunter2 \
+    strummer browser run examples/browser/login/login.bru \
+      --var baseUrl=https://app.example.com --var username=alice \
+      --allow-host app.example.com --unsafe
+```
+
 ### Command reference
 
 ```
 strummer browser snapshot   <url> [--allow-host <h>]… [--allow-private] [--no-sandbox] [--headed] [--json]
 strummer browser audit      <url> [same flags]                        # exit 1 on a11y violations
 strummer browser screenshot <url> [--out <file>] [--full-page] [same flags]
+strummer browser run        <flow.bru> [--var k=v]… [--unsafe] [--allow-host <h>]… [same flags]  # exit 1 on failure
 ```
 
 ---
