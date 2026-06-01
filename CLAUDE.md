@@ -94,9 +94,11 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `docs/decisions/` — Architecture Decision Records (ADRs).
 - `packages/` — TS workspace: `core` (docs domain + SQLite), `embed` (query
   embedding), `api` (API-testing engine: `.bru`, runner, assertions, secrets,
-  safety, scripts), `browser` (browser/UI engine: lifecycle, ARIA-snapshot +
-  step tools, action gate, two-tier SSRF, a11y audit, HAR capture/replay,
-  video capture, visual regression, persisted `.bru` flows — on `playwright-core`),
+  safety, scripts, contract validation, SSRF + redirect re-check, import
+  Postman/Insomnia/OpenAPI/HAR), `browser` (browser/UI engine: lifecycle,
+  ARIA-snapshot + step tools, action gate, two-tier SSRF, a11y audit, HAR
+  capture/replay, video capture, visual regression, persisted `.bru` flows,
+  multi-engine chromium/firefox/webkit — on `playwright-core`, headless-only),
   `safety` (shared SSRF range classifier + secret redaction, used by `api` +
   `browser`), `assert` (shared declarative-assertion operator core — `AssertionOp`
   + `applyOp` — used by `api` + `browser`), `mcp` (server), `cli` (terminal).
