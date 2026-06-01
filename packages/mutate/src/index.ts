@@ -1,3 +1,4 @@
+export { parseMutmutResults } from './mutmut.js'
 export {
   defaultStrykerRunner,
   MutateGateError,

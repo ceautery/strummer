@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
   type MutationReport,
   type MutationRunner,
+  parseMutmutResults,
   runMutation,
   summarizeMutation,
 } from '@strummer/mutate'
@@ -25,9 +26,10 @@ const INSTRUCTIONS = `Strummer reports mutation-testing results — are the test
 not just present? A surviving mutant is a code change no test caught: a passing-but-vacuous
 assertion. This is the complement to the coverage pillar's forgotten-assertion catch.
 
-\`mutate_summarize\` is a free, read-only analysis of a Stryker mutation-report.json (inline
-or by path): mutation score, the killed/survived/no-coverage breakdown, and the actionable
-survivor list. It runs nothing. \`mutate_run\` (present only when the operator enabled it)
+\`mutate_summarize\` is a free, read-only analysis: mutation score, the killed/survived/
+no-coverage breakdown, and the actionable survivor list. \`format\` selects the input — \`stryker\`
+(a mutation-report.json object, the default) or \`mutmut\` (the text of \`mutmut results --all true\`,
+the Python tool). It runs nothing. \`mutate_run\` (present only when the operator enabled it)
 actually runs Stryker — slow and operator-gated, confined to allowlisted roots, and
 diff-scopable via \`mutateFiles\`/\`incremental\`.`
 
@@ -42,22 +44,50 @@ export function registerMutateTools(server: McpServer, opts: MutateToolsOptions 
     {
       title: 'Summarize a mutation report',
       description:
-        'READ-ONLY: summarize a Stryker mutation-report.json (supply inline `report` or a ' +
-        '`reportPath`) — mutation score, status breakdown, per-file metrics, and the ' +
-        'survivor list (Survived + NoCoverage, the test gaps to fix). Runs nothing.',
+        'READ-ONLY: summarize a mutation report (supply inline `report` or a `reportPath`) — ' +
+        'mutation score, status breakdown, per-file metrics, and the survivor list (Survived + ' +
+        'NoCoverage, the test gaps to fix). `format` is `stryker` (a mutation-report.json, the ' +
+        'default) or `mutmut` (the text of `mutmut results --all true`). Runs nothing.',
       inputSchema: {
-        report: z.unknown().optional().describe('inline mutation-testing-elements report object'),
-        reportPath: z.string().optional().describe('path to a mutation-report.json'),
+        report: z
+          .unknown()
+          .optional()
+          .describe(
+            'inline report: a Stryker report object, or mutmut results text (format=mutmut)',
+          ),
+        reportPath: z
+          .string()
+          .optional()
+          .describe('path to the report (JSON for stryker, text for mutmut)'),
+        format: z
+          .enum(['stryker', 'mutmut'])
+          .optional()
+          .describe('report format (default stryker)'),
       },
     },
     (args) => {
-      const report =
-        (args.report as MutationReport | undefined) ??
-        (args.reportPath
-          ? (JSON.parse(readFileSync(args.reportPath, 'utf8')) as MutationReport)
-          : undefined)
-      if (report === undefined) {
-        throw new Error('supply `report` or `reportPath`')
+      let report: MutationReport
+      if (args.format === 'mutmut') {
+        const raw =
+          typeof args.report === 'string'
+            ? args.report
+            : args.reportPath
+              ? readFileSync(args.reportPath, 'utf8')
+              : undefined
+        if (raw === undefined) {
+          throw new Error('supply mutmut `report` text or `reportPath`')
+        }
+        report = parseMutmutResults(raw)
+      } else {
+        const r =
+          (args.report as MutationReport | undefined) ??
+          (args.reportPath
+            ? (JSON.parse(readFileSync(args.reportPath, 'utf8')) as MutationReport)
+            : undefined)
+        if (r === undefined) {
+          throw new Error('supply `report` or `reportPath`')
+        }
+        report = r
       }
       const summary = summarizeMutation(report)
       return { content: [text(summary)], structuredContent: { ...summary } }

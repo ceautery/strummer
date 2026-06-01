@@ -57,6 +57,27 @@ describe('mutate MCP surface', () => {
     expect(metrics.mutationScore).toBeCloseTo(40, 6)
   })
 
+  it('mutate_summarize handles mutmut results text via format=mutmut', async () => {
+    const client = await connect({})
+    const mutmutText = [
+      'calc.x_add__mutmut_1: killed',
+      'calc.x_sub__mutmut_1: survived',
+      'calc.x_mul__mutmut_1: no tests',
+    ].join('\n')
+    const res = await call(client, 'mutate_summarize', { report: mutmutText, format: 'mutmut' })
+    const sc = res.structuredContent as {
+      metrics: { detected: number; mutationScore: number }
+      survivors: { mutatorName: string }[]
+    }
+    expect(sc.metrics.detected).toBe(1) // only the killed mutant
+    // valid = detected(1) + undetected(survived 1 + noCoverage 1) = 3 → 1/3.
+    expect(sc.metrics.mutationScore).toBeCloseTo((1 / 3) * 100, 6)
+    expect(sc.survivors.map((s) => s.mutatorName).sort()).toEqual([
+      'calc.x_mul__mutmut_1',
+      'calc.x_sub__mutmut_1',
+    ])
+  })
+
   it('mutate_run runs the injected runner, scopes, and returns metrics', async () => {
     const runner: MutationRunner = async () => {
       copyFileSync(FIXTURE, reportPath)

@@ -562,7 +562,12 @@ Two independent tracks, then the test-quality chain, then LSP last:
         injected `MutationRunner` (no real Stryker in the gate); diff-scoped via
         `mutateFiles`→`--mutate` + `--incremental`. `mutate_summarize` (free) +
         `mutate_run` (gated) MCP tools + `strummer-mutate-mcp` bin.
-  - [ ] *(staged)* Python (mutmut / cosmic-ray) adapter; a `strummer mutate` human CLI.
+  - [x] **Python (mutmut) adapter** — pure `parseMutmutResults` maps `mutmut results --all true`
+        text (verified against **real mutmut 3.5.0** output; statuses killed/survived/no-tests/
+        timeout/suspicious/skipped → mutation-testing-elements `MutantStatus`, never overstating the
+        score) into a `MutationReport`, so `summarizeMutation` is reused unchanged. `mutate_summarize`
+        gained a `format: stryker|mutmut` discriminator (mutmut input = the results text, no spawn).
+  - [ ] *(staged)* a cosmic-ray adapter; a gated `runMutmut` spawner; a `strummer mutate` human CLI.
 - [x] **LSP bridge** (`@strummer/lsp`) — semantic code navigation. **COMPLETE (engine +
       agent surface), slices 1–5.** Highest *raw*
       leverage but **last**: the documented exception to ARCHITECTURE §1's no-live-RPC

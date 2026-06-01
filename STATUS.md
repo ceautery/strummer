@@ -629,12 +629,20 @@ derives from `eq`/`gt` and `clean` from `valid`) + Gem conformance fixtures; pur
 via gemComparator); wired into the `COMPARATORS` map (now total over all 3 ecosystems) + a RubyGems
 API fetcher in `bin-deps.ts` (`STRUMMER_DEPS_RUBYGEMS_REGISTRY`, default `https://rubygems.org/api/v1`).
 **All three ecosystems now audit a single package end-to-end.**
-**Next for deps:** `audit_project` for PyPI + RubyGems — a per-ecosystem manifest dependency-NAME
-reader (pyproject `[project].dependencies`/poetry, requirements.txt; Gemfile.lock). `audit_dependency`
-already covers all three; this is the multi-package roll-up convenience.
-**Then `mutate` (mutmut)** is the last Python-adapter pillar.
-**PRIOR next-action (the fallback once Python adapters land): a Phase-5 boundary or the other
-explicitly-staged tails.**
+**`mutate` (mutmut) DONE, 708 TS + 45 Py green:** pure `parseMutmutResults` (`mutmut.ts`) maps
+`mutmut results --all true` text — captured from **real mutmut 3.5.0** (`<module>.x_<fn>__mutmut_<n>:
+<status>`; fixture `packages/mutate/test/fixtures/mutmut-results.txt`) — into a `MutationReport`,
+mapping the status vocabulary conservatively (suspicious→Survived, segfault→RuntimeError,
+unknown→Pending) so the score is never overstated; `summarizeMutation` is reused unchanged.
+`mutate_summarize` gained a `format: stryker|mutmut` discriminator (mutmut input = results text,
+no spawn). **The Python-adapter milestone is functionally COMPLETE:** flake (pytest), coverage
+(coverage.py), deps (PyPI+RubyGems `audit_dependency`), and mutate (mutmut) all ship engine + agent
+surface; both new pins (`@renovatebot/pep440`, `@renovatebot/ruby-semver`) validated to load under
+tsc/tsdown/Vitest.
+**Remaining non-blocking tails:** deps `audit_project` for PyPI/RubyGems (a per-ecosystem manifest
+dependency-NAME reader — `audit_dependency` already covers all three); a cosmic-ray adapter + gated
+`runMutmut` spawner; the human CLIs (`strummer deps|coverage|flake|mutate|lsp`); the LSP capability
+tails (ADR 0011). **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
 exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full

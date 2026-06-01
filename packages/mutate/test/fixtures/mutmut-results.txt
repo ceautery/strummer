@@ -1,0 +1,6 @@
+    calc.x_add__mutmut_1: killed
+    calc.x_sub__mutmut_1: survived
+    calc.x_mul__mutmut_1: no tests
+    util.x_norm__mutmut_1: timeout
+    util.x_norm__mutmut_2: suspicious
+    util.x_helper__mutmut_1: skipped
