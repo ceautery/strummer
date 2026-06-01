@@ -101,7 +101,9 @@ vision and `ARCHITECTURE.md` for the technical design.
   multi-engine chromium/firefox/webkit — on `playwright-core`, headless-only),
   `safety` (shared SSRF range classifier + secret redaction, used by `api` +
   `browser`), `assert` (shared declarative-assertion operator core — `AssertionOp`
-  + `applyOp` — used by `api` + `browser`), `mcp` (server), `cli` (terminal).
+  + `applyOp` — used by `api` + `browser`), `deps` (Phase-4 dependency/version
+  intelligence: deprecation/vuln/freshness for the *installed* version; pure offline
+  core + on-disk OSV snapshot), `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
 - `examples/` — runnable sample collections (e.g. `examples/api/jsonplaceholder`,

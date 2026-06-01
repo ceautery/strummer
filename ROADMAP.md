@@ -362,16 +362,51 @@ Staged below; aspirational items are scheduled, not cut.
       verification tying browser network capture to the API pillar's contract
       validation.
 
-## Phase 4 — Cross-cutting verification tools
+## Phase 4 — Cross-cutting verification tools  *(UNDERWAY — sequence locked by ADR 0010)*
 
-Drawn from the brainstorm; sequence TBD by leverage.
+Sequence decided by the `phase4-design-research` fan-out (5 research streams →
+synthesis → 3 adversarial critics → corrected synthesis); see **ADR 0010** for the
+ranking, the cross-cutting decisions (shared `@strummer/artifacts` extraction;
+explicit pins / no transitive imports; paired deny-by-default operator gate; TS-first
+with Python staged), and the per-candidate corrections the adversarial pass forced.
+Two independent tracks, then the test-quality chain, then LSP last:
 
+- [ ] **Dependency/version intelligence** (`@strummer/deps`) — *track B, building first.*
+      Cleanest architectural fit: pure offline verdict core + an operator-provisioned
+      on-disk OSV advisory snapshot (file-as-data); extends shipped
+      `detectInstalledVersion`/`resolveVersion`; answers deprecation/EOL/CVE/freshness
+      for **the installed version** (not "latest").
+  - [x] **Slice 1 — `auditDeprecation`**: pure, offline deprecation reducer over an
+        npm packument (version-scope wins over package-scope; empty-string
+        un-deprecate idiom honoured). Committed fixtures, zero network/subprocess.
+  - [ ] OSV vulnerability matching against the on-disk snapshot (severity-bucketed;
+        surfaces `snapshotDate` so "no known vulns" is never treated as authoritative).
+  - [ ] `behindBy` freshness vs the `resolveVersion` policy; `recommendedTarget`.
+  - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
+        SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice.
+  - [ ] MCP tools `audit_dependency`/`audit_project`/`changelog_diff` + `strummer-deps-mcp`
+        bin (namespaced `STRUMMER_DEPS_*`, network off by default).
+  - [ ] *(staged)* Python/PyPI + RubyGems advisory adapters.
+- [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A.*
+      Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
+      (the forgotten-assertion catch — the genuinely novel win under our TDD gate).
+      Slice 1 = the pure `uncoveredNewLines` differ over a real istanbul fixture, with
+      the no-statement `nonExecutable` third state encoded (ADR 0010). Live `runScoped`
+      needs a **child-process** boundary (single root vitest.config → no Vitest-in-Vitest).
+- [ ] **Flaky-test detection & quarantine** (`@strummer/flake`) — protects the
+      deterministic green gate. Pure Wilson/binomial classifier over a run-history
+      fixture first; quarantine **writes** are operator-gated (paired) with mandatory
+      expiry. Opens its own private `better-sqlite3` history DB (a second SQLite owner,
+      outside the docs-pillar core invariant — noted in ADR 0010).
+- [ ] **Mutation testing** (`@strummer/mutate`) — are the tests meaningful? Run a
+      **Stryker/Vitest-4 compat spike first** (Stryker's vitest-runner advertises
+      Vitest v1–3; we are pinned to 4.1.x) before committing the slot. Pure
+      `summarizeMutation` over a golden report first; on-demand, diff-scoped.
 - [ ] **LSP bridge** — semantic code navigation (defs/refs/types/call hierarchy).
-- [ ] **Coverage-aware, impact-scoped test runner** — run only what a diff
-      touches; coverage deltas; uncovered-new-line detection.
-- [ ] Mutation testing (are the tests meaningful?).
-- [ ] Flaky-test detection & quarantine (protects the green gate).
-- [ ] Dependency/version intelligence (deprecations, changelog diffs).
+      Highest *raw* leverage but **last**: the only candidate that breaks
+      ARCHITECTURE §1's no-live-RPC rule (a live, version-coupled subprocess). Green
+      gate runs against a fake in-process JSON-RPC peer; operator binds the server
+      command (agent picks only a *language*); v1 reads-only.
 
 ## Ongoing
 

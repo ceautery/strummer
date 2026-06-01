@@ -1,0 +1,11 @@
+{
+  "name": "lodash",
+  "dist-tags": {
+    "latest": "4.17.21"
+  },
+  "versions": {
+    "4.17.21": {
+      "version": "4.17.21"
+    }
+  }
+}

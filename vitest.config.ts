@@ -7,6 +7,7 @@ export default defineConfig({
       // Run internal packages from source — no build step in the test loop.
       '@strummer/assert': fileURLToPath(new URL('./packages/assert/src/index.ts', import.meta.url)),
       '@strummer/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@strummer/deps': fileURLToPath(new URL('./packages/deps/src/index.ts', import.meta.url)),
       '@strummer/embed': fileURLToPath(new URL('./packages/embed/src/index.ts', import.meta.url)),
       '@strummer/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
       '@strummer/browser': fileURLToPath(

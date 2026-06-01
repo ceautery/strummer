@@ -5,6 +5,21 @@
 
 ## Current phase
 
+**Phase 4 — Cross-cutting verification: UNDERWAY (design locked, first slice landed).**
+_(Design pass done via the `phase4-design-research` fan-out — 5 parallel research
+streams → synthesis → 3 adversarial critics → corrected synthesis; captured in **ADR
+0010**. Sequence (by leverage-per-effort): **`@strummer/deps` (dependency/version
+intelligence) first** ∥ `@strummer/coverage` (parallel track), then `@strummer/flake`
+→ `@strummer/mutate` (after a Stryker/Vitest-4 compat spike) → `@strummer/lsp` (last —
+the only candidate that breaks ARCHITECTURE §1's no-live-RPC rule). Cross-cutting
+decisions in ADR 0010: extract a shared **`@strummer/artifacts`** (parameterized
+prefix) before the first handle-emitting slice; **explicit pins, no transitive
+imports**; **paired deny-by-default operator gate** for any code-running surface;
+**TS/Vitest first, Python staged**. **Slice 1 landed:** `@strummer/deps`
+`auditDeprecation(packument, installedVersion)` — a pure, offline deprecation reducer
+(version-scope wins over package-scope; npm empty-string un-deprecate idiom honoured)
+over committed npm-packument fixtures. 394 TS + 45 Py green.)_
+
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
 `engineLauncher`/`engineLaunchOptions`); the injected-`launch()` `BrowserManager`
@@ -311,11 +326,20 @@ against in-process fixtures):
 now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
 keyring wiring, SSRF range-block + redirect re-check, contract reach, import).
 **Developer live-view was DROPPED** (ADR 0008, headless-only/LLM-first).)_
-**Next action:** Phase 3 has no remaining required tail — only the
-explicitly-aspirational bucket (`@playwright/mcp` embed, autonomous self-healing,
-cross-pillar contract tie-in). Recommended: start **Phase 4** (cross-cutting
-verification: LSP bridge, impact-scoped test runner, mutation/flaky detection) with
-a design pass. The deferred `browser_run_flow`
+**Next action:** Phase 4 is underway (ADR 0010). `@strummer/deps` slice 1
+(`auditDeprecation`) is landed. **Next deps slices:** OSV vulnerability matching
+against an operator-provisioned on-disk OSV snapshot (`STRUMMER_DEPS_OSV_DB_DIR`,
+network off by default) → `behindBy` freshness vs the `resolveVersion` policy → the
+shared **`@strummer/artifacts`** extraction (parameterized prefix, touches the browser
+pillar's gate, behavior-preserving) when the first handle-emitting slice lands → the
+`audit_dependency`/`audit_project`/`changelog_diff` MCP tools + `strummer-deps-mcp`
+bin (egress SSRF-pinned via `@strummer/safety` `resolveAndPin` — **note:**
+`assertSsrfAllowed` does NOT exist, the research mis-cited it). In parallel, the
+`@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
+no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
+has no remaining required tail — only the explicitly-aspirational bucket
+(`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in). The
+deferred `browser_run_flow`
 follow-up (item 29), **video capture** (item 30), **vision/coordinate caps** (item
 31), the **container-hardening ADR** (item 32, ADR 0007), and **visual regression**
 (item 33) are now done. See the detailed "Next action" section below + ROADMAP.
