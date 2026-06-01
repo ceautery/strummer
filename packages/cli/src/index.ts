@@ -11,6 +11,7 @@ import {
 import type { Embedder } from '@strummer/embed'
 import type DatabaseType from 'better-sqlite3'
 import { runApi } from './api.js'
+import { runBrowser } from './browser.js'
 
 /** Output sinks and dependencies injected into `run` (so it is testable). */
 export interface CliIO {
@@ -36,6 +37,11 @@ API testing:
   strummer api run-collection <dir> <name…>             [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--stop-on-failure] [--json]
   strummer api validate --graphql <schema> --query <q>  [--json]
 
+Browser testing (single-shot; the typed host is auto-allowed):
+  strummer browser snapshot <url>    [--allow-host <h>…] [--allow-private] [--no-sandbox] [--headed] [--json]
+  strummer browser audit <url>       [same flags]   (exit 1 if any a11y violations)
+  strummer browser screenshot <url>  [--out <file>] [--full-page] [same flags]
+
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)
 `
@@ -53,6 +59,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return cmdDetect(rest, io)
     case 'api':
       return runApi(rest, io)
+    case 'browser':
+      return runBrowser(rest, io)
     case 'help':
     case '--help':
     case '-h':

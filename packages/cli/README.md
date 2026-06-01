@@ -147,6 +147,40 @@ strummer api validate --graphql <schema> --query <query> [--json]
 
 ---
 
+## Browser testing
+
+Single-shot page inspection over a real headless Chromium. Each command navigates
+once and reads, then tears the browser down — so it's a quick human probe, not the
+stateful agent surface (that's `strummer-browser-mcp`). Every request is fronted by
+a **mandatory DNS-pinning SSRF proxy**; navigation is allowed only to the host you
+typed (auto-allowed as explicit operator intent) plus any `--allow-host`.
+
+```bash
+# The ARIA snapshot (with [ref=…] ids) of a page:
+$ strummer browser snapshot https://example.com
+
+# Accessibility audit — prints a summary + the full report path; exits 1 if any
+# violations (usable as a CI gate):
+$ strummer browser audit https://example.com
+
+# Save a PNG screenshot:
+$ strummer browser screenshot https://example.com --out shot.png
+
+# Inspecting a local dev server (loopback) needs --allow-private; sandboxed
+# environments may need --no-sandbox:
+$ strummer browser snapshot http://127.0.0.1:3000 --allow-private --no-sandbox
+```
+
+### Command reference
+
+```
+strummer browser snapshot   <url> [--allow-host <h>]… [--allow-private] [--no-sandbox] [--headed] [--json]
+strummer browser audit      <url> [same flags]                        # exit 1 on a11y violations
+strummer browser screenshot <url> [--out <file>] [--full-page] [same flags]
+```
+
+---
+
 ## Docs search
 
 ```bash

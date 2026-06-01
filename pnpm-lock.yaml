@@ -83,12 +83,18 @@ importers:
       '@strummer/api':
         specifier: workspace:*
         version: link:../api
+      '@strummer/browser':
+        specifier: workspace:*
+        version: link:../browser
       '@strummer/core':
         specifier: workspace:*
         version: link:../core
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed
+      playwright-core:
+        specifier: 1.60.0
+        version: 1.60.0
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13

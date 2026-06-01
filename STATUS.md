@@ -6,7 +6,11 @@
 ## Current phase
 
 **Phase 3 — Browser/UI testing pillar: ENGINE + SAFETY + ARTIFACT PIPELINE + MCP
-SURFACE COMPLETE; CLI deferred.** Design locked by a 5-stream
+SURFACE + HUMAN CLI COMPLETE.** The agent surface AND the human `strummer browser`
+CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
+auth) is done. Remaining Phase 3 work is the aspirational tail (trace-query,
+browser assertions, Lighthouse perf, visual regression, `.bru` step persistence,
+multi-engine — all scheduled in ROADMAP, none blocking). Design locked by a 5-stream
 research workflow w/ adversarial verification (`docs/research/2026-05-31-pillar3-
 browser-testing.md`); captured in **ADR 0006 (+ dated updates) + ARCHITECTURE §10
 + ROADMAP Phase 3**. A new pure-TS **`@strummer/browser`** built **thin on stable
@@ -115,10 +119,21 @@ against in-process fixtures):
    later submit is gated separately by the mutation gate. Bin-wired via
    `STRUMMER_BROWSER_UPLOAD_DIR` (unset ⇒ uploads denied). **The downloads/uploads/
    dialog/auth gating bundle is now COMPLETE** (auth = origin-scoped `httpCredentials`).
+22. **Human `strummer browser` CLI:** `@strummer/cli` gains `browser snapshot|audit|
+   screenshot <url>` (`packages/cli/src/browser.ts`) — single-shot page inspection
+   over the engine (navigate once + read; per-snapshot refs needn't outlive the
+   process). Reuses the bin's egress boundary: a gated `BrowserManager` + **mandatory**
+   `createSsrfProxy` (`--proxy-bypass-list=<-loopback>` + WebRTC arg); the typed
+   host is auto-allowed (explicit operator intent) plus `--allow-host`; flags
+   `--allow-private`/`--no-sandbox`/`--headed`/`--json`/`--out`/`--full-page`.
+   `audit` exits 1 on a11y violations (CI-usable). Real-chromium CLI tests.
 
-**245 TS + 45 Py tests green; committed to `main`.** **Next action:** the only
-remaining Phase 3 item is the deferred human **`strummer browser` CLI**. See the
-detailed "Next action" section below + ROADMAP Phase 3.
+**249 TS + 45 Py tests green; committed to `main`.** **Next action:** Phase 3's core
++ both surfaces are COMPLETE. Pick from the aspirational Phase-3 tail (ROADMAP:
+`browser_trace_query`, browser assertions reusing the api engine, Lighthouse perf,
+visual regression, `.bru` step persistence, multi-engine) or start **Phase 4**
+(cross-cutting verification: LSP bridge, impact-scoped test runner, mutation/flaky
+detection). See the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -423,8 +438,14 @@ deny-by-default (requires operator `STRUMMER_BROWSER_UPLOAD_DIR`); every path mu
 resolve within that dir (no traversal/absolute escape) so an agent can't exfiltrate
 arbitrary local files. **The downloads/uploads/dialog/auth gating bundle is COMPLETE.**
 
-**Next (later Phase 3):** only the deferred human **`strummer browser` CLI** remains.
-TDD red→green; `pnpm gate` 100% green before each commit.
+**Human `strummer browser` CLI: DONE.** `browser snapshot|audit|screenshot <url>`
+over a gated manager + mandatory SSRF proxy; typed host auto-allowed; `audit` exits
+1 on violations. (`packages/cli/src/browser.ts`, real-chromium tested.)
+
+**Next (later Phase 3):** the aspirational tail only — `browser_trace_query`, browser
+assertions (reuse the api engine), Lighthouse perf, network heavy/HAR, visual
+regression, `.bru` step persistence, multi-engine. None blocking. TDD red→green;
+`pnpm gate` 100% green before each commit.
 
 ---
 

@@ -87,7 +87,7 @@ installed version Z" and get a precise, cited answer over MCP.
 - [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
       deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
 
-## Phase 3 — Browser / UI testing pillar  *(engine + safety + artifact pipeline + MCP surface complete; CLI + secret-boundary + hardening remain; design = ADR 0006 + ARCHITECTURE §10)*
+## Phase 3 — Browser / UI testing pillar  *(engine + safety + artifact pipeline + MCP surface + human CLI complete; only the aspirational tail remains; design = ADR 0006 + ARCHITECTURE §10)*
 
 New pure-TS `@strummer/browser`, thin on **stable `playwright-core` 1.60.0** (not
 a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow with
@@ -181,7 +181,15 @@ Staged below; aspirational items are scheduled, not cut.
       (`bin-browser.ts`): namespaced `STRUMMER_BROWSER_*` env (no api-var fallback),
       **mandatory** SSRF proxy + `--proxy-bypass-list=<-loopback>`, trace-off
       default, sandbox-on default. Safety is operator-set; no tool input flips a
-      flag. _(Human `strummer browser` CLI deferred to a later pass.)_
+      flag.
+- [x] **Human `strummer browser` CLI** (`@strummer/cli` `browser snapshot|audit|
+      screenshot <url>`, `packages/cli/src/browser.ts`) — single-shot page
+      inspection over the engine (navigate once + read; refs needn't persist across
+      the process). Reuses the bin's egress boundary: a gated `BrowserManager` +
+      mandatory `createSsrfProxy` + the loopback-bypass/WebRTC launch args; the typed
+      host is auto-allowed (explicit operator intent) plus `--allow-host`; flags
+      `--allow-private`/`--no-sandbox`/`--headed`/`--json`/`--out`/`--full-page`;
+      `audit` exits 1 on a11y violations (CI-usable). Real-chromium tested.
 - [x] **Artifact capture pipeline** — `RunRecorder` (`recorder.ts`) captures a
       Playwright trace.zip (screenshots+snapshots+sources) + own console/network
       logs, all by `strummer://browser/run/<id>/<kind>` handle with structured
