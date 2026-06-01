@@ -112,9 +112,12 @@ Staged below; aspirational items are scheduled, not cut.
       (parse → mint → token-capped serialize), `captureSnapshot` (+ full-snapshot
       handle), `diffSnapshots` (scoped, ref-independent); refs → semantic-locator
       descriptors `{role,name,nth}`, per-snapshot/non-persisted.
-- [ ] **Imperative step tools** over refs/semantic locators (navigate, click,
-      fill, fill_form batch, select, press, wait_for, snapshot, query,
-      get_text/attr) with auto-waiting.
+- [x] **Imperative step tools** (`PageDriver`) over refs → semantic locators with
+      auto-waiting: navigate, click, fill, fillForm (batch), selectOption, press,
+      waitFor, snapshot, getText/getValue/getAttribute (free reads). Each
+      navigating/mutating step re-captures under a new snapshot generation and
+      returns a scoped diff + capped snapshot + handle; refs tagged by generation
+      (`s2e3`) so a stale ref fails loudly instead of matching a wrong element.
 - [ ] **Deny-by-default action gate** — reads free; navigation/mutation/download/
       upload/dialog-accept/auth gated by operator unlock + allowlist;
       interception-based `dry_run` mutation preview.

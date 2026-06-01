@@ -173,17 +173,30 @@ the ADR open fork: `playwright-core` 1.60.0 has **no** `_snapshotForAI` and **no
 ref-ids in `ariaSnapshot()`, so Strummer parses the public `ariaSnapshot()` YAML
 and **mints its own ref-ids** → semantic-locator descriptors `{role,name,nth}`
 (per-snapshot, non-persisted), token-capped serialize + full-snapshot handle +
-ref-independent diff. (See ADR 0006 update 2026-06-01.) **146 TS + 45 Py green.**
-These two slices are committed to `main` but **not yet pushed** — push at the next
-milestone (when the step tools make interaction usable end to end).
+ref-independent diff. (See ADR 0006 update 2026-06-01.)
 
-**Next, per ROADMAP Phase 3 (in rough order):** (1) **imperative step tools** over
-refs (`navigate`/`click`/`fill`/`select`/`press`/`wait_for`/`snapshot`/`query`/
-`get_text/attr`), resolving refs via the snapshot descriptors + `getByRole`; these
-also bring the session wall-clock cap + max-pages; (2) the **deny-by-default
-action gate** + interception dry-run; (3) the **two-tier SSRF defense** (factoring
-`@strummer/safety` out of `@strummer/api`); then the artifact-capture pipeline.
-Continue TDD red→green; `pnpm gate` must be 100% green before each commit.
+**Slice 4 (imperative step tools): DONE.** `PageDriver` (`driver.ts`) — navigate,
+click, fill, fillForm, selectOption, press, waitFor, snapshot, and free reads
+(getText/getValue/getAttribute). Refs resolve via the snapshot descriptors to
+`getByRole(role,{name}).nth(n)` with auto-waiting; each navigating/mutating step
+re-captures under a new snapshot **generation** (refs like `s2e3`) and returns a
+scoped diff + capped snapshot + handle, so a stale ref from an earlier snapshot
+**fails loudly** instead of matching a different element. Real-chromium tested
+against an in-process fixture (fill/click/select/press/wait_for/stale-ref).
+**155 TS + 45 Py green.**
+
+This completes a usable interaction unit (lifecycle + snapshot + step tools) —
+**the milestone boundary; slices 2–4 pushed to `main`.**
+
+**Next, per ROADMAP Phase 3 (in rough order):** (1) the **deny-by-default action
+gate** — reads free; navigation/mutation/download/upload/dialog-accept/auth gated
+by operator unlock + host allowlist; interception-based `dry_run` preview. The
+`PageDriver` is the raw interaction layer the gate wraps. (2) The **two-tier SSRF
+defense** (route allowlist + loopback DNS-pinning proxy), factoring
+`@strummer/safety` (SSRF classifier + redaction) out of `@strummer/api`. (3) The
+**artifact-capture pipeline** (trace/console/network by handle). Plus the session
+wall-clock cap + max-pages (deferred from the lifecycle slice). Continue TDD
+red→green; `pnpm gate` 100% green before each commit.
 
 ---
 
