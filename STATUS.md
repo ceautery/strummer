@@ -5,26 +5,25 @@
 
 ## Current phase
 
-**Phase 3 — Browser/UI testing pillar: ENGINE + SAFETY + ARTIFACT PIPELINE + MCP
-SURFACE + HUMAN CLI COMPLETE.** _(Latest: **visual regression** (item 33) —
-`compareScreenshots` (pixelmatch) + `browser_visual_compare`, deterministic engine,
-committed baselines deferred; on top of the **container-hardening ADR** (item 32),
-**vision/coordinate caps** (item 31), and **video capture** (item 30). Remaining
-tail: **multi-engine** (firefox/webkit) only — and it is **NOT environment-blocked**
-(corrected 2026-06-01): `playwright-core` 1.60.0 *does* ship a working `install`/
-`install-deps` CLI, the CDN is reachable, and **both firefox + webkit were verified
-launching headless in this container** after `install-deps` (passwordless sudo +
-apt are available; the dev `docker/Dockerfile` now provisions all three engines).
-The remaining work is the **feature** — engine selection in `BrowserManager` +
-cross-engine determinism — not an infra blocker. **Developer live-view was DROPPED
-— headless only**
-(ADR 0008: LLM-first; the trace/HAR/console/video artifacts answer "what happened"
-better than watching pixels).)_ The agent surface AND the human `strummer browser`
+**Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
+(item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
+`engineLauncher`/`engineLaunchOptions`); the injected-`launch()` `BrowserManager`
+is unchanged (engine-agnostic), selection lives at the launch seam; bin
+`STRUMMER_BROWSER_ENGINE`, CLI `--engine`. The SSRF proxy applies to every engine;
+chromium-only hardening args stay chromium (firefox/webkit lean on the Tier-1 route
+allowlist + proxy — chromium is the hardened default); Lighthouse perf stays
+chromium. Verified end-to-end (firefox + webkit drive navigate→snapshot→click). On
+top of **visual regression** (33), the **container-hardening ADR** (32),
+**vision/coordinate caps** (31), and **video capture** (30). **Developer live-view
+was DROPPED — headless only** (ADR 0008: LLM-first; trace/HAR/console/video answer
+"what happened" better than watching pixels). Only the explicitly-aspirational
+bucket remains — `@playwright/mcp` embed, autonomous self-healing, cross-pillar
+contract tie-in.)_ The agent surface AND the human `strummer browser`
 CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
 auth) is done, plus trace-query, browser assertions, Lighthouse perf,
 **network heavy mode (HAR capture + replay)**, and **persisted `.bru` browser-step
-flows**. Remaining Phase 3 work is the aspirational tail (visual regression,
-multi-engine — both scheduled in ROADMAP, none blocking). Design locked by a 5-stream
+flows**. Visual regression and multi-engine have since landed; Phase 3 is
+feature-complete (only the explicitly-aspirational bucket remains). Design locked by a 5-stream
 research workflow w/ adversarial verification (`docs/research/2026-05-31-pillar3-
 browser-testing.md`); captured in **ADR 0006 (+ dated updates) + ARCHITECTURE §10
 + ROADMAP Phase 3**. A new pure-TS **`@strummer/browser`** built **thin on stable
@@ -287,19 +286,36 @@ against in-process fixtures):
    the green gate stays deterministic: tested with in-memory PNGs + a real-chromium
    **self-captured** baseline (nothing committed to the repo).
 
-**375 TS + 45 Py tests green; committed to `main`.** _(Latest milestone: **Pillar 2
-is now fully COMPLETE** — the request-body matrix plus the whole optional tail:
-keyring CLI/MCP wiring, API-gate SSRF range-block + opt-in redirect re-check,
-contract-validation reach (external local-file `$ref` / 3.0 `nullable` shim /
-`operationName`-scoped GraphQL), and import (Postman/Insomnia/OpenAPI/HAR → `.bru`).
-See the Phase-2 block below. Phase 3 unchanged — except **developer live-view is
-now DROPPED** (ADR 0008, headless-only/LLM-first).)_ **Next action:** the only
-remaining Phase-3 tail is **multi-engine** (firefox/webkit) — now known to be
-**runnable in this container** (firefox + webkit launched headless after
-`install-deps`; dev Dockerfile provisions all three), so it's a feature build
-(engine selection in `BrowserManager` + cross-engine determinism), not an infra
-blocker — or start **Phase 4** (cross-cutting verification: LSP bridge,
-impact-scoped test runner, mutation/flaky detection). The deferred `browser_run_flow`
+34. **Multi-engine (firefox/webkit) — operator-selected.** New `@strummer/browser`
+   `engine.ts`: `resolveEngine` (default chromium, throws loud on a typo) +
+   `engineLauncher`/`engineLaunchOptions`. The injected-`launch()` `BrowserManager`
+   is unchanged (already engine-agnostic) — selection lives only at the launch seam.
+   The Tier-2 SSRF **proxy applies to all engines** (`proxy.server`); the
+   **chromium-only** hardening CLI args (`--proxy-bypass-list=<-loopback>`,
+   `--force-webrtc-ip-handling-policy`, `--no-sandbox`) are emitted **only for
+   chromium** (firefox/webkit reject them) — those engines lean on the always-on
+   **Tier-1 route allowlist** + the proxy, so chromium stays the hardened default.
+   Bin `STRUMMER_BROWSER_ENGINE` (resolved early, before the proxy is allocated;
+   `config.engine` + per-engine `launchArgs`); CLI `--engine chromium|firefox|webkit`
+   (unknown ⇒ clean exit-1). **Lighthouse perf stays chromium** (Chrome-only),
+   whatever the session engine. One engine per server instance. Cross-engine probe
+   confirmed `serviceWorkers:'block'`/`httpCredentials`/`route`/`ariaSnapshot` are
+   identical on firefox/webkit (manager + driver needed no changes). TDD: engine
+   unit tests + a **real cross-engine** test driving navigate→snapshot→click→
+   re-snapshot on firefox AND webkit (`skipIf` the binary is absent → chromium-only
+   envs stay green); bin/CLI wiring tests. CI + the dev image install all three
+   engines. (ADR 0009.)
+
+**390 TS + 45 Py tests green; committed to `main`.** _(Latest milestone:
+**multi-engine** (item 34, ADR 0009) — firefox/webkit support landed; Phase 3 is
+now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
+keyring wiring, SSRF range-block + redirect re-check, contract reach, import).
+**Developer live-view was DROPPED** (ADR 0008, headless-only/LLM-first).)_
+**Next action:** Phase 3 has no remaining required tail — only the
+explicitly-aspirational bucket (`@playwright/mcp` embed, autonomous self-healing,
+cross-pillar contract tie-in). Recommended: start **Phase 4** (cross-cutting
+verification: LSP bridge, impact-scoped test runner, mutation/flaky detection) with
+a design pass. The deferred `browser_run_flow`
 follow-up (item 29), **video capture** (item 30), **vision/coordinate caps** (item
 31), the **container-hardening ADR** (item 32, ADR 0007), and **visual regression**
 (item 33) are now done. See the detailed "Next action" section below + ROADMAP.
@@ -672,18 +688,16 @@ caller `{{var}}`s + operator-resolved `{{secret:NAME}}` (fail-closed) + surface
 error redaction. Deny-by-default via `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface
 now at parity with `strummer browser run`.
 
-**Next (later Phase 3):** the aspirational tail is now just **multi-engine**
-(firefox/webkit). **Correction (2026-06-01): this is NOT environment-blocked** —
-`playwright-core` 1.60.0 ships a working `install`/`install-deps` CLI, the CDN is
-reachable, and both firefox + webkit were verified launching headless here after
-`install-deps` (passwordless sudo + apt; the dev `docker/Dockerfile` now bundles
-all three engines + their libs). It's a feature build (engine selection in
-`BrowserManager` + cross-engine determinism). **Developer live-view was DROPPED**
-(ADR 0008 — headless-only, LLM-first: trace/HAR/console/video answer "what happened" better than watching a
-render). Video capture (item 30), vision/coordinate caps (item
-31), the container-hardening ADR (item 32, ADR 0007), and visual regression (item 33,
-committed baselines deferred) are now **done**. None blocking. TDD red→green;
-`pnpm gate` 100% green before each commit.
+**Next (later Phase 3):** nothing required remains — Phase 3 is **feature-complete**.
+**Multi-engine** (item 34, ADR 0009) landed: firefox/webkit via `engine.ts`, bin
+`STRUMMER_BROWSER_ENGINE` + CLI `--engine`, proxy cross-engine, chromium-only
+hardening args, perf stays chromium; verified end-to-end (firefox + webkit drive a
+fixture). **Developer live-view was DROPPED** (ADR 0008 — headless-only, LLM-first:
+trace/HAR/console/video answer "what happened" better than watching a render). Video
+capture (30), vision/coordinate caps (31), container-hardening ADR (32, ADR 0007),
+and visual regression (33) are done. Only the explicitly-aspirational bucket is left
+(`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in).
+TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 
@@ -702,9 +716,9 @@ all green):
    deref, OpenAPI 3.0 `nullable` shim, `operationName`-scoped GraphQL. (Remote
    http `$ref` + non-schema `$ref` remain out of scope by design — SSRF.)
 
-Next: the Phase-3 tail (multi-engine — a feature build now that the engines are
-known to run in-container; developer live-view was dropped, ADR 0008) or start
-**Phase 4** (cross-cutting verification) — see ROADMAP.
+Next: Phase 3 is feature-complete (multi-engine done, ADR 0009; live-view dropped,
+ADR 0008). Recommended — start **Phase 4** (cross-cutting verification) with a
+design pass, or pick up the explicitly-aspirational browser bucket — see ROADMAP.
 
 Deferred Pillar-1 polish — **all DONE**: non-Node version detection (Python/Ruby
 in `detectInstalledVersion`, wired into MCP/CLI); ingestion TOC-bleed + richer

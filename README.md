@@ -56,11 +56,10 @@ both `strummer browser run` and the MCP `browser_run_flow` tool), **video captur
 for canvas / non-AX-tree UI), **visual-regression diffing** (`browser_visual_compare`
 via pixelmatch, baseline by handle), a human **`strummer browser` CLI** (snapshot/
 audit/screenshot/run), and a **container-hardening ADR** (the deployment/kernel
-boundary, [ADR 0007](./docs/decisions/0007-container-hardening.md)) have all landed.
-Remaining browser work is just **multi-engine** (firefox/webkit) — a feature build
-(engine selection + cross-engine determinism); the engines themselves run fine
-headless (the dev image provisions all three). Strummer is **headless-only**:
-developer live-view was dropped in
+boundary, [ADR 0007](./docs/decisions/0007-container-hardening.md)) have all landed,
+along with **multi-engine** (Chromium + Firefox + WebKit;
+[ADR 0009](./docs/decisions/0009-multi-engine.md)) — so the browser pillar is
+feature-complete. Strummer is **headless-only**: developer live-view was dropped in
 favor of LLM-first observability — the trace/HAR/console/video artifacts let the
 agent answer "what happened on this page" better than a human watching it render
 ([ADR 0008](./docs/decisions/0008-headless-only-llm-first-observability.md)).

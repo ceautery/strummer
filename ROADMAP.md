@@ -111,7 +111,7 @@ installed version Z" and get a precise, cited answer over MCP.
       passes the spec dir as the deref base; `validate --operation`; MCP
       `validate_response.operationName`.
 
-## Phase 3 — Browser / UI testing pillar  *(engine + safety + artifact pipeline + MCP surface + human CLI complete; only the aspirational tail remains; design = ADR 0006 + ARCHITECTURE §10)*
+## Phase 3 — Browser / UI testing pillar  *(FEATURE-COMPLETE — engine + safety + artifacts + MCP + CLI + multi-engine; live-view dropped per ADR 0008; only the explicitly-aspirational bucket remains; design = ADR 0006/0008/0009 + ARCHITECTURE §10)*
 
 New pure-TS `@strummer/browser`, thin on **stable `playwright-core` 1.60.0** (not
 a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow with
@@ -344,14 +344,18 @@ Staged below; aspirational items are scheduled, not cut.
       gated driver behind the per-session mutex — caller `{{var}}`s + operator-resolved
       `{{secret:NAME}}` (fail-closed), surface error redaction; deny-by-default via
       `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface at parity with `strummer browser run`.)_
-- [ ] **Multi-engine** (firefox/webkit) — engine selection in `BrowserManager`
-      (operator-chosen `browserType`) + cross-engine determinism (chromium-only
-      default for v1). **Env is ready, not a blocker** (corrected 2026-06-01):
-      `playwright-core install [--with-deps] firefox webkit` works and both were
-      verified launching headless in the dev container; the dev `docker/Dockerfile`
-      now provisions all three engines + libs. When the feature lands, add
-      `firefox webkit` to the CI workflow's `playwright-core install` line too
-      (today CI installs chromium only).
+- [x] **Multi-engine** (firefox/webkit) — DONE (ADR 0009). `engine.ts`:
+      `resolveEngine` (default chromium, throws on a typo) + `engineLauncher` /
+      `engineLaunchOptions`. The injected-`launch()` `BrowserManager` is unchanged
+      (engine-agnostic); selection lives at the launch seam. Bin
+      `STRUMMER_BROWSER_ENGINE`, CLI `--engine chromium|firefox|webkit`. The SSRF
+      **proxy applies to every engine**; the chromium-only hardening args
+      (`--proxy-bypass-list`/WebRTC/`--no-sandbox`) are emitted only for chromium
+      (firefox/webkit rely on the Tier-1 route allowlist + proxy — chromium stays
+      the hardened default). Lighthouse perf stays chromium (Chrome-only). One
+      engine per server instance. Verified end-to-end: firefox + webkit drive
+      navigate→snapshot→click→re-snapshot (real cross-engine test, skips where the
+      binary is absent). CI + dev image now install all three engines.
 - [ ] *(aspirational, scheduled not cut)* optional `@playwright/mcp` embed via
       `createConnection()` behind a feature flag for parity testing; autonomous
       self-healing "act"/locator-cache behind a strong operator gate; cross-pillar
