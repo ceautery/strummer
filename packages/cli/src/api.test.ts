@@ -198,6 +198,16 @@ describe('cli api', () => {
     }
   })
 
+  it('run --block-private refuses a loopback target (SSRF hardened)', async () => {
+    const c = capture()
+    const code = await run(
+      ['api', 'run', dir, 'get-health', '--var', `baseUrl=${baseUrl}`, '--block-private'],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out().toLowerCase()).toContain('block')
+  })
+
   it('run --openapi validates the live response against a spec', async () => {
     const spec = join(dir, 'openapi.json')
     writeFileSync(

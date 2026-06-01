@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
+import { type DnsLookup, SsrfError } from '@strummer/safety'
 import { type Dispatcher, request } from 'undici'
 import { ArtifactStore } from './artifacts.js'
 import { evaluateAssertions, extractCaptures } from './assert.js'
 import type { Collection, PreparedRequest, RunResult, ScriptTest, SecretStore } from './model.js'
 import { prepareRequest } from './prepare.js'
-import { checkGate } from './safety.js'
+import { assertSsrfAllowed, checkGate } from './safety.js'
 import { runScript } from './script.js'
 import { EnvSecretStore, Redactor } from './secrets.js'
 
@@ -22,6 +23,11 @@ export interface RunOptions {
   allowUnsafe?: boolean
   /** Hostnames a mutating request may reach. */
   allowedHosts?: string[]
+  /** Permit loopback/private SSRF targets (default true; see `assertSsrfAllowed`).
+   * Set false to block all private ranges, not just metadata/link-local. */
+  allowPrivate?: boolean
+  /** Injectable DNS resolver for the SSRF pre-flight (tests). */
+  lookup?: DnsLookup
 }
 
 function hasHeader(headers: Record<string, string>, name: string): boolean {
@@ -98,6 +104,23 @@ export async function runRequest(
   })
   if (!gate.allowed) {
     return { request: redactedRequest, sent: false, dryRun: true, reason: gate.reason }
+  }
+
+  // SSRF range-block: applies to every request that would actually go out (a
+  // safe GET to the metadata endpoint is the classic SSRF). A block is a safety
+  // refusal, not a dry-run — surfaced as withheld with a reason.
+  try {
+    await assertSsrfAllowed(prepared.url, { allowPrivate: opts.allowPrivate, lookup: opts.lookup })
+  } catch (err) {
+    if (err instanceof SsrfError) {
+      return {
+        request: redactedRequest,
+        sent: false,
+        dryRun: false,
+        reason: `blocked: ${err.message}`,
+      }
+    }
+    throw err
   }
 
   const started = performance.now()

@@ -16,6 +16,9 @@ export interface ApiToolsOptions {
   allowUnsafe?: boolean
   /** OPERATOR-controlled: hosts a mutating request may target. Never an agent input. */
   allowedHosts?: string[]
+  /** OPERATOR-controlled: permit loopback/private SSRF targets (default true).
+   * Set false for a hardened, internet-only posture. Never an agent input. */
+  allowPrivate?: boolean
   secrets?: SecretStore
   artifacts?: ArtifactStore
 }
@@ -151,6 +154,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
         artifacts,
         allowUnsafe: opts.allowUnsafe,
         allowedHosts: opts.allowedHosts,
+        allowPrivate: opts.allowPrivate,
       })
       return { content: [text(result)], structuredContent: { ...result } }
     },
@@ -196,6 +200,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
         artifacts,
         allowUnsafe: opts.allowUnsafe,
         allowedHosts: opts.allowedHosts,
+        allowPrivate: opts.allowPrivate,
         stopOnFailure: args.stopOnFailure,
       })
       const steps = seq.steps.map(({ name, result }) => ({

@@ -149,6 +149,7 @@ const RUN_OPTIONS = {
   env: { type: 'string' },
   unsafe: { type: 'boolean' },
   'allow-host': { type: 'string', multiple: true },
+  'block-private': { type: 'boolean' },
   keyring: { type: 'boolean' },
   json: { type: 'boolean' },
 } as const
@@ -200,6 +201,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     env: values.env,
     allowUnsafe: values.unsafe ?? false,
     allowedHosts: values['allow-host'],
+    allowPrivate: !values['block-private'],
     secrets: secretsFor(values.keyring),
     artifacts,
   })
@@ -268,6 +270,7 @@ async function cmdRunCollection(args: string[], io: CliIO): Promise<number> {
     env: values.env,
     allowUnsafe: values.unsafe ?? false,
     allowedHosts: values['allow-host'],
+    allowPrivate: !values['block-private'],
     secrets: secretsFor(values.keyring),
     stopOnFailure: values['stop-on-failure'] ?? false,
     artifacts,

@@ -262,6 +262,25 @@ describe('runRequest (offline, in-process server)', () => {
     expect(sent.variables).toEqual({ token: '[redacted:API_TOKEN]', tag: 'blue' })
   })
 
+  it('blocks an SSRF target (metadata IP) before sending — even a safe GET', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'get-health', {
+      vars: { baseUrl: 'http://169.254.169.254' },
+    })
+    expect(result.sent).toBe(false)
+    expect(result.dryRun).toBe(false)
+    expect(result.reason).toMatch(/block/i)
+    expect(result.response).toBeUndefined()
+  })
+
+  it('blocks loopback when allowPrivate is false (hardened posture)', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'get-health', {
+      vars: { baseUrl },
+      allowPrivate: false,
+    })
+    expect(result.sent).toBe(false)
+    expect(result.reason).toMatch(/block/i)
+  })
+
   it('runs a post-response script: tests + programmatic capture', async () => {
     const result = await runRequest(loadCollection(FIXTURE), 'script-demo', { vars: { baseUrl } })
     expect(result.response?.scriptTests).toEqual([

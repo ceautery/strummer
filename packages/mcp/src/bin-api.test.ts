@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { buildApiServerFromEnv } from './bin-api.js'
 
 describe('strummer-api-mcp bin config (operator env)', () => {
-  it('defaults to safe + no keyring', () => {
+  it('defaults to safe, no keyring, private allowed (local-API testing)', () => {
     expect(buildApiServerFromEnv({}).config).toEqual({
       allowUnsafe: false,
       allowedHosts: [],
       keyring: false,
+      allowPrivate: true,
     })
+  })
+
+  it('STRUMMER_BLOCK_PRIVATE hardens the SSRF posture', () => {
+    expect(buildApiServerFromEnv({ STRUMMER_BLOCK_PRIVATE: '1' }).config.allowPrivate).toBe(false)
   })
 
   it('parses allowUnsafe + allowedHosts (trimmed, empties dropped)', () => {
