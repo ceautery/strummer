@@ -6,7 +6,12 @@
 ## Current phase
 
 **Phase 3 — Browser/UI testing pillar: ENGINE + SAFETY + ARTIFACT PIPELINE + MCP
-SURFACE + HUMAN CLI COMPLETE.** The agent surface AND the human `strummer browser`
+SURFACE + HUMAN CLI COMPLETE.** _(Latest: **video capture** — `recordVideo` →
+`finalizeVideo` by `video` handle, operator-gated; surfaced on close. Multi-engine
+is the only headline tail item left, and it is **blocked in this dev container**
+(only chromium binaries installed; `playwright-core` is the thin core with no
+`install` CLI) — needs the CI/Docker image's firefox/webkit. Visual regression
+remains, deferred as the flake-prone one.)_ The agent surface AND the human `strummer browser`
 CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
 auth) is done, plus trace-query, browser assertions, Lighthouse perf,
 **network heavy mode (HAR capture + replay)**, and **persisted `.bru` browser-step
@@ -216,11 +221,28 @@ against in-process fixtures):
    documented side-by-side in `examples/browser/README.md` (CLI `strummer browser run`
    + the MCP `browser_list_flows`→`browser_run_flow` sequence over the login example).
 
-**305 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
-aspirational Phase-3 tail (ROADMAP: visual regression — the flake-prone one;
-multi-engine) or start **Phase 4** (cross-cutting verification: LSP bridge,
-impact-scoped test runner, mutation/flaky detection). The deferred `browser_run_flow`
-follow-up is now done (item 29). See the detailed "Next action" section below + ROADMAP.
+30. **Video capture (webm) — operator-gated.** New `@strummer/browser` `video.ts`:
+   `finalizeVideo` reads the `.webm` Playwright writes on context close, stores it by
+   `strummer://browser/run/<id>/video` handle (NO redaction — video is unredactable
+   pixels, so it is gated **off** by default like the trace/screenshots), returns a
+   compact summary (`byteSize`/`video/webm`), and removes the temp recording.
+   `BrowserManager` gains `videoDir`/`videoSize` → `recordVideo:{dir,size?}` per
+   context; the MCP surface finalizes the video in the **same `onClosed` hook as the
+   HAR** (resolved via `page.video().path()`, since Playwright auto-names the file —
+   the HAR's deterministic `harPathFor` has no video analogue) and surfaces the
+   `video` handle in `browser_close_session`; the run-artifact resource serves
+   `video/*` as a base64 blob. Bin: `STRUMMER_BROWSER_VIDEO_DIR` (+ `_VIDEO_WIDTH`/
+   `_HEIGHT` size cap; the session wall-clock cap bounds duration). Real-chromium
+   tested (asserts the EBML/webm container magic). **ffmpeg is present in the cache**
+   (Playwright needs it for video).
+
+**313 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+aspirational Phase-3 tail — **visual regression** (the flake-prone one) and
+**multi-engine** (firefox/webkit; **blocked in this container** — only chromium is
+installed, so it needs the CI/Docker image's binaries) — or start **Phase 4**
+(cross-cutting verification: LSP bridge, impact-scoped test runner, mutation/flaky
+detection). The deferred `browser_run_flow` follow-up (item 29) and **video capture**
+(item 30) are now done. See the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -568,8 +590,11 @@ error redaction. Deny-by-default via `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface
 now at parity with `strummer browser run`.
 
 **Next (later Phase 3):** the aspirational tail only — visual regression (the
-flake-prone one; baselines in the pinned Docker image), multi-engine. None
-blocking. TDD red→green; `pnpm gate` 100% green before each commit.
+flake-prone one; baselines in the pinned Docker image) and multi-engine
+(firefox/webkit; **blocked in this dev container** — only chromium binaries are
+installed and `playwright-core` has no `install` CLI, so this needs the CI/Docker
+image's engines). Video capture is now **done**. None blocking. TDD red→green;
+`pnpm gate` 100% green before each commit.
 
 ---
 

@@ -103,11 +103,17 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   (non-secret), `{{secret:NAME}}` resolves server-side (fail-closed, never echoed).
   Operator-gated + deny-by-default (requires a `FLOWS_DIR`; the flow is named, never a
   caller-supplied path). The human-CLI counterpart is `strummer browser run`.
+- **Video capture** — with an operator `VIDEO_DIR` set, each session records a
+  `.webm`; `browser_close_session` finalizes it (written on context close) and
+  surfaces it by `video` handle. Operator-gated off by default — video is
+  unredactable pixels (same posture as the trace/screenshots); an optional size cap
+  (`VIDEO_WIDTH`/`VIDEO_HEIGHT`) bounds the frame size, the session wall-clock cap
+  bounds duration.
 - Resource **`strummer://browser/run/{runId}/{kind}`** — fetch a stored artifact
   (`snapshot-s<gen>` / `a11y-s<n>` / `screenshot-s<n>` / `trace` / `console` /
-  `network` / `har`) by handle; binary kinds (trace.zip, screenshot PNG, HAR .zip)
-  come back as a base64 blob. The password-equivalent `storage-state` kind is
-  **refused** (operator-path only).
+  `network` / `har` / `video`) by handle; binary kinds (trace.zip, screenshot PNG,
+  HAR .zip, video webm) come back as a base64 blob. The password-equivalent
+  `storage-state` kind is **refused** (operator-path only).
 
 **Safety (all operator-set via `STRUMMER_BROWSER_*` env, never tool inputs):**
 navigation/mutation deny-by-default (`ALLOW_UNSAFE`, `ALLOWED_HOSTS`); a **mandatory**
@@ -118,7 +124,8 @@ downloads cancelled unless an operator quarantine dir (`DOWNLOAD_DIR`) is set;
 uploads confined to an operator allowlist dir (`UPLOAD_DIR`, denied when unset);
 HAR capture off unless an operator output dir (`HAR_DIR`) is set + HAR replay off
 unless a replay dir (`REPLAY_HAR_DIR`) is set, both deny-by-default; persisted-flow
-replay off unless a flows dir (`FLOWS_DIR`) is set; secret
+replay off unless a flows dir (`FLOWS_DIR`) is set; video capture off unless a video
+dir (`VIDEO_DIR`) is set; secret
 redaction across every artifact + the trace.zip + the HAR; `{{secret:NAME}}` fill +
 origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
 `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/

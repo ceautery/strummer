@@ -129,6 +129,34 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
     ).toBeUndefined()
   })
 
+  it('records video per context when an operator videoDir is set (with optional size cap)', async () => {
+    const t = setup({ videoDir: '/tmp/strummer-video', videoSize: { width: 640, height: 480 } })
+    await t.manager.createSession('sess-1')
+    const recordVideo = t.browser.contexts[0]?.options?.recordVideo as
+      | { dir: string; size?: { width: number; height: number } }
+      | undefined
+    expect(recordVideo?.dir).toBe('/tmp/strummer-video')
+    expect(recordVideo?.size).toEqual({ width: 640, height: 480 })
+  })
+
+  it('records video with no size cap when videoSize is omitted', async () => {
+    const t = setup({ videoDir: '/tmp/strummer-video' })
+    await t.manager.createSession('s1')
+    const recordVideo = t.browser.contexts[0]?.options?.recordVideo as
+      | { dir: string; size?: unknown }
+      | undefined
+    expect(recordVideo?.dir).toBe('/tmp/strummer-video')
+    expect(recordVideo?.size).toBeUndefined()
+  })
+
+  it('omits recordVideo when no videoDir is configured', async () => {
+    const t = setup()
+    await t.manager.createSession('s1')
+    expect(
+      (t.browser.contexts[0]?.options as { recordVideo?: unknown } | undefined)?.recordVideo,
+    ).toBeUndefined()
+  })
+
   it('blocks service workers on every context (hardening default)', async () => {
     const t = setup()
     await t.manager.createSession('s1')

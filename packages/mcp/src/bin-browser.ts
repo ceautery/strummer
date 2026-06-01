@@ -78,6 +78,10 @@ export interface BrowserBinConfig {
   replayDir?: string
   /** Operator persisted-flows dir (browser_list_flows/browser_run_flow denied when unset). */
   flowsDir?: string
+  /** Operator video-capture dir (no video recorded when unset). */
+  videoDir?: string
+  /** Optional recorded-video frame-size cap (both width + height required). */
+  videoSize?: { width: number; height: number }
 }
 
 export interface BuiltBrowserServer {
@@ -158,6 +162,16 @@ export async function buildBrowserServerFromEnv(
   // Persisted flows: deny-by-default. An operator flows dir holds the replayable
   // .bru + sidecar flows browser_run_flow may run (by name, no caller path).
   const flowsDir = env.STRUMMER_BROWSER_FLOWS_DIR || undefined
+  // Video capture: off unless the operator sets an output dir. Video is unredactable
+  // pixels (gated off like the trace/screenshots). An optional size cap needs BOTH
+  // dimensions; the session wall-clock cap (SESSION_MS) bounds duration.
+  const videoDir = env.STRUMMER_BROWSER_VIDEO_DIR || undefined
+  const videoWidth = env.STRUMMER_BROWSER_VIDEO_WIDTH
+  const videoHeight = env.STRUMMER_BROWSER_VIDEO_HEIGHT
+  const videoSize =
+    videoWidth && videoHeight
+      ? { width: num(videoWidth, 0), height: num(videoHeight, 0) }
+      : undefined
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -231,6 +245,8 @@ export async function buildBrowserServerFromEnv(
     maxPages,
     acceptDownloads,
     harDir,
+    videoDir,
+    videoSize,
   })
   const server = createBrowserServer({
     manager,
@@ -245,6 +261,7 @@ export async function buildBrowserServerFromEnv(
     harDir,
     replayDir,
     flowsDir,
+    videoDir,
     runPerfAudit,
     capture,
     maxNodes,
@@ -276,6 +293,8 @@ export async function buildBrowserServerFromEnv(
     harDir,
     replayDir,
     flowsDir,
+    videoDir,
+    videoSize,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

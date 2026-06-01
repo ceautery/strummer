@@ -38,6 +38,14 @@ export interface BrowserManagerOptions {
    * written by Playwright on context close. Unset = no HAR. Operator config, never
    * an agent input — HAR is a heavy secret surface (gated off by default). */
   harDir?: string
+  /** Operator dir for video capture. When set, every session's context records a
+   * `.webm` per page (Playwright auto-names it inside this dir), written on context
+   * close. Unset = no video. Operator config, never an agent input — video is
+   * unredactable pixels (gated off by default, like the trace/screenshots). */
+  videoDir?: string
+  /** Optional frame-size cap for recorded video (`recordVideo.size`). Unset =
+   * Playwright's default (scaled from the viewport). */
+  videoSize?: { width: number; height: number }
 }
 
 interface Session {
@@ -57,12 +65,26 @@ export class BrowserManager {
   private readonly opts: Required<
     Omit<
       BrowserManagerOptions,
-      'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages' | 'harDir'
+      | 'launch'
+      | 'gate'
+      | 'httpCredentials'
+      | 'maxSessionMs'
+      | 'maxPages'
+      | 'harDir'
+      | 'videoDir'
+      | 'videoSize'
     >
   > &
     Pick<
       BrowserManagerOptions,
-      'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages' | 'harDir'
+      | 'launch'
+      | 'gate'
+      | 'httpCredentials'
+      | 'maxSessionMs'
+      | 'maxPages'
+      | 'harDir'
+      | 'videoDir'
+      | 'videoSize'
     >
   private readonly sessions = new Map<string, Session>()
   private readonly reapCallbacks: ((sessionId: string) => void | Promise<void>)[] = []
@@ -85,6 +107,8 @@ export class BrowserManager {
       maxSessionMs: options.maxSessionMs,
       maxPages: options.maxPages,
       harDir: options.harDir,
+      videoDir: options.videoDir,
+      videoSize: options.videoSize,
     }
   }
 
@@ -140,6 +164,16 @@ export class BrowserManager {
               path: harPathFor(this.opts.harDir, sessionId),
               content: 'attach' as const,
               mode: 'full' as const,
+            },
+          }
+        : {}),
+      // Video capture: Playwright records a .webm per page into this dir (auto-named)
+      // and writes it on context close. Gated off by default — video is unredactable.
+      ...(this.opts.videoDir
+        ? {
+            recordVideo: {
+              dir: this.opts.videoDir,
+              ...(this.opts.videoSize ? { size: this.opts.videoSize } : {}),
             },
           }
         : {}),

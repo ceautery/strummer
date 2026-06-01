@@ -252,7 +252,18 @@ Staged below; aspirational items are scheduled, not cut.
       disable WebRTC/QUIC in the hardened profile.
 - [ ] **Vision/coordinate capability** behind operator-gated `--caps=vision` for
       canvas/non-AX-tree UI (screenshot-pixel click/move), off by default.
-- [ ] **Video capture** (webm, retain-on-failure) operator-gated with size caps.
+- [x] **Video capture** (webm) operator-gated with size caps. `video.ts`
+      `finalizeVideo` reads the `.webm` Playwright writes on context close, stores it
+      by `strummer://browser/run/<id>/video` handle (no redaction — video is
+      unredactable pixels, so it is gated **off** by default like the trace/
+      screenshots), returns a compact summary (`byteSize`/`video/webm`), and removes
+      the temp recording. `BrowserManager` gains `videoDir`/`videoSize` →
+      `recordVideo:{dir,size?}` per context; the MCP surface finalizes the video in
+      the same `onClosed` hook as the HAR (resolved via `page.video().path()`, since
+      Playwright auto-names the file) and surfaces the `video` handle in
+      `browser_close_session`; the run-artifact resource serves `video/*` as a base64
+      blob. Bin: `STRUMMER_BROWSER_VIDEO_DIR` (+ `_VIDEO_WIDTH`/`_HEIGHT` size cap; the
+      session wall-clock cap bounds duration). Real-chromium tested (EBML/webm magic).
 - [ ] **Developer live-view** (observability, not the agent path) — primary:
       headless + `--remote-debugging-port` so a developer can attach DevTools /
       `chrome://inspect` to watch the live session with no extra infra; optional

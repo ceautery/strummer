@@ -151,4 +151,23 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'strummer-flows-'))
     expect((await build({ STRUMMER_BROWSER_FLOWS_DIR: dir })).config.flowsDir).toBe(dir)
   })
+
+  it('records no video unless STRUMMER_BROWSER_VIDEO_DIR is set; parses an optional size cap', async () => {
+    expect((await build({})).config.videoDir).toBeUndefined()
+    expect((await build({})).config.videoSize).toBeUndefined()
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-video-'))
+    const on = await build({
+      STRUMMER_BROWSER_VIDEO_DIR: dir,
+      STRUMMER_BROWSER_VIDEO_WIDTH: '640',
+      STRUMMER_BROWSER_VIDEO_HEIGHT: '480',
+    })
+    expect(on.config.videoDir).toBe(dir)
+    expect(on.config.videoSize).toEqual({ width: 640, height: 480 })
+    // a dir with only one dimension set ⇒ no size cap (need both)
+    const partial = await build({
+      STRUMMER_BROWSER_VIDEO_DIR: dir,
+      STRUMMER_BROWSER_VIDEO_WIDTH: '640',
+    })
+    expect(partial.config.videoSize).toBeUndefined()
+  })
 })

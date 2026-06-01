@@ -72,6 +72,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     harDir?: string
     replayDir?: string
     flowsDir?: string
+    videoDir?: string
     capture?: { trace?: boolean; console?: boolean; network?: boolean }
     runPerfAudit?: Parameters<typeof createBrowserServer>[0]['runPerfAudit']
   }) {
@@ -92,6 +93,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       now: config.now,
       acceptDownloads: config.downloadDir !== undefined,
       harDir: config.harDir,
+      videoDir: config.videoDir,
     })
     const srv = createBrowserServer({
       manager,
@@ -106,6 +108,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       harDir: config.harDir,
       replayDir: config.replayDir,
       flowsDir: config.flowsDir,
+      videoDir: config.videoDir,
       capture: config.capture,
       runPerfAudit: config.runPerfAudit,
     })
@@ -664,6 +667,47 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(zip.subarray(0, 2).toString('latin1')).toBe('PK') // zip magic
     // the operator redactor is wired through finalizeHar; the deep
     // redact-every-text-entry proof lives in the engine's har.test.ts.
+    await client.close()
+  })
+
+  it('captures a video by handle on close (operator-gated), served as a webm blob', async () => {
+    const videoDir = mkdtempSync(join(baseDir, 'video-'))
+    const { client } = await connect({ videoDir })
+    const open = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+      runId: string
+    }
+    await call(client, 'browser_navigate', { sessionId: open.sessionId, url: baseUrl })
+
+    const close = (await call(client, 'browser_close_session', { sessionId: open.sessionId }))
+      .structuredContent as {
+      artifacts?: { video?: { handle: string; byteSize: number; contentType: string } }
+    }
+    const video = close.artifacts?.video
+    expect(video?.handle).toBe(`strummer://browser/run/${open.runId}/video`)
+    expect(video?.contentType).toBe('video/webm')
+    expect(video?.byteSize).toBeGreaterThan(0)
+
+    // served back as a base64 webm blob (binary), never inlined as text
+    const res = await client.readResource({ uri: video?.handle as string })
+    const content = res.contents[0] as { mimeType: string; blob?: string; text?: string }
+    expect(content.mimeType).toBe('video/webm')
+    expect(content.text).toBeUndefined()
+    const webm = Buffer.from(content.blob as string, 'base64')
+    // EBML magic (0x1A45DFA3) — a real Matroska/WebM container
+    expect(webm.subarray(0, 4).toString('hex')).toBe('1a45dfa3')
+    await client.close()
+  })
+
+  it('captures no video when the operator has not set a videoDir', async () => {
+    const { client } = await connect({})
+    const open = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(client, 'browser_navigate', { sessionId: open.sessionId, url: baseUrl })
+    const close = (await call(client, 'browser_close_session', { sessionId: open.sessionId }))
+      .structuredContent as { artifacts?: { video?: unknown } }
+    expect(close.artifacts?.video).toBeUndefined()
     await client.close()
   })
 

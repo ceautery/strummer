@@ -77,3 +77,4 @@ export {
   type TraceQueryOptions,
   type TraceQueryResult,
 } from './trace.js'
+export { type FinalizeVideoOptions, finalizeVideo, type VideoSummary } from './video.js'

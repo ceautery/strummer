@@ -6,6 +6,7 @@ import {
   type BrowserGate,
   type BrowserManager,
   finalizeHar,
+  finalizeVideo,
   type HarSummary,
   harPathFor,
   loadFlowCollection,
@@ -14,6 +15,7 @@ import {
   queryTrace,
   RunRecorder,
   runFlow,
+  type VideoSummary,
 } from '@strummer/browser'
 import type { Page } from 'playwright-core'
 import { z } from 'zod'
@@ -79,6 +81,11 @@ export interface BrowserToolsOptions {
    * there is no traversal surface). Unset ⇒ the flow tools are disabled
    * (deny-by-default). Flows replay through the same gate/redactor as live steps. */
   flowsDir?: string
+  /** Operator video dir. When set (the bin also passes it to the manager so each
+   * context records a `.webm`), the session's video is finalized on close — stored
+   * by handle, surfaced in the close reply. Unset ⇒ no video. Video is unredactable
+   * pixels, so it is operator-gated off by default (same posture as the trace). */
+  videoDir?: string
   /** Run a Lighthouse perf audit on a URL, keyed by a server-minted `runId`. The
    * bin binds the operator chromium path + proxied/hardened flags + store + redactor
    * here; absent ⇒ `browser_perf_audit` reports it is not enabled. */
@@ -105,6 +112,10 @@ interface BrowserSession {
   harFinalized: boolean
   /** The finalized HAR summary, if any — surfaced in the close reply. */
   harSummary?: HarSummary
+  /** Video finalized (store) once, on the first close/reap path to run. */
+  videoFinalized: boolean
+  /** The finalized video summary, if any — surfaced in the close reply. */
+  videoSummary?: VideoSummary
 }
 
 const INSTRUCTIONS = `Strummer drives a real browser for UI testing, ARIA-snapshot first.
@@ -152,6 +163,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   const allowStorageState = opts.allowStorageState ?? false
   const allowScreenshots = opts.allowScreenshots ?? false
   const harDir = opts.harDir
+  const videoDir = opts.videoDir
   const registry = new Map<string, BrowserSession>()
   const now = () => Date.now()
 
@@ -182,6 +194,21 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         redact,
       })
       if (summary) session.harSummary = summary
+    }
+    // Video is also written only on context close (like the HAR). Playwright
+    // auto-names the file, so resolve it from the page's Video object. No redaction
+    // pass — video is unredactable pixels (operator-gated, surfaced by handle only).
+    if (session && videoDir && !session.videoFinalized) {
+      session.videoFinalized = true
+      const video = session.page.video()
+      if (video) {
+        const summary = await finalizeVideo({
+          videoPath: await video.path(),
+          runId: session.runId,
+          store: artifacts,
+        })
+        if (summary) session.videoSummary = summary
+      }
     }
     registry.delete(sessionId)
   })
@@ -289,6 +316,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         auditIndex: 0,
         recorderStopped: false,
         harFinalized: false,
+        videoFinalized: false,
       })
       return reply({
         sessionId: id,
@@ -874,15 +902,19 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         }
         // Flush the recorder BEFORE closing (its trace needs the context alive).
         // closeSession then fires onReap (recorder already stopped → skipped) and,
-        // after the context closes, onClosed → which finalizes the HAR onto the
-        // session and drops the registry entry. We still hold `session`, so we can
-        // read its stashed har summary below.
+        // after the context closes, onClosed → which finalizes the HAR + video onto
+        // the session and drops the registry entry. We still hold `session`, so we
+        // can read its stashed har/video summaries below.
         await manager.closeSession(args.sessionId)
         return { artifacts: runArtifacts }
       })
       const allArtifacts =
-        runArtifacts || session.harSummary
-          ? { ...runArtifacts, ...(session.harSummary ? { har: session.harSummary } : {}) }
+        runArtifacts || session.harSummary || session.videoSummary
+          ? {
+              ...runArtifacts,
+              ...(session.harSummary ? { har: session.harSummary } : {}),
+              ...(session.videoSummary ? { video: session.videoSummary } : {}),
+            }
           : undefined
       return reply({
         closed: true,
@@ -972,7 +1004,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     {
       title: 'Browser run artifact',
       description:
-        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / screenshot-s<n> / trace / console / network / har), by handle',
+        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / screenshot-s<n> / trace / console / network / har / video), by handle',
     },
     (uri, variables) => {
       const runId = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId
@@ -989,10 +1021,12 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
       if (!artifact) {
         throw new Error(`No stored artifact for ${handle}`)
       }
-      // Binary artifacts (trace.zip, screenshot PNG) are returned as a base64 blob;
-      // text artifacts (snapshots, a11y/console/network JSON) as UTF-8 text.
+      // Binary artifacts (trace.zip/HAR zip, screenshot PNG, video webm) are returned
+      // as a base64 blob; text artifacts (snapshots, a11y/console/network JSON) as UTF-8.
       const isBinary =
-        artifact.contentType === 'application/zip' || artifact.contentType.startsWith('image/')
+        artifact.contentType === 'application/zip' ||
+        artifact.contentType.startsWith('image/') ||
+        artifact.contentType.startsWith('video/')
       return {
         contents: [
           {
