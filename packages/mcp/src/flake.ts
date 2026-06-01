@@ -1,12 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
   type HistoryStore,
+  type PytestJsonReport,
   Quarantine,
   type QuarantinePolicy,
   quarantineCandidates,
   type RunHistoryConfig,
   runAndRecord,
   type TestRunner,
+  type VitestJsonReport,
 } from '@strummer/flake'
 import { z } from 'zod'
 
@@ -29,10 +31,12 @@ for a BOUNDED window.
 
 \`flake_status\` and \`flake_candidates\` are free, read-only: they classify the stored
 history (flaky / reliable / broken / insufficient-data) with a Wilson confidence bound
-(\`flakeScore\`) and rank quarantine candidates. \`flake_release\` lifts a quarantine (always
-allowed — it only makes the gate stricter). \`flake_run\` (present only when the operator
-enabled it) RUNS the suite repeatedly to gather history; it is gated and confined to
-allowlisted roots. \`flake_quarantine\` (present only when enabled) WRITES a quarantine and
+(\`flakeScore\`) and rank quarantine candidates. \`flake_ingest\` records a CI-produced
+report (vitest or pytest JSON) into the history store WITHOUT spawning anything — the natural
+path when the suite already ran elsewhere (and the only way to feed pytest history). \`flake_release\`
+lifts a quarantine (always allowed — it only makes the gate stricter). \`flake_run\` (present
+only when the operator enabled it) RUNS the suite repeatedly to gather history; it is gated and
+confined to allowlisted roots. \`flake_quarantine\` (present only when enabled) WRITES a quarantine and
 requires a bounded, mandatory expiry — it can turn a red gate green, so it is operator-gated.`
 
 function text(value: unknown) {
@@ -120,6 +124,44 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
         compactVerdict,
       )
       return { content: [text({ candidates })], structuredContent: { candidates } }
+    },
+  )
+
+  server.registerTool(
+    'flake_ingest',
+    {
+      title: 'Ingest a test-run report into the history store',
+      description:
+        'Record a CI-produced test report (no spawn — the suite already ran) into the run-' +
+        'history store, then classify. `format` is "vitest" (`vitest run --reporter=json`) or ' +
+        '"pytest" (the pytest-json-report plugin); `report` is the parsed JSON. Skipped / ' +
+        'xfailed / xpassed (pytest) and skipped / pending / todo (vitest) carry no pass/fail ' +
+        'signal and are dropped. Optional `at` (ISO; defaults to now), `projectRoot` (stable ' +
+        'ids), and `runGroup`. Returns { format, recorded, verdicts }.',
+      inputSchema: {
+        format: z.enum(['vitest', 'pytest']),
+        report: z.record(z.string(), z.unknown()).describe('the parsed test-report JSON'),
+        at: z.string().optional().describe('ISO timestamp stamped on every run (defaults to now)'),
+        projectRoot: z.string().optional(),
+        runGroup: z.string().optional(),
+      },
+    },
+    (args) => {
+      const parseOpts = {
+        at: args.at ?? now(),
+        projectRoot: args.projectRoot,
+        runGroup: args.runGroup,
+      }
+      const recorded =
+        args.format === 'pytest'
+          ? store.ingestPytestReport(args.report as PytestJsonReport, parseOpts)
+          : store.ingestReport(args.report as VitestJsonReport, parseOpts)
+      const result = {
+        format: args.format,
+        recorded,
+        verdicts: store.classify().map(compactVerdict),
+      }
+      return { content: [text(result)], structuredContent: { ...result } }
     },
   )
 

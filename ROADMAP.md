@@ -521,7 +521,13 @@ Two independent tracks, then the test-quality chain, then LSP last:
         (`flake_status`/`flake_candidates`/`flake_release`); `flake_run` behind the run gate;
         `flake_quarantine` behind the quarantine gate. Bin requires `STRUMMER_FLAKE_DB` +
         the two independent paired gates.
-  - [ ] *(staged)* Python (pytest-json) adapter; an optional `strummer flake` human CLI.
+  - [x] **Python (pytest-json) adapter** — pure `parsePytestJson` (pytest-json-report's
+        `tests[]` → `RecordedRun[]`; the `nodeid` is the stable id verbatim — no reconstruction;
+        per-phase seconds summed → `durationMs`; `error`→fail, `skipped`/`xfailed`/`xpassed`
+        dropped). Store/classifier/quarantine unchanged (test-id-opaque). `HistoryStore.
+        ingestPytestReport` + a new always-on, format-discriminated **`flake_ingest`** MCP tool
+        (vitest|pytest, no spawn — the suite already ran; the only way to feed pytest history).
+  - [ ] *(staged)* an optional `strummer flake` human CLI.
 - [x] **Mutation testing** (`@strummer/mutate`) — **COMPLETE (engine + agent surface).**
       Are the tests meaningful? **Stryker/Vitest-4 compat spike resolved** (ADR 0010 update
       2026-06-01: vitest-runner 9.x declares `vitest >=2.0.0` + ships Vitest 4/4.1 support —

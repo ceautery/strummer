@@ -587,7 +587,25 @@ tests use stubs — no peer harness reach-in); the bin builds the real `Language
 executable-tail guard; `startReaper`+SIGINT/SIGTERM `shutdown`), and wires the `toolchain` provenance
 via `core.detectInstalledVersion` (language→toolchain map; the conservative v1 warn — full
 mismatch heuristic still staged). 7 surface + 6 bin tests; **659 TS + 45 Py green**. **Next action:
-Phase 4 is DONE — pick the next milestone (a Phase-5 boundary or the explicitly-staged tails).**
+Phase 4's pillars are DONE; the chosen next milestone is the cross-pillar PYTHON-ADAPTER tail (the
+verification pillars are TS/npm-only today; `core.detectInstalledVersion` already dispatches
+node/python/ruby). A fan-out research pass (4 parallel pillar-seam maps) found the pattern: every
+pillar's pure core is ecosystem-agnostic; only the live RUNNER is JS-coupled — so a Python adapter is
+a pure input-shape converter (+ optionally a sibling runner). Effort tiers: flake/coverage are
+near-trivial pure converters; `deps` needs a pluggable `VersionComparator` (PEP 440 / Gem — semver is
+hardcoded in ~7 funcs across `audit.ts`/`osv.ts`, the silent-wrong trap); mutate needs a
+status-vocabulary conversion (mutmut). Sequence chosen: flake → coverage → deps → mutate.
+**Slice 1 (flake pytest) DONE, 669 TS + 45 Py green:** pure `parsePytestJson` in
+`packages/flake/src/pytest.ts` (pytest-json-report `tests[]`→`RecordedRun[]`; `nodeid` is the stable
+id verbatim — no reconstruction; per-phase seconds summed→`durationMs`; `error`→fail,
+`skipped`/`xfailed`/`xpassed` dropped), `HistoryStore.ingestPytestReport`, and a NEW always-on,
+format-discriminated **`flake_ingest`** MCP tool (vitest|pytest, no spawn — records a CI-produced
+report; the only way to feed pytest history). Store/classifier/quarantine unchanged (test-id-opaque).
+**Next: coverage.py adapter** — pure `fileCoverageFromCoveragePyJson` (coverage.py `executed_lines`/
+`missing_lines`/`excluded_lines` → the istanbul `FileCoverage` shape `uncoveredInDiff` already
+consumes; `uncoveredInDiff` is fully ecosystem-agnostic, `runScoped` is vitest-argv-coupled).**
+PRIOR next-action (still the fallback once Python adapters land): a Phase-5 boundary or the other
+explicitly-staged tails.**
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
 exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full

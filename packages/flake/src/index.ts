@@ -10,6 +10,12 @@ export {
   wilsonInterval,
 } from './classify.js'
 export {
+  type PytestJsonReport,
+  type PytestPhase,
+  type PytestTest,
+  parsePytestJson,
+} from './pytest.js'
+export {
   type CandidateOptions,
   Quarantine,
   type QuarantineEntry,

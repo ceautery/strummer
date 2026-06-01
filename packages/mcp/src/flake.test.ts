@@ -47,9 +47,69 @@ describe('flake MCP surface', () => {
     ])
   })
 
-  it('always exposes the read tools; gates run/quarantine off by default', async () => {
+  it('always exposes the read + ingest tools; gates run/quarantine off by default', async () => {
     const client = await connect({ store })
-    expect(await toolNames(client)).toEqual(['flake_candidates', 'flake_release', 'flake_status'])
+    expect(await toolNames(client)).toEqual([
+      'flake_candidates',
+      'flake_ingest',
+      'flake_release',
+      'flake_status',
+    ])
+  })
+
+  it('flake_ingest records a pytest report (CI-produced, no spawn) and classifies it', async () => {
+    const fresh = HistoryStore.memory()
+    const client = await connect({ store: fresh })
+    const report = {
+      tests: [
+        { nodeid: 'tests/test_x.py::test_wobbles', outcome: 'failed' },
+        { nodeid: 'tests/test_x.py::test_solid', outcome: 'passed' },
+        { nodeid: 'tests/test_x.py::test_skip', outcome: 'skipped' },
+      ],
+    }
+    const r1 = await call(client, 'flake_ingest', {
+      format: 'pytest',
+      report,
+      at: '2026-06-01T00:00:00Z',
+    })
+    expect(r1.structuredContent?.recorded).toBe(2) // skipped dropped
+    // A second, all-pass ingest makes test_wobbles a mixed history → flaky.
+    await call(client, 'flake_ingest', {
+      format: 'pytest',
+      report: { tests: [{ nodeid: 'tests/test_x.py::test_wobbles', outcome: 'passed' }] },
+      at: '2026-06-02T00:00:00Z',
+    })
+    const verdicts = r1.structuredContent?.verdicts as { id: string; state: string }[]
+    expect(verdicts.find((v) => v.id === 'tests/test_x.py::test_wobbles')).toBeTruthy()
+    const status = await call(client, 'flake_status', {})
+    const byId = Object.fromEntries(
+      (status.structuredContent?.verdicts as { id: string; state: string }[]).map((v) => [
+        v.id,
+        v.state,
+      ]),
+    )
+    expect(byId['tests/test_x.py::test_wobbles']).toBe('flaky')
+    fresh.close()
+  })
+
+  it('flake_ingest records a vitest report too (format-discriminated)', async () => {
+    const fresh = HistoryStore.memory()
+    const client = await connect({ store: fresh })
+    const res = await call(client, 'flake_ingest', {
+      format: 'vitest',
+      report: {
+        testResults: [
+          {
+            name: '/abs/project/src/x.test.ts',
+            assertionResults: [{ ancestorTitles: ['x'], title: 'works', status: 'passed' }],
+          },
+        ],
+      },
+      at: '2026-06-01T00:00:00Z',
+      projectRoot: '/abs/project',
+    })
+    expect(res.structuredContent?.recorded).toBe(1)
+    fresh.close()
   })
 
   it('registers flake_run only with the paired run gate', async () => {

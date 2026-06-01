@@ -20,6 +20,7 @@ import {
   type TestHistory,
   type TestRun,
 } from './classify.js'
+import { type PytestJsonReport, parsePytestJson } from './pytest.js'
 import { type ParseReportOptions, parseVitestJson, type VitestJsonReport } from './report.js'
 
 const SCHEMA_VERSION = 1
@@ -168,6 +169,17 @@ export class HistoryStore {
    */
   ingestReport(report: VitestJsonReport, opts: ParseReportOptions): number {
     const runs = parseVitestJson(report, opts)
+    this.recordRuns(runs)
+    return runs.length
+  }
+
+  /**
+   * Parse a pytest-json-report report and record every pass/fail/error test as a run. Returns
+   * the number of runs recorded (skipped/xfailed/xpassed tests are not counted). The Python
+   * sibling of {@link ingestReport}.
+   */
+  ingestPytestReport(report: PytestJsonReport, opts: ParseReportOptions): number {
+    const runs = parsePytestJson(report, opts)
     this.recordRuns(runs)
     return runs.length
   }

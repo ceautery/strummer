@@ -1,0 +1,45 @@
+{
+  "created": 1748736000.0,
+  "duration": 0.42,
+  "exitcode": 1,
+  "root": "/abs/workspace/py",
+  "environment": {},
+  "summary": { "passed": 1, "failed": 1, "skipped": 1, "error": 1, "xfailed": 1, "total": 5 },
+  "tests": [
+    {
+      "nodeid": "tests/test_runner.py::test_retries_then_succeeds",
+      "lineno": 10,
+      "outcome": "passed",
+      "setup": { "duration": 0.001, "outcome": "passed" },
+      "call": { "duration": 0.0115, "outcome": "passed" },
+      "teardown": { "duration": 0.0, "outcome": "passed" }
+    },
+    {
+      "nodeid": "tests/test_runner.py::TestPinning::test_pins_resolved_ip",
+      "lineno": 22,
+      "outcome": "failed",
+      "setup": { "duration": 0.001, "outcome": "passed" },
+      "call": { "duration": 0.007, "outcome": "failed" },
+      "teardown": { "duration": 0.0, "outcome": "passed" }
+    },
+    {
+      "nodeid": "tests/test_runner.py::test_rejects_foreign_schema",
+      "lineno": 30,
+      "outcome": "skipped",
+      "setup": { "duration": 0.0005, "outcome": "passed" },
+      "call": { "duration": 0.0, "outcome": "skipped" }
+    },
+    {
+      "nodeid": "tests/test_db.py::test_opens_golden_index",
+      "lineno": 5,
+      "outcome": "error",
+      "setup": { "duration": 0.002, "outcome": "error" }
+    },
+    {
+      "nodeid": "tests/test_db.py::test_known_xfail",
+      "lineno": 40,
+      "outcome": "xfailed",
+      "call": { "duration": 0.001, "outcome": "failed" }
+    }
+  ]
+}
