@@ -514,4 +514,121 @@ describe('strummer deps MCP surface', () => {
     expect(sc.recommendedTarget).toBe('7.1.0') // newest same-major (the .rc1 prerelease is excluded)
     expect(sc.freshness.latest).toBe('7.1.0')
   })
+
+  it('audit_project rolls up a PyPI project from requirements.txt', async () => {
+    const pyProject = mkdtempSync(join(tmpdir(), 'strummer-deps-pyproj-'))
+    tmpDirs.push(pyProject)
+    writeFileSync(join(pyProject, 'requirements.txt'), 'Django==5.0.0\nrequests==2.31.0\n')
+
+    const packuments: Record<string, Packument> = {
+      django: {
+        name: 'django',
+        'dist-tags': { latest: '5.0.4' },
+        versions: { '5.0.0': { version: '5.0.0' }, '5.0.4': { version: '5.0.4' } },
+      },
+      requests: {
+        name: 'requests',
+        'dist-tags': { latest: '2.31.0' },
+        versions: { '2.31.0': { version: '2.31.0' } },
+      },
+    }
+    const fetchPyPi: PackumentFetcher = async (name, ecosystem) => {
+      expect(ecosystem).toBe('PyPI')
+      const p = packuments[name]
+      if (!p) throw new Error(`no fixture for ${name}`)
+      return p
+    }
+    const djangoAdvisory: OsvAdvisory = {
+      id: 'PYSEC-2024-1',
+      modified: '2024-03-01T00:00:00Z',
+      database_specific: { severity: 'CRITICAL' },
+      affected: [
+        {
+          package: { ecosystem: 'PyPI', name: 'django' },
+          ranges: [{ type: 'ECOSYSTEM', events: [{ introduced: '5.0' }, { fixed: '5.0.4' }] }],
+        },
+      ],
+    }
+    const osv = makeOsvSnapshot([djangoAdvisory], 'PyPI')
+    const client = await connect(createDepsServer({ fetchPackument: fetchPyPi, osvDir: osv }))
+    clients.push(client)
+    const res = await client.callTool({
+      name: 'audit_project',
+      arguments: { project: pyProject, ecosystem: 'PyPI' },
+    })
+    const sc = res.structuredContent as {
+      summary: { total: number; bySeverity: Record<string, number> }
+      dependencies: { package: string; worstSeverity: string; vulnerabilityCount: number }[]
+    }
+    expect(sc.summary.total).toBe(2)
+    expect(sc.dependencies.map((d) => d.package).sort()).toEqual(['django', 'requests'])
+    expect(sc.dependencies.find((d) => d.package === 'django')?.worstSeverity).toBe('critical')
+    expect(sc.dependencies.find((d) => d.package === 'requests')?.vulnerabilityCount).toBe(0)
+    expect(sc.summary.bySeverity.critical).toBe(1)
+  })
+
+  it('audit_project rolls up a RubyGems project from Gemfile.lock', async () => {
+    const rbProject = mkdtempSync(join(tmpdir(), 'strummer-deps-rbproj-'))
+    tmpDirs.push(rbProject)
+    writeFileSync(
+      join(rbProject, 'Gemfile.lock'),
+      [
+        'GEM',
+        '  remote: https://rubygems.org/',
+        '  specs:',
+        '    puma (6.4.0)',
+        '    rails (7.0.4)',
+        '',
+        'PLATFORMS',
+        '  ruby',
+        '',
+        'DEPENDENCIES',
+        '  puma',
+        '  rails (~> 7.0)',
+        '',
+        'BUNDLED WITH',
+        '   2.4.0',
+        '',
+      ].join('\n'),
+    )
+
+    const packuments: Record<string, Packument> = {
+      rails: {
+        name: 'rails',
+        versions: { '7.0.4': { version: '7.0.4' }, '7.0.8': { version: '7.0.8' } },
+      },
+      puma: { name: 'puma', versions: { '6.4.0': { version: '6.4.0' } } },
+    }
+    const fetchGem: PackumentFetcher = async (name, ecosystem) => {
+      expect(ecosystem).toBe('RubyGems')
+      const p = packuments[name]
+      if (!p) throw new Error(`no fixture for ${name}`)
+      return p
+    }
+    const railsAdvisory: OsvAdvisory = {
+      id: 'GHSA-rails-test',
+      modified: '2024-05-01T00:00:00Z',
+      database_specific: { severity: 'HIGH' },
+      affected: [
+        {
+          package: { ecosystem: 'RubyGems', name: 'rails' },
+          ranges: [{ type: 'ECOSYSTEM', events: [{ introduced: '7.0.0' }, { fixed: '7.0.8' }] }],
+        },
+      ],
+    }
+    const osv = makeOsvSnapshot([railsAdvisory], 'RubyGems')
+    const client = await connect(createDepsServer({ fetchPackument: fetchGem, osvDir: osv }))
+    clients.push(client)
+    const res = await client.callTool({
+      name: 'audit_project',
+      arguments: { project: rbProject, ecosystem: 'RubyGems' },
+    })
+    const sc = res.structuredContent as {
+      summary: { total: number }
+      dependencies: { package: string; worstSeverity: string }[]
+    }
+    // Declared deps (puma, rails) — NOT every resolved spec.
+    expect(sc.dependencies.map((d) => d.package).sort()).toEqual(['puma', 'rails'])
+    expect(sc.dependencies.find((d) => d.package === 'rails')?.worstSeverity).toBe('high')
+  })
 })

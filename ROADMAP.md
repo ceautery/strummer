@@ -459,9 +459,11 @@ Two independent tracks, then the test-quality chain, then LSP last:
         conformance fixtures, `rubygemsToPackument` (RubyGems API versions array → `Packument`,
         freshness derives latest), wired into the comparator map + a RubyGems API fetcher
         (`STRUMMER_DEPS_RUBYGEMS_REGISTRY`). All three ecosystems now audit a single package.
-  - [ ] *(staged)* `audit_project` for PyPI + RubyGems (a per-ecosystem manifest dependency-name
-        reader: pyproject/poetry/requirements; Gemfile/Gemfile.lock) — `audit_dependency` already
-        covers all three; this is the multi-package roll-up.
+  - [x] **`audit_project` for PyPI + RubyGems** — pure `pythonManifestNames` (PEP 621
+        `[project]` deps + optional-dependencies, Poetry deps + group deps, requirements.txt;
+        PEP 503-normalized) and `rubyManifestNames` (Gemfile.lock `DEPENDENCIES` block, else
+        Gemfile `gem` lines); the surface dispatches the reader by ecosystem and the npm-only
+        gate is lifted. `audit_project` now rolls up npm, PyPI, and RubyGems.
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A, building.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
       (the forgotten-assertion catch — the genuinely novel win under our TDD gate).

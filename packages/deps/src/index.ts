@@ -37,6 +37,7 @@ export {
   type PyPiJson,
   type PyPiReleaseFile,
   pypiJsonToPackument,
+  pythonManifestNames,
 } from './pypi.js'
-export { type RubyGemsVersion, rubygemsToPackument } from './rubygems.js'
+export { type RubyGemsVersion, rubygemsToPackument, rubyManifestNames } from './rubygems.js'
 export { loadOsvSnapshot, type OsvSnapshot } from './snapshot.js'

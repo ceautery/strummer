@@ -12,6 +12,8 @@ import {
   type OsvAdvisory,
   type Packument,
   pep440Comparator,
+  pythonManifestNames,
+  rubyManifestNames,
   semverComparator,
   sliceChangelog,
   type VersionComparator,
@@ -121,6 +123,36 @@ function manifestDependencies(project: string, includeDev: boolean): string[] {
   return [...names].sort()
 }
 
+/** Read a file, or undefined when it doesn't exist (other read errors propagate). */
+function readIfPresent(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw err
+  }
+}
+
+/** Declared top-level dependency names for a project, dispatched by ecosystem. */
+function dependencyNames(project: string, ecosystem: OsvEcosystem, includeDev: boolean): string[] {
+  if (ecosystem === 'PyPI') {
+    return pythonManifestNames(
+      {
+        pyproject: readIfPresent(join(project, 'pyproject.toml')),
+        requirements: readIfPresent(join(project, 'requirements.txt')),
+      },
+      { includeDev },
+    )
+  }
+  if (ecosystem === 'RubyGems') {
+    return rubyManifestNames({
+      gemfileLock: readIfPresent(join(project, 'Gemfile.lock')),
+      gemfile: readIfPresent(join(project, 'Gemfile')),
+    })
+  }
+  return manifestDependencies(project, includeDev)
+}
+
 /** Detect → fetch → audit one package. Throws a clear error on a missing version or
  * a disabled fetcher; returns the pure {@link auditDependency} verdict otherwise. */
 async function auditOne(
@@ -221,7 +253,8 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
         'deprecated, outdated, finding count) plus a summary. When an artifact store is ' +
         'configured the full per-package verdicts (vulnerability lists, deprecation messages, ' +
         'freshness) are stored BY HANDLE (`detailHandle` → the strummer://deps/{id}/{kind} ' +
-        'resource); otherwise drill into one package with audit_dependency. v1 supports npm.',
+        'resource); otherwise drill into one package with audit_dependency. Supports npm ' +
+        '(package.json), PyPI (pyproject/requirements.txt), and RubyGems (Gemfile.lock/Gemfile).',
       inputSchema: {
         project: z.string().describe('absolute path to the project root'),
         ecosystem: ecosystemArg,
@@ -233,11 +266,8 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
     },
     async (args) => {
       const ecosystem = (args.ecosystem ?? 'npm') as OsvEcosystem
-      if (ecosystem !== 'npm') {
-        throw new Error('audit_project currently supports the npm ecosystem only')
-      }
       const { advisories, snapshotDate, loaded } = loadAdvisories(opts.osvDir, ecosystem)
-      const names = manifestDependencies(args.project, args.includeDev ?? true)
+      const names = dependencyNames(args.project, ecosystem, args.includeDev ?? true)
 
       const dependencies: {
         package: string

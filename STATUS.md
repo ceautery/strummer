@@ -639,10 +639,16 @@ no spawn). **The Python-adapter milestone is functionally COMPLETE:** flake (pyt
 (coverage.py), deps (PyPI+RubyGems `audit_dependency`), and mutate (mutmut) all ship engine + agent
 surface; both new pins (`@renovatebot/pep440`, `@renovatebot/ruby-semver`) validated to load under
 tsc/tsdown/Vitest.
-**Remaining non-blocking tails:** deps `audit_project` for PyPI/RubyGems (a per-ecosystem manifest
-dependency-NAME reader — `audit_dependency` already covers all three); a cosmic-ray adapter + gated
-`runMutmut` spawner; the human CLIs (`strummer deps|coverage|flake|mutate|lsp`); the LSP capability
-tails (ADR 0011). **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
+**`audit_project` for PyPI + RubyGems DONE, 715 TS + 45 Py green:** pure `pythonManifestNames`
+(`pypi.ts`: PEP 621 `[project]` deps + optional-dependencies, Poetry deps + group deps,
+requirements.txt fallback; PEP 503-normalized + deduped) and `rubyManifestNames` (`rubygems.ts`:
+Gemfile.lock `DEPENDENCIES` block — declared, not the resolved spec tree — else Gemfile `gem` lines);
+`packages/mcp/src/deps.ts` dispatches the name reader by ecosystem (`dependencyNames`) and the
+npm-only throw is lifted. **`audit_project` now rolls up all three ecosystems** (npm/PyPI/RubyGems);
+`auditOne` already carried the per-ecosystem comparator + matchName from slice 3.
+**Remaining non-blocking tails:** a cosmic-ray adapter + gated `runMutmut` spawner; the human CLIs
+(`strummer deps|coverage|flake|mutate|lsp`); the LSP capability tails (ADR 0011). **NEXT MILESTONE
+is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
 exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full

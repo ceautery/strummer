@@ -26,3 +26,38 @@ export function rubygemsToPackument(name: string, versions: RubyGemsVersion[]): 
   }
   return { name, versions: out }
 }
+
+/** Names from a Gemfile.lock `DEPENDENCIES` section (the declared top-level gems). */
+function namesFromGemfileLock(lock: string): string[] {
+  // The DEPENDENCIES block lists the gems the Gemfile declares (not the full resolved tree in
+  // `specs:`); each is `  name (constraint)` or `  name!`. Capture until the next blank line.
+  const block = /\nDEPENDENCIES\n([\s\S]*?)(?:\n\n|\n[A-Z]|$)/.exec(`\n${lock}`)?.[1]
+  if (!block) return []
+  const names: string[] = []
+  for (const raw of block.split(/\r?\n/)) {
+    const m = /^\s{2,}([A-Za-z0-9._-]+)/.exec(raw)
+    if (m?.[1]) names.push(m[1])
+  }
+  return names
+}
+
+/** Names from a Gemfile's `gem "name"` declarations. */
+function namesFromGemfile(gemfile: string): string[] {
+  const names: string[] = []
+  for (const m of gemfile.matchAll(/^\s*gem\s+['"]([^'"]+)['"]/gm)) {
+    if (m[1]) names.push(m[1])
+  }
+  return names
+}
+
+/**
+ * Enumerate the declared top-level gem NAMES of a Ruby project (the RubyGems analogue of reading
+ * npm `package.json` deps), deduped + sorted. Prefers the Gemfile.lock `DEPENDENCIES` section
+ * (resolved declared gems); falls back to the Gemfile's `gem` lines. Pure.
+ */
+export function rubyManifestNames(sources: { gemfileLock?: string; gemfile?: string }): string[] {
+  let raw: string[] = []
+  if (sources.gemfileLock) raw = namesFromGemfileLock(sources.gemfileLock)
+  if (raw.length === 0 && sources.gemfile) raw = namesFromGemfile(sources.gemfile)
+  return [...new Set(raw)].sort()
+}
