@@ -103,8 +103,11 @@ Staged below; aspirational items are scheduled, not cut.
 - [x] **Browser lifecycle manager** (`BrowserManager`) — lazy single shared
       browser, ephemeral isolated context per session, `maxContexts` cap,
       idle-TTL `sweepIdle` + `startReaper`, per-context default action/navigation
-      timeouts, `closeSession`/`shutdown`. (Session wall-clock cap + max-pages
-      land with the step tools.)
+      timeouts, `closeSession`/`shutdown`. _(Update: a `maxSessionMs` wall-clock cap
+      — `sweepIdle` reaps past `now - createdAt` even when active — and a `maxPages`
+      per-context cap — a `'page'` guard closes pages opened beyond the limit — now
+      land; both operator-set via `STRUMMER_BROWSER_SESSION_MS`/`MAX_PAGES`, default
+      no cap. `f0fc419`.)_
 - [x] **ARIA-snapshot capture + serializer** (`snapshot.ts`) — parses the public
       `locator.ariaSnapshot()` YAML and **mints our own ref-ids** (1.60.0 lacks
       `_snapshotForAI`/snapshot-refs; see ADR 0006 update 2026-06-01, a revision

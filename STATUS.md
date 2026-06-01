@@ -77,11 +77,15 @@ against in-process fixtures):
    bypassing the Tier-1 SSRF layer); the bin adds
    `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` (WebRTC limited to
    proxied UDP — no P2P egress bypassing the SSRF proxy, no local-IP leak).
+17. **Browser caps — session wall-clock + max-pages** (`f0fc419`):
+   `BrowserManager` reaps a session past `maxSessionMs` (wall-clock, even when
+   active) and closes pages opened beyond `maxPages` per context; bin-set via
+   `STRUMMER_BROWSER_SESSION_MS`/`STRUMMER_BROWSER_MAX_PAGES`, default no cap.
 
-**221 TS + 45 Py tests green; all pushed to `main`.** **Next action:** downloads/
-uploads/dialog/auth gating, session wall-clock + max-pages, an on-demand screenshot
-step tool, and (deferred) the human **`strummer browser` CLI**. See the detailed
-"Next action" section below + ROADMAP Phase 3.
+**225 TS + 45 Py tests green; all pushed to `main`.** **Next action:** downloads/
+uploads/dialog/auth gating, an on-demand screenshot step tool, and (deferred) the
+human **`strummer browser` CLI**. See the detailed "Next action" section below +
+ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -356,11 +360,14 @@ top of console/network (8b), dry-run preview (8a), snapshot (A1), and surface-re
 `storageState`/userDataDir **import** for operator login-reuse.
 
 **Hardening — `serviceWorkers:'block'` + WebRTC: DONE (`9207224`).** SWs blocked on
-every context; WebRTC limited to proxied UDP via a launch arg.
+every context; WebRTC limited to proxied UDP via a launch arg. **Caps — session
+wall-clock + max-pages: DONE (`f0fc419`).** `maxSessionMs` reaps active-but-old
+sessions; `maxPages` closes excess pages per context; both operator-set, default
+no cap.
 
-**Next (later Phase 3):** downloads/uploads/dialog/auth gating; session wall-clock +
-max-pages; an on-demand screenshot step tool; and the deferred human
-**`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before each commit.
+**Next (later Phase 3):** downloads/uploads/dialog/auth gating; an on-demand
+screenshot step tool; and the deferred human **`strummer browser` CLI**. TDD
+red→green; `pnpm gate` 100% green before each commit.
 
 ---
 
