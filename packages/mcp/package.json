@@ -7,7 +7,8 @@
   "bin": {
     "strummer-mcp": "./dist/bin.mjs",
     "strummer-api-mcp": "./dist/bin-api.mjs",
-    "strummer-browser-mcp": "./dist/bin-browser.mjs"
+    "strummer-browser-mcp": "./dist/bin-browser.mjs",
+    "strummer-deps-mcp": "./dist/bin-deps.mjs"
   },
   "exports": {
     ".": {
@@ -20,7 +21,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts --dts",
+    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts src/bin-deps.ts --dts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -28,12 +29,14 @@
     "@strummer/api": "workspace:*",
     "@strummer/browser": "workspace:*",
     "@strummer/core": "workspace:*",
+    "@strummer/deps": "workspace:*",
     "@strummer/embed": "workspace:*",
     "@strummer/safety": "workspace:*",
     "playwright-core": "1.60.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
+    "@types/better-sqlite3": "^7.6.13",
+    "fflate": "^0.8.3"
   }
 }

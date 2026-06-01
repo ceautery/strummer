@@ -16,6 +16,12 @@ export {
   createBrowserServer,
   registerBrowserTools,
 } from './browser.js'
+export {
+  createDepsServer,
+  type DepsToolsOptions,
+  type PackumentFetcher,
+  registerDepsTools,
+} from './deps.js'
 
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */
