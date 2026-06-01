@@ -63,6 +63,16 @@ feature-complete. Strummer is **headless-only**: developer live-view was dropped
 favor of LLM-first observability — the trace/HAR/console/video artifacts let the
 agent answer "what happened on this page" better than a human watching it render
 ([ADR 0008](./docs/decisions/0008-headless-only-llm-first-observability.md)).
+
+**Phase 4 (cross-cutting verification) is now underway** — the sequence was locked by
+a research + adversarial-verification fan-out
+([ADR 0010](./docs/decisions/0010-phase4-cross-cutting-verification.md)):
+dependency intelligence ∥ coverage → flaky-test detection → mutation testing → an LSP
+bridge (last). The first pillar, **`@strummer/deps` (dependency/version
+intelligence)**, has its pure, offline core complete — deprecation, OSV vulnerability
+matching, on-disk OSV-snapshot loading, and a composed `auditDependency` verdict for
+the version *actually installed*; the agent/human surface (MCP tools + CLI) is next.
+
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
