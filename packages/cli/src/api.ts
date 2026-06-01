@@ -4,6 +4,8 @@ import { parseArgs } from 'node:util'
 import {
   ArtifactStore,
   type ContractResult,
+  type ImportFormat,
+  importToCollection,
   loadCollection,
   resolveSecretStore,
   runRequest,
@@ -61,6 +63,8 @@ export async function runApi(args: string[], io: CliIO): Promise<number> {
       return cmdRunCollection(rest, io)
     case 'validate':
       return cmdValidate(rest, io)
+    case 'import':
+      return cmdImport(rest, io)
     default:
       io.err(`unknown api subcommand: ${sub ?? '(none)'}\n`)
       return 1
@@ -307,6 +311,29 @@ async function cmdRunCollection(args: string[], io: CliIO): Promise<number> {
   }
   io.out(`captured: ${Object.keys(result.captured).join(', ') || '(none)'}\n`)
   return ok ? 0 : 1
+}
+
+const IMPORT_FORMATS = new Set<ImportFormat>(['postman', 'insomnia', 'openapi', 'har'])
+
+function cmdImport(args: string[], io: CliIO): number {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: { name: { type: 'string' } },
+  })
+  const [format, source, dest] = positionals
+  if (!format || !source || !dest) {
+    io.err('api import needs <postman|insomnia|openapi|har> <source-file> <dest-dir>\n')
+    return 1
+  }
+  if (!IMPORT_FORMATS.has(format as ImportFormat)) {
+    io.err(`unknown import format: ${format} (expected postman|insomnia|openapi|har)\n`)
+    return 1
+  }
+  const text = readFileSync(source, 'utf8')
+  const count = importToCollection(format as ImportFormat, text, dest, { name: values.name })
+  io.out(`imported ${count} request(s) into ${dest}\n`)
+  return 0
 }
 
 function cmdValidate(args: string[], io: CliIO): number {

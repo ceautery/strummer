@@ -221,6 +221,32 @@ describe('cli api', () => {
     }
   })
 
+  it('import converts a Postman collection into a runnable .bru collection', async () => {
+    const src = join(dir, 'postman.json')
+    writeFileSync(
+      src,
+      JSON.stringify({
+        info: { name: 'PM' },
+        item: [{ name: 'ping', request: { method: 'GET', url: '{{baseUrl}}/health' } }],
+      }),
+    )
+    const out = mkdtempSync(join(tmpdir(), 'strummer-cli-import-'))
+    const c = capture()
+    expect(await run(['api', 'import', 'postman', src, out], c.io)).toBe(0)
+    expect(c.out()).toContain('imported 1')
+
+    // The imported collection is immediately listable.
+    const c2 = capture()
+    expect(await run(['api', 'list', out], c2.io)).toBe(0)
+    expect(c2.out()).toContain('ping')
+  })
+
+  it('import rejects an unknown format', async () => {
+    const c = capture()
+    expect(await run(['api', 'import', 'bogus', 'x', 'y'], c.io)).toBe(1)
+    expect(c.err().toLowerCase()).toContain('unknown import format')
+  })
+
   it('run --max-redirects follows a redirect to a passing final response', async () => {
     const c = capture()
     const code = await run(

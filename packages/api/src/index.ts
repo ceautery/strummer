@@ -1,8 +1,24 @@
 export { type Artifact, ArtifactStore } from './artifacts.js'
 export { evaluateAssertions, extractCaptures, type ResponseContext } from './assert.js'
 export { loadCollection } from './collection.js'
-export { type ResponseFacts, validateOpenApiResponse } from './contract.js'
-export { validateGraphqlOperation } from './graphql.js'
+export {
+  type OpenApiValidateOptions,
+  type ResponseFacts,
+  validateOpenApiResponse,
+} from './contract.js'
+export { type GraphqlValidateOptions, validateGraphqlOperation } from './graphql.js'
+export {
+  type ImportedRequest,
+  type ImportFormat,
+  type ImportResult,
+  importHar,
+  importInsomnia,
+  importOpenApi,
+  importPostman,
+  importToCollection,
+  parseImport,
+  writeImported,
+} from './import.js'
 export type {
   ApiRequest,
   AssertionOp,
