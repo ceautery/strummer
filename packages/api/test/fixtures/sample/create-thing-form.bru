@@ -1,0 +1,16 @@
+meta {
+  name: create-thing-form
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/things
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  name: {{thingName}}
+  token: {{secret:API_TOKEN}}
+}

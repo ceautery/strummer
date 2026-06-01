@@ -154,6 +154,29 @@ describe('runRequest (offline, in-process server)', () => {
     expect(echoed).toContain('application/json')
   })
 
+  it('sends a form-urlencoded body (camelCase discriminator) with interpolation + redaction', async () => {
+    const token = 'form-secret-456'
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'create-thing-form', {
+      vars: { baseUrl, thingName: 'widget' },
+      secrets: new StaticSecretStore({ API_TOKEN: token }),
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'],
+      artifacts,
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(201)
+
+    // Agent-facing request: urlencoded params, secret redacted, real value absent.
+    expect(result.request.body).toContain('name=widget')
+    expect(result.request.body).toContain('token=[redacted:API_TOKEN]')
+    expect(result.request.body).not.toContain(token)
+
+    const echoed = JSON.parse(artifacts.get(result.response?.bodyHandle ?? '')?.body ?? '{}')
+    expect(echoed.contentType).toContain('application/x-www-form-urlencoded')
+    expect(echoed.received).toContain('name=widget')
+  })
+
   it('sends a graphql body as {query, variables} JSON with secrets resolved + redacted', async () => {
     const token = 'gql-secret-789'
     const artifacts = new ArtifactStore()
