@@ -19,6 +19,15 @@ export {
   type WaitForOptions,
   type WouldRequest,
 } from './driver.js'
+export {
+  type BrowserFlow,
+  type FlowCollection,
+  type FlowStep,
+  loadFlow,
+  loadFlowCollection,
+  type SemanticLocator,
+  type WaitState,
+} from './flow.js'
 export { BrowserGate, type BrowserGateOptions, GateError } from './gate.js'
 export {
   type FinalizeHarOptions,

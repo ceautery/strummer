@@ -1,0 +1,157 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
+import { bruToJsonV2 } from '@usebruno/lang'
+import { parse as parseYaml } from 'yaml'
+import type { BrowserAssertionSpec } from './assertions.js'
+
+/**
+ * Persisted, replayable browser **flows** — `.bru` + sidecar (ROADMAP Phase 3;
+ * mirrors ADR 0004's API-pillar pattern). A Bruno-openable `<name>.bru` carries
+ * the flow's meta (its name); the colocated `<name>.strummer.yml` sidecar holds
+ * the ordered **steps**. Steps key off **semantic locators** (`role` + optional
+ * accessible `name` + `nth`), NOT the ephemeral per-snapshot refs — so a flow is
+ * stable across runs. `{{var}}` / `{{secret:NAME}}` interpolation is resolved at
+ * run time (see `runFlow`), exactly as in the API pillar.
+ */
+
+/** A snapshot-independent element locator: `getByRole(role,{name}).nth(nth)`. */
+export interface SemanticLocator {
+  role: string
+  name?: string
+  /** Disambiguate when several elements share role+name. Default 0 (the first). */
+  nth?: number
+}
+
+export type WaitState = 'attached' | 'detached' | 'visible' | 'hidden'
+
+/** One step in a persisted flow. */
+export type FlowStep =
+  | { action: 'navigate'; url: string }
+  | { action: 'click'; target: SemanticLocator }
+  | { action: 'fill'; target: SemanticLocator; value: string }
+  | { action: 'select'; target: SemanticLocator; values: string | string[] }
+  | { action: 'press'; target?: SemanticLocator; key: string }
+  | { action: 'wait_for'; target: SemanticLocator; state?: WaitState; timeout?: number }
+  | { action: 'assert'; assertions: BrowserAssertionSpec[] }
+
+export interface BrowserFlow {
+  name: string
+  steps: FlowStep[]
+}
+
+export interface FlowCollection {
+  dir: string
+  /** Flows keyed by name (meta.name, falling back to the .bru filename stem). */
+  flows: Map<string, BrowserFlow>
+}
+
+// Collection/folder-level .bru files are settings, not flows.
+const NON_FLOW = new Set(['collection.bru', 'folder.bru'])
+
+interface BruJson {
+  meta?: { name?: string }
+}
+
+interface Sidecar {
+  steps?: unknown[]
+}
+
+/** Pull a `{role, name?, nth?}` locator out of a raw step object (role required). */
+function toTarget(raw: Record<string, unknown>, action: string): SemanticLocator {
+  const role = raw.role
+  if (typeof role !== 'string' || role === '') {
+    throw new Error(`flow step "${action}" requires a string "role"`)
+  }
+  const target: SemanticLocator = { role }
+  if (typeof raw.name === 'string') target.name = raw.name
+  if (typeof raw.nth === 'number') target.nth = raw.nth
+  return target
+}
+
+/** A flow step in the sidecar is a single-key object: `{ <action>: <value> }`. */
+function parseStep(raw: unknown, index: number): FlowStep {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`flow step #${index + 1} must be a single-key object like { click: {...} }`)
+  }
+  const keys = Object.keys(raw as Record<string, unknown>)
+  if (keys.length !== 1) {
+    throw new Error(
+      `flow step #${index + 1} must have exactly one action key, got: ${keys.join(', ')}`,
+    )
+  }
+  const action = keys[0] as string
+  const value = (raw as Record<string, unknown>)[action]
+
+  switch (action) {
+    case 'navigate': {
+      if (typeof value !== 'string') throw new Error('flow step "navigate" requires a URL string')
+      return { action, url: value }
+    }
+    case 'click': {
+      return { action, target: toTarget(value as Record<string, unknown>, action) }
+    }
+    case 'fill': {
+      const o = (value ?? {}) as Record<string, unknown>
+      if (typeof o.value !== 'string') throw new Error('flow step "fill" requires a string "value"')
+      return { action, target: toTarget(o, action), value: o.value }
+    }
+    case 'select': {
+      const o = (value ?? {}) as Record<string, unknown>
+      const ok =
+        typeof o.values === 'string' ||
+        (Array.isArray(o.values) && o.values.every((v) => typeof v === 'string'))
+      if (!ok) throw new Error('flow step "select" requires "values" (a string or string[])')
+      return { action, target: toTarget(o, action), values: o.values as string | string[] }
+    }
+    case 'press': {
+      const o = (value ?? {}) as Record<string, unknown>
+      if (typeof o.key !== 'string') throw new Error('flow step "press" requires a string "key"')
+      // role optional: press on a target element, or on the page when omitted
+      const target = typeof o.role === 'string' ? toTarget(o, action) : undefined
+      return { action, key: o.key, ...(target ? { target } : {}) }
+    }
+    case 'wait_for': {
+      const o = (value ?? {}) as Record<string, unknown>
+      const step: Extract<FlowStep, { action: 'wait_for' }> = {
+        action,
+        target: toTarget(o, action),
+      }
+      if (typeof o.state === 'string') step.state = o.state as WaitState
+      if (typeof o.timeout === 'number') step.timeout = o.timeout
+      return step
+    }
+    case 'assert': {
+      if (!Array.isArray(value))
+        throw new Error('flow step "assert" requires an array of assertions')
+      return { action, assertions: value as BrowserAssertionSpec[] }
+    }
+    default:
+      throw new Error(`unknown step action "${action}" in flow step #${index + 1}`)
+  }
+}
+
+/** Load a single persisted flow from its `<name>.bru` (+ `<name>.strummer.yml`). */
+export function loadFlow(bruPath: string): BrowserFlow {
+  const stem = basename(bruPath, '.bru')
+  const parsed = bruToJsonV2(readFileSync(bruPath, 'utf8')) as BruJson
+  const name = parsed.meta?.name ?? stem
+
+  const sidecarPath = bruPath.replace(/\.bru$/, '.strummer.yml')
+  if (!existsSync(sidecarPath)) {
+    throw new Error(`flow "${stem}" has no ${stem}.strummer.yml sidecar (the steps live there)`)
+  }
+  const sidecar = (parseYaml(readFileSync(sidecarPath, 'utf8')) ?? {}) as Sidecar
+  const steps = (sidecar.steps ?? []).map((raw, i) => parseStep(raw, i))
+  return { name, steps }
+}
+
+/** Load every flow in a directory, keyed by name (skips collection/folder .bru). */
+export function loadFlowCollection(dir: string): FlowCollection {
+  const flows = new Map<string, BrowserFlow>()
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.bru') || NON_FLOW.has(file)) continue
+    const flow = loadFlow(join(dir, file))
+    flows.set(flow.name, flow)
+  }
+  return { dir, flows }
+}

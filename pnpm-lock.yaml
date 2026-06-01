@@ -76,6 +76,9 @@ importers:
       '@strummer/safety':
         specifier: workspace:*
         version: link:../safety
+      '@usebruno/lang':
+        specifier: ^0.36.0
+        version: 0.36.0
       axe-core:
         specifier: 4.11.4
         version: 4.11.4
@@ -91,6 +94,9 @@ importers:
       playwright-core:
         specifier: 1.60.0
         version: 1.60.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   packages/cli:
     dependencies:
