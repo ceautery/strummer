@@ -397,8 +397,13 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `semver`, prereleases excluded) into one verdict — `worstSeverity`,
         `recommendedTarget` (conservative newest-same-major), `snapshotDate`,
         `hasFindings`. Inputs are gathered by the caller (still pure/offline).
-  - [ ] Vuln-aware "minimum safe upgrade" target (lowest version clearing all matched
-        advisories) — distinct from the conservative same-major `recommendedTarget`.
+  - [x] **Vuln-aware "minimum safe upgrade" target** — `auditDependency.minimumSafeUpgrade`:
+        the lowest stable release newer than installed that re-matches ZERO advisories
+        (re-evaluated per candidate against the full advisory set, so a release that fixes
+        the original vuln but is hit by a different one is skipped); `undefined` when nothing
+        is vulnerable or no release clears them. Distinct from the conservative same-major
+        `recommendedTarget` (a security fix may cross a major). Surfaced in
+        `audit_dependency` + the `audit_project` roll-up.
   - [ ] `behindBy` freshness vs the `resolveVersion` policy; `recommendedTarget`.
   - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
         SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice
