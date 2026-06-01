@@ -95,6 +95,37 @@ describe('coverage MCP surface', () => {
     expect(sc.summary.uncovered).toBe(1)
   })
 
+  it('uncovered_in_diff accepts a coverage.py report via coverageFormat', async () => {
+    const pyDiff = `--- a/src/math.py
++++ b/src/math.py
+@@ -1,1 +1,4 @@
+ def f(x):
++    y = x + 1
++    return y
++    z = never()
+`
+    const client = await connect({})
+    const res = await client.callTool({
+      name: 'uncovered_in_diff',
+      arguments: {
+        diff: pyDiff,
+        coverageFormat: 'coveragepy',
+        coverage: {
+          files: {
+            '/abs/repo/src/math.py': {
+              executed_lines: [1, 2, 3],
+              missing_lines: [4],
+              excluded_lines: [],
+            },
+          },
+        },
+        projectRoot: '/abs/repo',
+      },
+    })
+    const sc = res.structuredContent as { uncovered: { path: string; line: number }[] }
+    expect(sc.uncovered).toEqual([{ path: 'src/math.py', line: 4 }])
+  })
+
   it('run_scoped runs the gated, injected runner and reports the diff coverage', async () => {
     const root = '/abs/repo'
     // Fake runner writes the coverage-final.json runScoped points it at via argv.

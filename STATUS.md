@@ -595,17 +595,27 @@ a pure input-shape converter (+ optionally a sibling runner). Effort tiers: flak
 near-trivial pure converters; `deps` needs a pluggable `VersionComparator` (PEP 440 / Gem — semver is
 hardcoded in ~7 funcs across `audit.ts`/`osv.ts`, the silent-wrong trap); mutate needs a
 status-vocabulary conversion (mutmut). Sequence chosen: flake → coverage → deps → mutate.
-**Slice 1 (flake pytest) DONE, 669 TS + 45 Py green:** pure `parsePytestJson` in
+**Slice 1 (flake pytest) DONE:** pure `parsePytestJson` in
 `packages/flake/src/pytest.ts` (pytest-json-report `tests[]`→`RecordedRun[]`; `nodeid` is the stable
 id verbatim — no reconstruction; per-phase seconds summed→`durationMs`; `error`→fail,
 `skipped`/`xfailed`/`xpassed` dropped), `HistoryStore.ingestPytestReport`, and a NEW always-on,
 format-discriminated **`flake_ingest`** MCP tool (vitest|pytest, no spawn — records a CI-produced
 report; the only way to feed pytest history). Store/classifier/quarantine unchanged (test-id-opaque).
-**Next: coverage.py adapter** — pure `fileCoverageFromCoveragePyJson` (coverage.py `executed_lines`/
-`missing_lines`/`excluded_lines` → the istanbul `FileCoverage` shape `uncoveredInDiff` already
-consumes; `uncoveredInDiff` is fully ecosystem-agnostic, `runScoped` is vitest-argv-coupled).**
-PRIOR next-action (still the fallback once Python adapters land): a Phase-5 boundary or the other
-explicitly-staged tails.**
+**Slice 2 (coverage.py) DONE, 674 TS + 45 Py green:** pure `fileCoverageFromCoveragePy`/
+`coveragePyToIstanbul` in `packages/coverage/src/coveragepy.ts` (`coverage json` line lists →
+istanbul `FileCoverage`: one synthetic single-line statement per executed/missing line, executed→hit
+1, missing→0, excluded omitted→`nonExecutable`). The differ (`uncoveredInDiff`/`uncoveredNewLines`)
+is unchanged (ecosystem-agnostic); `uncovered_in_diff` gained a `coverageFormat: istanbul|coveragepy`
+discriminator so the Python path is agent-reachable.
+**Next: deps PyPI** — the heavy one. semver is hardcoded in ~7 funcs across `packages/deps/src/audit.ts`
+(`stableVersions`/`maxVersion`/`computeFreshness`/`computeBehindBy`/`lowestSafeVersion`) and `osv.ts`
+(`clean`/`compareVersions`) + `changelog.ts`; PyPI=PEP 440, RubyGems=Gem, neither semver-comparable
+(OSV ships them as `ECOSYSTEM` ranges the code silently mis-coerces today). Plan: a pluggable
+`VersionComparator` (npm=semver, PyPI=PEP 440, Gem) threaded through those funcs + a PyPI packument
+fetcher (PyPI JSON API). `loadOsvSnapshot`/`detectInstalledVersion` are ALREADY ecosystem-generic;
+`audit_project` hard-rejects non-npm at `deps.ts:213` (lift that). Likely its own ADR + several slices.
+Then **mutate (mutmut)** last. **PRIOR next-action (the fallback once Python adapters land): a Phase-5
+boundary or the other explicitly-staged tails.**
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
 exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full

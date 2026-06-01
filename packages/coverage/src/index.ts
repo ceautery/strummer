@@ -1,3 +1,9 @@
+export {
+  type CoveragePyFile,
+  type CoveragePyReport,
+  coveragePyToIstanbul,
+  fileCoverageFromCoveragePy,
+} from './coveragepy.js'
 export { type DiffFile, parseUnifiedDiff } from './diff.js'
 export {
   type DiffCoverageFile,

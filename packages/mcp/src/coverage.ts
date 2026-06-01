@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { type FileCoverage, runScoped, type TestRunner, uncoveredInDiff } from '@strummer/coverage'
+import {
+  type CoveragePyReport,
+  coveragePyToIstanbul,
+  type FileCoverage,
+  runScoped,
+  type TestRunner,
+  uncoveredInDiff,
+} from '@strummer/coverage'
 import { z } from 'zod'
 
 export interface CoverageToolsOptions {
@@ -17,18 +24,16 @@ export interface CoverageToolsOptions {
 const INSTRUCTIONS = `Strummer reports test coverage scoped to a change — the "forgotten
 assertion" catch: of the lines a diff ADDED, which executable ones did no test exercise.
 
-\`uncovered_in_diff\` is a free, read-only analysis: give it a unified diff and an istanbul
-\`coverage-final.json\` (inline or by path) and it returns the uncovered new lines. It does
-NOT run anything. \`run_scoped\` (only present when the operator enabled it) actually runs
+\`uncovered_in_diff\` is a free, read-only analysis: give it a unified diff and a coverage
+report (inline or by path) and it returns the uncovered new lines. \`coverageFormat\` selects
+the report shape — \`istanbul\` (a \`coverage-final.json\`, the default) or \`coveragepy\` (a
+Python \`coverage json\` report, converted to the same line model). It does NOT run anything.
+\`run_scoped\` (only present when the operator enabled it) actually runs
 the tests a change touches (\`vitest related\`) with coverage and then analyses the diff —
 that is operator-gated and confined to allowlisted project roots.`
 
 function text(value: unknown) {
   return { type: 'text' as const, text: JSON.stringify(value, null, 2) }
-}
-
-function readJson(path: string): Record<string, FileCoverage> {
-  return JSON.parse(readFileSync(path, 'utf8')) as Record<string, FileCoverage>
 }
 
 /** Register the coverage tools onto a server. `run_scoped` is registered only when enabled. */
@@ -38,15 +43,20 @@ export function registerCoverageTools(server: McpServer, opts: CoverageToolsOpti
     {
       title: 'Uncovered new lines in a diff',
       description:
-        'READ-ONLY: given a unified diff and an istanbul coverage-final.json, report the ' +
-        'lines the diff added that are executable but unhit (the forgotten-assertion catch). ' +
-        'Supply the diff inline (`diff`) or by path (`diffPath`), and coverage inline ' +
-        '(`coverage`) or by path (`coveragePath`). Runs nothing.',
+        'READ-ONLY: given a unified diff and a coverage report, report the lines the diff ' +
+        'added that are executable but unhit (the forgotten-assertion catch). Supply the diff ' +
+        'inline (`diff`) or by path (`diffPath`), and coverage inline (`coverage`) or by path ' +
+        '(`coveragePath`). `coverageFormat` is `istanbul` (a coverage-final.json, default) or ' +
+        '`coveragepy` (a Python `coverage json` report). Runs nothing.',
       inputSchema: {
         diff: z.string().optional().describe('unified diff text'),
         diffPath: z.string().optional().describe('path to a unified diff file'),
-        coverage: z.unknown().optional().describe('inline istanbul coverage-final.json object'),
-        coveragePath: z.string().optional().describe('path to a coverage-final.json'),
+        coverage: z.unknown().optional().describe('inline coverage report object'),
+        coveragePath: z.string().optional().describe('path to a coverage report JSON'),
+        coverageFormat: z
+          .enum(['istanbul', 'coveragepy'])
+          .optional()
+          .describe('coverage report shape (default istanbul)'),
         projectRoot: z
           .string()
           .optional()
@@ -58,12 +68,16 @@ export function registerCoverageTools(server: McpServer, opts: CoverageToolsOpti
       if (diff === undefined) {
         throw new Error('supply `diff` or `diffPath`')
       }
-      const coverage =
-        (args.coverage as Record<string, FileCoverage> | undefined) ??
-        (args.coveragePath ? readJson(args.coveragePath) : undefined)
-      if (coverage === undefined) {
+      const raw =
+        args.coverage ??
+        (args.coveragePath ? JSON.parse(readFileSync(args.coveragePath, 'utf8')) : undefined)
+      if (raw === undefined) {
         throw new Error('supply `coverage` or `coveragePath`')
       }
+      const coverage =
+        args.coverageFormat === 'coveragepy'
+          ? coveragePyToIstanbul(raw as CoveragePyReport)
+          : (raw as Record<string, FileCoverage>)
       const report = uncoveredInDiff(diff, coverage, { projectRoot: args.projectRoot })
       return { content: [text(report)], structuredContent: { ...report } }
     },

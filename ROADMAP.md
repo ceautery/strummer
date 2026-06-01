@@ -483,8 +483,14 @@ Two independent tracks, then the test-quality chain, then LSP last:
         when the operator set `allowRun` AND a non-empty root allowlist — deny-by-default).
         Bin reads `STRUMMER_COVERAGE_ALLOW_RUN` / `_PROJECT_ROOTS` / `_TIMEOUT_MS` and wires
         the live vitest subprocess runner. **The coverage pillar's agent surface is complete.**
+  - [x] **Python (coverage.py) adapter** — pure `fileCoverageFromCoveragePy` /
+        `coveragePyToIstanbul` (`coverage json`'s line-list shape → the istanbul `FileCoverage`
+        the differ already consumes: one synthetic single-line statement per executed/missing
+        line, excluded omitted → `nonExecutable`). The differ (`uncoveredInDiff`/
+        `uncoveredNewLines`) is unchanged (ecosystem-agnostic). `uncovered_in_diff` gained a
+        `coverageFormat: istanbul|coveragepy` discriminator so the Python path is agent-reachable.
   - [ ] *(staged)* pin `istanbul-lib-coverage` if `CoverageMap` merging/summaries are needed;
-        a `strummer coverage` human CLI; Python (coverage.py) adapter.
+        a `strummer coverage` human CLI; a Python `run_scoped` (pytest --cov argv) sibling.
 - [x] **Flaky-test detection & quarantine** (`@strummer/flake`) — **COMPLETE (engine +
       agent surface).** Protects the deterministic green gate. Pure Wilson/binomial
       classifier over a run-history fixture first; quarantine **writes** operator-gated
