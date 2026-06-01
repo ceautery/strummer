@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   fromLspCharacter,
   fromLspPosition,
+  lspPositionToOffset,
   type PositionEncoding,
   resolvePositionEncoding,
   toLspCharacter,
@@ -100,5 +101,45 @@ describe('toLspPosition / fromLspPosition', () => {
       line: 2,
       column: 2,
     })
+  })
+})
+
+describe('lspPositionToOffset (absolute JS-string index for splicing)', () => {
+  // The write-mode core: convert an LSP Position to an absolute JS `.length` index. It must
+  // raw-scan terminators (NOT reuse splitLines, which discards CRLF length) so the offset
+  // lands on the real byte in CRLF files, and must count negotiated code units within the
+  // line but return the JS (UTF-16) offset.
+  const CRLF = 'line0\r\nconst x = 1\nlast'
+  // indices: l0 i1 n2 e3 04 \r5 \n6 c7 o8 n9 s10 t11 ' '12 x13 ' '14 =15 ' '16 117 \n18 l19...
+
+  it('lands on the right char across a CRLF terminator (splitLines would be off-by-one)', () => {
+    // line 1 ('const x = 1') starts at JS offset 7 because \r\n is 2 units; char 6 → `x` at 13.
+    expect(lspPositionToOffset(CRLF, { line: 1, character: 6 }, 'utf-16')).toBe(13)
+    expect(CRLF[13]).toBe('x')
+  })
+
+  it('finds the start of a later line after a LF terminator', () => {
+    expect(lspPositionToOffset(CRLF, { line: 2, character: 0 }, 'utf-16')).toBe(19)
+    expect(CRLF.slice(19)).toBe('last')
+  })
+
+  it('counts negotiated code units within the line but returns a JS offset (utf-8 emoji)', () => {
+    const text = '😀b\nx' // emoji = 2 JS units / 4 utf-8 bytes; `b` at JS offset 2.
+    // utf-8: after the 4-byte emoji (character 4) → JS offset 2 (after the surrogate pair).
+    expect(lspPositionToOffset(text, { line: 0, character: 4 }, 'utf-8')).toBe(2)
+    expect(lspPositionToOffset(text, { line: 0, character: 5 }, 'utf-8')).toBe(3) // after `b`
+    // utf-16: the emoji is 2 units → character 2 is the same JS offset 2.
+    expect(lspPositionToOffset(text, { line: 0, character: 2 }, 'utf-16')).toBe(2)
+  })
+
+  it('accounts for a leading BOM so the offset indexes into the real (BOM-bearing) text', () => {
+    const text = '﻿const' // body `const`; the BOM is 1 JS unit.
+    expect(lspPositionToOffset(text, { line: 0, character: 0 }, 'utf-16')).toBe(1) // after BOM
+    expect(lspPositionToOffset(text, { line: 0, character: 2 }, 'utf-16')).toBe(3) // before `n`
+    expect(text[3]).toBe('n')
+  })
+
+  it('clamps a character past the line end to the line end (before its terminator)', () => {
+    expect(lspPositionToOffset(CRLF, { line: 0, character: 99 }, 'utf-16')).toBe(5) // end of `line0`
   })
 })

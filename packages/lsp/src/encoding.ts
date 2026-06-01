@@ -135,3 +135,65 @@ export function fromLspPosition(
     column: fromLspCharacter(lineText, position.character, encoding),
   }
 }
+
+/** JS-string (UTF-16) offset WITHIN `lineText` for a 0-based LSP `character` in `encoding`. */
+function lspCharacterToJsOffset(
+  lineText: string,
+  character: number,
+  encoding: PositionEncoding,
+): number {
+  if (character <= 0) return 0
+  let units = 0
+  let js = 0
+  for (const cp of lineText) {
+    if (units >= character) break
+    const u = codeUnits(cp, encoding)
+    if (units + u > character) break // offset lands inside this code point → clamp to its start
+    units += u
+    js += cp.length
+  }
+  return js
+}
+
+/**
+ * Convert an LSP `Position` to an ABSOLUTE JS-string (UTF-16 `.length`) index into `text`, for
+ * splicing edits (the write-mode core). Unlike {@link toLspPosition} this does NOT use
+ * `splitLines` — that splitter discards terminator identity and would shift the offset by one
+ * JS code unit per CRLF line above the position. We raw-scan terminators (counting their actual
+ * length) and count negotiated code units only WITHIN the target line, returning the cumulative
+ * JS index. A leading BOM is stripped for line/character math (matching `toLspPosition`) but its
+ * length is added back, so the returned offset indexes into the real, BOM-bearing `text`.
+ */
+export function lspPositionToOffset(
+  text: string,
+  position: LspPositionParts,
+  encoding: PositionEncoding,
+): number {
+  const bom = text.charCodeAt(0) === 0xfeff ? 1 : 0
+  const body = bom ? text.slice(1) : text
+  const n = body.length
+  // Walk to the start of `position.line`, counting the ACTUAL terminator length per line.
+  let i = 0
+  let line = 0
+  while (line < position.line && i < n) {
+    const ch = body.charCodeAt(i)
+    if (ch === 0x0d) {
+      i += body.charCodeAt(i + 1) === 0x0a ? 2 : 1 // CRLF or a lone CR
+      line++
+    } else if (ch === 0x0a) {
+      i += 1
+      line++
+    } else {
+      i += 1
+    }
+  }
+  // Find the end of the target line (exclusive of its terminator).
+  let lineEnd = i
+  while (lineEnd < n) {
+    const ch = body.charCodeAt(lineEnd)
+    if (ch === 0x0d || ch === 0x0a) break
+    lineEnd++
+  }
+  const within = lspCharacterToJsOffset(body.slice(i, lineEnd), position.character, encoding)
+  return bom + i + within
+}
