@@ -135,10 +135,14 @@ Staged below; aspirational items are scheduled, not cut.
       governing every request (nav + subresource + XHR); **allowlist-authoritative**
       (ADR 0006 update 2026-06-01: private/metadata literals blocked by
       deny-by-default, not unconditionally, so localhost apps remain testable).
-- [ ] **Tier-2 loopback DNS-pinning SSRF proxy** — launch Chromium through a
-      Strummer forward proxy that calls `resolveAndPin` per connection (+ redirect
-      re-check), closing allowlisted-hostname rebinding. (`serviceWorkers:'block'`
-      + dialog auto-dismiss ride here.)
+- [x] **Tier-2 loopback DNS-pinning SSRF proxy** (`createSsrfProxy`) — HTTP +
+      HTTPS-CONNECT forward proxy passed as Chromium's `proxy.server`; calls
+      `resolveAndPin` per request/CONNECT (resolve once → refuse blocked range →
+      connect to the pinned IP), so allowlisted-hostname rebinding is refused
+      (HTTP→502 / tunnel refused); redirects re-checked (each hop is a fresh
+      request). Operator `allowPrivate` opt-in permits loopback/RFC1918 for
+      local-app testing but never link-local/metadata. (`serviceWorkers:'block'` +
+      WebRTC disable + wiring the proxy into the server bin still scheduled.)
 - [ ] **Secret boundary** — `{{secret:NAME}}` fill resolution + origin-scoped
       `httpCredentials`; redaction over console/network/HAR/trace/storageState
       before any write; `storageState` by handle only.

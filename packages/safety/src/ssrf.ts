@@ -23,17 +23,43 @@ export function isBlockedHostLiteral(host: string): boolean {
  * an unparseable value fails closed (blocked). IPv4-mapped IPv6 is unwrapped
  * and checked as IPv4.
  */
-export function isBlockedIp(ip: string): boolean {
+/** `'global'` = routable unicast; `'private'` = loopback/RFC1918/CGNAT/unique-local
+ * (reachable only under an explicit `allowPrivate` opt-in for local-app testing);
+ * `'blocked'` = always refused (link-local incl. 169.254 metadata, multicast,
+ * unspecified, reserved, …). Unparseable input is `'blocked'` (fail-closed). */
+export type AddressClass = 'global' | 'private' | 'blocked'
+
+const PRIVATE_RANGES = new Set(['loopback', 'private', 'carrierGradeNat', 'uniqueLocal'])
+
+export function classifyAddress(ip: string): AddressClass {
   let addr: ReturnType<typeof ipaddr.parse>
   try {
     addr = ipaddr.parse(ip)
   } catch {
-    return true
+    return 'blocked'
   }
   if (addr instanceof ipaddr.IPv6 && addr.isIPv4MappedAddress()) {
     addr = addr.toIPv4Address()
   }
-  return addr.range() !== 'unicast'
+  const range = addr.range()
+  if (range === 'unicast') return 'global'
+  if (PRIVATE_RANGES.has(range)) return 'private'
+  return 'blocked'
+}
+
+export interface RangeOptions {
+  /** Permit loopback/private/CGNAT/unique-local targets (local-app testing).
+   * Link-local/metadata and other always-dangerous ranges stay blocked. */
+  allowPrivate?: boolean
+}
+
+/** True unless the IP may be reached: `'global'` always may; `'private'` only
+ * with `allowPrivate`; `'blocked'` never. */
+export function isBlockedIp(ip: string, opts: RangeOptions = {}): boolean {
+  const cls = classifyAddress(ip)
+  if (cls === 'global') return false
+  if (cls === 'private') return !opts.allowPrivate
+  return true
 }
 
 /**
@@ -66,16 +92,17 @@ const defaultLookup: DnsLookup = async (host) => {
 export async function resolveAndPin(
   host: string,
   lookup: DnsLookup = defaultLookup,
+  opts: RangeOptions = {},
 ): Promise<string> {
   if (isBlockedHostLiteral(host)) {
     throw new SsrfError(`host "${host}" is blocked`)
   }
   if (ipaddr.isValid(host)) {
-    if (isBlockedIp(host)) throw new SsrfError(`address ${host} is in a blocked range`)
+    if (isBlockedIp(host, opts)) throw new SsrfError(`address ${host} is in a blocked range`)
     return host
   }
   const { address } = await lookup(host)
-  if (isBlockedIp(address)) {
+  if (isBlockedIp(address, opts)) {
     throw new SsrfError(`host "${host}" resolved to blocked address ${address}`)
   }
   return address

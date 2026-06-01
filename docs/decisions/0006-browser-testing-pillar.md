@@ -119,7 +119,22 @@ the hardened profile disables WebRTC (scheduled).
 > allowlisted-hostname DNS-rebinding is the real threat). The shared SSRF
 > classifier + the `Redactor` now live in **`@strummer/safety`**, consumed by
 > both pillars. Implemented: `packages/safety/src/ssrf.ts`,
-> `packages/browser/src/routes.ts` (Tier-1); Tier-2 proxy is the next slice.
+> `packages/browser/src/routes.ts` (Tier-1).
+
+> **Update (2026-06-01) — Tier-2 proxy + `allowPrivate`.** Tier-2 is
+> `createSsrfProxy` (`packages/browser/src/proxy.ts`): a loopback forward proxy
+> (HTTP absolute-form + HTTPS `CONNECT`) passed as Chromium's `proxy.server`. It
+> calls `resolveAndPin` per request/CONNECT — resolving the host once, refusing
+> blocked ranges, connecting to the **pinned** IP — so an allowlisted hostname
+> that rebinds to a private/metadata address is refused (HTTP → `502`; HTTPS →
+> tunnel refused). Every redirect hop is a fresh request to the proxy, so
+> redirects are re-checked for free. To keep **local-app testing** possible, the
+> classifier gained three classes — `global` / `private` (loopback/RFC1918/CGNAT/
+> unique-local) / `blocked` (link-local incl. 169.254.169.254 metadata,
+> multicast, …) — and an operator `allowPrivate` opt-in permitting `private`
+> targets **but never `blocked` ones**. Default blocks both. Scheduled:
+> `serviceWorkers:'block'`, WebRTC/QUIC disable, and wiring the proxy into the
+> server bin's launch.
 
 ### 6. Secrets at the fill/auth boundary; redact before any write
 

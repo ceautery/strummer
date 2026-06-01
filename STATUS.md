@@ -213,14 +213,26 @@ apps stay testable). **174 TS + 45 Py green.** Committed to `main`; the
 `@strummer/safety` extraction (77c7ff7) + Tier-1 are being pushed together as the
 milestone.
 
-**Next, per ROADMAP Phase 3:** (1) **Tier-2 loopback DNS-pinning proxy** — launch
-Chromium through a Strummer forward proxy that calls `resolveAndPin` per
-connection + re-checks on redirect, closing allowlisted-hostname rebinding (the
-gap Tier-1 structurally can't see). `serviceWorkers:'block'` + dialog auto-dismiss
-ride here. (2) Wire the `Redactor` into the gate's dry-run `postData` preview
-(currently identity) + artifact-capture pipeline (trace/console/network by
-handle). (3) Downloads/uploads/dialog/auth gating; session wall-clock + max-pages.
-TDD red→green; `pnpm gate` 100% green before each commit.
+**Slice 7 (Tier-2 DNS-pinning SSRF proxy): DONE.** `createSsrfProxy`
+(`proxy.ts`) — a loopback forward proxy (HTTP absolute-form + HTTPS `CONNECT`)
+passed as Chromium's `proxy.server`; calls `@strummer/safety` `resolveAndPin` per
+request/CONNECT (resolve once → refuse blocked range → connect to the **pinned**
+IP), closing allowlisted-hostname DNS-rebinding (the gap Tier-1 can't see). HTTP
+rebind → 502; redirects re-checked (each hop is a fresh proxy request). The
+safety classifier gained `classifyAddress` (`global`/`private`/`blocked`) + an
+operator **`allowPrivate`** opt-in (permits loopback/RFC1918 for local-app
+testing, **never** link-local/metadata). Direct HTTP-client-through-proxy tests +
+a real Chromium-through-proxy test (hostnames, so no loopback-bypass). **181 TS +
+45 Py green.** The **two-tier SSRF defense is now complete.** Committed to `main`;
+pushing as the milestone.
+
+**Next, per ROADMAP Phase 3:** (1) **wire the `Redactor`** into the gate's dry-run
+`postData` preview (currently identity) and build the **artifact-capture pipeline**
+(trace.zip / console / network by `strummer://browser/run/<id>/<kind>` handle,
+redacted before write). (2) `serviceWorkers:'block'` + WebRTC disable + assemble
+the server bin (manager + gate + proxy + capture) — the MCP/CLI surface over the
+browser engine. (3) Downloads/uploads/dialog/auth gating; session wall-clock +
+max-pages. TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

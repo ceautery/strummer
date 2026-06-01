@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  classifyAddress,
   isBlockedHost,
   isBlockedHostLiteral,
   isBlockedIp,
@@ -45,6 +46,36 @@ describe('isBlockedHostLiteral', () => {
     expect(isBlockedHostLiteral('metadata.google.internal')).toBe(true)
     expect(isBlockedHostLiteral('METADATA.GOOGLE.INTERNAL')).toBe(true)
     expect(isBlockedHostLiteral('example.com')).toBe(false)
+  })
+})
+
+describe('classifyAddress + allowPrivate', () => {
+  it('classifies global / private / blocked', () => {
+    expect(classifyAddress('8.8.8.8')).toBe('global')
+    expect(classifyAddress('10.0.0.1')).toBe('private')
+    expect(classifyAddress('127.0.0.1')).toBe('private')
+    expect(classifyAddress('169.254.169.254')).toBe('blocked') // link-local metadata
+    expect(classifyAddress('garbage')).toBe('blocked')
+  })
+
+  it('allowPrivate permits loopback/RFC1918 but never link-local/metadata', () => {
+    expect(isBlockedIp('10.0.0.1', { allowPrivate: true })).toBe(false)
+    expect(isBlockedIp('127.0.0.1', { allowPrivate: true })).toBe(false)
+    expect(isBlockedIp('169.254.169.254', { allowPrivate: true })).toBe(true) // still blocked
+    expect(isBlockedIp('8.8.8.8', { allowPrivate: true })).toBe(false)
+  })
+
+  it('resolveAndPin honours allowPrivate but keeps metadata blocked', async () => {
+    expect(
+      await resolveAndPin('app.test', async () => ({ address: '127.0.0.1', family: 4 }), {
+        allowPrivate: true,
+      }),
+    ).toBe('127.0.0.1')
+    await expect(
+      resolveAndPin('m.test', async () => ({ address: '169.254.169.254', family: 4 }), {
+        allowPrivate: true,
+      }),
+    ).rejects.toThrow(SsrfError)
   })
 })
 
