@@ -3,6 +3,7 @@ export { ArtifactStore, type BrowserArtifact } from './artifacts.js'
 export { type A11yAuditOptions, type A11yAuditResult, auditA11y } from './audit.js'
 export {
   type DialogEvent,
+  type DownloadEvent,
   PageDriver,
   type PageDriverOptions,
   type ScreenshotOptions,

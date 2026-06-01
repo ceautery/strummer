@@ -1,4 +1,6 @@
-import type { Dialog, Locator, Page, Route } from 'playwright-core'
+import { stat } from 'node:fs/promises'
+import { basename, join } from 'node:path'
+import type { Dialog, Download, Locator, Page, Route } from 'playwright-core'
 import type { ArtifactStore } from './artifacts.js'
 import type { BrowserGate } from './gate.js'
 import { captureSnapshot, diffSnapshots, type RefDescriptor, type Snapshot } from './snapshot.js'
@@ -20,6 +22,26 @@ export interface DialogEvent {
   message: string
   /** True when the operator unlocked dialogs (accepted); false when dismissed. */
   accepted: boolean
+}
+
+/** A file download the page started (saved to the operator quarantine dir, or denied). */
+export interface DownloadEvent {
+  /** The browser-suggested filename, redacted. */
+  suggestedFilename: string
+  /** Absolute path in the operator quarantine dir, when saved. */
+  savedAs?: string
+  /** Saved file size in bytes, when saved. */
+  byteSize?: number
+  /** True when saved to the quarantine dir; false when denied (no dir configured). */
+  accepted: boolean
+}
+
+/** basename + strip anything but word chars/.-/ and any leading dots (no traversal). */
+function sanitizeFilename(name: string): string {
+  const safe = basename(name)
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/^\.+/, '')
+  return safe || 'download'
 }
 
 export interface StepResult {
@@ -64,6 +86,11 @@ export interface PageDriverOptions {
    * surfaces. Default identity; the server bin wires the real `@strummer/safety`
    * `Redactor` here so registered secrets never leak via a query string or body. */
   redact?: (value: string) => string
+  /** Operator download-quarantine dir. When set (and the context was created with
+   * `acceptDownloads: true`), a started download is saved here under a sanitized,
+   * indexed name and recorded; when unset, downloads are denied (the manager's
+   * `acceptDownloads: false` already cancels them). Operator config, never a tool input. */
+  downloadDir?: string
 }
 
 export interface ScreenshotOptions {
@@ -113,6 +140,11 @@ export class PageDriver {
   private readonly redact: (value: string) => string
   /** Dialogs raised since the last `settle()`, drained onto its StepResult. */
   private pendingDialogs: DialogEvent[] = []
+  /** Downloads saved/denied since the last `collectDownloads()`. */
+  private downloadsCollected: DownloadEvent[] = []
+  /** In-flight saveAs promises, awaited by `collectDownloads()`. */
+  private downloadsInFlight: Promise<void>[] = []
+  private downloadIndex = 0
 
   constructor(
     private readonly page: Page,
@@ -128,7 +160,59 @@ export class PageDriver {
       this.page.on('dialog', (dialog) => {
         void this.handleDialog(dialog)
       })
+      this.page.on('download', (download) => this.handleDownload(download))
     }
+  }
+
+  /** Save a started download to the quarantine dir (or deny it), recording it. */
+  private handleDownload(download: Download): void {
+    const task = (async () => {
+      const suggested = this.redact(download.suggestedFilename())
+      if (this.opts.downloadDir === undefined) {
+        // No quarantine dir → deny. (The manager's acceptDownloads:false also cancels.)
+        this.downloadsCollected.push({ suggestedFilename: suggested, accepted: false })
+        await download.cancel().catch(() => {})
+        return
+      }
+      this.downloadIndex += 1
+      const savedAs = join(
+        this.opts.downloadDir,
+        `${this.downloadIndex}-${sanitizeFilename(download.suggestedFilename())}`,
+      )
+      await download.saveAs(savedAs)
+      const { size } = await stat(savedAs)
+      this.downloadsCollected.push({
+        suggestedFilename: suggested,
+        savedAs,
+        byteSize: size,
+        accepted: true,
+      })
+    })().catch(() => {
+      // saveAs/stat/cancel can reject (context closing, fs error) — best-effort record
+    })
+    this.downloadsInFlight.push(task)
+  }
+
+  /**
+   * Return downloads captured since the last call (awaiting any in-flight saves
+   * first), then clear them. A free read — does not invalidate refs. Downloads are
+   * collected as they arrive (not tied to a single step), so call this after the
+   * action(s) that may have triggered them. When `waitMs > 0` and nothing has
+   * arrived yet, wait up to that long for a download to start (closes the gap
+   * between the click that triggers a download and the async `download` event).
+   */
+  async collectDownloads(waitMs = 0): Promise<DownloadEvent[]> {
+    if (
+      waitMs > 0 &&
+      this.downloadsInFlight.length === 0 &&
+      this.downloadsCollected.length === 0 &&
+      typeof this.page.waitForEvent === 'function'
+    ) {
+      // our persistent 'download' listener also fires → populates downloadsInFlight
+      await this.page.waitForEvent('download', { timeout: waitMs }).catch(() => {})
+    }
+    await Promise.all(this.downloadsInFlight.splice(0))
+    return this.downloadsCollected.splice(0)
   }
 
   /** Dismiss (default) or accept (operator-unlocked) a dialog, recording it. */

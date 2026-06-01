@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -22,6 +22,7 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>MCP</title></head><
   <button id="go">Submit</button>
   <button id="login">Login</button>
   <button id="del">Delete</button>
+  <a id="dl" href="/download.bin" download="report.txt">Get file</a>
   <script>
     document.cookie = 'sid=secret-cookie'
     localStorage.setItem('token', 'secret-cookie')
@@ -65,6 +66,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     allowStorageState?: boolean
     allowScreenshots?: boolean
     allowDialogs?: boolean
+    downloadDir?: string
   }) {
     const gate = new BrowserGate({
       allowUnsafe: config.allowUnsafe,
@@ -81,6 +83,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       idleTtlMs: config.idleTtlMs ?? 5 * 60_000,
       maxContexts: config.maxContexts ?? 8,
       now: config.now,
+      acceptDownloads: config.downloadDir !== undefined,
     })
     const srv = createBrowserServer({
       manager,
@@ -90,6 +93,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       resolveSecret: (name) => secrets.get(name),
       allowStorageState: config.allowStorageState,
       allowScreenshots: config.allowScreenshots,
+      downloadDir: config.downloadDir,
     })
     const [ct, st] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test', version: '0.0.0' })
@@ -106,6 +110,14 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       if (req.url?.startsWith('/submit')) {
         res.writeHead(200)
         res.end('ok')
+        return
+      }
+      if (req.url?.startsWith('/download.bin')) {
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-disposition': 'attachment; filename="report.txt"',
+        })
+        res.end('downloaded-bytes')
         return
       }
       res.writeHead(200, { 'content-type': 'text/html' })
@@ -142,6 +154,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_get_attribute',
       'browser_audit_a11y',
       'browser_screenshot',
+      'browser_downloads',
       'browser_save_storage_state',
       'browser_close_session',
     ]) {
@@ -405,6 +418,37 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(res.dialogs?.[0]?.accepted).toBe(true)
     expect(res.dialogs?.[0]?.message).toBe('Remove [redacted:pw]?')
     expect(JSON.stringify(res)).not.toContain('hunter2-secret')
+    await client.close()
+  })
+
+  it('saves a download to the operator quarantine dir, surfaced by browser_downloads (no bytes)', async () => {
+    const dlDir = mkdtempSync(join(baseDir, 'dl-'))
+    const { client } = await connect({ allowUnsafe: true, downloadDir: dlDir })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
+      .structuredContent as StepSC
+    await call(client, 'browser_click', {
+      sessionId,
+      ref: refByName(nav.snapshot, 'link', 'Get file'),
+    })
+    const dl = (await call(client, 'browser_downloads', { sessionId, waitMs: 3000 }))
+      .structuredContent as {
+      downloads: {
+        suggestedFilename: string
+        savedAs?: string
+        byteSize?: number
+        accepted: boolean
+      }[]
+    }
+    expect(dl.downloads).toHaveLength(1)
+    expect(dl.downloads[0]?.accepted).toBe(true)
+    expect(dl.downloads[0]?.suggestedFilename).toBe('report.txt')
+    expect(dl.downloads[0]?.savedAs?.startsWith(dlDir)).toBe(true)
+    expect(existsSync(dl.downloads[0]?.savedAs as string)).toBe(true)
+    // metadata only — the downloaded bytes are never returned to the agent
+    expect(JSON.stringify(dl)).not.toContain('downloaded-bytes')
     await client.close()
   })
 

@@ -121,4 +121,10 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     expect((await build({})).config.allowDialogs).toBe(false)
     expect((await build({ STRUMMER_BROWSER_ALLOW_DIALOGS: 'yes' })).config.allowDialogs).toBe(true)
   })
+
+  it('denies downloads unless STRUMMER_BROWSER_DOWNLOAD_DIR sets a quarantine dir', async () => {
+    expect((await build({})).config.downloadDir).toBeUndefined()
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-dlq-'))
+    expect((await build({ STRUMMER_BROWSER_DOWNLOAD_DIR: dir })).config.downloadDir).toBe(dir)
+  })
 })

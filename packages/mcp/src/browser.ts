@@ -51,6 +51,10 @@ export interface BrowserToolsOptions {
    * is unredactable pixels (a secret rendered in the DOM would land in the image),
    * so it is operator-gated like the trace.zip. */
   allowScreenshots?: boolean
+  /** Operator download-quarantine dir. When set (the bin also flips the manager's
+   * `acceptDownloads` on), started downloads are saved here and surfaced by
+   * `browser_downloads`; when unset, downloads are denied (cancelled). */
+  downloadDir?: string
   /** Token cap on inlined snapshot text. */
   maxNodes?: number
   /** Exact accessible-name matching when resolving refs. Default true. */
@@ -211,6 +215,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         redact,
         maxNodes: opts.maxNodes,
         exact: opts.exact,
+        downloadDir: opts.downloadDir,
       })
       registry.set(id, {
         runId,
@@ -529,6 +534,42 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         session.driver.screenshot({ fullPage: args.fullPage }),
       )
       return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_downloads',
+    {
+      title: 'Collect downloads',
+      description:
+        'Return file downloads captured since the last call (a free read; does not invalidate refs). ' +
+        'Downloads are saved to the operator quarantine dir — only filename/path/size are reported, ' +
+        'never the bytes; denied (no quarantine dir) downloads report accepted:false. Pass waitMs to ' +
+        'wait briefly for a download triggered by a just-issued click.',
+      inputSchema: {
+        sessionId,
+        waitMs: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('wait up to this long (ms) for a pending download to start'),
+      },
+      outputSchema: {
+        downloads: z.array(
+          z.object({
+            suggestedFilename: z.string(),
+            savedAs: z.string().optional(),
+            byteSize: z.number().int().optional(),
+            accepted: z.boolean(),
+          }),
+        ),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const downloads = await enqueue(session, () => session.driver.collectDownloads(args.waitMs))
+      return reply({ downloads })
     },
   )
 

@@ -27,6 +27,11 @@ export interface BrowserManagerOptions {
   /** Operator-set HTTP Basic credentials applied to every session context
    * (optionally scoped to an `origin`). Operator config, never an agent input. */
   httpCredentials?: { username: string; password: string; origin?: string }
+  /** Whether contexts accept file downloads. Default false: Playwright **cancels**
+   * every download (race-free deny-by-default). The bin sets this true only when an
+   * operator download-quarantine dir is configured, so the `PageDriver` can save +
+   * record them. Operator config, never an agent input. */
+  acceptDownloads?: boolean
 }
 
 interface Session {
@@ -61,6 +66,7 @@ export class BrowserManager {
       defaultTimeoutMs: options.defaultTimeoutMs ?? 0,
       defaultNavigationTimeoutMs: options.defaultNavigationTimeoutMs ?? 0,
       now: options.now ?? Date.now,
+      acceptDownloads: options.acceptDownloads ?? false,
       gate: options.gate,
       httpCredentials: options.httpCredentials,
       maxSessionMs: options.maxSessionMs,
@@ -109,6 +115,8 @@ export class BrowserManager {
     // requests and persist across the context, bypassing the route-based SSRF layer.
     const context = await browser.newContext({
       serviceWorkers: 'block',
+      // deny-by-default: Playwright cancels downloads unless the operator enabled them
+      acceptDownloads: this.opts.acceptDownloads,
       ...(this.opts.httpCredentials ? { httpCredentials: this.opts.httpCredentials } : {}),
     })
     if (this.opts.gate) await installSafetyRoutes(context, this.opts.gate)

@@ -67,6 +67,8 @@ export interface BrowserBinConfig {
   allowStorageState: boolean
   /** Whether browser_screenshot is enabled (unredactable PNG pixels). */
   allowScreenshots: boolean
+  /** Operator download-quarantine dir (downloads denied/cancelled when unset). */
+  downloadDir?: string
 }
 
 export interface BuiltBrowserServer {
@@ -131,6 +133,10 @@ export async function buildBrowserServerFromEnv(
   const allowDialogs = bool(env.STRUMMER_BROWSER_ALLOW_DIALOGS)
   const allowStorageState = bool(env.STRUMMER_BROWSER_ALLOW_STORAGE_STATE)
   const allowScreenshots = bool(env.STRUMMER_BROWSER_ALLOW_SCREENSHOTS)
+  // Downloads: deny-by-default. An operator quarantine dir flips acceptDownloads on
+  // AND tells the driver where to save; unset ⇒ contexts cancel every download.
+  const downloadDir = env.STRUMMER_BROWSER_DOWNLOAD_DIR || undefined
+  const acceptDownloads = downloadDir !== undefined
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -183,6 +189,7 @@ export async function buildBrowserServerFromEnv(
     httpCredentials,
     maxSessionMs,
     maxPages,
+    acceptDownloads,
   })
   const server = createBrowserServer({
     manager,
@@ -192,6 +199,7 @@ export async function buildBrowserServerFromEnv(
     resolveSecret,
     allowStorageState,
     allowScreenshots,
+    downloadDir,
     capture,
     maxNodes,
   })
@@ -217,6 +225,7 @@ export async function buildBrowserServerFromEnv(
     secretNames,
     allowStorageState,
     allowScreenshots,
+    downloadDir,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

@@ -68,6 +68,10 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
 - **`browser_screenshot`** — operator-gated (off by default; pixels can't be
   redacted, like the trace.zip); captures a PNG to a `screenshot-s<n>` handle
   (summary only, never inlined) and does not invalidate refs.
+- **`browser_downloads`** — collect file downloads since the last call (a free read).
+  Downloads are denied by default (cancelled); with an operator quarantine dir set
+  they're saved there under a sanitized name and reported as filename/path/size —
+  the bytes are never served. `waitMs` waits briefly for a download a click just started.
 - **`browser_save_storage_state`** — operator-gated; writes the password-equivalent
   storageState to an operator-path artifact (handle + counts only, never inlined).
 - Resource **`strummer://browser/run/{runId}/{kind}`** — fetch a stored artifact
@@ -81,6 +85,7 @@ navigation/mutation deny-by-default (`ALLOW_UNSAFE`, `ALLOWED_HOSTS`); a **manda
 DNS-pinning SSRF proxy (loopback forced through it; `ALLOW_PRIVATE` opt-in);
 service-workers blocked + WebRTC egress neutralized; JS dialogs dismissed by
 default (`ALLOW_DIALOGS` to accept; each recorded, redacted, on the step result);
+downloads cancelled unless an operator quarantine dir (`DOWNLOAD_DIR`) is set;
 secret redaction across every artifact + the trace.zip; `{{secret:NAME}}` fill +
 origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
 `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/

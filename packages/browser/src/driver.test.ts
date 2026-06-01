@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -21,6 +21,7 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>Steps</title></head
   <ul id="list"></ul>
   <button id="later">Later</button>
   <button id="del">Delete</button>
+  <a id="dl" href="/download.bin" download="report.txt">Get file</a>
   <script>
     const $ = (id) => document.getElementById(id)
     $('add').addEventListener('click', () => {
@@ -64,7 +65,15 @@ describe('PageDriver — step tools (real headless chromium)', () => {
   let context: BrowserContext
 
   beforeAll(async () => {
-    server = createServer((_req, res) => {
+    server = createServer((req, res) => {
+      if (req.url?.startsWith('/download.bin')) {
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-disposition': 'attachment; filename="report.txt"',
+        })
+        res.end('downloaded-bytes')
+        return
+      }
       res.writeHead(200, { 'content-type': 'text/html' })
       res.end(FIXTURE)
     })
@@ -239,5 +248,36 @@ describe('PageDriver — step tools (real headless chromium)', () => {
     const driver = await freshDriver()
     const result = await driver.snapshot()
     expect(result.dialogs).toBeUndefined()
+  })
+
+  it('saves a download to the operator quarantine dir and records it (sanitized, indexed)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-dl-'))
+    const dlContext = await browser.newContext({ acceptDownloads: true })
+    try {
+      const page = await dlContext.newPage()
+      const driver = new PageDriver(page, {
+        gate: new BrowserGate({ allowUnsafe: true, allowedHosts: ['127.0.0.1'] }),
+        downloadDir: dir,
+      })
+      await driver.navigate(baseUrl)
+      // sync on the download event so collectDownloads is deterministic
+      await Promise.all([
+        page.waitForEvent('download'),
+        driver.click(refFor(driver, 'link', 'Get file')),
+      ])
+      const downloads = await driver.collectDownloads()
+      expect(downloads).toHaveLength(1)
+      expect(downloads[0]?.accepted).toBe(true)
+      expect(downloads[0]?.suggestedFilename).toBe('report.txt')
+      expect(downloads[0]?.byteSize).toBe('downloaded-bytes'.length)
+      // saved under the quarantine dir with an indexed, sanitized name
+      expect(downloads[0]?.savedAs?.startsWith(dir)).toBe(true)
+      expect(downloads[0]?.savedAs).toContain('1-report.txt')
+      expect(existsSync(downloads[0]?.savedAs as string)).toBe(true)
+      // draining is idempotent — a second collect returns nothing new
+      expect(await driver.collectDownloads()).toEqual([])
+    } finally {
+      await dlContext.close()
+    }
   })
 })

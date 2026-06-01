@@ -96,6 +96,16 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
     expect(t.browser.contexts[0]?.options?.serviceWorkers).toBe('block')
   })
 
+  it('denies downloads by default (acceptDownloads:false) and accepts only when enabled', async () => {
+    const denied = setup()
+    await denied.manager.createSession('s1')
+    expect(denied.browser.contexts[0]?.options?.acceptDownloads).toBe(false)
+
+    const enabled = setup({ acceptDownloads: true })
+    await enabled.manager.createSession('s1')
+    expect(enabled.browser.contexts[0]?.options?.acceptDownloads).toBe(true)
+  })
+
   it('applies operator origin-scoped httpCredentials to each new context', async () => {
     const httpCredentials = { username: 'admin', password: 's3cr3t', origin: 'https://app.test' }
     const t = setup({ httpCredentials })

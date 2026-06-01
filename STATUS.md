@@ -97,11 +97,21 @@ against in-process fixtures):
    `BrowserGate.allowDialogs` flips to **accept**; bin-wired via
    `STRUMMER_BROWSER_ALLOW_DIALOGS` (default off). Registering the handler overrides
    Playwright's auto-dismiss, so the page never hangs.
+20. **Download gating — deny + opt-in quarantine:** `BrowserManager` creates contexts
+   with `acceptDownloads:false` by default (Playwright **cancels** every download —
+   race-free deny). An operator quarantine dir (`STRUMMER_BROWSER_DOWNLOAD_DIR`)
+   flips `acceptDownloads:true` and sets `PageDriver.downloadDir`; a started download
+   is saved there under a **sanitized, indexed** name (`<n>-<basename>`, no traversal)
+   and recorded as a `DownloadEvent {suggestedFilename(redacted), savedAs, byteSize,
+   accepted}`. Surfaced by the race-free **`browser_downloads`** read tool
+   (`collectDownloads(waitMs?)` awaits in-flight saves; optional bounded wait) —
+   **metadata only, bytes never served** to the agent.
 
-**237 TS + 45 Py tests green; committed to `main`.** **Next action:** downloads/
-uploads gating (auth is already covered by origin-scoped `httpCredentials`), and
-(deferred) the human **`strummer browser` CLI**. See the detailed "Next action"
-section below + ROADMAP Phase 3.
+**240 TS + 45 Py tests green; committed to `main`.** **Next action:** uploads gating
+(a `setInputFiles` tool confined to an operator allowlist dir) — auth is already
+covered by origin-scoped `httpCredentials` — and (deferred) the human
+**`strummer browser` CLI**. See the detailed "Next action" section below + ROADMAP
+Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -394,9 +404,16 @@ dismiss-by-default (override of Playwright's auto-dismiss, so the page never han
 `StepResult.dialogs`; `BrowserGate.allowDialogs` flips to accept; bin-wired via
 `STRUMMER_BROWSER_ALLOW_DIALOGS` (default off).
 
-**Next (later Phase 3):** downloads + uploads gating (auth = origin-scoped
-`httpCredentials`, done); and the deferred human **`strummer browser` CLI**. TDD
-red→green; `pnpm gate` 100% green before each commit.
+**Download gating: DONE.** `BrowserManager` contexts are `acceptDownloads:false` by
+default (Playwright cancels — race-free deny); an operator quarantine dir
+(`STRUMMER_BROWSER_DOWNLOAD_DIR`) flips it on + sets `PageDriver.downloadDir`, where
+a download is saved under a sanitized indexed name and recorded as a `DownloadEvent`.
+Surfaced by the race-free `browser_downloads` read tool (metadata only — bytes never
+served).
+
+**Next (later Phase 3):** uploads gating (`setInputFiles` confined to an operator
+allowlist dir; auth = origin-scoped `httpCredentials`, done); and the deferred human
+**`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 
