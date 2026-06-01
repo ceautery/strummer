@@ -70,8 +70,17 @@ installed version Z" and get a precise, cited answer over MCP.
       host allowlist. (SSRF/redirect re-check still to add.)
 - [x] Request chaining via captures (`extractCaptures` + `runSequence`).
 - [x] Environment-file loading (`environments/<Env>.bru`, lowest precedence) +
-      request **body** sending (json/text/xml/sparql/form-urlencoded). multipart/
-      file/graphql bodies still TODO.
+      request **body** sending — the full matrix now materializes from a `.bru`:
+      json/text/xml/sparql (raw), form-urlencoded, **graphql** (`{query, variables}`
+      JSON envelope; variables interpolated + JSON-parsed), **multipart-form**
+      (text + file parts via undici `FormData`, files read from disk, undici mints
+      the boundary), and **file** (raw bytes under the declared content-type).
+      File paths resolve against the collection dir (operator-authored config;
+      egress separately gated). Agent-facing previews summarize binary/file parts
+      (name + byte size), never inlining bytes; secrets resolve in every part and
+      are redacted at the surface. _(Fixed a latent gap: `graphql` was mis-stored
+      as a raw string; and an uncaught discriminator regression — the parser emits
+      camelCase `formUrlEncoded`/`multipartForm`, normalized via an alias map.)_
 - [x] QuickJS-sandboxed pre/post scripts (curated `bru`/`expect`/`test` API;
       JSON-only boundary, 1s interrupt). Sidecar `preScript`/`postScript`.
 - [x] **Contract validation & drift detection** (ADR 0005, ajv-direct): `schema`

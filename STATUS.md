@@ -281,7 +281,10 @@ against in-process fixtures):
    the green gate stays deterministic: tested with in-memory PNGs + a real-chromium
    **self-captured** baseline (nothing committed to the repo).
 
-**328 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+**332 TS + 45 Py tests green; committed to `main`.** _(Latest milestone is the
+**Pillar-2 request-body matrix** — graphql/multipart-form/file + the form-
+urlencoded discriminator fix; see the Phase-2 block below. Phase 3 is unchanged.)_
+**Next action:** remaining
 aspirational Phase-3 tail — **developer live-view** (the headed path needs Xvfb/VNC
 infra not in this container; the headless `--remote-debugging-port` path is finicky
 alongside playwright-core's own CDP) and **multi-engine** (firefox/webkit; **blocked
@@ -313,9 +316,18 @@ ingestion refinements, Dash docset adapter). Pillar 2 design is locked (ADR 0004
   default and only send with `allowUnsafe` + a host allowlist (`checkGate`).
 - **Captures + chaining:** sidecar `captures` extract values from a response
   (`extractCaptures`); `runSequence` threads them into later requests' scope.
-- **Request bodies:** `.bru` `body:json/text/xml/sparql` (raw) + `form-urlencoded`
-  sent via undici with a default `Content-Type`; vars/secrets interpolated in the
-  body; redacted body shown in the result. (multipart/file/graphql still TODO.)
+- **Request bodies (full matrix):** `.bru` `body:json/text/xml/sparql` (raw),
+  `form-urlencoded`, **graphql** (`{query, variables}` JSON envelope — variables
+  interpolated then JSON-parsed; empty block omitted), **multipart-form** (text +
+  file parts via undici `FormData`, file bytes read from disk, undici mints the
+  boundary), and **file** (raw bytes under the declared content-type). All sent
+  via undici; vars/secrets interpolated in every part; the agent-facing preview
+  summarizes file/binary parts by name + byte size (never inlines bytes) and is
+  redacted. File paths resolve against the collection dir (operator-authored
+  config; egress separately gated, so not sandboxed). _(Closed a latent graphql
+  gap + an uncaught `formUrlEncoded`/`multipartForm` camelCase-discriminator
+  regression via an alias map; `PreparedBody.content` is now
+  `string | Buffer | FormData` with a separate redaction-safe `preview`.)_
 - **Environments:** `environments/<Env>.bru` loaded into `collection.environments`;
   `runRequest`/`runSequence` take `env` (lowest precedence; runtime vars win).
 - **Scripts (QuickJS sandbox):** sidecar `preScript`/`postScript` run in a WASM
@@ -355,9 +367,10 @@ ingestion refinements, Dash docset adapter). Pillar 2 design is locked (ADR 0004
   adversarially verified; both API bins smoke-tested end-to-end.
 
 **Next (Pillar 2 tail):** keyring secret-store wiring into CLI/MCP (opt-in),
-SSRF/redirect re-checks, remaining body types (multipart/file/graphql),
-Postman/Insomnia/OpenAPI/HAR import. Contract-validation scope notes (local
-`$ref`s only, 3.1-only, ajv `strict:false`) are in ADR 0005.
+SSRF/redirect re-checks, Postman/Insomnia/OpenAPI/HAR import. **Request body
+types are now COMPLETE** (graphql + multipart-form + file landed; the form-
+urlencoded discriminator regression fixed). Contract-validation scope notes
+(local `$ref`s only, 3.1-only, ajv `strict:false`) are in ADR 0005.
 
 Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
@@ -657,7 +670,9 @@ any; none blocking):
    today both default to `EnvSecretStore` (`STRUMMER_SECRET_<NAME>`).
 2. **SSRF range-block + post-redirect re-check** in the safety gate (currently
    method + host-allowlist only).
-3. Remaining request **body types**: multipart-form, file, graphql.
+3. ~~Remaining request **body types**: multipart-form, file, graphql.~~ **DONE**
+   (graphql/multipart-form/file all materialize from a `.bru`; form-urlencoded
+   discriminator regression fixed).
 4. **Import**: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
 5. Contract-validation reach (ADR 0005): external/remote `$ref` deref; OpenAPI
    3.0 `nullable` shim; `operationName`-scoped GraphQL.
