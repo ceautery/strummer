@@ -33,9 +33,13 @@ hybrid search over MCP + CLI, multi-ecosystem version detection, DevDocs + Dash
 adapters). The **API-testing pillar's core is complete** too — `.bru` runner,
 secrets, deny-by-default mutation safety, captures/chaining, QuickJS scripts,
 OpenAPI/GraphQL contract validation, and both an MCP tool surface and a
-`strummer api …` CLI. Next up is the **browser/UI pillar** (or optional API tail
-items). **The single source of truth for "what phase are we on" is
-[`STATUS.md`](./STATUS.md).**
+`strummer api …` CLI. The **browser/UI pillar (`@strummer/browser`, on
+`playwright-core`) is under active construction** — the engine has the browser
+lifecycle manager, ARIA-snapshot capture + imperative step tools, a
+deny-by-default action gate, and a two-tier SSRF defense (route allowlist + a
+DNS-pinning proxy, sharing `@strummer/safety` with the API pillar); the
+artifact-capture pipeline and the MCP/CLI surface come next. **The single source
+of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
 

@@ -5,25 +5,34 @@
 
 ## Current phase
 
-**Phase 3 — Browser/UI testing pillar: DESIGN LOCKED + first slice SHIPPED.** The
-design is grounded by a 5-stream research workflow with adversarial verification
-(archived in `docs/research/2026-05-31-pillar3-browser-testing.md`) and captured
-in **ADR 0006 + ARCHITECTURE §10 + ROADMAP Phase 3**. Decision: a new pure-TS
-**`@strummer/browser`** package built **thin on stable `playwright-core` 1.60.0**
-(NOT a wrap of `@playwright/mcp` — it pins an alpha core + inlines artifacts);
-ARIA-snapshot-first driving model; artifacts by handle (on-disk store);
-deny-by-default operator-set safety with a two-tier SSRF defense (route allowlist
-+ loopback DNS-pinning proxy); secrets at the fill boundary, redacted before any
-write; a11y (`@axe-core/playwright`) + perf (Lighthouse over CDP) audits. A shared
-**`@strummer/safety`** module (SSRF classifier + redaction) will be factored out
-of `@strummer/api`. **First slice SHIPPED:** `@strummer/browser` scaffolded
-(thin on `playwright-core` 1.60.0); `ArtifactStore` (on-disk,
-`strummer://browser/run/<id>/<kind>` handles), `summarizeA11y`, and `auditA11y`
-(via `@axe-core/playwright`) all TDD'd against an offline in-process fixture +
-real headless Chromium. CI + the (gitignored) docker harness now provision
-Chromium + its system libs. **128 TS + 45 Py tests green.** **Next action:** the
-browser lifecycle manager + ARIA-snapshot capture/serializer (see ROADMAP
-Phase 3).
+**Phase 3 — Browser/UI testing pillar: ENGINE CORE + SAFETY COMPLETE; agent
+surface (MCP/CLI) + artifact pipeline remain.** Design locked by a 5-stream
+research workflow w/ adversarial verification (`docs/research/2026-05-31-pillar3-
+browser-testing.md`); captured in **ADR 0006 (+ dated updates) + ARCHITECTURE §10
++ ROADMAP Phase 3**. A new pure-TS **`@strummer/browser`** built **thin on stable
+`playwright-core` 1.60.0** (NOT a wrap of `@playwright/mcp`, which pins an alpha
+core + inlines artifacts); ARIA-snapshot-first driving; artifacts by handle;
+deny-by-default operator-set safety. Shipped slices (all TDD, real-chromium tested
+against in-process fixtures):
+
+1. a11y-audit summarizer + on-disk `ArtifactStore`.
+2. `BrowserManager` (shared browser, ephemeral context/session, idle reaper, caps).
+3. ARIA-snapshot capture + serializer — Strummer mints its own ref-ids over the
+   public `ariaSnapshot()` YAML (1.60.0 lacks `_snapshotForAI`/snapshot-refs; ADR
+   update 2026-06-01); token-capped diff + full-snapshot handle.
+4. `PageDriver` step tools (navigate/click/fill/select/press/waitFor/snapshot +
+   free reads) over generation-tagged refs.
+5. `BrowserGate` deny-by-default action gate — navigation allowlist + mutation
+   dry-run (one-shot route capture+abort) vs execute; operator-set.
+6. Shared **`@strummer/safety`** (SSRF range classifier + `Redactor` moved from
+   `api`) + Tier-1 `installSafetyRoutes` allowlist (allowlist-authoritative).
+7. Tier-2 `createSsrfProxy` — loopback DNS-pinning forward proxy; `allowPrivate`
+   opt-in for local-app testing (never link-local/metadata).
+
+**181 TS + 45 Py tests green; all pushed to `main`.** **Next action:** wire the
+`Redactor` into the gate's dry-run preview + build the **artifact-capture
+pipeline** (trace/console/network by handle), then the **MCP + CLI surface** over
+the browser engine. See the detailed "Next action" section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail

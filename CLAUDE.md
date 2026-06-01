@@ -94,7 +94,10 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `docs/decisions/` — Architecture Decision Records (ADRs).
 - `packages/` — TS workspace: `core` (docs domain + SQLite), `embed` (query
   embedding), `api` (API-testing engine: `.bru`, runner, assertions, secrets,
-  safety, scripts), `mcp` (server), `cli` (terminal).
+  safety, scripts), `browser` (browser/UI engine: lifecycle, ARIA-snapshot +
+  step tools, action gate, two-tier SSRF, a11y audit — on `playwright-core`),
+  `safety` (shared SSRF range classifier + secret redaction, used by `api` +
+  `browser`), `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
 - `examples/` — runnable sample collections (e.g. `examples/api/jsonplaceholder`,

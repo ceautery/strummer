@@ -87,7 +87,7 @@ installed version Z" and get a precise, cited answer over MCP.
 - [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
       deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
 
-## Phase 3 — Browser / UI testing pillar  *(design locked: ADR 0006 + ARCHITECTURE §10)*
+## Phase 3 — Browser / UI testing pillar  *(engine core + safety complete; agent surface + artifact pipeline remain; design = ADR 0006 + ARCHITECTURE §10)*
 
 New pure-TS `@strummer/browser`, thin on **stable `playwright-core` 1.60.0** (not
 a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow with
