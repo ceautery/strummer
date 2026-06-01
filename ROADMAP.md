@@ -379,8 +379,15 @@ Two independent tracks, then the test-quality chain, then LSP last:
   - [x] **Slice 1 — `auditDeprecation`**: pure, offline deprecation reducer over an
         npm packument (version-scope wins over package-scope; empty-string
         un-deprecate idiom honoured). Committed fixtures, zero network/subprocess.
-  - [ ] OSV vulnerability matching against the on-disk snapshot (severity-bucketed;
-        surfaces `snapshotDate` so "no known vulns" is never treated as authoritative).
+  - [x] **Slice 2 — `matchVulnerabilities`**: pure OSV version-range matcher (the
+        documented sort-events-then-scan algorithm; SEMVER/ECOSYSTEM ranges via
+        `semver`, `last_affected` inclusive vs `fixed` exclusive, explicit `versions`,
+        ecosystem+name filter; severity bucketed `critical|high|moderate|low|unknown`).
+        Pure over committed OSV-advisory fixtures.
+  - [ ] Load advisories from the operator OSV snapshot (`STRUMMER_DEPS_OSV_DB_DIR`,
+        fflate unzip of `all.zip`); surface `snapshotDate` so "no known vulns" is
+        never treated as authoritative. CVSS-vector → bucket scoring (defer; slice 2
+        buckets the GHSA `database_specific.severity` string, CVSS vectors → `unknown`).
   - [ ] `behindBy` freshness vs the `resolveVersion` policy; `recommendedTarget`.
   - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
         SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice.

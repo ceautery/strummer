@@ -152,7 +152,15 @@ importers:
         specifier: ^7.7.1
         version: 7.7.1
 
-  packages/deps: {}
+  packages/deps:
+    dependencies:
+      semver:
+        specifier: ^7.8.1
+        version: 7.8.1
+    devDependencies:
+      '@types/semver':
+        specifier: ^7.7.1
+        version: 7.7.1
 
   packages/embed:
     dependencies:

@@ -5,3 +5,12 @@ export {
   type Packument,
   type PackumentVersion,
 } from './deprecation.js'
+export {
+  matchVulnerabilities,
+  type OsvAdvisory,
+  type OsvAffected,
+  type OsvEvent,
+  type OsvRange,
+  type SeverityBucket,
+  type VulnerabilityMatch,
+} from './osv.js'

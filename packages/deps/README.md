@@ -39,7 +39,22 @@ auditDeprecation(lodashPackument, '4.17.21')
 // → { isDeprecated: false }
 ```
 
-Later slices (staged in `ROADMAP.md`): OSV vulnerability matching against the
-on-disk snapshot, `behindBy` freshness vs the version-pin policy, the
+- **`matchVulnerabilities(advisories, pkg, installedVersion)`** — given parsed OSV
+  advisories, returns the ones that affect the installed version, with a bucketed
+  severity (`critical|high|moderate|low|unknown`) and the `fixedIn` versions. Range
+  evaluation follows the OSV schema's documented sort-events-then-scan algorithm
+  (SEMVER/ECOSYSTEM ranges via `semver`; `fixed` exclusive, `last_affected`
+  inclusive; explicit `versions`; filtered by ecosystem + name).
+
+```ts
+import { matchVulnerabilities } from '@strummer/deps'
+
+matchVulnerabilities(lodashAdvisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15')
+// → [{ id: 'GHSA-…', severity: 'moderate', fixedIn: ['4.17.21'], … }]
+```
+
+Later slices (staged in `ROADMAP.md`): loading advisories from the operator OSV
+snapshot (`STRUMMER_DEPS_OSV_DB_DIR`, fflate-unzipped `all.zip`, with a surfaced
+`snapshotDate`); `behindBy` freshness vs the version-pin policy; the
 `audit_dependency` / `audit_project` / `changelog_diff` MCP tools + a
-`strummer-deps-mcp` bin, and a Python/PyPI adapter.
+`strummer-deps-mcp` bin; and a Python/PyPI adapter.

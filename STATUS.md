@@ -18,7 +18,13 @@ imports**; **paired deny-by-default operator gate** for any code-running surface
 **TS/Vitest first, Python staged**. **Slice 1 landed:** `@strummer/deps`
 `auditDeprecation(packument, installedVersion)` — a pure, offline deprecation reducer
 (version-scope wins over package-scope; npm empty-string un-deprecate idiom honoured)
-over committed npm-packument fixtures. 394 TS + 45 Py green.)_
+over committed npm-packument fixtures. **Slice 2 landed:** `matchVulnerabilities`
+— a pure OSV version-range matcher (the documented sort-events-then-scan algorithm;
+SEMVER/ECOSYSTEM via `semver`, `fixed` exclusive vs `last_affected` inclusive,
+explicit `versions`, ecosystem+name filter; severity bucketed
+`critical|high|moderate|low|unknown`) over committed OSV-advisory fixtures.
+`semver ^7.8.1` added as the package's first explicit pinned dep (matches `core`).
+400 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -326,10 +332,12 @@ against in-process fixtures):
 now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
 keyring wiring, SSRF range-block + redirect re-check, contract reach, import).
 **Developer live-view was DROPPED** (ADR 0008, headless-only/LLM-first).)_
-**Next action:** Phase 4 is underway (ADR 0010). `@strummer/deps` slice 1
-(`auditDeprecation`) is landed. **Next deps slices:** OSV vulnerability matching
-against an operator-provisioned on-disk OSV snapshot (`STRUMMER_DEPS_OSV_DB_DIR`,
-network off by default) → `behindBy` freshness vs the `resolveVersion` policy → the
+**Next action:** Phase 4 is underway (ADR 0010). `@strummer/deps` slices 1–2
+(`auditDeprecation`, `matchVulnerabilities`) are landed. **Next deps slices:** load
+advisories from an operator-provisioned on-disk OSV snapshot
+(`STRUMMER_DEPS_OSV_DB_DIR`, fflate-unzip `all.zip`, network off by default, surface
+`snapshotDate`) feeding `matchVulnerabilities` → `behindBy` freshness vs the
+`resolveVersion` policy → the
 shared **`@strummer/artifacts`** extraction (parameterized prefix, touches the browser
 pillar's gate, behavior-preserving) when the first handle-emitting slice lands → the
 `audit_dependency`/`audit_project`/`changelog_diff` MCP tools + `strummer-deps-mcp`

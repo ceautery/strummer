@@ -1,0 +1,36 @@
+[
+  {
+    "id": "GHSA-jf85-cpcp-j695",
+    "aliases": ["CVE-2019-10744"],
+    "summary": "Prototype pollution in lodash",
+    "database_specific": { "severity": "HIGH" },
+    "affected": [
+      {
+        "package": { "ecosystem": "npm", "name": "lodash" },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [{ "introduced": "0" }, { "fixed": "4.17.12" }]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GHSA-35jh-r3h4-6jhm",
+    "aliases": ["CVE-2021-23337"],
+    "summary": "Command injection in lodash",
+    "database_specific": { "severity": "MODERATE" },
+    "affected": [
+      {
+        "package": { "ecosystem": "npm", "name": "lodash" },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [{ "introduced": "0" }, { "fixed": "4.17.21" }]
+          }
+        ]
+      }
+    ]
+  }
+]
