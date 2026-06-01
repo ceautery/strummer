@@ -136,6 +136,23 @@ describe('diffSnapshots (scoped, ref-independent)', () => {
     const b = buildSnapshot('- link "A"\n- button "B"')
     expect(diffSnapshots(a, b)).toBe('')
   })
+
+  it('caps the emitted diff lines with a "… (N more changes)" tail', () => {
+    // two fully-disjoint large trees → 50 removed + 50 added = 100 change lines
+    const a = buildSnapshot(Array.from({ length: 50 }, (_, i) => `- button "old-${i}"`).join('\n'))
+    const b = buildSnapshot(Array.from({ length: 50 }, (_, i) => `- button "new-${i}"`).join('\n'))
+    const diff = diffSnapshots(a, b, { maxLines: 10 })
+    const lines = diff.split('\n')
+    expect(lines).toHaveLength(11) // 10 change lines + 1 tail
+    expect(lines.filter((l) => l.startsWith('- ') || l.startsWith('+ ')).length).toBe(10)
+    expect(diff).toContain('… (90 more changes)')
+  })
+
+  it('does not add a tail when the diff fits under the cap', () => {
+    const a = buildSnapshot('- button "Sign in"')
+    const b = buildSnapshot('- button "Sign out"')
+    expect(diffSnapshots(a, b, { maxLines: 10 })).not.toContain('more changes')
+  })
 })
 
 describe('captureSnapshot (structural source; no browser)', () => {
