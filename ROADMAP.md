@@ -416,8 +416,14 @@ Two independent tracks, then the test-quality chain, then LSP last:
         private blocked by default) packument fetcher. Safety/network operator-set,
         never agent inputs. (TDD: real OSV-snapshot zip + temp `node_modules` project +
         injected fetcher.)
-  - [ ] `changelog_diff` MCP tool + by-handle full `audit_project` detail (await the
-        `@strummer/artifacts` extraction).
+  - [x] **Shared `@strummer/artifacts` extraction** (ADR 0010 cross-cutting) — the
+        on-disk `ArtifactStore` moved out of `@strummer/browser` into a new shared
+        package with a **parameterized** `strummer://<prefix>/<id>/<kind>` handle prefix
+        (browser bakes in `browser/run`; deps/coverage emit their own). Behavior-
+        preserving (browser suite is the regression guard); unblocks the first
+        handle-emitting Phase-4 slice.
+  - [ ] `changelog_diff` MCP tool (over `@strummer/artifacts`, `deps` prefix) + by-handle
+        full `audit_project` detail.
   - [ ] *(staged)* Python/PyPI + RubyGems advisory adapters.
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection

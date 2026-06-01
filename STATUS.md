@@ -48,7 +48,14 @@ reader of namespaced `STRUMMER_DEPS_*` (`OSV_DB_DIR`, `ALLOW_NETWORK` **off by d
 (`@strummer/safety` `resolveAndPin`, private blocked by default) npm packument fetcher;
 safety/network are operator-set, never agent inputs. The first **handle-emitting** deps
 slice (`changelog_diff` + by-handle `audit_project` detail) is deferred to the shared
-`@strummer/artifacts` extraction. 422 TS + 45 Py green.)_
+`@strummer/artifacts` extraction. **Shared `@strummer/artifacts` extraction DONE** (ADR
+0010 cross-cutting): the on-disk `ArtifactStore` moved out of `@strummer/browser` into a
+new shared package with a **parameterized** `strummer://<prefix>/<id>/<kind>` handle
+prefix (browser keeps `browser/run`; deps/coverage emit their own — e.g.
+`strummer://deps/...`). Behavior-preserving — browser is a thin subclass that bakes in
+the `browser/run` prefix so every call site is unchanged; the full browser suite is the
+regression guard. This **unblocks the first handle-emitting Phase-4 slice**
+(`changelog_diff`). 428 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -362,11 +369,12 @@ slice 5 (the agent surface)** are landed: `audit_dependency` + `audit_project` M
 (`packages/mcp/src/deps.ts`) + the `strummer-deps-mcp` bin (`bin-deps.ts`, namespaced
 `STRUMMER_DEPS_*`, network off by default, SSRF-pinned packument fetch via
 `@strummer/safety` `resolveAndPin` — **note:** `assertSsrfAllowed` does NOT exist on
-`safety`, only in the api package). **Next for deps: `changelog_diff` by handle** — this
-is the **first handle-emitting** deps slice, so do the shared **`@strummer/artifacts`**
-extraction (parameterized prefix, touches the browser pillar's gate,
-behavior-preserving) FIRST, then `changelog_diff` (injectable fetcher, operator-gated
-network, SSRF-pinned) + by-handle full `audit_project` detail. In parallel, the
+`safety`, only in the api package). **The shared `@strummer/artifacts` extraction is now
+DONE** (parameterized `strummer://<prefix>/<id>/<kind>`; browser rewired as a thin
+subclass, behavior-preserving). **Next for deps: `changelog_diff` by handle** — the first
+handle-emitting deps slice, now unblocked: build it over `@strummer/artifacts` (the
+`deps` prefix) with an injectable fetcher + operator-gated, SSRF-pinned (`resolveAndPin`)
+network, plus by-handle full `audit_project` detail. In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
