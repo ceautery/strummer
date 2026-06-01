@@ -1,4 +1,13 @@
 export {
+  defaultStrykerRunner,
+  MutateGateError,
+  type MutationRunner,
+  type RunMutationConfig,
+  type RunMutationInput,
+  type RunMutationResult,
+  runMutation,
+} from './run.js'
+export {
   type FileSummary,
   type Mutant,
   type MutantPosition,

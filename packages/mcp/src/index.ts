@@ -33,6 +33,11 @@ export {
   type FlakeToolsOptions,
   registerFlakeTools,
 } from './flake.js'
+export {
+  createMutateServer,
+  type MutateToolsOptions,
+  registerMutateTools,
+} from './mutate.js'
 
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */
