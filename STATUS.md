@@ -646,9 +646,20 @@ Gemfile.lock `DEPENDENCIES` block — declared, not the resolved spec tree — e
 `packages/mcp/src/deps.ts` dispatches the name reader by ecosystem (`dependencyNames`) and the
 npm-only throw is lifted. **`audit_project` now rolls up all three ecosystems** (npm/PyPI/RubyGems);
 `auditOne` already carried the per-ecosystem comparator + matchName from slice 3.
-**Remaining non-blocking tails:** a cosmic-ray adapter + gated `runMutmut` spawner; the human CLIs
-(`strummer deps|coverage|flake|mutate|lsp`); the LSP capability tails (ADR 0011). **NEXT MILESTONE
-is again open** — a Phase-5 boundary or one of these tails.
+**LSP capability-gated read tails DONE, 728 TS + 45 Py green (ADR 0011):** `lsp_type_definition`
+(reuses `normalizeLocations`), `lsp_document_symbols` (position-less; reuses the slice-1
+`normalizeDocumentSymbols`; query engine gained a no-position path + recursive range mapping;
+`line`/`column` now optional per kind), and `lsp_call_hierarchy` (two-round-trip `prepareCallHierarchy`
+→ `incoming`/`outgoing`; new call-hierarchy normalizers; keeps all overloads; per-direction
+`fromRanges` file attribution; the client now declares the `callHierarchy` capability). All gated as
+part of the navigation group. Captured **fresh real `typescript-language-server` 5.3.0** payloads
+(`type-definition-locations.json`, `call-hierarchy-{prepare,incoming,outgoing}.json`; the deterministic
+gate still replays recorded payloads, NO real server in `pnpm gate`). The capture harness used an
+extended greeter project (a free `hello()` that `greet()` calls); provenance in the fixtures README.
+**Remaining non-blocking tails:** LSP write-mode (`rename`), `workspace/symbol`, `diagnostics`,
+multi-root, full toolchain-mismatch heuristic, a `strummer lsp` CLI; deps cosmic-ray/`runMutmut`
+spawner; the human CLIs (`strummer deps|coverage|flake|mutate`). **NEXT MILESTONE is again open** —
+a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
 exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full

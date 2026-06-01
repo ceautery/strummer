@@ -38,6 +38,9 @@ import {
   StreamMessageWriter,
 } from 'vscode-jsonrpc/node.js'
 import {
+  CallHierarchyIncomingCallsRequest,
+  CallHierarchyOutgoingCallsRequest,
+  CallHierarchyPrepareRequest,
   ConfigurationRequest,
   DefinitionRequest,
   DidOpenTextDocumentNotification,
@@ -55,17 +58,23 @@ import {
 } from 'vscode-languageserver-protocol'
 import { type PositionEncoding, PREFERRED_ENCODINGS, resolvePositionEncoding } from './encoding.js'
 import {
+  type CallHierarchyItem,
   type DocumentSymbol,
   decideStatus,
   type Hover,
   type Location,
   type LocationLink,
+  type NormalizedCall,
+  type NormalizedCallItem,
   type NormalizedHover,
   type NormalizedLocation,
   type NormalizedSymbol,
+  normalizeCallHierarchyItem,
   normalizeDocumentSymbols,
   normalizeHover,
+  normalizeIncomingCalls,
   normalizeLocations,
+  normalizeOutgoingCalls,
   type QueryStatus,
   type SymbolInformation,
 } from './normalize.js'
@@ -123,6 +132,14 @@ export interface ServerInfo {
   name: string
   version?: string
 }
+
+/** A call-hierarchy group: one prepared source item + the calls in the requested direction. */
+export interface CallHierarchyGroup {
+  source: NormalizedCallItem
+  calls: NormalizedCall[]
+}
+
+export type CallDirection = 'incoming' | 'outgoing'
 
 /** A navigation result with its tri-state status and version/encoding provenance. */
 export interface NavResult<T> {
@@ -236,6 +253,8 @@ export class LspClient {
           typeDefinition: { linkSupport: true },
           references: {},
           hover: { contentFormat: ['markdown', 'plaintext'] },
+          documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+          callHierarchy: { dynamicRegistration: false },
         },
         window: { workDoneProgress: true },
         workspace: { configuration: true, workspaceFolders: true },
@@ -351,6 +370,55 @@ export class LspClient {
       (raw) => normalizeDocumentSymbols(raw as DocumentSymbol[] | SymbolInformation[] | null),
       (syms) => syms.length === 0,
     )
+  }
+
+  /**
+   * Call hierarchy — a TWO-round-trip protocol. `prepareCallHierarchy` resolves the symbol at
+   * `position` to one or more `CallHierarchyItem`s (null vs empty is distinct; overloads yield
+   * MANY — we keep them all, never silently the first); then per item we fetch incoming or
+   * outgoing calls. Tri-state lives on the PREPARE step (empty-while-indexing ⇒ not_ready). A
+   * prepared item with no callers/callees is a legitimate `ok` with empty `calls`. The RAW item
+   * is passed back to the calls request (it may carry an opaque `data` field the server needs).
+   */
+  async callHierarchy(
+    uri: string,
+    position: { line: number; character: number },
+    direction: CallDirection,
+  ): Promise<NavResult<CallHierarchyGroup[]>> {
+    if (!this.supports('callHierarchyProvider')) {
+      throw new LspUnsupportedError('server does not advertise callHierarchy support')
+    }
+    const prepared = await this.withRetry(
+      () =>
+        this.conn.sendRequest(CallHierarchyPrepareRequest.method, {
+          textDocument: { uri },
+          position,
+        }),
+      (raw) => (raw as CallHierarchyItem[] | null) ?? [],
+      (items) => items.length === 0,
+    )
+    if (prepared.status !== 'ok') return this.wrap(prepared.status, [])
+
+    const method =
+      direction === 'incoming'
+        ? CallHierarchyIncomingCallsRequest.method
+        : CallHierarchyOutgoingCallsRequest.method
+    const groups: CallHierarchyGroup[] = []
+    for (const item of prepared.result) {
+      const raw = await this.conn.sendRequest(method, { item })
+      const calls =
+        direction === 'incoming'
+          ? normalizeIncomingCalls(
+              raw as
+                | { from: CallHierarchyItem; fromRanges: NormalizedLocation['range'][] }[]
+                | null,
+            )
+          : normalizeOutgoingCalls(
+              raw as { to: CallHierarchyItem; fromRanges: NormalizedLocation['range'][] }[] | null,
+            )
+      groups.push({ source: normalizeCallHierarchyItem(item), calls })
+    }
+    return this.wrap('ok', groups)
   }
 
   private navigateLocations(

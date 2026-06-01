@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { MessageConnection } from 'vscode-jsonrpc/node.js'
 import { LspClient } from './client.js'
 import {
+  CALL_HIERARCHY_INCOMING,
+  CALL_HIERARCHY_OUTGOING,
+  CALL_HIERARCHY_PREPARE,
   DEFINITION,
   DOCUMENT_SYMBOLS,
   type FakeServerOptions,
@@ -14,6 +17,16 @@ import {
   REFERENCES,
   TYPE_DEFINITION,
 } from './peer.js'
+
+const GREETER_URI = 'file:///project/src/greeter.ts'
+
+/** The base init fixture predates the client declaring the callHierarchy capability; the real
+ * server advertises `callHierarchyProvider: true` once it does (confirmed in the capture). */
+function initWithCallHierarchy(): unknown {
+  const init = INIT() as { capabilities: Record<string, unknown> }
+  init.capabilities.callHierarchyProvider = true
+  return init
+}
 
 const ROOT = 'file:///project'
 const INDEX_URI = 'file:///project/src/index.ts'
@@ -109,6 +122,43 @@ describe('LspClient navigation (tri-state + normalization over recorded payloads
     expect(greeter?.children?.some((c) => c.name === 'greet')).toBe(true)
   })
 
+  it('callHierarchy incoming: prepare → incomingCalls, the edge item is the CALLER', async () => {
+    const { client } = await connectedClient({
+      initialize: initWithCallHierarchy(),
+      onPrepareCallHierarchy: () => CALL_HIERARCHY_PREPARE(),
+      onIncomingCalls: () => CALL_HIERARCHY_INCOMING(),
+    })
+    const r = await client.callHierarchy(GREETER_URI, { line: 0, character: 16 }, 'incoming')
+    expect(r.status).toBe('ok')
+    expect(r.result).toHaveLength(1) // one prepared item: hello
+    expect(r.result[0]?.source.name).toBe('hello')
+    expect(r.result[0]?.source.kindName).toBe('Function')
+    expect(r.result[0]?.calls[0]?.item.name).toBe('greet') // greet calls hello
+    expect(r.result[0]?.calls[0]?.fromRanges.length).toBeGreaterThan(0)
+  })
+
+  it('callHierarchy outgoing: the edge item is the CALLEE', async () => {
+    const { client } = await connectedClient({
+      initialize: initWithCallHierarchy(),
+      onPrepareCallHierarchy: () => CALL_HIERARCHY_PREPARE(),
+      onOutgoingCalls: () => CALL_HIERARCHY_OUTGOING(),
+    })
+    const r = await client.callHierarchy(GREETER_URI, { line: 0, character: 16 }, 'outgoing')
+    expect(r.status).toBe('ok')
+    expect(r.result[0]?.calls[0]?.item.name).toBe('hello') // greet calls hello
+  })
+
+  it('callHierarchy: empty prepare while ready is no_result (no symbol at the position)', async () => {
+    const { client } = await connectedClient({
+      initialize: initWithCallHierarchy(),
+      onPrepareCallHierarchy: () => null,
+      clientOptions: { timeoutMs: 1000, noRetry: true },
+    })
+    const r = await client.callHierarchy(GREETER_URI, { line: 1, character: 0 }, 'incoming')
+    expect(r.status).toBe('no_result')
+    expect(r.result).toEqual([])
+  })
+
   it('no_result: an empty result with no indexing in progress (single attempt)', async () => {
     const { client } = await connectedClient({
       onDefinition: () => null,
@@ -159,6 +209,12 @@ describe('LspClient capability gating', () => {
     init.capabilities.hoverProvider = false
     const { client } = await connectedClient({ initialize: init })
     await expect(client.hover(INDEX_URI, POS)).rejects.toThrow(/hover/i)
+  })
+
+  it('throws for callHierarchy when the base server does not advertise it', async () => {
+    const { client } = await connectedClient() // base INIT: no callHierarchyProvider
+    expect(client.supports('callHierarchyProvider')).toBe(false)
+    await expect(client.callHierarchy(INDEX_URI, POS, 'incoming')).rejects.toThrow(/callHierarchy/i)
   })
 })
 

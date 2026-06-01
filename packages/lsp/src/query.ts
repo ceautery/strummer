@@ -21,7 +21,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import type { NavResult, ServerInfo } from './client.js'
+import type { CallDirection, CallHierarchyGroup, NavResult, ServerInfo } from './client.js'
 import {
   fromLspPosition,
   type HumanPosition,
@@ -31,6 +31,7 @@ import {
 import type { LanguageServerManager } from './manager.js'
 import type {
   LspRange,
+  NormalizedCallItem,
   NormalizedHover,
   NormalizedLocation,
   NormalizedSymbol,
@@ -72,6 +73,7 @@ export type LspQueryKind =
   | 'references'
   | 'hover'
   | 'documentSymbols'
+  | 'callHierarchy'
 
 /** The position-based kinds — those that require a `line`/`column`. */
 const POSITION_KINDS: ReadonlySet<LspQueryKind> = new Set([
@@ -79,6 +81,7 @@ const POSITION_KINDS: ReadonlySet<LspQueryKind> = new Set([
   'typeDefinition',
   'references',
   'hover',
+  'callHierarchy',
 ])
 
 export interface LspQueryInput {
@@ -93,6 +96,8 @@ export interface LspQueryInput {
   /** 1-based human column (code points) — required for the position-based kinds. */
   column?: number
   kind: LspQueryKind
+  /** Call-hierarchy direction (callers vs callees); defaults to `incoming`. */
+  direction?: CallDirection
   /** Optional toolchain provenance to echo (the surface computes via `detectInstalledVersion`). */
   toolchain?: { name: string; version: string | null }
 }
@@ -123,12 +128,36 @@ export interface ResultSymbol {
   children?: ResultSymbol[]
 }
 
+/** A call-hierarchy item with its ranges mapped to human 1-based coords. */
+export interface ResultCallItem {
+  name: string
+  kind: number
+  kindName: string
+  detail?: string
+  uri: string
+  range: HumanRange
+  selectionRange: HumanRange
+}
+
+/** One call edge: the other item + the human-coord ranges where the call occurs. */
+export interface ResultCall {
+  item: ResultCallItem
+  fromRanges: HumanRange[]
+}
+
+export interface ResultCallGroup {
+  source: ResultCallItem
+  direction: CallDirection
+  calls: ResultCall[]
+}
+
 export interface LspQueryResult {
   status: QueryStatus
   kind: LspQueryKind
   locations?: ResultLocation[]
   hover?: { value: string; range?: HumanRange }
   symbols?: ResultSymbol[]
+  callHierarchy?: ResultCallGroup[]
   serverInfo?: ServerInfo
   toolchain?: { name: string; version: string | null }
   encoding: PositionEncoding
@@ -167,6 +196,7 @@ export class LspQueryEngine {
       | NavResult<NormalizedLocation[]>
       | NavResult<NormalizedHover | null>
       | NavResult<NormalizedSymbol[]>
+      | NavResult<CallHierarchyGroup[]>
     const nav = await this.manager.run<Nav>(
       { language: input.language, projectRoot: input.projectRoot, uri, text },
       (client): Promise<Nav> => {
@@ -189,6 +219,8 @@ export class LspQueryEngine {
                 return client.references(uri, pos)
               case 'hover':
                 return client.hover(uri, pos)
+              case 'callHierarchy':
+                return client.callHierarchy(uri, pos, input.direction ?? 'incoming')
             }
           }
         }
@@ -203,7 +235,8 @@ export class LspQueryEngine {
     nav:
       | NavResult<NormalizedLocation[]>
       | NavResult<NormalizedHover | null>
-      | NavResult<NormalizedSymbol[]>,
+      | NavResult<NormalizedSymbol[]>
+      | NavResult<CallHierarchyGroup[]>,
     queriedUri: string,
     queriedText: string,
   ): LspQueryResult {
@@ -239,6 +272,18 @@ export class LspQueryEngine {
       const symbols = (nav as NavResult<NormalizedSymbol[]>).result
       // Document symbols are all in the QUERIED file; map every range with its text.
       return { ...base, symbols: symbols.map((s) => this.mapSymbol(s, queriedText, encoding)) }
+    }
+
+    if (input.kind === 'callHierarchy') {
+      const direction = input.direction ?? 'incoming'
+      const groups = (nav as NavResult<CallHierarchyGroup[]>).result
+      const cache = new Map<string, string | undefined>([[queriedUri, queriedText]])
+      return {
+        ...base,
+        callHierarchy: groups.map((g) =>
+          this.mapCallGroup(g, direction, encoding, queriedUri, cache),
+        ),
+      }
     }
 
     const locations = (nav as NavResult<NormalizedLocation[]>).result
@@ -284,6 +329,45 @@ export class LspQueryEngine {
       out.children = s.children.map((c) => this.mapSymbol(c, text, encoding))
     }
     return out
+  }
+
+  private mapCallItem(
+    item: NormalizedCallItem,
+    encoding: PositionEncoding,
+    cache: Map<string, string | undefined>,
+  ): ResultCallItem {
+    const text = this.textForUri(item.uri, cache)
+    return {
+      name: item.name,
+      kind: item.kind,
+      kindName: item.kindName,
+      ...(item.detail !== undefined ? { detail: item.detail } : {}),
+      uri: item.uri,
+      range: this.mapRange(text, item.range, encoding),
+      selectionRange: this.mapRange(text, item.selectionRange, encoding),
+    }
+  }
+
+  private mapCallGroup(
+    g: CallHierarchyGroup,
+    direction: CallDirection,
+    encoding: PositionEncoding,
+    queriedUri: string,
+    cache: Map<string, string | undefined>,
+  ): ResultCallGroup {
+    return {
+      source: this.mapCallItem(g.source, encoding, cache),
+      direction,
+      calls: g.calls.map((c) => {
+        // fromRanges live in the CALLER's file: incoming ⇒ the edge item (the caller);
+        // outgoing ⇒ the source (the queried caller) itself.
+        const fromText = this.textForUri(direction === 'incoming' ? c.item.uri : queriedUri, cache)
+        return {
+          item: this.mapCallItem(c.item, encoding, cache),
+          fromRanges: c.fromRanges.map((r) => this.mapRange(fromText, r, encoding)),
+        }
+      }),
+    }
   }
 
   private textForUri(uri: string, cache: Map<string, string | undefined>): string | undefined {

@@ -1,4 +1,6 @@
 export {
+  type CallDirection,
+  type CallHierarchyGroup,
   defaultServerSpawn,
   type InitializeSummary,
   LspClient,
@@ -29,6 +31,7 @@ export {
   type ServerDescription,
 } from './manager.js'
 export {
+  type CallHierarchyItem,
   type DocumentSymbol,
   decideStatus,
   type Hover,
@@ -38,12 +41,18 @@ export {
   type LspRange,
   type MarkedString,
   type MarkupContent,
+  type NormalizedCall,
+  type NormalizedCallItem,
   type NormalizedHover,
   type NormalizedLocation,
   type NormalizedSymbol,
+  normalizeCallHierarchyItem,
+  normalizeCallHierarchyItems,
   normalizeDocumentSymbols,
   normalizeHover,
+  normalizeIncomingCalls,
   normalizeLocations,
+  normalizeOutgoingCalls,
   type QueryStatus,
   type SymbolInformation,
   symbolKindName,
@@ -57,6 +66,9 @@ export {
   type LspQueryInput,
   type LspQueryKind,
   type LspQueryResult,
+  type ResultCall,
+  type ResultCallGroup,
+  type ResultCallItem,
   type ResultLocation,
   type ResultSymbol,
 } from './query.js'

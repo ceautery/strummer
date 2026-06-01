@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { LanguageServerManager } from './manager.js'
 import {
+  CALL_HIERARCHY_INCOMING,
+  CALL_HIERARCHY_PREPARE,
   DEFINITION,
   DOCUMENT_SYMBOLS,
   fakeSpawn,
   HOVER,
+  INIT,
   INIT_UTF8,
   PROGRESS_BEGIN,
   type SpawnTracker,
@@ -176,6 +179,38 @@ describe('LspQueryEngine documentSymbols (position-less)', () => {
         kind: 'definition',
       }),
     ).rejects.toBeInstanceOf(LspGateError)
+  })
+})
+
+describe('LspQueryEngine callHierarchy', () => {
+  function initWithCallHierarchy(): unknown {
+    const init = INIT() as { capabilities: Record<string, unknown> }
+    init.capabilities.callHierarchyProvider = true
+    return init
+  }
+
+  it('returns incoming-call groups with the source + edge items mapped to human coords', async () => {
+    const engine = makeEngine({
+      initialize: initWithCallHierarchy(),
+      onPrepareCallHierarchy: () => CALL_HIERARCHY_PREPARE(),
+      onIncomingCalls: () => CALL_HIERARCHY_INCOMING(),
+    })
+    const r = await engine.query({
+      ...DEF_INPUT,
+      file: 'src/greeter.ts',
+      kind: 'callHierarchy',
+      direction: 'incoming',
+    })
+    expect(r.status).toBe('ok')
+    expect(r.kind).toBe('callHierarchy')
+    expect(r.callHierarchy).toHaveLength(1)
+    const group = r.callHierarchy?.[0]
+    expect(group?.direction).toBe('incoming')
+    expect(group?.source.name).toBe('hello')
+    expect(group?.calls[0]?.item.name).toBe('greet')
+    // ranges are mapped to human 1-based coords (line ≥ 1)
+    expect(group?.calls[0]?.item.range.start.line).toBeGreaterThanOrEqual(1)
+    expect(group?.calls[0]?.fromRanges[0]?.start.line).toBeGreaterThanOrEqual(1)
   })
 })
 

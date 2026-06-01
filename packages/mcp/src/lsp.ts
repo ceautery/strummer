@@ -265,6 +265,51 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
         return { content: [text(structured)], structuredContent: structured }
       },
     )
+
+    server.registerTool(
+      'lsp_call_hierarchy',
+      {
+        title: 'Call hierarchy (callers / callees)',
+        description:
+          'Resolve the symbol at a 1-based line:column and list its callers (`direction: ' +
+          '"incoming"`, the default) or callees (`direction: "outgoing"`), each with the call-site ' +
+          'ranges in human 1-based line:column. Operator-gated; tri-state status. Overloaded ' +
+          'symbols yield multiple groups (all kept). A large result goes by handle when a store is set.',
+        inputSchema: {
+          ...positionSchema,
+          direction: z
+            .enum(['incoming', 'outgoing'])
+            .optional()
+            .describe('callers ("incoming", default) or callees ("outgoing")'),
+        },
+      },
+      async (args) => {
+        const language = args.language as string
+        const projectRoot = args.projectRoot as string
+        const toolchain = opts.detectToolchain?.(projectRoot, language)
+        const result = await query({
+          language,
+          projectRoot,
+          file: args.file as string,
+          line: args.line as number,
+          column: args.column as number,
+          kind: 'callHierarchy',
+          direction: (args.direction as 'incoming' | 'outgoing') ?? 'incoming',
+          ...(toolchain ? { toolchain } : {}),
+        })
+        const groups = result.callHierarchy ?? []
+        const callCount = groups.reduce((n, g) => n + g.calls.length, 0)
+        // Call-hierarchy edges are bounded metadata (a symbol's direct callers/callees), so they
+        // are inlined in full — unlike a reference list, there is no large-body case to offload.
+        const structured = {
+          ...envelope(result),
+          direction: args.direction ?? 'incoming',
+          callCount,
+          callHierarchy: groups,
+        }
+        return { content: [text(structured)], structuredContent: structured }
+      },
+    )
   }
 
   // Large reference lists are emitted by handle, served by one resource when a store is set.

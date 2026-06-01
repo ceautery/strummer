@@ -624,10 +624,19 @@ Two independent tracks, then the test-quality chain, then LSP last:
         Env `STRUMMER_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/`_SERVERS`(JSON)/
         `_ARTIFACT_DIR`/`_MAX_SERVERS`/`_IDLE_TTL_MS`; toolchain provenance via
         `core.detectInstalledVersion`. 7 surface + 6 bin tests.
-  - [ ] *(staged, not amputated)* `lsp_type_definition`/`lsp_document_symbols`/
-        `lsp_call_hierarchy` (behind per-server capability detection); then write-mode
-        (`rename`), `workspace/symbol` search, `diagnostics`, multi-root, full
-        toolchain-version resolution, Python adapter posture.
+  - [x] **Capability-gated read tails — `lsp_type_definition` / `lsp_document_symbols` /
+        `lsp_call_hierarchy`.** `type_definition` reuses `normalizeLocations` (the handshake
+        already advertised `typeDefinition` linkSupport); `document_symbols` is position-less and
+        reuses the slice-1 `normalizeDocumentSymbols` (the query engine gained a no-position path +
+        recursive human-coord range mapping; `line`/`column` now optional, validated per kind);
+        `call_hierarchy` is the two-round-trip protocol (`prepareCallHierarchy` → `incoming`/
+        `outgoing` calls; new `normalizeCallHierarchyItems`/`normalizeIncoming`/`normalizeOutgoing`;
+        keeps ALL prepared overloads; per-direction `fromRanges`-file attribution; the client now
+        declares the `callHierarchy` capability so servers advertise it). All gated as part of the
+        navigation group; `lsp_languages` already reported their capabilities. Fixtures captured
+        from the **same real `typescript-language-server` 5.3.0** (provenance in the fixtures README).
+  - [ ] *(staged, not amputated)* write-mode (`rename`), `workspace/symbol` search,
+        `diagnostics`, multi-root, full toolchain-version resolution, Python adapter posture.
 
 ## Ongoing
 

@@ -199,6 +199,76 @@ export function normalizeDocumentSymbols(
   return (result as DocumentSymbol[]).map(normalizeDocumentSymbol)
 }
 
+// --- Call hierarchy (ADR 0011 staged tail) -------------------------------------------------
+
+/** A raw `CallHierarchyItem` (prepareCallHierarchy result + the node inside incoming/outgoing). */
+export interface CallHierarchyItem {
+  name: string
+  kind: number
+  detail?: string
+  uri: string
+  range: LspRange
+  selectionRange: LspRange
+}
+
+export interface NormalizedCallItem {
+  name: string
+  kind: number
+  kindName: string
+  detail?: string
+  uri: string
+  range: LspRange
+  selectionRange: LspRange
+}
+
+/** One edge of the call hierarchy: the other item + the ranges where the call occurs. */
+export interface NormalizedCall {
+  item: NormalizedCallItem
+  fromRanges: LspRange[]
+}
+
+export function normalizeCallHierarchyItem(item: CallHierarchyItem): NormalizedCallItem {
+  const out: NormalizedCallItem = {
+    name: item.name,
+    kind: item.kind,
+    kindName: symbolKindName(item.kind),
+    uri: item.uri,
+    range: item.range,
+    selectionRange: item.selectionRange,
+  }
+  if (item.detail !== undefined && item.detail !== '') out.detail = item.detail
+  return out
+}
+
+export function normalizeCallHierarchyItems(
+  result: CallHierarchyItem[] | null | undefined,
+): NormalizedCallItem[] {
+  if (result == null) return []
+  return result.map(normalizeCallHierarchyItem)
+}
+
+/** `callHierarchy/incomingCalls` → `{from, fromRanges}[]`; the edge item is the CALLER. */
+export function normalizeIncomingCalls(
+  result: { from: CallHierarchyItem; fromRanges: LspRange[] }[] | null | undefined,
+): NormalizedCall[] {
+  if (result == null) return []
+  return result.map((c) => ({
+    item: normalizeCallHierarchyItem(c.from),
+    fromRanges: c.fromRanges ?? [],
+  }))
+}
+
+/** `callHierarchy/outgoingCalls` → `{to, fromRanges}[]`; the edge item is the CALLEE. */
+export function normalizeOutgoingCalls(
+  result: { to: CallHierarchyItem; fromRanges: LspRange[] }[] | null | undefined,
+): NormalizedCall[] {
+  if (result == null) return []
+  return result.map((c) => ({
+    item: normalizeCallHierarchyItem(c.to),
+    fromRanges: c.fromRanges ?? [],
+  }))
+}
+
 /**
  * The tri-state query outcome (ADR 0011): an empty result is only authoritatively
  * `no_result` when the server is READY; while it is still indexing an empty result is

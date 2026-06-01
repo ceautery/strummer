@@ -32,6 +32,9 @@ interface ToolJson {
   hover?: { value: string }
   symbolCount?: number
   symbols?: Array<{ name: string; kindName: string; children?: unknown[] }>
+  direction?: string
+  callCount?: number
+  callHierarchy?: Array<{ source: { name: string }; calls: Array<{ item: { name: string } }> }>
   languages?: string[]
   servers?: unknown
 }
@@ -117,6 +120,7 @@ describe('lsp MCP surface gating', () => {
 
     const gated = await connect({ ...GATED, query: stubQuery(okDefinition).query })
     expect((await gated.listTools()).tools.map((t) => t.name).sort()).toEqual([
+      'lsp_call_hierarchy',
       'lsp_document_symbols',
       'lsp_find_definition',
       'lsp_find_references',
@@ -230,6 +234,52 @@ describe('lsp navigation tools', () => {
     expect(data.symbolCount).toBe(1)
     expect(data.symbols?.[0]?.name).toBe('Greeter')
     expect(data.symbols?.[0]?.children?.length).toBe(1)
+  })
+
+  it('lsp_call_hierarchy queries the callHierarchy kind with a direction', async () => {
+    const stub = stubQuery({
+      status: 'ok',
+      kind: 'callHierarchy',
+      encoding: 'utf-16',
+      callHierarchy: [
+        {
+          source: {
+            name: 'hello',
+            kind: 12,
+            kindName: 'Function',
+            uri: 'file:///project/src/greeter.ts',
+            range: { start: { line: 1, column: 1 }, end: { line: 3, column: 2 } },
+            selectionRange: { start: { line: 1, column: 17 }, end: { line: 1, column: 22 } },
+          },
+          direction: 'incoming',
+          calls: [
+            {
+              item: {
+                name: 'greet',
+                kind: 6,
+                kindName: 'Method',
+                uri: 'file:///project/src/greeter.ts',
+                range: { start: { line: 10, column: 3 }, end: { line: 12, column: 4 } },
+                selectionRange: { start: { line: 10, column: 3 }, end: { line: 10, column: 8 } },
+              },
+              fromRanges: [{ start: { line: 11, column: 12 }, end: { line: 11, column: 17 } }],
+            },
+          ],
+        },
+      ],
+    })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({
+      name: 'lsp_call_hierarchy',
+      arguments: { ...DEF_ARGS, direction: 'incoming' },
+    })
+    const data = firstJson(res.content)
+    expect(stub.last()?.kind).toBe('callHierarchy')
+    expect(stub.last()?.direction).toBe('incoming')
+    expect(data.direction).toBe('incoming')
+    expect(data.callCount).toBe(1)
+    expect(data.callHierarchy?.[0]?.source.name).toBe('hello')
+    expect(data.callHierarchy?.[0]?.calls[0]?.item.name).toBe('greet')
   })
 
   it('passes through detected toolchain provenance', async () => {
