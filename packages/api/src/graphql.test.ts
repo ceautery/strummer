@@ -61,4 +61,34 @@ describe('validateGraphqlOperation', () => {
     expect(r.valid).toBe(true)
     expect(r.findings).toEqual([])
   })
+
+  describe('operationName scoping (multi-operation documents)', () => {
+    // Two named operations; the schema has a Query but NO Mutation root type.
+    const doc = `
+      query A { user(id: "1") { id } }
+      mutation B { user(id: "1") { id } }
+    `
+
+    it('scopes the root-type drift check to the named operation', () => {
+      // A is a query and the schema has Query → no drift when scoped to A,
+      // even though sibling mutation B would otherwise flag.
+      expect(validateGraphqlOperation(sdl, doc, { operationName: 'A' }).valid).toBe(true)
+    })
+
+    it('still flags the named operation when IT is the drifting one', () => {
+      const r = validateGraphqlOperation(sdl, doc, { operationName: 'B' })
+      expect(r.valid).toBe(false)
+      expect(r.findings.some((f) => /mutation/i.test(f.message))).toBe(true)
+    })
+
+    it('flags an operationName that is absent from the document', () => {
+      const r = validateGraphqlOperation(sdl, doc, { operationName: 'Missing' })
+      expect(r.valid).toBe(false)
+      expect(r.findings.some((f) => /no operation named/i.test(f.message))).toBe(true)
+    })
+
+    it('without operationName, checks every operation (B drifts → invalid)', () => {
+      expect(validateGraphqlOperation(sdl, doc).valid).toBe(false)
+    })
+  })
 })

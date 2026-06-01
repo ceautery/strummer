@@ -35,7 +35,7 @@ API testing:
   strummer api get <dir> <name>                         [--json]
   strummer api run <dir> <name>                         [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--block-private] [--max-redirects <n>] [--openapi <spec.json>] [--json]
   strummer api run-collection <dir> <name…>             [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--block-private] [--max-redirects <n>] [--stop-on-failure] [--json]
-  strummer api validate --graphql <schema> --query <q>  [--json]
+  strummer api validate --graphql <schema> --query <q>  [--operation <name>] [--json]
 
 Browser testing (single-shot; the typed host is auto-allowed):
   strummer browser snapshot <url>    [--allow-host <h>…] [--allow-private] [--no-sandbox] [--headed] [--json]

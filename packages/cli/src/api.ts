@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
   ArtifactStore,
@@ -227,6 +228,8 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
         headers: result.response.headers,
         body: parseStoredBody(artifacts, result.response.bodyHandle),
       },
+      // External local-file $refs resolve relative to the spec file's directory.
+      { baseDir: dirname(values.openapi) },
     )
   }
 
@@ -313,6 +316,7 @@ function cmdValidate(args: string[], io: CliIO): number {
     options: {
       graphql: { type: 'string' },
       query: { type: 'string' },
+      operation: { type: 'string' },
       json: { type: 'boolean' },
     },
   })
@@ -322,7 +326,7 @@ function cmdValidate(args: string[], io: CliIO): number {
   }
   const sdl = readFileSync(values.graphql, 'utf8')
   const query = readFileSync(values.query, 'utf8')
-  const contract = validateGraphqlOperation(sdl, query)
+  const contract = validateGraphqlOperation(sdl, query, { operationName: values.operation })
 
   if (values.json) {
     io.out(`${JSON.stringify(contract, null, 2)}\n`)

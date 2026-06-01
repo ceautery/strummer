@@ -1,5 +1,10 @@
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { validateOpenApiResponse } from './contract.js'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const OPENAPI_DIR = resolve(here, '../test/fixtures/openapi')
 
 // A small OpenAPI 3.1 document: a templated path, a $ref into components, and
 // two documented statuses.
@@ -169,5 +174,164 @@ describe('validateOpenApiResponse', () => {
       { status: 200, body: { id: 42, name: 'Ada' } },
     )
     expect(r.valid).toBe(true)
+  })
+})
+
+describe('validateOpenApiResponse — OpenAPI 3.0 nullable shim', () => {
+  const spec30 = {
+    openapi: '3.0.3',
+    paths: {
+      '/u': {
+        get: {
+          responses: {
+            '200': {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['name'],
+                    properties: {
+                      name: { type: 'string', nullable: true },
+                      age: { type: 'integer' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+
+  it('honors nullable:true so an explicit null passes (3.1 would need type:[..,null])', () => {
+    const r = validateOpenApiResponse(
+      spec30,
+      { method: 'GET', path: '/u' },
+      {
+        status: 200,
+        body: { name: null },
+      },
+    )
+    expect(r.valid).toBe(true)
+  })
+
+  it('still flags a real type mismatch after the shim', () => {
+    const r = validateOpenApiResponse(
+      spec30,
+      { method: 'GET', path: '/u' },
+      {
+        status: 200,
+        body: { name: 123 },
+      },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('response-schema')
+  })
+
+  it('does NOT loosen a 3.1 doc (nullable is not a 3.1 keyword)', () => {
+    const r = validateOpenApiResponse(
+      spec,
+      { method: 'GET', path: '/users/42' },
+      {
+        status: 200,
+        body: { id: 42, name: 'Ada' },
+      },
+    )
+    expect(r.valid).toBe(true)
+  })
+})
+
+describe('validateOpenApiResponse — external local-file $ref deref', () => {
+  const jsonSpec = {
+    openapi: '3.1.0',
+    paths: {
+      '/users/{id}': {
+        get: {
+          responses: {
+            '200': {
+              content: { 'application/json': { schema: { $ref: './user.schema.json#/User' } } },
+            },
+          },
+        },
+      },
+    },
+  }
+
+  it('resolves an external JSON $ref, including the file’s own internal $ref', () => {
+    const ok = validateOpenApiResponse(
+      jsonSpec,
+      { method: 'GET', path: '/users/1' },
+      {
+        status: 200,
+        body: { id: 1, pet: { name: 'Rex' } },
+      },
+      { baseDir: OPENAPI_DIR },
+    )
+    expect(ok.valid).toBe(true)
+
+    // `pet.name` is required by the file-internal Pet schema — omit it ⇒ drift.
+    const bad = validateOpenApiResponse(
+      jsonSpec,
+      { method: 'GET', path: '/users/1' },
+      {
+        status: 200,
+        body: { id: 1, pet: {} },
+      },
+      { baseDir: OPENAPI_DIR },
+    )
+    expect(bad.valid).toBe(false)
+    expect(bad.findings.map((f) => f.kind)).toContain('response-schema')
+  })
+
+  it('flags a top-level type mismatch through an external ref', () => {
+    const bad = validateOpenApiResponse(
+      jsonSpec,
+      { method: 'GET', path: '/users/1' },
+      {
+        status: 200,
+        body: { id: 'not-an-int' },
+      },
+      { baseDir: OPENAPI_DIR },
+    )
+    expect(bad.valid).toBe(false)
+  })
+
+  it('resolves an external YAML $ref', () => {
+    const yamlSpec = {
+      openapi: '3.1.0',
+      paths: {
+        '/tags': {
+          get: {
+            responses: {
+              '200': {
+                content: { 'application/json': { schema: { $ref: './common.schema.yaml#/Tag' } } },
+              },
+            },
+          },
+        },
+      },
+    }
+    const ok = validateOpenApiResponse(
+      yamlSpec,
+      { method: 'GET', path: '/tags' },
+      {
+        status: 200,
+        body: { label: 'urgent' },
+      },
+      { baseDir: OPENAPI_DIR },
+    )
+    expect(ok.valid).toBe(true)
+
+    const bad = validateOpenApiResponse(
+      yamlSpec,
+      { method: 'GET', path: '/tags' },
+      {
+        status: 200,
+        body: {},
+      },
+      { baseDir: OPENAPI_DIR },
+    )
+    expect(bad.valid).toBe(false)
   })
 })

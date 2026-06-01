@@ -13,15 +13,24 @@ interface GraphqlPayload {
   errors?: { message?: string }[]
 }
 
+export interface GraphqlValidateOptions {
+  /** Response payload to inspect for a top-level `errors` array. */
+  json?: unknown
+  /** For a multi-operation document, scope the root-type drift check to this
+   * operation (and require it to exist). Without it, every operation is checked. */
+  operationName?: string
+}
+
 /**
- * Validate a GraphQL `query` against a schema `sdl`; if `res.json` is supplied,
- * also check the response payload for returned `errors`. `valid` is true only
- * when no `error`-severity finding is present.
+ * Validate a GraphQL `query` against a schema `sdl`; if `opts.json` is supplied,
+ * also check the response payload for returned `errors`. With `opts.operationName`
+ * the root-type drift check is scoped to that operation (which must exist).
+ * `valid` is true only when no `error`-severity finding is present.
  */
 export function validateGraphqlOperation(
   sdl: string,
   query: string,
-  res?: { json?: unknown },
+  opts: GraphqlValidateOptions = {},
 ): ContractResult {
   const findings: ContractFinding[] = []
 
@@ -52,12 +61,27 @@ export function validateGraphqlOperation(
     findings.push({ kind: 'graphql-validation', severity: 'error', message: err.message })
   }
 
+  // Collect operation definitions; optionally scope to a named one.
+  const operations = document.definitions.filter(
+    (d): d is OperationDefinitionNode => d.kind === 'OperationDefinition',
+  )
+  let targets = operations
+  if (opts.operationName !== undefined) {
+    targets = operations.filter((d) => d.name?.value === opts.operationName)
+    if (targets.length === 0) {
+      findings.push({
+        kind: 'graphql-validation',
+        severity: 'error',
+        message: `no operation named "${opts.operationName}" in the document`,
+      })
+    }
+  }
+
   // graphql-js `validate()` does not flag a mutation/subscription whose root
   // type is absent from the schema (it's an execution-time error). For drift
   // detection that's exactly the case we care about, so check it explicitly.
-  for (const def of document.definitions) {
-    if (def.kind !== 'OperationDefinition') continue
-    const op = (def as OperationDefinitionNode).operation
+  for (const def of targets) {
+    const op = def.operation
     const rootType =
       op === 'mutation'
         ? schema.getMutationType()
@@ -73,7 +97,7 @@ export function validateGraphqlOperation(
     }
   }
 
-  const payload = res?.json as GraphqlPayload | undefined
+  const payload = opts.json as GraphqlPayload | undefined
   if (payload?.errors && payload.errors.length > 0) {
     const messages = payload.errors.map((e) => e.message ?? '(no message)').join('; ')
     findings.push({

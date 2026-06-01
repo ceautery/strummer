@@ -1,0 +1,15 @@
+{
+  "User": {
+    "type": "object",
+    "required": ["id"],
+    "properties": {
+      "id": { "type": "integer" },
+      "pet": { "$ref": "#/Pet" }
+    }
+  },
+  "Pet": {
+    "type": "object",
+    "required": ["name"],
+    "properties": { "name": { "type": "string" } }
+  }
+}

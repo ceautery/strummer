@@ -231,12 +231,19 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
         body: z.unknown().optional().describe('response body to validate'),
         graphqlSchema: z.string().optional().describe('GraphQL schema (SDL)'),
         query: z.string().optional().describe('GraphQL operation/query text'),
+        operationName: z
+          .string()
+          .optional()
+          .describe('scope GraphQL drift to a named operation in a multi-operation document'),
       },
     },
     (args) => {
       let result: import('@strummer/api').ContractResult
       if (args.graphqlSchema !== undefined) {
-        result = validateGraphqlOperation(args.graphqlSchema, args.query ?? '', { json: args.body })
+        result = validateGraphqlOperation(args.graphqlSchema, args.query ?? '', {
+          json: args.body,
+          operationName: args.operationName,
+        })
       } else if (args.openapiSpec !== undefined) {
         result = validateOpenApiResponse(
           args.openapiSpec as Parameters<typeof validateOpenApiResponse>[0],
