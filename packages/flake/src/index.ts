@@ -26,6 +26,15 @@ export {
   type VitestJsonReport,
 } from './report.js'
 export {
+  defaultVitestRunner,
+  FlakeGateError,
+  type RunAndRecordInput,
+  type RunAndRecordResult,
+  type RunHistoryConfig,
+  runAndRecord,
+  type TestRunner,
+} from './runner.js'
+export {
   type HistoryQueryOptions,
   HistoryStore,
   type RecordedRun,
