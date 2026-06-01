@@ -1,0 +1,17 @@
+meta {
+  name: create-thing-multipart
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/things
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  name: {{thingName}}
+  token: {{secret:API_TOKEN}}
+  attachment: @file(upload.txt) @contentType(text/plain)
+}

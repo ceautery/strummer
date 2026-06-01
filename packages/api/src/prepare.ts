@@ -1,4 +1,6 @@
-import type { FormData } from 'undici'
+import { readFile } from 'node:fs/promises'
+import { basename, resolve } from 'node:path'
+import { FormData } from 'undici'
 import type { ApiRequest, RequestBody, SecretStore } from './model.js'
 import type { Redactor } from './secrets.js'
 import { interpolate } from './vars.js'
@@ -64,6 +66,12 @@ function bodyTexts(body: RequestBody | undefined): string[] {
     const g = body.graphql
     return g ? [g.query, ...(g.variables ? [g.variables] : [])] : []
   }
+  if (body.type === 'multipart-form') {
+    return (body.parts ?? []).flatMap((p) =>
+      p.kind === 'file' ? (p.filePaths ?? []) : [p.value ?? ''],
+    )
+  }
+  if (body.type === 'file') return body.file ? [body.file.filePath] : []
   if (body.content !== undefined) return [body.content]
   return (body.params ?? []).map((p) => p.value)
 }
@@ -71,7 +79,7 @@ function bodyTexts(body: RequestBody | undefined): string[] {
 async function materializeBody(
   body: RequestBody | undefined,
   fill: (text: string) => string,
-  _baseDir?: string,
+  baseDir?: string,
 ): Promise<PreparedBody | undefined> {
   if (!body || body.type === 'none') return undefined
   if (body.type === 'form-urlencoded') {
@@ -84,12 +92,48 @@ async function materializeBody(
     const content = materializeGraphql(body.graphql, fill)
     return { contentType: 'application/json', content, preview: content }
   }
+  if (body.type === 'multipart-form') {
+    return materializeMultipart(body, fill, baseDir)
+  }
   if (body.content !== undefined) {
     const content = fill(body.content)
     return { contentType: RAW_CONTENT_TYPE[body.type] ?? 'text/plain', content, preview: content }
   }
-  // Unsupported body type (multipart-form, file, …) — nothing to send yet.
+  // Recognized body type with no payload to materialize.
   return undefined
+}
+
+/**
+ * A `multipart/form-data` body. Text parts carry interpolated values; file parts
+ * read their bytes from disk (paths resolved against the collection dir — the
+ * `.bru` is operator-authored config, and egress is separately gated, so paths
+ * are not sandboxed here). undici mints the boundary, so `contentType` is left
+ * unset. The preview summarizes parts (file by name + byte size), never inlining
+ * file bytes; text values flow through the redactor at the surface.
+ */
+async function materializeMultipart(
+  body: RequestBody,
+  fill: (text: string) => string,
+  baseDir?: string,
+): Promise<PreparedBody> {
+  const form = new FormData()
+  const lines = ['multipart/form-data:']
+  for (const part of body.parts ?? []) {
+    if (part.kind === 'file') {
+      for (const rawPath of part.filePaths ?? []) {
+        const filled = fill(rawPath)
+        const buf = await readFile(resolve(baseDir ?? '', filled))
+        const blob = new Blob([buf], part.contentType ? { type: part.contentType } : {})
+        form.append(part.name, blob as unknown as Blob, basename(filled))
+        lines.push(`  ${part.name} (file): ${filled} (${buf.byteLength} bytes)`)
+      }
+    } else {
+      const value = fill(part.value ?? '')
+      form.append(part.name, value)
+      lines.push(`  ${part.name} (text): ${value}`)
+    }
+  }
+  return { content: form, preview: lines.join('\n') }
 }
 
 /** A GraphQL-over-HTTP envelope: `{query, variables}` as JSON. Variables (a JSON

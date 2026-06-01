@@ -177,6 +177,40 @@ describe('runRequest (offline, in-process server)', () => {
     expect(echoed.received).toContain('name=widget')
   })
 
+  it('sends a multipart-form body (text + file parts) with file resolved against the collection dir', async () => {
+    const token = 'multipart-secret-321'
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'create-thing-multipart', {
+      vars: { baseUrl, thingName: 'widget' },
+      secrets: new StaticSecretStore({ API_TOKEN: token }),
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'],
+      artifacts,
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(201)
+
+    // Preview summarizes parts: text values (secret redacted), file by name/size —
+    // never the file bytes inlined, never the raw secret.
+    expect(result.request.body).toContain('name (text): widget')
+    expect(result.request.body).toContain('token (text): [redacted:API_TOKEN]')
+    expect(result.request.body).toContain('attachment (file): upload.txt')
+    expect(result.request.body).not.toContain('hello multipart body')
+    expect(result.request.body).not.toContain(token)
+
+    // Server received a real multipart/form-data body with a boundary undici minted.
+    const echoed = JSON.parse(artifacts.get(result.response?.bodyHandle ?? '')?.body ?? '{}')
+    expect(echoed.contentType).toContain('multipart/form-data')
+    expect(echoed.contentType).toContain('boundary=')
+    expect(echoed.received).toContain('name="name"')
+    expect(echoed.received).toContain('widget')
+    expect(echoed.received).toContain('filename="upload.txt"')
+    expect(echoed.received).toContain('hello multipart body')
+    // The secret is on the wire but redacted in the stored artifact.
+    expect(echoed.received).toContain('[redacted:API_TOKEN]')
+    expect(echoed.received).not.toContain(token)
+  })
+
   it('sends a graphql body as {query, variables} JSON with secrets resolved + redacted', async () => {
     const token = 'gql-secret-789'
     const artifacts = new ArtifactStore()
