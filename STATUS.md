@@ -63,13 +63,21 @@ against in-process fixtures):
    every session context; bin parses `STRUMMER_BROWSER_HTTP_USERNAME/PASSWORD/
    ORIGIN`, registers the password with the redactor, and keeps it out of the
    config (config exposes `{username, origin}` only).
+14. **Browser secret boundary — `storageState` by handle** (`24e47ff`):
+   operator-gated `browser_save_storage_state` captures the context storageState to
+   an operator-path artifact, returns a handle + cookie/origin counts (never
+   inlined); the resource refuses the password-equivalent `storage-state` kind.
+   Bin gates it behind `STRUMMER_BROWSER_ALLOW_STORAGE_STATE` (default off).
+15. **Browser secret boundary — trace-internal redaction** (`acc6536`):
+   `RunRecorder.stop` unzips the trace.zip (fflate), scrubs its text entries (JSONL
+   metadata + DOM/sources snapshots), and re-zips before write; binary resources
+   pass through. **ADR 0006 §6 secret boundary is now COMPLETE.**
 
-**215 TS + 45 Py tests green; all pushed to `main`.** **Next action:** finish the
-secret boundary (`storageState`-by-handle, trace-internal redaction), then
-`serviceWorkers:'block'` + WebRTC disable, downloads/uploads/dialog/auth gating,
-session wall-clock + max-pages, an on-demand screenshot step tool, and (deferred)
-the human **`strummer browser` CLI**. See the detailed "Next action" section below
-+ ROADMAP Phase 3.
+**219 TS + 45 Py tests green; all pushed to `main`.** **Next action:**
+`serviceWorkers:'block'` + WebRTC disable (small hardening), downloads/uploads/
+dialog/auth gating, session wall-clock + max-pages, an on-demand screenshot step
+tool, and (deferred) the human **`strummer browser` CLI**. See the detailed "Next
+action" section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -334,18 +342,19 @@ sandbox on by default (`--no-sandbox` opt-in); `startReaper`; SIGINT/SIGTERM
 shutdown → `manager.shutdown()` then `proxy.close()`; `strummer-browser-mcp` bin +
 package.json deps/build inputs. Built bin smoke-starts clean.
 
-**Secret boundary — `{{secret:NAME}}` fill resolution (`bffdf07`) + origin-scoped
-`httpCredentials` (`4841fb2`): DONE.** Fill placeholders resolve server-side at the
-fill boundary (fail-closed; bin-wired from `STRUMMER_BROWSER_SECRET_*`); HTTP Basic
-creds are applied per context by `BrowserManager`, bin-parsed from
-`STRUMMER_BROWSER_HTTP_USERNAME/PASSWORD/ORIGIN`, password redacted + kept out of
-config. Remaining secret-boundary tail: `storageState`-by-handle (operator path),
-trace-internal redaction.
+**Secret boundary (ADR 0006 §6): COMPLETE.** `{{secret:NAME}}` fill resolution
+(`bffdf07`, fail-closed, bin-wired) + origin-scoped `httpCredentials` (`4841fb2`,
+per-context via `BrowserManager`, password redacted/out-of-config) + `storageState`
+by handle (`24e47ff`, operator-gated, counts+handle only, resource-refused) +
+trace-internal redaction (`acc6536`, fflate unzip→scrub text entries→rezip) — on
+top of console/network (8b), dry-run preview (8a), snapshot (A1), and surface-read
+(Milestone B) redaction. Scheduled refinements (not blocking): HAR bodies;
+`storageState`/userDataDir **import** for operator login-reuse.
 
-**Next (later Phase 3):** finish the secret-boundary tail above; `serviceWorkers:
-'block'` + WebRTC disable; downloads/uploads/dialog/auth gating; session wall-clock
-+ max-pages; an on-demand screenshot step tool; and the deferred human
-**`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before each commit.
+**Next (later Phase 3):** `serviceWorkers:'block'` + WebRTC disable; downloads/
+uploads/dialog/auth gating; session wall-clock + max-pages; an on-demand screenshot
+step tool; and the deferred human **`strummer browser` CLI**. TDD red→green;
+`pnpm gate` 100% green before each commit.
 
 ---
 

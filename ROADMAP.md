@@ -143,17 +143,18 @@ Staged below; aspirational items are scheduled, not cut.
       request). Operator `allowPrivate` opt-in permits loopback/RFC1918 for
       local-app testing but never link-local/metadata. (`serviceWorkers:'block'` +
       WebRTC disable + wiring the proxy into the server bin still scheduled.)
-- [ ] **Secret boundary** — `{{secret:NAME}}` fill resolution + origin-scoped
-      `httpCredentials`; redaction over console/network/HAR/trace/storageState
-      before any write; `storageState` by handle only. _(Mostly done: console+network
-      artifacts redacted before write (slice 8b); dry-run preview redacts `url`+
-      `postData` (slice 8a); ARIA-snapshot text+stored tree redacted via a
-      `buildSnapshot` redact seam (A1); surface reads redacted (Milestone B);
-      **`{{secret:NAME}}` fill resolution** server-side at the fill boundary
-      (fail-closed, bin-wired from `STRUMMER_BROWSER_SECRET_*`); **origin-scoped
-      `httpCredentials`** applied per context via `BrowserManager`, bin-parsed from
-      `STRUMMER_BROWSER_HTTP_USERNAME/PASSWORD/ORIGIN`, password redacted + kept out
-      of config. Remaining: `storageState`-by-handle, trace-internal redaction.)_
+- [x] **Secret boundary** (ADR 0006 §6) — `{{secret:NAME}}` fill resolution
+      server-side at the fill boundary (fail-closed, bin-wired from
+      `STRUMMER_BROWSER_SECRET_*`); origin-scoped `httpCredentials` applied per
+      context via `BrowserManager` (bin-parsed from `STRUMMER_BROWSER_HTTP_*`,
+      password redacted + kept out of config); `storageState` **by handle**
+      (operator-gated `browser_save_storage_state` → counts + handle only, never
+      inlined; the resource refuses the password-equivalent `storage-state` kind);
+      and **redaction before any write** across console/network (8b), dry-run
+      preview url+postData (8a), ARIA-snapshot text+stored tree (A1), surface reads
+      (Milestone B), and the **trace.zip** text entries (metadata + DOM/sources
+      snapshots, via fflate). _(Further refinements scheduled, not blocking: HAR
+      bodies; userDataDir/storageState **import** for operator login-reuse.)_
 - [x] **Engine hardening for the MCP surface** (Milestone A, slices A1–A6) —
       surfaced by the `browser-mcp-design` fan-out's adversarial review: snapshot
       redaction seam (A1); per-generation immutable artifact handles `snapshot-s<gen>`

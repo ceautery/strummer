@@ -184,6 +184,30 @@ pillar's **redaction pass before any disk write** — Playwright itself does **n
 artifact redaction. `storageState` is **password-equivalent**: operator-path
 only, by handle, scrubbed from traces.
 
+> **Update (2026-06-01) — secret boundary implemented.** All of §6 now ships:
+> - **`{{secret:NAME}}` fill resolution** at the surface (`browser_fill`/
+>   `browser_fill_form`), just before `locator.fill()`; **fail-closed** on an
+>   unknown name; bin-wired from `STRUMMER_BROWSER_SECRET_*` (same map as the
+>   redactor). Cleartext is typed into the input and scrubbed from every output.
+> - **Origin-scoped `httpCredentials`** applied per context by `BrowserManager`
+>   (`browser.newContext({ httpCredentials })`), bin-parsed from
+>   `STRUMMER_BROWSER_HTTP_USERNAME/PASSWORD/ORIGIN` (built only when both
+>   username+password are set); the password is registered with the redactor and
+>   kept out of the returned config.
+> - **`storageState` by handle**: operator-gated `browser_save_storage_state`
+>   (`STRUMMER_BROWSER_ALLOW_STORAGE_STATE`, default off) writes the
+>   password-equivalent state to an operator-path artifact and returns a **handle +
+>   cookie/origin counts only** — never inlined; the run-artifact resource
+>   **refuses** to serve the `storage-state` kind to the agent.
+> - **Redact before any write** is realized across console/network logs, the
+>   dry-run preview (url+postData), the ARIA-snapshot text+stored tree, surface
+>   reads, and the **trace.zip**: `RunRecorder` unzips the trace (fflate), scrubs
+>   its text entries (JSONL `trace`/`network`/`stacks` + text resource snapshots
+>   `.html`/`.txt`/css/js), and re-zips; binary resources pass through (resource
+>   files are content-addressed but referenced by filename, so redaction is safe).
+> Scheduled, not blocking: HAR request/response bodies; `storageState`/`userDataDir`
+> **import** for operator login-reuse.
+
 ### 7. Lifecycle, container posture, capture-cost gating
 
 One browser per server; one **ephemeral isolated `BrowserContext` per MCP
