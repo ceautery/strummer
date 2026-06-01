@@ -5,6 +5,12 @@ export {
   type FreshnessVerdict,
 } from './audit.js'
 export {
+  type ChangelogEntry,
+  type ChangelogSlice,
+  type SliceOptions,
+  sliceChangelog,
+} from './changelog.js'
+export {
   auditDeprecation,
   type DeprecationScope,
   type DeprecationVerdict,

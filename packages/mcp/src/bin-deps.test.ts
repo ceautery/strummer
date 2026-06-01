@@ -1,10 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
 import { buildDepsServerFromEnv } from './bin-deps.js'
 
+const tmpDirs: string[] = []
+afterAll(() => {
+  for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true })
+})
+
 describe('strummer-deps-mcp bin config (operator env)', () => {
-  it('defaults to no snapshot, network off, public registry, private blocked', () => {
+  it('defaults to no snapshot/artifacts, network off, public registry, private blocked', () => {
     expect(buildDepsServerFromEnv({}).config).toEqual({
       osvDir: undefined,
+      artifactDir: undefined,
       allowNetwork: false,
       registry: 'https://registry.npmjs.org',
       allowPrivate: false,
@@ -14,6 +23,13 @@ describe('strummer-deps-mcp bin config (operator env)', () => {
   it('reads the OSV snapshot dir from STRUMMER_DEPS_OSV_DB_DIR', () => {
     const { config } = buildDepsServerFromEnv({ STRUMMER_DEPS_OSV_DB_DIR: '/var/lib/osv' })
     expect(config.osvDir).toBe('/var/lib/osv')
+  })
+
+  it('reads the artifact dir from STRUMMER_DEPS_ARTIFACT_DIR (enables changelog_diff)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-bin-'))
+    tmpDirs.push(dir)
+    const { config } = buildDepsServerFromEnv({ STRUMMER_DEPS_ARTIFACT_DIR: dir })
+    expect(config.artifactDir).toBe(dir)
   })
 
   it('enables network only via STRUMMER_DEPS_ALLOW_NETWORK', () => {

@@ -3,10 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { ArtifactStore } from '@strummer/artifacts'
 import type { OsvAdvisory, Packument } from '@strummer/deps'
 import { strToU8, zipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createDepsServer, type PackumentFetcher } from './deps.js'
+import { type ChangelogFetcher, createDepsServer, type PackumentFetcher } from './deps.js'
 
 // ---- fixtures -------------------------------------------------------------
 
@@ -47,6 +48,24 @@ const fetchPackument: PackumentFetcher = async (name) => {
   const p = PACKUMENTS[name]
   if (!p) throw new Error(`no fixture packument for ${name}`)
   return p
+}
+
+const LODASH_CHANGELOG = `# Changelog
+
+## [4.17.21] - 2021-02-20
+### Security
+- Fix command injection (CVE-2021-23337)
+
+## [4.17.20] - 2020-08-13
+- Misc fixes
+
+## [4.17.15] - 2019-07-19
+- Old release
+`
+
+const fetchChangelog: ChangelogFetcher = async (name) => {
+  if (name !== 'lodash') throw new Error(`no fixture changelog for ${name}`)
+  return { text: LODASH_CHANGELOG, source: 'https://example.test/lodash/CHANGELOG.md' }
 }
 
 const LODASH_ADVISORY: OsvAdvisory = {
@@ -264,5 +283,67 @@ describe('strummer deps MCP surface', () => {
     }
     expect(sc.dependencies.map((d) => d.package)).toEqual(['lodash'])
     expect(sc.errors.map((e) => e.package)).toEqual(['ghost'])
+  })
+
+  it('exposes changelog_diff only when an artifact store + fetcher are configured', async () => {
+    const without = await connect(createDepsServer({ fetchPackument }))
+    clients.push(without)
+    expect((await without.listTools()).tools.map((t) => t.name)).not.toContain('changelog_diff')
+
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    tmpDirs.push(dir)
+    const withCl = await connect(
+      createDepsServer({ fetchChangelog, artifacts: new ArtifactStore(dir, 'deps') }),
+    )
+    clients.push(withCl)
+    expect((await withCl.listTools()).tools.map((t) => t.name)).toContain('changelog_diff')
+  })
+
+  it('changelog_diff slices the installed→target range and returns it by handle', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    tmpDirs.push(dir)
+    const store = new ArtifactStore(dir, 'deps')
+    const client = await connect(createDepsServer({ fetchChangelog, artifacts: store }))
+    clients.push(client)
+
+    const res = await client.callTool({
+      name: 'changelog_diff',
+      arguments: { project, package: 'lodash', to: '4.17.21' },
+    })
+    const sc = res.structuredContent as {
+      from: string
+      to: string | null
+      versionsCovered: string[]
+      entryCount: number
+      handle: string
+      source: string
+      byteSize: number
+    }
+    // installed lodash is 4.17.15 (auto-detected) → covers 4.17.20 and 4.17.21.
+    expect(sc.from).toBe('4.17.15')
+    expect(sc.to).toBe('4.17.21')
+    expect(sc.versionsCovered).toEqual(['4.17.21', '4.17.20'])
+    expect(sc.entryCount).toBe(2)
+    expect(sc.source).toBe('https://example.test/lodash/CHANGELOG.md')
+    expect(sc.handle).toBe('strummer://deps/lodash-4.17.15-to-4.17.21/changelog')
+    expect(sc.byteSize).toBeGreaterThan(0)
+
+    // The full sliced markdown is fetchable via the resource (never inlined in the tool).
+    const read = await client.readResource({ uri: sc.handle })
+    const body = (read.contents[0] as { text: string }).text
+    expect(body).toContain('CVE-2021-23337')
+    expect(body).toContain('### Security')
+    expect(body).not.toContain('Old release') // 4.17.15 itself is excluded
+  })
+
+  it('changelog_diff fails clearly when not enabled', async () => {
+    const client = await connect(createDepsServer({ fetchPackument }))
+    clients.push(client)
+    // The tool is not even registered without a store/fetcher, so calling it errors.
+    const res = await client.callTool({
+      name: 'changelog_diff',
+      arguments: { project, package: 'lodash' },
+    })
+    expect(res.isError).toBe(true)
   })
 })

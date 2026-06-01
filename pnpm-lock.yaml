@@ -184,6 +184,9 @@ importers:
       '@strummer/api':
         specifier: workspace:*
         version: link:../api
+      '@strummer/artifacts':
+        specifier: workspace:*
+        version: link:../artifacts
       '@strummer/browser':
         specifier: workspace:*
         version: link:../browser

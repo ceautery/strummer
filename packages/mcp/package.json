@@ -27,6 +27,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@strummer/api": "workspace:*",
+    "@strummer/artifacts": "workspace:*",
     "@strummer/browser": "workspace:*",
     "@strummer/core": "workspace:*",
     "@strummer/deps": "workspace:*",

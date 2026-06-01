@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { ArtifactStore } from '@strummer/artifacts'
 import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
 import {
   auditDependency,
@@ -8,6 +9,7 @@ import {
   loadOsvSnapshot,
   type OsvAdvisory,
   type Packument,
+  sliceChangelog,
 } from '@strummer/deps'
 import { z } from 'zod'
 
@@ -15,6 +17,13 @@ import { z } from 'zod'
  * audit core stays offline/deterministic; the bin wires an operator-gated,
  * SSRF-pinned network fetcher. Absent ⇒ network is off and the audit tools say so. */
 export type PackumentFetcher = (packageName: string, ecosystem: string) => Promise<Packument>
+
+/** Fetch a package's raw CHANGELOG markdown. Injected like {@link PackumentFetcher};
+ * the bin wires an operator-gated, SSRF-pinned fetch. Returns the text + its source. */
+export type ChangelogFetcher = (
+  packageName: string,
+  ecosystem: string,
+) => Promise<{ text: string; source: string }>
 
 export interface DepsToolsOptions {
   /** OPERATOR: directory of the on-disk OSV snapshot (`<dir>/<ecosystem>/all.zip`).
@@ -24,6 +33,13 @@ export interface DepsToolsOptions {
   osvDir?: string
   /** OPERATOR: injected packument source (see {@link PackumentFetcher}). */
   fetchPackument?: PackumentFetcher
+  /** OPERATOR: injected changelog source (see {@link ChangelogFetcher}). Absent ⇒
+   * `changelog_diff` reports it is not enabled. */
+  fetchChangelog?: ChangelogFetcher
+  /** OPERATOR: on-disk artifact store (prefix `deps`) backing `changelog_diff`'s
+   * by-handle output. Absent ⇒ `changelog_diff` reports it is not enabled (a sliced
+   * changelog is large/multi-version, so it is returned by handle, never inlined). */
+  artifacts?: ArtifactStore
 }
 
 /** OSV ecosystem names this surface understands, mapped to the `@strummer/core`
@@ -41,10 +57,12 @@ package that is ACTUALLY INSTALLED in a project (not "latest"): is it deprecated
 it have a known vulnerability, how far behind is it.
 
 Use \`audit_dependency\` for one package, \`audit_project\` for a compact roll-up across
-a manifest. Vulnerability data comes from an operator-provisioned offline OSV snapshot;
-when none is configured the result carries \`osvSnapshotLoaded:false\` — treat "no known
-vulnerabilities" as unknown, not clean. Network access to fetch package metadata is
-operator-gated and off by default.`
+a manifest, and \`changelog_diff\` to see WHAT CHANGED between the installed version and
+an upgrade target (the sliced changelog is returned by handle — read the
+\`strummer://deps/{id}/{kind}\` resource). Vulnerability data comes from an
+operator-provisioned offline OSV snapshot; when none is configured the result carries
+\`osvSnapshotLoaded:false\` — treat "no known vulnerabilities" as unknown, not clean.
+Network access to fetch package metadata/changelogs is operator-gated and off by default.`
 
 function text(value: unknown) {
   return { type: 'text' as const, text: JSON.stringify(value, null, 2) }
@@ -247,6 +265,112 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
       return { content: [text(structured)], structuredContent: structured }
     },
   )
+
+  // changelog_diff emits large, multi-version markdown by handle, so it is enabled
+  // only when the operator has wired BOTH a changelog fetcher and an artifact store
+  // (deny-by-default: absent either, the tool/resource are not registered at all).
+  if (opts.fetchChangelog !== undefined && opts.artifacts !== undefined) {
+    const fetchChangelog = opts.fetchChangelog
+    const store = opts.artifacts
+
+    server.registerTool(
+      'changelog_diff',
+      {
+        title: 'Diff a dependency changelog across an upgrade',
+        description:
+          'Slice a package CHANGELOG to the versions between the INSTALLED version (from) and ' +
+          'an upgrade target (to), so you can see what actually changed before recommending a ' +
+          'bump. Returns a COMPACT summary (versions covered, source) + the sliced markdown by ' +
+          'handle — read the strummer://deps/{id}/{kind} resource for the full text.',
+        inputSchema: {
+          project: z
+            .string()
+            .optional()
+            .describe('project root, to auto-detect the installed `from` version'),
+          package: z.string().describe('package name'),
+          ecosystem: ecosystemArg,
+          from: z
+            .string()
+            .optional()
+            .describe('lower bound (exclusive); defaults to the detected installed version'),
+          to: z
+            .string()
+            .optional()
+            .describe('upgrade target (inclusive); omit for everything newer than `from`'),
+        },
+      },
+      async (args) => {
+        const ecosystem = (args.ecosystem ?? 'npm') as OsvEcosystem
+        let from = args.from
+        if (from === undefined) {
+          if (args.project === undefined) {
+            throw new Error('provide `from` or `project` so the installed version can be detected')
+          }
+          const detected = detectInstalledVersion(args.project, args.package, {
+            ecosystem: DETECT_ECOSYSTEM[ecosystem],
+          })
+          if (detected.version === null) {
+            throw new Error(
+              `could not detect an installed version of "${args.package}" in ${args.project}`,
+            )
+          }
+          from = detected.version
+        }
+
+        const { text: markdown, source } = await fetchChangelog(args.package, ecosystem)
+        const slice = sliceChangelog(markdown, { from, to: args.to })
+        const body = slice.entries.map((e) => e.body).join('\n\n')
+
+        // Sanitize the version-pair into a filesystem-safe artifact id (it becomes a dir).
+        const id = `${args.package}-${slice.from}-to-${slice.to ?? 'latest'}`.replace(
+          /[^A-Za-z0-9._-]/g,
+          '-',
+        )
+        const handle = store.put(id, 'changelog', body, 'text/markdown')
+        const structured = {
+          package: args.package,
+          ecosystem,
+          from: slice.from,
+          to: slice.to ?? null,
+          versionsCovered: slice.entries.map((e) => e.version),
+          entryCount: slice.entries.length,
+          allVersions: slice.allVersions,
+          source,
+          handle,
+          byteSize: Buffer.byteLength(body),
+          contentType: 'text/markdown',
+          note:
+            slice.entries.length === 0
+              ? 'no changelog sections fall in the requested range'
+              : undefined,
+        }
+        return { content: [text(structured)], structuredContent: structured }
+      },
+    )
+
+    server.registerResource(
+      'deps-artifact',
+      new ResourceTemplate('strummer://deps/{id}/{kind}', { list: undefined }),
+      {
+        title: 'Dependency artifact',
+        description: 'A stored deps artifact (e.g. a sliced changelog) by handle',
+        mimeType: 'text/markdown',
+      },
+      (uri, variables) => {
+        const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
+        const handle = `strummer://deps/${pick(variables.id)}/${pick(variables.kind)}`
+        const artifact = store.get(handle)
+        if (!artifact) {
+          throw new Error(`No stored deps artifact for ${handle}`)
+        }
+        return {
+          contents: [
+            { uri: uri.href, mimeType: artifact.contentType, text: artifact.body.toString('utf8') },
+          ],
+        }
+      },
+    )
+  }
 }
 
 /** Build a standalone Strummer dependency-intelligence MCP server. */

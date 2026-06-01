@@ -17,6 +17,7 @@ export {
   registerBrowserTools,
 } from './browser.js'
 export {
+  type ChangelogFetcher,
   createDepsServer,
   type DepsToolsOptions,
   type PackumentFetcher,
