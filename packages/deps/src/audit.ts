@@ -10,7 +10,7 @@
  * trivially testable; the I/O + operator gating live at the bin/MCP layer.
  */
 
-import semver from 'semver'
+import { semverComparator, type VersionComparator } from './comparator.js'
 import { auditDeprecation, type DeprecationVerdict, type Packument } from './deprecation.js'
 import {
   matchVulnerabilities,
@@ -86,6 +86,8 @@ export interface AuditDependencyInput {
   packument: Packument
   advisories?: OsvAdvisory[]
   snapshotDate?: string
+  /** Version algebra for this ecosystem (ADR 0012); defaults to semver (npm). */
+  comparator?: VersionComparator
 }
 
 const SEVERITY_RANK: Record<SeverityBucket, number> = {
@@ -96,69 +98,74 @@ const SEVERITY_RANK: Record<SeverityBucket, number> = {
   unknown: 0,
 }
 
-/** Stable (non-prerelease), valid-semver version strings present in the packument. */
-function stableVersions(packument: Packument): string[] {
-  return Object.keys(packument.versions).filter(
-    (v) => semver.valid(v) !== null && semver.prerelease(v) === null,
-  )
+/** Stable (non-prerelease), valid version strings present in the packument. */
+function stableVersions(packument: Packument, cmp: VersionComparator): string[] {
+  return Object.keys(packument.versions).filter((v) => cmp.isValid(v) && !cmp.isPrerelease(v))
 }
 
-function maxVersion(versions: string[]): string | undefined {
+function maxVersion(versions: string[], cmp: VersionComparator): string | undefined {
   return versions.reduce<string | undefined>(
-    (best, v) => (best === undefined || semver.gt(v, best) ? v : best),
+    (best, v) => (best === undefined || cmp.gt(v, best) ? v : best),
     undefined,
   )
 }
 
-/** Upgrade distance by semver component; undefined when `installed` is not valid semver. */
+/** Upgrade distance by release component; undefined when `installed` is not a valid version. */
 function computeBehindBy(
   installed: string,
   stable: string[],
   latest: string | undefined,
   latestSameMajor: string | undefined,
+  cmp: VersionComparator,
 ): BehindBy | undefined {
-  if (semver.valid(installed) === null) return undefined
-  const releases = stable.filter((v) => semver.gt(v, installed)).length
-  const major =
-    latest !== undefined && semver.valid(latest) !== null
-      ? Math.max(0, semver.major(latest) - semver.major(installed))
-      : 0
-  const minor =
-    latestSameMajor !== undefined
-      ? Math.max(0, semver.minor(latestSameMajor) - semver.minor(installed))
-      : 0
+  const inst = cmp.releaseComponents(installed)
+  if (inst === null) return undefined
+  const releases = stable.filter((v) => cmp.gt(v, installed)).length
+  const latestComps = latest !== undefined ? cmp.releaseComponents(latest) : null
+  const major = latestComps !== null ? Math.max(0, (latestComps[0] ?? 0) - (inst[0] ?? 0)) : 0
+  const sameMajorComps =
+    latestSameMajor !== undefined ? cmp.releaseComponents(latestSameMajor) : null
+  const minor = sameMajorComps !== null ? Math.max(0, (sameMajorComps[1] ?? 0) - (inst[1] ?? 0)) : 0
   // Newest patch within the installed major.minor line.
   const latestSamePatchLine = maxVersion(
-    stable.filter(
-      (v) =>
-        semver.major(v) === semver.major(installed) && semver.minor(v) === semver.minor(installed),
-    ),
+    stable.filter((v) => {
+      const c = cmp.releaseComponents(v)
+      return c !== null && c[0] === inst[0] && c[1] === inst[1]
+    }),
+    cmp,
   )
-  const patch =
-    latestSamePatchLine !== undefined
-      ? Math.max(0, semver.patch(latestSamePatchLine) - semver.patch(installed))
-      : 0
+  const patchComps =
+    latestSamePatchLine !== undefined ? cmp.releaseComponents(latestSamePatchLine) : null
+  const patch = patchComps !== null ? Math.max(0, (patchComps[2] ?? 0) - (inst[2] ?? 0)) : 0
   return { releases, major, minor, patch }
 }
 
-function computeFreshness(installed: string, packument: Packument): FreshnessVerdict {
-  const stable = stableVersions(packument)
+function computeFreshness(
+  installed: string,
+  packument: Packument,
+  cmp: VersionComparator,
+): FreshnessVerdict {
+  const stable = stableVersions(packument, cmp)
   const tagged = packument['dist-tags']?.latest
-  const latest = tagged !== undefined && semver.valid(tagged) !== null ? tagged : maxVersion(stable)
+  const latest = tagged !== undefined && cmp.isValid(tagged) ? tagged : maxVersion(stable, cmp)
 
   let latestSameMajor: string | undefined
-  if (semver.valid(installed) !== null) {
-    const major = semver.major(installed)
-    latestSameMajor = maxVersion(stable.filter((v) => semver.major(v) === major))
+  const instComps = cmp.releaseComponents(installed)
+  if (instComps !== null) {
+    const major = instComps[0]
+    latestSameMajor = maxVersion(
+      stable.filter((v) => cmp.releaseComponents(v)?.[0] === major),
+      cmp,
+    )
   }
 
   const isOutdated =
-    semver.valid(installed) !== null &&
+    cmp.isValid(installed) &&
     latest !== undefined &&
-    semver.valid(latest) !== null &&
-    semver.lt(installed, latest)
+    cmp.isValid(latest) &&
+    cmp.lt(installed, latest)
 
-  const behindBy = computeBehindBy(installed, stable, latest, latestSameMajor)
+  const behindBy = computeBehindBy(installed, stable, latest, latestSameMajor, cmp)
 
   return { installed, latest, latestSameMajor, isOutdated, behindBy }
 }
@@ -174,12 +181,13 @@ function lowestSafeVersion(
   advisories: OsvAdvisory[],
   pkg: { ecosystem: string; name: string },
   installed: string,
+  cmp: VersionComparator,
 ): string | undefined {
-  const candidates = stableVersions(packument)
-    .filter((v) => semver.gt(v, installed))
-    .sort((a, b) => semver.compare(a, b))
+  const candidates = stableVersions(packument, cmp)
+    .filter((v) => cmp.gt(v, installed))
+    .sort((a, b) => cmp.compare(a, b))
   for (const candidate of candidates) {
-    if (matchVulnerabilities(advisories, pkg, candidate).length === 0) return candidate
+    if (matchVulnerabilities(advisories, pkg, candidate, cmp).length === 0) return candidate
   }
   return undefined
 }
@@ -202,25 +210,33 @@ export function auditDependency(input: AuditDependencyInput): DependencyAudit {
     advisories = [],
     snapshotDate,
   } = input
+  const cmp = input.comparator ?? semverComparator
 
   const deprecated = auditDeprecation(packument, installedVersion)
   const vulnerabilities = matchVulnerabilities(
     advisories,
     { ecosystem, name: packageName },
     installedVersion,
+    cmp,
   )
-  const freshness = computeFreshness(installedVersion, packument)
+  const freshness = computeFreshness(installedVersion, packument, cmp)
 
   const recommendedTarget =
     freshness.latestSameMajor !== undefined &&
-    semver.valid(installedVersion) !== null &&
-    semver.gt(freshness.latestSameMajor, installedVersion)
+    cmp.isValid(installedVersion) &&
+    cmp.gt(freshness.latestSameMajor, installedVersion)
       ? freshness.latestSameMajor
       : undefined
 
   const minimumSafeUpgrade =
-    vulnerabilities.length > 0 && semver.valid(installedVersion) !== null
-      ? lowestSafeVersion(packument, advisories, { ecosystem, name: packageName }, installedVersion)
+    vulnerabilities.length > 0 && cmp.isValid(installedVersion)
+      ? lowestSafeVersion(
+          packument,
+          advisories,
+          { ecosystem, name: packageName },
+          installedVersion,
+          cmp,
+        )
       : undefined
 
   return {

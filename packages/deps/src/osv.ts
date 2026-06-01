@@ -9,14 +9,18 @@
  * version-range evaluation pure here is what lets the green gate stay deterministic.
  *
  * Range evaluation follows the OSV schema's documented algorithm
- * (https://ossf.github.io/osv-schema/): for a SEMVER range, sort the events
+ * (https://ossf.github.io/osv-schema/): for a SEMVER or ECOSYSTEM range, sort the events
  * ascending by version (with the sentinel `introduced: "0"` first), then scan — an
  * `introduced` turns the affected state on at/after its version, a `fixed` turns it
  * off at/after its version (exclusive), and a `last_affected` turns it off strictly
  * after its version (inclusive). The final state decides membership.
+ *
+ * Version ordering is delegated to an injected {@link VersionComparator} (ADR 0012): an
+ * ECOSYSTEM range carries versions in the ecosystem's own scheme (npm=SemVer, PyPI=PEP 440,
+ * RubyGems=Gem), so the caller passes the matching comparator; it defaults to semver (npm).
  */
 
-import semver from 'semver'
+import { semverComparator, type VersionComparator } from './comparator.js'
 import { cvssV3BaseScore } from './cvss.js'
 
 /** A CVSS severity entry (OSV schema): `type` like `CVSS_V3`, `score` is the vector string. */
@@ -130,23 +134,18 @@ function resolveSeverity(advisory: OsvAdvisory, hit: OsvAffected[]): SeverityBuc
   return best
 }
 
-/** Coerce an arbitrary version-ish string into a comparable semver, or null if hopeless. */
-function clean(version: string): string | null {
-  return semver.valid(version) ?? semver.coerce(version)?.version ?? null
-}
-
 /**
- * Compare two range-event versions for sorting/evaluation. The OSV sentinel `"0"`
- * (`introduced: "0"` = "from the beginning") sorts below every real version.
+ * Compare two range-event versions for sorting/evaluation, via the ecosystem comparator. The
+ * OSV sentinel `"0"` (`introduced: "0"` = "from the beginning") sorts below every real version.
  */
-function compareVersions(a: string, b: string): number {
+function compareVersions(a: string, b: string, cmp: VersionComparator): number {
   if (a === b) return 0
   if (b === '0') return 1
   if (a === '0') return -1
-  const ca = clean(a)
-  const cb = clean(b)
+  const ca = cmp.clean(a)
+  const cb = cmp.clean(b)
   if (ca === null || cb === null) return 0
-  return semver.compare(ca, cb)
+  return cmp.compare(ca, cb)
 }
 
 interface SortableEvent {
@@ -165,10 +164,10 @@ function toSortableEvents(events: OsvEvent[]): SortableEvent[] {
   return out
 }
 
-/** True if `version` falls within the affected window described by a SEMVER range's events. */
-function versionInRange(version: string, events: OsvEvent[]): boolean {
+/** True if `version` falls within the affected window described by a range's events. */
+function versionInRange(version: string, events: OsvEvent[], cmp: VersionComparator): boolean {
   const sorted = toSortableEvents(events).sort((x, y) => {
-    const c = compareVersions(x.version, y.version)
+    const c = compareVersions(x.version, y.version, cmp)
     if (c !== 0) return c
     // At an equal version, an `introduced` is applied before a closing event.
     return x.kind === 'introduced' ? -1 : 1
@@ -176,7 +175,7 @@ function versionInRange(version: string, events: OsvEvent[]): boolean {
 
   let affected = false
   for (const event of sorted) {
-    const c = compareVersions(version, event.version)
+    const c = compareVersions(version, event.version, cmp)
     if (event.kind === 'introduced') {
       if (c >= 0) affected = true
     } else if (event.kind === 'fixed') {
@@ -189,18 +188,18 @@ function versionInRange(version: string, events: OsvEvent[]): boolean {
 }
 
 /** True if `version` is affected by an `OsvAffected` entry (explicit versions or any SEMVER/ECOSYSTEM range). */
-function affectedByEntry(version: string, affected: OsvAffected): boolean {
+function affectedByEntry(version: string, affected: OsvAffected, cmp: VersionComparator): boolean {
   if (affected.versions?.includes(version)) return true
   for (const range of affected.ranges ?? []) {
-    // GIT ranges are commit-based, not version-comparable here. npm's ECOSYSTEM
-    // ranges are semver, so they evaluate the same as SEMVER.
+    // GIT ranges are commit-based, not version-comparable here. SEMVER + ECOSYSTEM ranges
+    // are evaluated with the injected ecosystem comparator (semver for npm, PEP 440 for PyPI, …).
     if (range.type === 'GIT') continue
-    if (versionInRange(version, range.events)) return true
+    if (versionInRange(version, range.events, cmp)) return true
   }
   return false
 }
 
-function fixedVersions(affected: OsvAffected): string[] {
+function fixedVersions(affected: OsvAffected, cmp: VersionComparator): string[] {
   const fixes = new Set<string>()
   for (const range of affected.ranges ?? []) {
     if (range.type === 'GIT') continue
@@ -208,7 +207,7 @@ function fixedVersions(affected: OsvAffected): string[] {
       if (event.fixed !== undefined) fixes.add(event.fixed)
     }
   }
-  return [...fixes].sort((a, b) => compareVersions(a, b))
+  return [...fixes].sort((a, b) => compareVersions(a, b, cmp))
 }
 
 /**
@@ -220,17 +219,20 @@ export function matchVulnerabilities(
   advisories: OsvAdvisory[],
   pkg: { ecosystem: string; name: string },
   installedVersion: string,
+  cmp: VersionComparator = semverComparator,
 ): VulnerabilityMatch[] {
   const matches: VulnerabilityMatch[] = []
   for (const advisory of advisories) {
     const relevant = advisory.affected.filter(
       (a) => a.package.ecosystem === pkg.ecosystem && a.package.name === pkg.name,
     )
-    const hit = relevant.filter((a) => affectedByEntry(installedVersion, a))
+    const hit = relevant.filter((a) => affectedByEntry(installedVersion, a, cmp))
     if (hit.length === 0) continue
 
     const severity = resolveSeverity(advisory, hit)
-    const fixedIn = [...new Set(hit.flatMap(fixedVersions))].sort((a, b) => compareVersions(a, b))
+    const fixedIn = [...new Set(hit.flatMap((a) => fixedVersions(a, cmp)))].sort((a, b) =>
+      compareVersions(a, b, cmp),
+    )
     matches.push({
       id: advisory.id,
       aliases: advisory.aliases ?? [],

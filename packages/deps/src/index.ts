@@ -11,6 +11,7 @@ export {
   type SliceOptions,
   sliceChangelog,
 } from './changelog.js'
+export { semverComparator, type VersionComparator } from './comparator.js'
 export { cvssV3BaseScore } from './cvss.js'
 export {
   auditDeprecation,
