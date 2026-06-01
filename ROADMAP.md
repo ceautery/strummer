@@ -149,10 +149,11 @@ Staged below; aspirational items are scheduled, not cut.
       artifacts redacted before write (slice 8b); dry-run preview redacts `url`+
       `postData` (slice 8a); ARIA-snapshot text+stored tree redacted via a
       `buildSnapshot` redact seam (A1); surface reads redacted (Milestone B);
-      **`{{secret:NAME}}` fill resolution — resolved server-side at the fill
-      boundary, fail-closed, bin-wired from `STRUMMER_BROWSER_SECRET_*`** (done).
-      Remaining: origin-scoped `httpCredentials`, `storageState`-by-handle,
-      trace-internal redaction.)_
+      **`{{secret:NAME}}` fill resolution** server-side at the fill boundary
+      (fail-closed, bin-wired from `STRUMMER_BROWSER_SECRET_*`); **origin-scoped
+      `httpCredentials`** applied per context via `BrowserManager`, bin-parsed from
+      `STRUMMER_BROWSER_HTTP_USERNAME/PASSWORD/ORIGIN`, password redacted + kept out
+      of config. Remaining: `storageState`-by-handle, trace-internal redaction.)_
 - [x] **Engine hardening for the MCP surface** (Milestone A, slices A1–A6) —
       surfaced by the `browser-mcp-design` fan-out's adversarial review: snapshot
       redaction seam (A1); per-generation immutable artifact handles `snapshot-s<gen>`
