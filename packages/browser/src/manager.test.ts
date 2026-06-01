@@ -90,6 +90,12 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
     expect(t.browser.contexts[1]?.closed).toBe(true)
   })
 
+  it('blocks service workers on every context (hardening default)', async () => {
+    const t = setup()
+    await t.manager.createSession('s1')
+    expect(t.browser.contexts[0]?.options?.serviceWorkers).toBe('block')
+  })
+
   it('applies operator origin-scoped httpCredentials to each new context', async () => {
     const httpCredentials = { username: 'admin', password: 's3cr3t', origin: 'https://app.test' }
     const t = setup({ httpCredentials })

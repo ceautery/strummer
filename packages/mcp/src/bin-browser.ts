@@ -144,9 +144,17 @@ export async function buildBrowserServerFromEnv(
   // MANDATORY Tier-2 DNS-pinning proxy — deliberately no disable env.
   const proxy = await createSsrfProxy({ allowPrivate })
 
-  // Force loopback through the pinning proxy too (Chromium bypasses the proxy for
-  // localhost by default). --no-sandbox stays an explicit operator opt-in.
-  const launchArgs = ['--proxy-bypass-list=<-loopback>', ...(noSandbox ? ['--no-sandbox'] : [])]
+  // Hardening launch args (always on):
+  // - --proxy-bypass-list=<-loopback> forces loopback through the pinning proxy too
+  //   (Chromium bypasses the proxy for localhost by default).
+  // - --force-webrtc-ip-handling-policy=disable_non_proxied_udp neutralizes WebRTC
+  //   egress: only proxied UDP is allowed (no P2P bypass of the SSRF proxy, no local
+  //   IP leak). --no-sandbox stays an explicit operator opt-in.
+  const launchArgs = [
+    '--proxy-bypass-list=<-loopback>',
+    '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+    ...(noSandbox ? ['--no-sandbox'] : []),
+  ]
 
   const gate = new BrowserGate({ allowUnsafe, allowedHosts })
   const store = new ArtifactStore(artifactsDir)

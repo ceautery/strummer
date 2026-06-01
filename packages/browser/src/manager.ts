@@ -96,9 +96,12 @@ export class BrowserManager {
       )
     }
     const browser = await this.ensureBrowser()
-    const context = await browser.newContext(
-      this.opts.httpCredentials ? { httpCredentials: this.opts.httpCredentials } : {},
-    )
+    // Hardening default: block service workers — a registered SW can cache/intercept
+    // requests and persist across the context, bypassing the route-based SSRF layer.
+    const context = await browser.newContext({
+      serviceWorkers: 'block',
+      ...(this.opts.httpCredentials ? { httpCredentials: this.opts.httpCredentials } : {}),
+    })
     if (this.opts.gate) await installSafetyRoutes(context, this.opts.gate)
     if (this.opts.defaultTimeoutMs > 0) context.setDefaultTimeout(this.opts.defaultTimeoutMs)
     if (this.opts.defaultNavigationTimeoutMs > 0) {

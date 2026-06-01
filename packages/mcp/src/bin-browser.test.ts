@@ -42,6 +42,13 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     expect(b.config.launchArgs).toContain('--proxy-bypass-list=<-loopback>')
   })
 
+  it('neutralizes WebRTC egress (forces proxied UDP / no IP leak) via a launch arg', async () => {
+    const b = await build({})
+    expect(b.config.launchArgs).toContain(
+      '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+    )
+  })
+
   it('defaults trace capture OFF and console/network ON; trace opt-in flips it', async () => {
     const off = await build({})
     expect(off.config.capture).toEqual({ trace: false, console: true, network: true })
