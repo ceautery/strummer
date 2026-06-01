@@ -52,13 +52,19 @@ against in-process fixtures):
    <-loopback>` (loopback also traverses the proxy); trace-off-by-default; sandbox
    on by default (`--no-sandbox` opt-in); SIGINT/SIGTERM shutdown.
 
-**208 TS + 45 Py tests green; all pushed to `main`.** **Next action:** the
-**browser secret-boundary slice** (`{{secret:NAME}}` fill resolution + origin-scoped
-`httpCredentials` + `storageState`/trace-internal redaction), then
-`serviceWorkers:'block'` + WebRTC disable, downloads/uploads/dialog/auth gating,
-session wall-clock + max-pages, an on-demand screenshot step tool, and (deferred
-from this pass) the human **`strummer browser` CLI**. See the detailed "Next
-action" section below + ROADMAP Phase 3.
+12. **Browser secret boundary — `{{secret:NAME}}` fill resolution** (`bffdf07`):
+   `browser_fill`/`browser_fill_form` resolve `{{secret:NAME}}` to the operator
+   secret server-side at the fill boundary (cleartext typed into the input, never
+   in a tool arg or agent-visible result; redactor scrubs it everywhere); fails
+   closed on an unknown name; the bin wires `resolveSecret` from the same
+   `STRUMMER_BROWSER_SECRET_*` map as the redactor.
+
+**211 TS + 45 Py tests green; all pushed to `main`.** **Next action:** finish the
+secret boundary (origin-scoped `httpCredentials`, `storageState`-by-handle,
+trace-internal redaction), then `serviceWorkers:'block'` + WebRTC disable,
+downloads/uploads/dialog/auth gating, session wall-clock + max-pages, an on-demand
+screenshot step tool, and (deferred) the human **`strummer browser` CLI**. See the
+detailed "Next action" section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -323,12 +329,16 @@ sandbox on by default (`--no-sandbox` opt-in); `startReaper`; SIGINT/SIGTERM
 shutdown → `manager.shutdown()` then `proxy.close()`; `strummer-browser-mcp` bin +
 package.json deps/build inputs. Built bin smoke-starts clean.
 
-**Next (later Phase 3):** the **secret-boundary slice** (`{{secret:NAME}}` fill
-resolution + origin-scoped `httpCredentials` + `storageState`/trace-internal
-redaction); `serviceWorkers:'block'` + WebRTC disable; downloads/uploads/dialog/
-auth gating; session wall-clock + max-pages; an on-demand screenshot step tool; and
-the deferred human **`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green
-before each commit.
+**Secret boundary — `{{secret:NAME}}` fill resolution: DONE (`bffdf07`).** Surface
+resolves the placeholder server-side at the fill boundary (fail-closed); bin wires
+`resolveSecret` from `STRUMMER_BROWSER_SECRET_*`. Remaining secret-boundary tail:
+origin-scoped `httpCredentials` (thread context options through `BrowserManager`),
+`storageState`-by-handle (operator path), trace-internal redaction.
+
+**Next (later Phase 3):** finish the secret-boundary tail above; `serviceWorkers:
+'block'` + WebRTC disable; downloads/uploads/dialog/auth gating; session wall-clock
++ max-pages; an on-demand screenshot step tool; and the deferred human
+**`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

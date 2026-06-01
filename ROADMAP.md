@@ -145,12 +145,14 @@ Staged below; aspirational items are scheduled, not cut.
       WebRTC disable + wiring the proxy into the server bin still scheduled.)
 - [ ] **Secret boundary** — `{{secret:NAME}}` fill resolution + origin-scoped
       `httpCredentials`; redaction over console/network/HAR/trace/storageState
-      before any write; `storageState` by handle only. _(Partial: console+network
-      text artifacts redacted before write via the `RunRecorder` `redact` hook
-      (slice 8b); dry-run preview redacts `url`+`postData` (slice 8a); the
-      ARIA-snapshot text+stored tree are redacted via a `buildSnapshot` redact
-      seam (slice A1). `{{secret:NAME}}` fill / `httpCredentials` / `storageState`
-      / trace-internal redaction still to come.)_
+      before any write; `storageState` by handle only. _(Mostly done: console+network
+      artifacts redacted before write (slice 8b); dry-run preview redacts `url`+
+      `postData` (slice 8a); ARIA-snapshot text+stored tree redacted via a
+      `buildSnapshot` redact seam (A1); surface reads redacted (Milestone B);
+      **`{{secret:NAME}}` fill resolution — resolved server-side at the fill
+      boundary, fail-closed, bin-wired from `STRUMMER_BROWSER_SECRET_*`** (done).
+      Remaining: origin-scoped `httpCredentials`, `storageState`-by-handle,
+      trace-internal redaction.)_
 - [x] **Engine hardening for the MCP surface** (Milestone A, slices A1–A6) —
       surfaced by the `browser-mcp-design` fan-out's adversarial review: snapshot
       redaction seam (A1); per-generation immutable artifact handles `snapshot-s<gen>`
