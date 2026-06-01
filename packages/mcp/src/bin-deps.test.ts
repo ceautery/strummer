@@ -17,6 +17,7 @@ describe('strummer-deps-mcp bin config (operator env)', () => {
       allowNetwork: false,
       registry: 'https://registry.npmjs.org',
       pypiRegistry: 'https://pypi.org/pypi',
+      rubygemsRegistry: 'https://rubygems.org/api/v1',
       allowPrivate: false,
     })
   })
@@ -26,6 +27,13 @@ describe('strummer-deps-mcp bin config (operator env)', () => {
       STRUMMER_DEPS_PYPI_REGISTRY: 'https://pypi.example.test/pypi',
     })
     expect(config.pypiRegistry).toBe('https://pypi.example.test/pypi')
+  })
+
+  it('reads the RubyGems registry base from STRUMMER_DEPS_RUBYGEMS_REGISTRY', () => {
+    const { config } = buildDepsServerFromEnv({
+      STRUMMER_DEPS_RUBYGEMS_REGISTRY: 'https://gems.example.test/api/v1',
+    })
+    expect(config.rubygemsRegistry).toBe('https://gems.example.test/api/v1')
   })
 
   it('reads the OSV snapshot dir from STRUMMER_DEPS_OSV_DB_DIR', () => {

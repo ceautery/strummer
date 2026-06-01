@@ -20,6 +20,7 @@ export {
   type Packument,
   type PackumentVersion,
 } from './deprecation.js'
+export { gemComparator } from './gem.js'
 export {
   matchVulnerabilities,
   type OsvAdvisory,
@@ -37,4 +38,5 @@ export {
   type PyPiReleaseFile,
   pypiJsonToPackument,
 } from './pypi.js'
+export { type RubyGemsVersion, rubygemsToPackument } from './rubygems.js'
 export { loadOsvSnapshot, type OsvSnapshot } from './snapshot.js'

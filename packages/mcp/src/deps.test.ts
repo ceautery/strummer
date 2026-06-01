@@ -454,4 +454,64 @@ describe('strummer deps MCP surface', () => {
     expect(sc.recommendedTarget).toBe('5.0.4') // newest same-major
     expect(sc.osvSnapshotLoaded).toBe(true)
   })
+
+  it('audit_dependency audits an installed RubyGems package with Gem::Version ordering', async () => {
+    // rails 7.0.4 is installed (Gemfile.lock), vulnerable per a RubyGems ECOSYSTEM range.
+    const rbProject = mkdtempSync(join(tmpdir(), 'strummer-deps-rb-'))
+    tmpDirs.push(rbProject)
+    writeFileSync(
+      join(rbProject, 'Gemfile.lock'),
+      'GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.0.4)\n',
+    )
+
+    const railsPackument: Packument = {
+      name: 'rails',
+      versions: {
+        '7.0.4': { version: '7.0.4' },
+        '7.0.8': { version: '7.0.8' },
+        '7.1.0': { version: '7.1.0' },
+        '7.1.0.rc1': { version: '7.1.0.rc1' },
+      },
+    }
+    const fetchGem: PackumentFetcher = async (name, ecosystem) => {
+      expect(ecosystem).toBe('RubyGems')
+      if (name === 'rails') return railsPackument
+      throw new Error(`no fixture packument for ${name}`)
+    }
+
+    const railsAdvisory: OsvAdvisory = {
+      id: 'GHSA-rails-test',
+      modified: '2024-05-01T00:00:00Z',
+      summary: 'XSS in rails',
+      database_specific: { severity: 'HIGH' },
+      affected: [
+        {
+          package: { ecosystem: 'RubyGems', name: 'rails' },
+          ranges: [{ type: 'ECOSYSTEM', events: [{ introduced: '7.0.0' }, { fixed: '7.0.8' }] }],
+        },
+      ],
+    }
+    const rbOsvDir = makeOsvSnapshot([railsAdvisory], 'RubyGems')
+
+    const client = await connect(createDepsServer({ fetchPackument: fetchGem, osvDir: rbOsvDir }))
+    clients.push(client)
+    const res = await client.callTool({
+      name: 'audit_dependency',
+      arguments: { project: rbProject, package: 'rails', ecosystem: 'RubyGems' },
+    })
+    const sc = res.structuredContent as {
+      installedVersion: string
+      worstSeverity: string
+      vulnerabilities: { id: string; fixedIn: string[] }[]
+      minimumSafeUpgrade?: string
+      recommendedTarget?: string
+      freshness: { latest?: string }
+    }
+    expect(sc.installedVersion).toBe('7.0.4')
+    expect(sc.worstSeverity).toBe('high')
+    expect(sc.vulnerabilities[0]?.id).toBe('GHSA-rails-test')
+    expect(sc.minimumSafeUpgrade).toBe('7.0.8') // lowest stable clearing the advisory
+    expect(sc.recommendedTarget).toBe('7.1.0') // newest same-major (the .rc1 prerelease is excluded)
+    expect(sc.freshness.latest).toBe('7.1.0')
+  })
 })

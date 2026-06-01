@@ -454,8 +454,14 @@ Two independent tracks, then the test-quality chain, then LSP last:
         and **PyPI `audit_dependency` end-to-end** — `pypiJsonToPackument` + PEP 503
         `normalizePypiName`, the per-ecosystem comparator map in the surface, and a PyPI JSON-API
         packument fetcher in the bin (`STRUMMER_DEPS_PYPI_REGISTRY`). `changelog_diff` stays npm-only.
-  - [ ] *(staged)* PyPI `audit_project` (a Python-manifest dependency-name reader); RubyGems
-        (`@renovatebot/ruby-semver` `gemComparator` + the RubyGems API fetcher).
+  - [x] **RubyGems `audit_dependency` end-to-end** — `gemComparator` on the pinned
+        `@renovatebot/ruby-semver` (derives `compare` from `eq`/`gt`; loads cleanly) + Gem
+        conformance fixtures, `rubygemsToPackument` (RubyGems API versions array → `Packument`,
+        freshness derives latest), wired into the comparator map + a RubyGems API fetcher
+        (`STRUMMER_DEPS_RUBYGEMS_REGISTRY`). All three ecosystems now audit a single package.
+  - [ ] *(staged)* `audit_project` for PyPI + RubyGems (a per-ecosystem manifest dependency-name
+        reader: pyproject/poetry/requirements; Gemfile/Gemfile.lock) — `audit_dependency` already
+        covers all three; this is the multi-package roll-up.
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A, building.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
       (the forgotten-assertion catch — the genuinely novel win under our TDD gate).

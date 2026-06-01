@@ -164,6 +164,9 @@ importers:
       '@renovatebot/pep440':
         specifier: 5.0.0
         version: 5.0.0
+      '@renovatebot/ruby-semver':
+        specifier: 5.0.0
+        version: 5.0.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -938,6 +941,10 @@ packages:
 
   '@renovatebot/pep440@5.0.0':
     resolution: {integrity: sha512-91cFM32/pnOAvC7W1W1kPPI9QM2y6OrYCeomz7pop4A+3Ksh2XnZXGznUMlzR7YbOQlg7X/MNlF27s9Yt9hhTA==}
+    engines: {node: ^22.11.0 || >=24.10.0, pnpm: '>=10.0.0'}
+
+  '@renovatebot/ruby-semver@5.0.0':
+    resolution: {integrity: sha512-yQgeq4HVV9mh2AJHHlStd//7mD/96lWj8KWB5Szi5YDjPwpvk12Sj3H+Y4waNC3N2D4t5xqbwYYpTHB5KsrSVg==}
     engines: {node: ^22.11.0 || >=24.10.0, pnpm: '>=10.0.0'}
 
   '@rolldown/binding-android-arm64@1.0.2':
@@ -3525,6 +3532,8 @@ snapshots:
       quansync: 1.0.0
 
   '@renovatebot/pep440@5.0.0': {}
+
+  '@renovatebot/ruby-semver@5.0.0': {}
 
   '@rolldown/binding-android-arm64@1.0.2':
     optional: true

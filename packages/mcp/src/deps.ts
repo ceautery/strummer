@@ -6,6 +6,7 @@ import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
 import {
   auditDependency,
   type DependencyAudit,
+  gemComparator,
   loadOsvSnapshot,
   normalizePypiName,
   type OsvAdvisory,
@@ -57,18 +58,15 @@ const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
   RubyGems: 'ruby',
 }
 
-/** Version algebra per ecosystem (ADR 0012). RubyGems (Gem) is staged — absent here. */
-const COMPARATORS: Partial<Record<OsvEcosystem, VersionComparator>> = {
+/** Version algebra per ecosystem (ADR 0012): npm=semver, PyPI=PEP 440, RubyGems=Gem. */
+const COMPARATORS: Record<OsvEcosystem, VersionComparator> = {
   npm: semverComparator,
   PyPI: pep440Comparator,
+  RubyGems: gemComparator,
 }
 
 function comparatorFor(ecosystem: OsvEcosystem): VersionComparator {
-  const cmp = COMPARATORS[ecosystem]
-  if (cmp === undefined) {
-    throw new Error(`version comparison for the ${ecosystem} ecosystem is not yet supported`)
-  }
-  return cmp
+  return COMPARATORS[ecosystem]
 }
 
 /** The name OSV matches on. PyPI advisory names are PEP 503-normalized; npm uses the name as-is. */

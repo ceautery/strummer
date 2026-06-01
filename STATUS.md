@@ -622,10 +622,17 @@ boundary semver mis-handles). **Slice 3:** PyPI `audit_dependency` end-to-end �
 in `packages/mcp/src/deps.ts`, and a PyPI JSON-API packument fetcher in `bin-deps.ts`
 (`STRUMMER_DEPS_PYPI_REGISTRY`, default `https://pypi.org/pypi`). RubyGems stays unsupported (clear
 error from `comparatorFor`); `audit_project` stays npm-only.
-**Next for deps:** (slice 3b) PyPI `audit_project` — needs a Python-manifest dependency-NAME reader
-(pyproject `[project].dependencies`/poetry, requirements.txt); then **slice 4 RubyGems**
-(`gemComparator` on `@renovatebot/ruby-semver` — validate it loads, hand-roll fallback ready — + the
-RubyGems API fetcher). **Then `mutate` (mutmut)** is the last Python-adapter pillar.
+**Slice 4 (RubyGems audit_dependency) DONE, 704 TS + 45 Py green:** `gemComparator` (`gem.ts`, on
+the pinned `@renovatebot/ruby-semver` — loads cleanly; no native `compare`/`clean`, so `compare`
+derives from `eq`/`gt` and `clean` from `valid`) + Gem conformance fixtures; pure `rubygemsToPackument`
+(`rubygems.ts`: RubyGems API versions array → `Packument`, no `dist-tags` so freshness derives latest
+via gemComparator); wired into the `COMPARATORS` map (now total over all 3 ecosystems) + a RubyGems
+API fetcher in `bin-deps.ts` (`STRUMMER_DEPS_RUBYGEMS_REGISTRY`, default `https://rubygems.org/api/v1`).
+**All three ecosystems now audit a single package end-to-end.**
+**Next for deps:** `audit_project` for PyPI + RubyGems — a per-ecosystem manifest dependency-NAME
+reader (pyproject `[project].dependencies`/poetry, requirements.txt; Gemfile.lock). `audit_dependency`
+already covers all three; this is the multi-package roll-up convenience.
+**Then `mutate` (mutmut)** is the last Python-adapter pillar.
 **PRIOR next-action (the fallback once Python adapters land): a Phase-5 boundary or the other
 explicitly-staged tails.**
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/

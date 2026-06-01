@@ -8,6 +8,8 @@ import {
   type Packument,
   type PyPiJson,
   pypiJsonToPackument,
+  type RubyGemsVersion,
+  rubygemsToPackument,
 } from '@strummer/deps'
 import { resolveAndPin } from '@strummer/safety'
 import { type ChangelogFetcher, createDepsServer, type PackumentFetcher } from './deps.js'
@@ -25,6 +27,8 @@ export interface DepsBinConfig {
   registry: string
   /** PyPI JSON-API base URL (`<base>/<project>/json`) the PyPI packument fetcher targets. */
   pypiRegistry: string
+  /** RubyGems API base URL (`<base>/versions/<name>.json`) the Gem packument fetcher targets. */
+  rubygemsRegistry: string
   /** Permit a loopback/private registry mirror (e.g. a local Verdaccio). Default
    * false — the public registry is global, so private targets are refused unless
    * the operator opts in. */
@@ -56,6 +60,7 @@ function packumentUrl(registry: string, packageName: string): string {
 function makeFetcher(
   registry: string,
   pypiRegistry: string,
+  rubygemsRegistry: string,
   allowPrivate: boolean,
 ): PackumentFetcher {
   return async (packageName, ecosystem) => {
@@ -78,7 +83,17 @@ function makeFetcher(
       }
       return pypiJsonToPackument((await res.json()) as PyPiJson)
     }
-    throw new Error(`network packument fetch supports npm and PyPI (got "${ecosystem}")`)
+    if (ecosystem === 'RubyGems') {
+      const base = rubygemsRegistry.replace(/\/+$/, '')
+      const url = `${base}/versions/${encodeURIComponent(packageName)}.json`
+      await resolveAndPin(new URL(url).hostname, undefined, { allowPrivate })
+      const res = await fetch(url, { headers: { accept: 'application/json' } })
+      if (!res.ok) {
+        throw new Error(`RubyGems returned ${res.status} for ${packageName}`)
+      }
+      return rubygemsToPackument(packageName, (await res.json()) as RubyGemsVersion[])
+    }
+    throw new Error(`network packument fetch supports npm, PyPI, and RubyGems (got "${ecosystem}")`)
   }
 }
 
@@ -109,9 +124,10 @@ const CHANGELOG_FILES = [
 function makeChangelogFetcher(
   registry: string,
   pypiRegistry: string,
+  rubygemsRegistry: string,
   allowPrivate: boolean,
 ): ChangelogFetcher {
-  const fetchPackument = makeFetcher(registry, pypiRegistry, allowPrivate)
+  const fetchPackument = makeFetcher(registry, pypiRegistry, rubygemsRegistry, allowPrivate)
   return async (packageName, ecosystem) => {
     if (ecosystem !== 'npm') {
       throw new Error(`changelog fetch supports the npm ecosystem only (got "${ecosystem}")`)
@@ -139,6 +155,7 @@ function makeChangelogFetcher(
  *   STRUMMER_DEPS_ALLOW_NETWORK=1                     # enable packument + changelog fetch
  *   STRUMMER_DEPS_NPM_REGISTRY=https://registry.npmjs.org
  *   STRUMMER_DEPS_PYPI_REGISTRY=https://pypi.org/pypi  # PyPI JSON API base
+ *   STRUMMER_DEPS_RUBYGEMS_REGISTRY=https://rubygems.org/api/v1  # RubyGems API base
  *   STRUMMER_DEPS_ALLOW_PRIVATE=1                     # permit a local registry mirror
  */
 export function buildDepsServerFromEnv(
@@ -150,15 +167,26 @@ export function buildDepsServerFromEnv(
     allowNetwork: bool(env.STRUMMER_DEPS_ALLOW_NETWORK),
     registry: env.STRUMMER_DEPS_NPM_REGISTRY || 'https://registry.npmjs.org',
     pypiRegistry: env.STRUMMER_DEPS_PYPI_REGISTRY || 'https://pypi.org/pypi',
+    rubygemsRegistry: env.STRUMMER_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
     allowPrivate: bool(env.STRUMMER_DEPS_ALLOW_PRIVATE),
   }
   const server = createDepsServer({
     osvDir: config.osvDir,
     fetchPackument: config.allowNetwork
-      ? makeFetcher(config.registry, config.pypiRegistry, config.allowPrivate)
+      ? makeFetcher(
+          config.registry,
+          config.pypiRegistry,
+          config.rubygemsRegistry,
+          config.allowPrivate,
+        )
       : undefined,
     fetchChangelog: config.allowNetwork
-      ? makeChangelogFetcher(config.registry, config.pypiRegistry, config.allowPrivate)
+      ? makeChangelogFetcher(
+          config.registry,
+          config.pypiRegistry,
+          config.rubygemsRegistry,
+          config.allowPrivate,
+        )
       : undefined,
     artifacts:
       config.artifactDir !== undefined ? new ArtifactStore(config.artifactDir, 'deps') : undefined,
