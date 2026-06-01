@@ -97,7 +97,10 @@ export class PageDriver {
   }
 
   private locator(ref: string): Locator {
-    const desc = this.current?.refs.get(ref)
+    if (!this.current) {
+      throw new Error('no snapshot yet — call navigate or snapshot before acting on a ref')
+    }
+    const desc = this.current.refs.get(ref)
     if (!desc) {
       throw new Error(
         `unknown ref "${ref}" — refs are per-snapshot; capture a fresh snapshot and use its refs`,

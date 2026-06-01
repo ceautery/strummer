@@ -35,6 +35,14 @@ describe('PageDriver — ref resolution guard (no browser)', () => {
     const driver = new PageDriver({} as unknown as Page)
     await expect(driver.click('e1')).rejects.toThrow(/snapshot/i)
   })
+
+  it('distinguishes "no snapshot yet" from a stale ref', async () => {
+    const driver = new PageDriver({} as unknown as Page)
+    // before any capture, the error is specifically the no-snapshot guidance,
+    // NOT the stale-ref ("unknown ref") message used after a re-capture
+    await expect(driver.click('e1')).rejects.toThrow(/no snapshot yet/i)
+    await expect(driver.click('e1')).rejects.not.toThrow(/unknown ref/i)
+  })
 })
 
 describe('PageDriver — step tools (real headless chromium)', () => {
