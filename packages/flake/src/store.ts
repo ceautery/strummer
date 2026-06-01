@@ -20,6 +20,7 @@ import {
   type TestHistory,
   type TestRun,
 } from './classify.js'
+import { type ParseReportOptions, parseVitestJson, type VitestJsonReport } from './report.js'
 
 const SCHEMA_VERSION = 1
 
@@ -159,6 +160,16 @@ export class HistoryStore {
     let runs = (this.db.prepare(sql).all(...params) as RunRow[]).map(HistoryStore.toRun)
     if (opts.limitPerTest !== undefined) runs = runs.slice(-opts.limitPerTest)
     return { id: testId, runs }
+  }
+
+  /**
+   * Parse a vitest json report and record every pass/fail assertion as a run. Returns the
+   * number of runs recorded (skipped/pending/todo assertions are not counted).
+   */
+  ingestReport(report: VitestJsonReport, opts: ParseReportOptions): number {
+    const runs = parseVitestJson(report, opts)
+    this.recordRuns(runs)
+    return runs.length
   }
 
   /** Classify every test's history straight from the store. */

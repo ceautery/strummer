@@ -1,0 +1,59 @@
+{
+  "numTotalTestSuites": 2,
+  "numTotalTests": 4,
+  "numPassedTests": 2,
+  "numFailedTests": 1,
+  "numPendingTests": 1,
+  "startTime": 1748736000000,
+  "success": false,
+  "testResults": [
+    {
+      "name": "/abs/workspace/packages/api/src/runner.test.ts",
+      "status": "failed",
+      "startTime": 1748736000100,
+      "endTime": 1748736000400,
+      "assertionResults": [
+        {
+          "ancestorTitles": ["runner", "retries"],
+          "fullName": "runner retries a 503 then succeeds",
+          "title": "a 503 then succeeds",
+          "status": "passed",
+          "duration": 12.5,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": ["runner"],
+          "fullName": "runner pins the resolved IP",
+          "title": "pins the resolved IP",
+          "status": "failed",
+          "duration": 8.0,
+          "failureMessages": ["AssertionError: expected ..."]
+        }
+      ]
+    },
+    {
+      "name": "/abs/workspace/packages/core/src/db.test.ts",
+      "status": "passed",
+      "startTime": 1748736000100,
+      "endTime": 1748736000200,
+      "assertionResults": [
+        {
+          "ancestorTitles": ["openDb"],
+          "fullName": "openDb opens the golden index",
+          "title": "opens the golden index",
+          "status": "passed",
+          "duration": 3.2,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": ["openDb"],
+          "fullName": "openDb rejects a foreign schema",
+          "title": "rejects a foreign schema",
+          "status": "skipped",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    }
+  ]
+}

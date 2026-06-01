@@ -10,6 +10,13 @@ export {
   wilsonInterval,
 } from './classify.js'
 export {
+  type ParseReportOptions,
+  parseVitestJson,
+  type VitestAssertion,
+  type VitestFileResult,
+  type VitestJsonReport,
+} from './report.js'
+export {
   type HistoryQueryOptions,
   HistoryStore,
   type RecordedRun,
