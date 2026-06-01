@@ -64,6 +64,8 @@ export interface BuiltBrowserServer {
   manager: BrowserManager
   proxy: SsrfProxy
   config: BrowserBinConfig
+  /** Resolve an operator secret NAME → value (same map the redactor is built from). */
+  resolveSecret: (name: string) => string | undefined
   /** Tear down the manager (and browser) then close the proxy. */
   shutdown: () => Promise<void>
 }
@@ -80,15 +82,17 @@ export async function buildBrowserServerFromEnv(
   // Secrets: STRUMMER_BROWSER_SECRET_<NAME>=value — register NAME→value; values
   // are never logged or surfaced (only the NAME appears anywhere).
   const redactor = new Redactor()
-  const secretNames: string[] = []
+  const secrets = new Map<string, string>()
   for (const [key, value] of Object.entries(env)) {
     const m = /^STRUMMER_BROWSER_SECRET_(.+)$/.exec(key)
     if (m?.[1] && value) {
       redactor.register(m[1], value)
-      secretNames.push(m[1])
+      secrets.set(m[1], value)
     }
   }
+  const secretNames = [...secrets.keys()]
   const redact = (s: string) => redactor.redact(s)
+  const resolveSecret = (name: string) => secrets.get(name)
 
   const allowUnsafe = bool(env.STRUMMER_BROWSER_ALLOW_UNSAFE)
   const allowedHosts = (env.STRUMMER_BROWSER_ALLOWED_HOSTS ?? '')
@@ -131,7 +135,15 @@ export async function buildBrowserServerFromEnv(
     defaultTimeoutMs,
     defaultNavigationTimeoutMs,
   })
-  const server = createBrowserServer({ manager, gate, artifacts: store, redact, capture, maxNodes })
+  const server = createBrowserServer({
+    manager,
+    gate,
+    artifacts: store,
+    redact,
+    resolveSecret,
+    capture,
+    maxNodes,
+  })
 
   const config: BrowserBinConfig = {
     allowUnsafe,
@@ -154,7 +166,7 @@ export async function buildBrowserServerFromEnv(
     await manager.shutdown()
     await proxy.close()
   }
-  return { server, manager, proxy, config, shutdown }
+  return { server, manager, proxy, config, resolveSecret, shutdown }
 }
 
 // Run as a server only when invoked directly (not when imported by a test).

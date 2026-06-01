@@ -61,4 +61,10 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     expect(b.config.secretNames).toContain('API_TOKEN')
     expect(JSON.stringify(b.config)).not.toContain('super-secret') // values never surface in config
   })
+
+  it('wires resolveSecret from the same operator-secret map (for {{secret:NAME}} fills)', async () => {
+    const b = await build({ STRUMMER_BROWSER_SECRET_API_TOKEN: 'super-secret' })
+    expect(b.resolveSecret('API_TOKEN')).toBe('super-secret')
+    expect(b.resolveSecret('MISSING')).toBeUndefined()
+  })
 })

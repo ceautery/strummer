@@ -18,10 +18,14 @@ vi.setConfig({ testTimeout: 30_000 })
 const FIXTURE = `<!doctype html><html lang="en"><head><title>MCP</title></head><body>
   <h1>Browser MCP</h1>
   <label>Name <input id="name" type="text" value="hunter2-secret"></label>
+  <input id="pw" type="text" aria-label="Secret">
   <button id="go">Submit</button>
+  <button id="login">Login</button>
   <script>
     document.getElementById('go').addEventListener('click', () =>
       fetch('/submit?token=hunter2-secret', { method: 'POST', body: 'x=1' }).catch(() => {}))
+    document.getElementById('login').addEventListener('click', () =>
+      fetch('/login', { method: 'POST', body: 'pw=' + document.getElementById('pw').value }).catch(() => {}))
   </script>
 </body></html>`
 
@@ -60,8 +64,9 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       allowedHosts: config.allowedHosts ?? ['127.0.0.1'],
     })
     const store = new ArtifactStore(mkdtempSync(join(baseDir, 'store-')))
+    const secrets = new Map([['pw', 'hunter2-secret']])
     const redactor = new Redactor()
-    redactor.register('pw', 'hunter2-secret')
+    for (const [name, value] of secrets) redactor.register(name, value)
     const manager = new BrowserManager({
       launch: async () => browser,
       gate,
@@ -74,6 +79,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       gate,
       artifacts: store,
       redact: (v) => redactor.redact(v),
+      resolveSecret: (name) => secrets.get(name),
     })
     const [ct, st] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test', version: '0.0.0' })
@@ -221,6 +227,54 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       url: 'https://evil.test/',
     })
     expect(denied.isError).toBe(true)
+    await client.close()
+  })
+
+  it('resolves a {{secret:NAME}} fill server-side and redacts it everywhere; never echoes it', async () => {
+    const { client } = await connect({ allowUnsafe: false, allowedHosts: ['127.0.0.1'] })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
+      .structuredContent as StepSC
+    const secretRef = refByName(nav.snapshot, 'textbox', 'Secret')
+
+    // fill with the placeholder — the real secret is typed into the input, never returned
+    const fill = await call(client, 'browser_fill', {
+      sessionId,
+      ref: secretRef,
+      value: '{{secret:pw}}',
+    })
+    expect(fill.isError).toBeFalsy()
+    expect(JSON.stringify(fill)).not.toContain('hunter2-secret')
+
+    // the fill re-snapshots (new generation) — take the Login ref from that fresh snapshot.
+    // Submitting posts the input value → the dry-run preview shows it redacted (proves the
+    // real secret was typed in), and the secret never appears anywhere unredacted.
+    const loginRef = refByName((fill.structuredContent as StepSC).snapshot, 'button', 'Login')
+    const click = (await call(client, 'browser_click', { sessionId, ref: loginRef }))
+      .structuredContent as StepSC
+    expect(click.dryRun).toBe(true)
+    expect(click.wouldRequest?.postData).toBe('pw=[redacted:pw]')
+    expect(click.wouldRequest?.postData).not.toContain('hunter2-secret')
+    await client.close()
+  })
+
+  it('fails closed on an unknown {{secret:NAME}}', async () => {
+    const { client } = await connect({})
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
+      .structuredContent as StepSC
+    const secretRef = refByName(nav.snapshot, 'textbox', 'Secret')
+    const res = await call(client, 'browser_fill', {
+      sessionId,
+      ref: secretRef,
+      value: '{{secret:nope}}',
+    })
+    expect(res.isError).toBe(true)
+    expect(JSON.stringify(res.content)).toMatch(/unknown secret/i)
     await client.close()
   })
 

@@ -38,6 +38,11 @@ export interface BrowserToolsOptions {
   /** Operator artifact-capture enablement. Default: console+network on, trace off
    * (trace.zip is unredacted binary). */
   capture?: { trace?: boolean; console?: boolean; network?: boolean }
+  /** Resolve a `{{secret:NAME}}` fill placeholder to the operator's secret value.
+   * The cleartext is typed into the browser input and immediately scrubbed from
+   * every output by the redactor — it never appears in a tool argument or an
+   * agent-visible result. Unknown names fail closed. Omit to disable secret fills. */
+  resolveSecret?: (name: string) => string | undefined
   /** Token cap on inlined snapshot text. */
   maxNodes?: number
   /** Exact accessible-name matching when resolving refs. Default true. */
@@ -131,6 +136,20 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
       () => undefined,
     )
     return result
+  }
+
+  // Resolve `{{secret:NAME}}` placeholders in a fill value at the surface, just
+  // before it reaches the engine's locator.fill(). Fails closed: an unconfigured
+  // name (or no resolver at all) throws rather than typing a partial value.
+  const SECRET_REF = /\{\{\s*secret:\s*([^}\s]+)\s*\}\}/g
+  function resolveSecrets(value: string): string {
+    return value.replace(SECRET_REF, (_match, name: string) => {
+      const resolved = opts.resolveSecret?.(name)
+      if (resolved === undefined) {
+        throw new Error(`unknown secret "${name}" — not configured by the operator`)
+      }
+      return resolved
+    })
   }
 
   const sessionId = z.string().describe('session id from browser_open_session')
@@ -293,12 +312,19 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     'browser_fill',
     {
       title: 'Fill',
-      description: 'Fill a ref (text input) with a value. Mutating: same gate as click.',
-      inputSchema: { sessionId, ref, value: z.string().describe('value to type') },
+      description:
+        'Fill a ref (text input) with a value. Use {{secret:NAME}} to fill an operator secret ' +
+        '(resolved server-side, never echoed back). Mutating: same gate as click.',
+      inputSchema: {
+        sessionId,
+        ref,
+        value: z.string().describe('value to type, or {{secret:NAME}}'),
+      },
     },
     async (args) => {
       const session = requireSession(args.sessionId)
-      const result = await enqueue(session, () => session.driver.fill(args.ref, args.value))
+      const value = resolveSecrets(args.value) // fail-closed before touching the page
+      const result = await enqueue(session, () => session.driver.fill(args.ref, value))
       return reply({ ...result })
     },
   )
@@ -318,7 +344,8 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     },
     async (args) => {
       const session = requireSession(args.sessionId)
-      const result = await enqueue(session, () => session.driver.fillForm(args.fields))
+      const fields = args.fields.map((f) => ({ ref: f.ref, value: resolveSecrets(f.value) }))
+      const result = await enqueue(session, () => session.driver.fillForm(fields))
       return reply({ ...result })
     },
   )
