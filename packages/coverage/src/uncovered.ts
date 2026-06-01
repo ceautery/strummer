@@ -101,5 +101,9 @@ export function uncoveredNewLines(fc: FileCoverage, newLines: number[]): Uncover
     lines.push({ line, state })
   }
 
-  return { lines, uncovered, summary: { covered, uncovered: uncov, nonExecutable, total: lines.length } }
+  return {
+    lines,
+    uncovered,
+    summary: { covered, uncovered: uncov, nonExecutable, total: lines.length },
+  }
 }
