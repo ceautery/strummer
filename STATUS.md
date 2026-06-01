@@ -383,7 +383,8 @@ against in-process fixtures):
    envs stay green); bin/CLI wiring tests. CI + the dev image install all three
    engines. (ADR 0009.)
 
-**390 TS + 45 Py tests green; committed to `main`.** _(Latest milestone:
+**(Point-in-time at Phase-3 close: 390 TS + 45 Py green; the authoritative current
+count is in the Phase-4 block above — 457 TS + 45 Py.)** _(Latest milestone:
 **multi-engine** (item 34, ADR 0009) — firefox/webkit support landed; Phase 3 is
 now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
 keyring wiring, SSRF range-block + redirect re-check, contract reach, import).

@@ -70,8 +70,12 @@ a research + adversarial-verification fan-out
 dependency intelligence ∥ coverage → flaky-test detection → mutation testing → an LSP
 bridge (last). The first pillar, **`@strummer/deps` (dependency/version
 intelligence)**, has its pure, offline core complete — deprecation, OSV vulnerability
-matching, on-disk OSV-snapshot loading, and a composed `auditDependency` verdict for
-the version *actually installed*; the agent/human surface (MCP tools + CLI) is next.
+matching (incl. CVSS-vector severity scoring), on-disk OSV-snapshot loading, freshness
+(`behindBy`), a vuln-aware `minimumSafeUpgrade` target, and a composed `auditDependency`
+verdict for the version *actually installed*. Its **agent surface has shipped** — the
+`audit_dependency`/`audit_project`/`changelog_diff` MCP tools (artifacts by handle over
+the shared `@strummer/artifacts`) + the `strummer-deps-mcp` bin. A human `strummer deps`
+CLI and the Python/PyPI + RubyGems advisory adapters are next.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 

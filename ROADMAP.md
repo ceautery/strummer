@@ -414,10 +414,6 @@ Two independent tracks, then the test-quality chain, then LSP last:
         0, `undefined` for a non-semver installed version. Lets a caller judge upgrade
         risk (patch bump vs major jump), not just the binary `isOutdated`. Carried through
         `audit_dependency` + `audit_project`'s by-handle detail.
-  - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
-        SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice
-        (the first handle-emitting deps slice; lands with the shared `@strummer/artifacts`
-        extraction).
   - [x] **Slice 5 — MCP surface** `audit_dependency` (single package) + `audit_project`
         (compact npm-manifest roll-up; per-package error non-fatal) in
         `packages/mcp/src/deps.ts` (`registerDepsTools`/`createDepsServer`). Detect the
