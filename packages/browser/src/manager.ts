@@ -1,4 +1,6 @@
 import type { Browser, BrowserContext } from 'playwright-core'
+import type { BrowserGate } from './gate.js'
+import { installSafetyRoutes } from './routes.js'
 
 export interface BrowserManagerOptions {
   /** How to launch the shared browser. Called lazily, at most once per live
@@ -14,6 +16,8 @@ export interface BrowserManagerOptions {
   defaultNavigationTimeoutMs?: number
   /** Clock injection (testing). Default `Date.now`. */
   now?: () => number
+  /** When set, every session's context gets the Tier-1 SSRF route allowlist. */
+  gate?: BrowserGate
 }
 
 interface Session {
@@ -29,8 +33,8 @@ interface Session {
  * on first use so constructing a manager is cheap.
  */
 export class BrowserManager {
-  private readonly opts: Required<Omit<BrowserManagerOptions, 'launch'>> &
-    Pick<BrowserManagerOptions, 'launch'>
+  private readonly opts: Required<Omit<BrowserManagerOptions, 'launch' | 'gate'>> &
+    Pick<BrowserManagerOptions, 'launch' | 'gate'>
   private readonly sessions = new Map<string, Session>()
   private browser: Browser | undefined
   private launching: Promise<Browser> | undefined
@@ -44,6 +48,7 @@ export class BrowserManager {
       defaultTimeoutMs: options.defaultTimeoutMs ?? 0,
       defaultNavigationTimeoutMs: options.defaultNavigationTimeoutMs ?? 0,
       now: options.now ?? Date.now,
+      gate: options.gate,
     }
   }
 
@@ -80,6 +85,7 @@ export class BrowserManager {
     }
     const browser = await this.ensureBrowser()
     const context = await browser.newContext()
+    if (this.opts.gate) await installSafetyRoutes(context, this.opts.gate)
     if (this.opts.defaultTimeoutMs > 0) context.setDefaultTimeout(this.opts.defaultTimeoutMs)
     if (this.opts.defaultNavigationTimeoutMs > 0) {
       context.setDefaultNavigationTimeout(this.opts.defaultNavigationTimeoutMs)

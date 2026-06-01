@@ -125,12 +125,20 @@ Staged below; aspirational items are scheduled, not cut.
       with `allowUnsafe` + an allowlisted host; hard-deny otherwise. Config is
       operator-set, never an agent input. (Downloads/uploads/dialog/auth gating +
       postData redaction land with the artifact/SSRF slices.)
-- [ ] **Tier-1 route allowlist** — `browserContext.route` deny-by-default +
-      private/link-local/metadata literal block; `serviceWorkers:'block'`; dialog
-      auto-dismiss.
-- [ ] **Tier-2 loopback DNS-pinning SSRF proxy** reusing the shared range
-      classifier; redirect re-check. **Factor `@strummer/safety`** (SSRF +
-      redaction) shared by `api` + `browser`.
+- [x] **Factor `@strummer/safety`** — shared SSRF range classifier (`isBlockedIp`/
+      `isBlockedHost`/`isBlockedHostLiteral`, `ipaddr.js`, fail-closed) +
+      `resolveAndPin` (DNS resolve → refuse blocked range → pinned IP) + the
+      `Redactor` (moved from `@strummer/api`, re-exported there). Consumed by both
+      pillars.
+- [x] **Tier-1 route allowlist** (`installSafetyRoutes`, wired into
+      `BrowserManager` when a gate is set) — `browserContext.route` deny-by-default
+      governing every request (nav + subresource + XHR); **allowlist-authoritative**
+      (ADR 0006 update 2026-06-01: private/metadata literals blocked by
+      deny-by-default, not unconditionally, so localhost apps remain testable).
+- [ ] **Tier-2 loopback DNS-pinning SSRF proxy** — launch Chromium through a
+      Strummer forward proxy that calls `resolveAndPin` per connection (+ redirect
+      re-check), closing allowlisted-hostname rebinding. (`serviceWorkers:'block'`
+      + dialog auto-dismiss ride here.)
 - [ ] **Secret boundary** — `{{secret:NAME}}` fill resolution + origin-scoped
       `httpCredentials`; redaction over console/network/HAR/trace/storageState
       before any write; `storageState` by handle only.

@@ -36,6 +36,19 @@ export function isBlockedIp(ip: string): boolean {
   return addr.range() !== 'unicast'
 }
 
+/**
+ * True when a request to this host should be blocked on the host string alone —
+ * a cloud-metadata literal, or an IP literal in a blocked range. A regular
+ * hostname returns false here: the allowlist governs whether it's reachable, and
+ * the resolved-IP check belongs to the connection-time proxy (`resolveAndPin`),
+ * since the route layer never sees the IP a hostname resolves to.
+ */
+export function isBlockedHost(host: string): boolean {
+  if (isBlockedHostLiteral(host)) return true
+  if (ipaddr.isValid(host)) return isBlockedIp(host)
+  return false
+}
+
 export type DnsLookup = (host: string) => Promise<{ address: string; family: number }>
 
 const defaultLookup: DnsLookup = async (host) => {

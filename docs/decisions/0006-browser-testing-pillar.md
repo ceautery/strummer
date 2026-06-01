@@ -107,6 +107,20 @@ Strummer's own loopback forward proxy (`proxy:{server}`) that re-resolves +
 — reusing the shared range classifier. WebRTC/QUIC can bypass an HTTP proxy, so
 the hardened profile disables WebRTC (scheduled).
 
+> **Update (2026-06-01) — Tier-1 is allowlist-authoritative.** In implementation
+> the Tier-1 `route('**/*')` handler blocks purely on the **operator allowlist**
+> (`gate.isHostAllowed`), rather than *unconditionally* aborting private/metadata
+> literals. Deny-by-default already blocks those literals (they're never
+> allowlisted), and making the block unconditional would break the **primary
+> localhost-testing use case** — an operator deliberately allowlisting
+> `127.0.0.1` to test a local app. The IP-range classifier (`isBlockedIp`/
+> `isBlockedHost`/`resolveAndPin` in `@strummer/safety`) therefore belongs to
+> **Tier-2** (connection-time, where the resolved IP is visible and
+> allowlisted-hostname DNS-rebinding is the real threat). The shared SSRF
+> classifier + the `Redactor` now live in **`@strummer/safety`**, consumed by
+> both pillars. Implemented: `packages/safety/src/ssrf.ts`,
+> `packages/browser/src/routes.ts` (Tier-1); Tier-2 proxy is the next slice.
+
 ### 6. Secrets at the fill/auth boundary; redact before any write
 
 `{{secret:NAME}}` form-fill placeholders resolve server-side immediately before

@@ -200,16 +200,27 @@ allowlisted current host (hard-deny otherwise). Gate omitted ⇒ raw ungated lay
 + 45 Py green.** Committed to `main`; **not yet pushed** — push after the SSRF
 slice rounds out the safety story.
 
-**Next, per ROADMAP Phase 3:** (1) **two-tier SSRF defense** — Tier-1
-`browserContext.route` deny-by-default allowlist + private/link-local/metadata
-literal block; Tier-2 loopback **DNS-pinning proxy** (resolved-IP enforcement +
-redirect re-check) closing the rebinding hole hostname matching can't see —
-**factoring `@strummer/safety`** (SSRF range classifier + secret redaction) out of
-`@strummer/api`, shared by both pillars. This also brings **postData redaction**
-into the gate's dry-run preview (currently identity). (2) Downloads/uploads/
-dialog/auth gating. (3) Artifact-capture pipeline (trace/console/network by
-handle). Plus session wall-clock + max-pages. TDD red→green; `pnpm gate` 100%
-green before each commit.
+**Slice 6 (`@strummer/safety` + Tier-1 SSRF): DONE.** New shared **`@strummer/safety`**
+package (factored per ADR 0006): SSRF range classifier (`isBlockedIp`/
+`isBlockedHost`/`isBlockedHostLiteral` via `ipaddr.js`, fail-closed) +
+`resolveAndPin` (DNS resolve → refuse blocked range → pinned IP, the Tier-2
+decision core) + the `Redactor` (moved from `@strummer/api`, re-exported there —
+behavior-preserving). **Tier-1** `installSafetyRoutes` (deny-by-default
+`browserContext.route`, wired into `BrowserManager` when a gate is set) governs
+every request and is **allowlist-authoritative** (ADR 0006 update 2026-06-01:
+literals blocked by deny-by-default rather than unconditionally, so localhost
+apps stay testable). **174 TS + 45 Py green.** Committed to `main`; the
+`@strummer/safety` extraction (77c7ff7) + Tier-1 are being pushed together as the
+milestone.
+
+**Next, per ROADMAP Phase 3:** (1) **Tier-2 loopback DNS-pinning proxy** — launch
+Chromium through a Strummer forward proxy that calls `resolveAndPin` per
+connection + re-checks on redirect, closing allowlisted-hostname rebinding (the
+gap Tier-1 structurally can't see). `serviceWorkers:'block'` + dialog auto-dismiss
+ride here. (2) Wire the `Redactor` into the gate's dry-run `postData` preview
+(currently identity) + artifact-capture pipeline (trace/console/network by
+handle). (3) Downloads/uploads/dialog/auth gating; session wall-clock + max-pages.
+TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { isBlockedHostLiteral, isBlockedIp, resolveAndPin, SsrfError } from './ssrf.js'
+import {
+  isBlockedHost,
+  isBlockedHostLiteral,
+  isBlockedIp,
+  resolveAndPin,
+  SsrfError,
+} from './ssrf.js'
 
 describe('isBlockedIp', () => {
   it('blocks loopback, private, link-local, metadata, and unspecified ranges', () => {
@@ -39,6 +45,17 @@ describe('isBlockedHostLiteral', () => {
     expect(isBlockedHostLiteral('metadata.google.internal')).toBe(true)
     expect(isBlockedHostLiteral('METADATA.GOOGLE.INTERNAL')).toBe(true)
     expect(isBlockedHostLiteral('example.com')).toBe(false)
+  })
+})
+
+describe('isBlockedHost', () => {
+  it('blocks metadata literals and blocked IP literals, but not regular hostnames', () => {
+    expect(isBlockedHost('metadata.google.internal')).toBe(true)
+    expect(isBlockedHost('169.254.169.254')).toBe(true)
+    expect(isBlockedHost('127.0.0.1')).toBe(true)
+    expect(isBlockedHost('8.8.8.8')).toBe(false)
+    // a hostname is not blocked here — the allowlist + resolve-time proxy decide
+    expect(isBlockedHost('example.com')).toBe(false)
   })
 })
 

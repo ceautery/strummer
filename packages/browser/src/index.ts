@@ -10,6 +10,7 @@ export {
 } from './driver.js'
 export { BrowserGate, type BrowserGateOptions, GateError } from './gate.js'
 export { BrowserManager, type BrowserManagerOptions } from './manager.js'
+export { installSafetyRoutes } from './routes.js'
 export {
   type AriaSnapshotSource,
   type BuildSnapshotOptions,
