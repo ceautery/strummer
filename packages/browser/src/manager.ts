@@ -18,6 +18,9 @@ export interface BrowserManagerOptions {
   now?: () => number
   /** When set, every session's context gets the Tier-1 SSRF route allowlist. */
   gate?: BrowserGate
+  /** Operator-set HTTP Basic credentials applied to every session context
+   * (optionally scoped to an `origin`). Operator config, never an agent input. */
+  httpCredentials?: { username: string; password: string; origin?: string }
 }
 
 interface Session {
@@ -33,8 +36,10 @@ interface Session {
  * on first use so constructing a manager is cheap.
  */
 export class BrowserManager {
-  private readonly opts: Required<Omit<BrowserManagerOptions, 'launch' | 'gate'>> &
-    Pick<BrowserManagerOptions, 'launch' | 'gate'>
+  private readonly opts: Required<
+    Omit<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials'>
+  > &
+    Pick<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials'>
   private readonly sessions = new Map<string, Session>()
   private readonly reapCallbacks: ((sessionId: string) => void | Promise<void>)[] = []
   private browser: Browser | undefined
@@ -50,6 +55,7 @@ export class BrowserManager {
       defaultNavigationTimeoutMs: options.defaultNavigationTimeoutMs ?? 0,
       now: options.now ?? Date.now,
       gate: options.gate,
+      httpCredentials: options.httpCredentials,
     }
   }
 
@@ -90,7 +96,9 @@ export class BrowserManager {
       )
     }
     const browser = await this.ensureBrowser()
-    const context = await browser.newContext()
+    const context = await browser.newContext(
+      this.opts.httpCredentials ? { httpCredentials: this.opts.httpCredentials } : {},
+    )
     if (this.opts.gate) await installSafetyRoutes(context, this.opts.gate)
     if (this.opts.defaultTimeoutMs > 0) context.setDefaultTimeout(this.opts.defaultTimeoutMs)
     if (this.opts.defaultNavigationTimeoutMs > 0) {

@@ -57,6 +57,8 @@ export interface BrowserBinConfig {
   launchArgs: string[]
   /** Operator secret NAMES (never values) registered with the redactor. */
   secretNames: string[]
+  /** Origin-scoped HTTP Basic auth, password-free (the password never lands here). */
+  httpCredentials?: { username: string; origin?: string }
 }
 
 export interface BuiltBrowserServer {
@@ -66,6 +68,8 @@ export interface BuiltBrowserServer {
   config: BrowserBinConfig
   /** Resolve an operator secret NAME → value (same map the redactor is built from). */
   resolveSecret: (name: string) => string | undefined
+  /** The operator redactor's scrub function (secrets + http password). */
+  redact: (value: string) => string
   /** Tear down the manager (and browser) then close the proxy. */
   shutdown: () => Promise<void>
 }
@@ -91,8 +95,24 @@ export async function buildBrowserServerFromEnv(
     }
   }
   const secretNames = [...secrets.keys()]
-  const redact = (s: string) => redactor.redact(s)
   const resolveSecret = (name: string) => secrets.get(name)
+
+  // Origin-scoped HTTP Basic auth (operator-set). Built only when BOTH username +
+  // password are present; the password is registered with the redactor so it never
+  // leaks via an artifact, and it never appears in the returned config.
+  const httpUsername = env.STRUMMER_BROWSER_HTTP_USERNAME
+  const httpPassword = env.STRUMMER_BROWSER_HTTP_PASSWORD
+  const httpOrigin = env.STRUMMER_BROWSER_HTTP_ORIGIN
+  let httpCredentials: { username: string; password: string; origin?: string } | undefined
+  if (httpUsername && httpPassword) {
+    redactor.register('http-credentials', httpPassword)
+    httpCredentials = {
+      username: httpUsername,
+      password: httpPassword,
+      ...(httpOrigin ? { origin: httpOrigin } : {}),
+    }
+  }
+  const redact = (s: string) => redactor.redact(s)
 
   const allowUnsafe = bool(env.STRUMMER_BROWSER_ALLOW_UNSAFE)
   const allowedHosts = (env.STRUMMER_BROWSER_ALLOWED_HOSTS ?? '')
@@ -134,6 +154,7 @@ export async function buildBrowserServerFromEnv(
     idleTtlMs,
     defaultTimeoutMs,
     defaultNavigationTimeoutMs,
+    httpCredentials,
   })
   const server = createBrowserServer({
     manager,
@@ -161,12 +182,18 @@ export async function buildBrowserServerFromEnv(
     artifactsDir,
     launchArgs,
     secretNames,
+    httpCredentials: httpCredentials
+      ? {
+          username: httpCredentials.username,
+          ...(httpCredentials.origin ? { origin: httpCredentials.origin } : {}),
+        }
+      : undefined,
   }
   const shutdown = async () => {
     await manager.shutdown()
     await proxy.close()
   }
-  return { server, manager, proxy, config, resolveSecret, shutdown }
+  return { server, manager, proxy, config, resolveSecret, redact, shutdown }
 }
 
 // Run as a server only when invoked directly (not when imported by a test).

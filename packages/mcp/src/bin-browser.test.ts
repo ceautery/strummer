@@ -67,4 +67,20 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     expect(b.resolveSecret('API_TOKEN')).toBe('super-secret')
     expect(b.resolveSecret('MISSING')).toBeUndefined()
   })
+
+  it('builds origin-scoped httpCredentials from env, redacts the password, keeps it out of config', async () => {
+    const b = await build({
+      STRUMMER_BROWSER_HTTP_USERNAME: 'admin',
+      STRUMMER_BROWSER_HTTP_PASSWORD: 'basic-pass',
+      STRUMMER_BROWSER_HTTP_ORIGIN: 'https://app.test',
+    })
+    expect(b.config.httpCredentials).toEqual({ username: 'admin', origin: 'https://app.test' })
+    expect(JSON.stringify(b.config)).not.toContain('basic-pass') // password never in config
+    expect(b.redact('Authorization: Basic basic-pass')).not.toContain('basic-pass') // scrubbed
+  })
+
+  it('omits httpCredentials unless BOTH username and password are set', async () => {
+    const b = await build({ STRUMMER_BROWSER_HTTP_USERNAME: 'admin' })
+    expect(b.config.httpCredentials).toBeUndefined()
+  })
 })

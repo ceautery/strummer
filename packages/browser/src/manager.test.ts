@@ -13,6 +13,7 @@ class FakeContext {
   closed = false
   timeout: number | undefined
   navTimeout: number | undefined
+  options: Record<string, unknown> | undefined
   setDefaultTimeout(ms: number): void {
     this.timeout = ms
   }
@@ -26,8 +27,9 @@ class FakeContext {
 class FakeBrowser {
   contexts: FakeContext[] = []
   closed = false
-  async newContext(): Promise<FakeContext> {
+  async newContext(options?: Record<string, unknown>): Promise<FakeContext> {
     const c = new FakeContext()
+    c.options = options
     this.contexts.push(c)
     return c
   }
@@ -86,6 +88,22 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
     await t.manager.sweepIdle()
     expect(events).toEqual(['s2:closed=false'])
     expect(t.browser.contexts[1]?.closed).toBe(true)
+  })
+
+  it('applies operator origin-scoped httpCredentials to each new context', async () => {
+    const httpCredentials = { username: 'admin', password: 's3cr3t', origin: 'https://app.test' }
+    const t = setup({ httpCredentials })
+    await t.manager.createSession('s1')
+    expect(t.browser.contexts[0]?.options?.httpCredentials).toEqual(httpCredentials)
+  })
+
+  it('creates contexts without httpCredentials when none are configured', async () => {
+    const t = setup()
+    await t.manager.createSession('s1')
+    expect(
+      (t.browser.contexts[0]?.options as { httpCredentials?: unknown } | undefined)
+        ?.httpCredentials,
+    ).toBeUndefined()
   })
 
   it('launches the browser lazily and only once, shared across sessions', async () => {
