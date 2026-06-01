@@ -295,7 +295,10 @@ packages/assert/   # NEW shared module: declarative-assertion operator core
   allowlist (legible, hostname-level) + a loopback **DNS-pinning proxy** that
   closes the rebinding hole `route()` can't see (it lacks the resolved IP) and
   re-checks on redirect. `serviceWorkers:'block'`; container keeps the Chromium
-  sandbox (`--no-sandbox` only as an operator-gated fallback).
+  sandbox (`--no-sandbox` only as an operator-gated fallback). The full
+  deployment-hardening posture (sandbox via unprivileged userns, non-root,
+  `cap_drop: ALL`, seccomp, read-only FS, WebRTC/QUIC off, egress firewalling) is
+  **ADR 0007** — the container/kernel boundary behind this in-process spine.
 - **Secrets** resolve at the `locator.fill()` boundary (`{{secret:NAME}}`) /
   origin-scoped `httpCredentials`; every artifact is redacted before any write
   (Playwright does none). `storageState` is password-equivalent (operator path,

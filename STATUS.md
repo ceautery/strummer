@@ -6,13 +6,13 @@
 ## Current phase
 
 **Phase 3 — Browser/UI testing pillar: ENGINE + SAFETY + ARTIFACT PIPELINE + MCP
-SURFACE + HUMAN CLI COMPLETE.** _(Latest: **vision/coordinate caps** —
-`mouseClick`/`mouseMove` at a viewport coordinate, operator-gated `allowVision`, for
-canvas/non-AX UI; on top of **video capture** (item 30). Remaining tail: visual
-regression (deferred, flake-prone), developer live-view (needs Xvfb/VNC infra),
-container-hardening ADR (a doc), and multi-engine — **blocked in this dev container**
-(only chromium binaries; `playwright-core` is the thin core with no `install` CLI),
-needs the CI/Docker image's firefox/webkit.)_ The agent surface AND the human `strummer browser`
+SURFACE + HUMAN CLI COMPLETE.** _(Latest: the **container-hardening ADR** (item 32,
+`docs/decisions/0007`) documenting the deployment/kernel boundary behind the
+in-process spine; on top of **vision/coordinate caps** (item 31) and **video
+capture** (item 30). Remaining tail: visual regression (deferred, flake-prone),
+developer live-view (needs Xvfb/VNC infra), and multi-engine — **blocked in this dev
+container** (only chromium binaries; `playwright-core` is the thin core with no
+`install` CLI), needs the CI/Docker image's firefox/webkit.)_ The agent surface AND the human `strummer browser`
 CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
 auth) is done, plus trace-query, browser assertions, Lighthouse perf,
 **network heavy mode (HAR capture + replay)**, and **persisted `.bru` browser-step
@@ -251,15 +251,30 @@ against in-process fixtures):
    in). Bin: `STRUMMER_BROWSER_ALLOW_VISION`. Real-chromium tested via a
    document-level coordinate recorder (execute lands the coord; locked gate ⇒ dryRun).
 
+32. **Container-hardening ADR — `docs/decisions/0007-container-hardening.md`.**
+   The deployment-security posture (the container/kernel boundary **behind** the
+   in-process spine, for when a renderer RCE bypasses the documented-API defenses):
+   keep the Chromium sandbox by default, resolving the sandbox-in-container tension
+   via **unprivileged user namespaces** (so **no `SYS_ADMIN`**; `--no-sandbox` only a
+   documented operator fallback); non-root + no-new-privileges; `cap_drop: ALL`; a
+   default-derived **seccomp** profile pinned to the Playwright image; read-only
+   rootfs + minimal tmpfs/volume mounts (incl. the `/dev/shm` footgun — `--shm-size`,
+   **not** `--ipc=host`); **WebRTC + QUIC disabled**; container-level **egress
+   firewalling** as defense-in-depth behind the SSRF proxy (metadata unreachable). A
+   threat→boundary table maps each risk across the two layers. A **design doc** (no
+   code/tests) — extends ADR 0006 §7's one-liner; referenced from ARCHITECTURE §10 +
+   ROADMAP. The dev harness (`docker/`) stays separate (gitignored).
+
 **319 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
 aspirational Phase-3 tail — **visual regression** (the flake-prone one), **developer
-live-view** (the headed path needs Xvfb/VNC infra not in this container), the
-**container-hardening ADR** (a design doc), and **multi-engine** (firefox/webkit;
-**blocked in this container** — only chromium is installed, so it needs the CI/Docker
-image's binaries) — or start **Phase 4** (cross-cutting verification: LSP bridge,
-impact-scoped test runner, mutation/flaky detection). The deferred `browser_run_flow`
-follow-up (item 29), **video capture** (item 30), and **vision/coordinate caps**
-(item 31) are now done. See the detailed "Next action" section below + ROADMAP.
+live-view** (the headed path needs Xvfb/VNC infra not in this container; the headless
+`--remote-debugging-port` path is finicky alongside playwright-core's own CDP), and
+**multi-engine** (firefox/webkit; **blocked in this container** — only chromium is
+installed, so it needs the CI/Docker image's binaries) — or start **Phase 4**
+(cross-cutting verification: LSP bridge, impact-scoped test runner, mutation/flaky
+detection). The deferred `browser_run_flow` follow-up (item 29), **video capture**
+(item 30), **vision/coordinate caps** (item 31), and the **container-hardening ADR**
+(item 32, ADR 0007) are now done. See the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -608,11 +623,11 @@ now at parity with `strummer browser run`.
 
 **Next (later Phase 3):** the aspirational tail only — visual regression (the
 flake-prone one; baselines in the pinned Docker image), developer live-view (the
-headed path needs Xvfb/VNC infra not present here), the container-hardening ADR (a
-design doc), and multi-engine (firefox/webkit; **blocked in this dev container** —
-only chromium binaries are installed and `playwright-core` has no `install` CLI, so
-this needs the CI/Docker image's engines). Video capture (item 30) and vision/
-coordinate caps (item 31) are now **done**. None blocking. TDD red→green; `pnpm gate`
+headed path needs Xvfb/VNC infra not present here), and multi-engine (firefox/webkit;
+**blocked in this dev container** — only chromium binaries are installed and
+`playwright-core` has no `install` CLI, so this needs the CI/Docker image's engines).
+Video capture (item 30), vision/coordinate caps (item 31), and the container-hardening
+ADR (item 32, ADR 0007) are now **done**. None blocking. TDD red→green; `pnpm gate`
 100% green before each commit.
 
 ---

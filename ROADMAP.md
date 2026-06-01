@@ -247,9 +247,16 @@ Staged below; aspirational items are scheduled, not cut.
       traversal/absolute escape), the exfiltration control. Dialog gating: dismiss
       by default, `ALLOW_DIALOGS` to accept, recorded as `DialogEvent`s. Auth:
       origin-scoped `httpCredentials`. The full gating bundle is complete.)_
-- [ ] **Container hardening ADR** — seccomp profile + dropped caps + read-only FS
-      + non-root by default; `--no-sandbox` as documented operator-gated fallback;
-      disable WebRTC/QUIC in the hardened profile.
+- [x] **Container hardening ADR** (`docs/decisions/0007-container-hardening.md`) —
+      the deployment-security posture behind the in-process spine: keep the Chromium
+      sandbox by default (resolving the sandbox-in-container tension via unprivileged
+      user namespaces, so **no `SYS_ADMIN`**; `--no-sandbox` only as a documented
+      operator-gated fallback); non-root + no-new-privileges; `cap_drop: ALL`; a
+      default-derived **seccomp** profile pinned to the Playwright image; read-only
+      rootfs + minimal tmpfs/volume mounts (incl. the `/dev/shm` footgun, **not**
+      `--ipc=host`); **WebRTC + QUIC disabled**; container-level **egress firewalling**
+      as defense-in-depth behind the SSRF proxy (metadata endpoint unreachable). Maps
+      each threat across the two boundaries (documented-API vs renderer-RCE bypass).
 - [x] **Vision/coordinate capability** — operator-gated `allowVision` (off by
       default) for canvas / non-AX-tree UI the ARIA-snapshot path can't address.
       `PageDriver.mouseClick(x,y)` drives the raw pointer at a viewport coordinate
