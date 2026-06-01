@@ -11,6 +11,16 @@ export {
 export { BrowserGate, type BrowserGateOptions, GateError } from './gate.js'
 export { BrowserManager, type BrowserManagerOptions } from './manager.js'
 export { createSsrfProxy, type SsrfProxy, type SsrfProxyOptions } from './proxy.js'
+export {
+  type ConsoleEntry,
+  type ConsoleSummary,
+  type NetworkEntry,
+  type NetworkSummary,
+  type RunArtifacts,
+  RunRecorder,
+  type RunRecorderOptions,
+  type TraceSummary,
+} from './recorder.js'
 export { installSafetyRoutes } from './routes.js'
 export {
   type AriaSnapshotSource,
