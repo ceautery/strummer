@@ -30,4 +30,5 @@ export {
   type SeverityBucket,
   type VulnerabilityMatch,
 } from './osv.js'
+export { pep440Comparator } from './pep440.js'
 export { loadOsvSnapshot, type OsvSnapshot } from './snapshot.js'
