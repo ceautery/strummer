@@ -20,6 +20,21 @@ the capture harness — class `Greeter` in `greeter.ts`, used via `new Greeter(.
 - `document-symbols-flat.json` / `document-symbols-hierarchical.json` — the two
   `documentSymbol` shapes (slice-1 `normalize` fixtures).
 
+The capability-gated read tails (ADR 0011, staged) were captured from the **same
+`typescript-language-server` 5.3.0** driving an *extended* version of the project — a free
+`hello(name)` function plus `class Greeter` whose `greet()` calls `hello` (so call-hierarchy
+has a real caller/callee edge), `index.ts` doing `const g = new Greeter(...)`:
+
+- `type-definition-locations.json` — genuine `textDocument/typeDefinition` on `g`. Returned
+  as a flat **`Location[]`** (the server ignores `linkSupport` for typeDefinition) — exercises
+  the non-link branch the definition LocationLink fixture does not.
+- `call-hierarchy-prepare.json` — genuine `textDocument/prepareCallHierarchy` on `hello`: a
+  **`CallHierarchyItem[]`** (`kind`/`name`/`detail`/`uri`/`range`/`selectionRange`).
+- `call-hierarchy-incoming.json` — genuine `callHierarchy/incomingCalls`: `{from, fromRanges}`
+  (`greet` calls `hello`).
+- `call-hierarchy-outgoing.json` — genuine `callHierarchy/outgoingCalls` from `greet`: `{to,
+  fromRanges}`.
+
 The only edit applied to the captures is normalizing the environment-specific absolute
 path prefix to a stable `/project` (structure preserved verbatim).
 

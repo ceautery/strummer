@@ -47,8 +47,9 @@ const INSTRUCTIONS = `Strummer drives a real Language Server as a subprocess for
 navigation. \`lsp_languages\` (always available, no spawn) reports which languages the operator
 bound a server for, plus — once a server is running — its advertised capabilities and version.
 
-\`lsp_find_definition\`, \`lsp_find_references\`, and \`lsp_hover\` (present only when the operator
-enabled navigation) take a language + project root + file + 1-based line:column and return the
+\`lsp_find_definition\`, \`lsp_type_definition\`, \`lsp_find_references\`, and \`lsp_hover\` (present
+only when the operator enabled navigation) take a language + project root + file + 1-based
+line:column; \`lsp_document_symbols\` takes just a file (the outline, no position). All return the
 answer with line:column mapped back to human coordinates. Positions are 1-based; columns count
 Unicode code points. A result \`status\` is tri-state: "ok", "not_ready" (the server is still
 indexing — retry shortly; NOT the same as no result), or "no_result". Navigation requires a live
@@ -174,6 +175,19 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
     )
 
     server.registerTool(
+      'lsp_type_definition',
+      {
+        title: 'Go to type definition',
+        description:
+          'Resolve the TYPE definition of the symbol at a 1-based line:column (the declaration ' +
+          "of the symbol's type — e.g. the class/interface a variable is an instance of, not " +
+          'the variable). Operator-gated; tri-state status + locations in human 1-based line:column.',
+        inputSchema: positionSchema,
+      },
+      (args) => runNavigation('typeDefinition', args),
+    )
+
+    server.registerTool(
       'lsp_find_references',
       {
         title: 'Find references',
@@ -196,6 +210,60 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
         inputSchema: positionSchema,
       },
       (args) => runNavigation('hover', args),
+    )
+
+    server.registerTool(
+      'lsp_document_symbols',
+      {
+        title: 'Document symbols (file outline)',
+        description:
+          'List the symbols declared in a file (classes/functions/methods/…), as a hierarchical ' +
+          'outline with each range in human 1-based line:column. No position needed. Operator-' +
+          'gated and confined to allowlisted project roots. A large outline is capped inline; the ' +
+          'full tree is returned by handle when an artifact store is configured.',
+        inputSchema: {
+          language: z.string().describe('a language bound in the operator registry'),
+          projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
+          file: z
+            .string()
+            .describe('the file to outline, relative to projectRoot (or absolute within it)'),
+        },
+      },
+      async (args) => {
+        const language = args.language as string
+        const projectRoot = args.projectRoot as string
+        const toolchain = opts.detectToolchain?.(projectRoot, language)
+        const result = await query({
+          language,
+          projectRoot,
+          file: args.file as string,
+          kind: 'documentSymbols',
+          ...(toolchain ? { toolchain } : {}),
+        })
+        const symbols = result.symbols ?? []
+        let structured: Record<string, unknown> = {
+          ...envelope(result),
+          symbolCount: symbols.length,
+          symbols,
+        }
+        if (symbols.length > HEAD && artifacts) {
+          const id = `documentSymbols-${seq++}`
+          const fullHandle = artifacts.put(
+            id,
+            'symbols',
+            JSON.stringify(symbols, null, 2),
+            'application/json',
+          )
+          structured = {
+            ...envelope(result),
+            symbolCount: symbols.length,
+            symbols: symbols.slice(0, HEAD),
+            truncated: true,
+            fullHandle,
+          }
+        }
+        return { content: [text(structured)], structuredContent: structured }
+      },
     )
   }
 

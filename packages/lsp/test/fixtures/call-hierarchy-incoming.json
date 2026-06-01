@@ -1,0 +1,42 @@
+[
+  {
+    "from": {
+      "kind": 6,
+      "name": "greet",
+      "detail": "Greeter",
+      "uri": "file:///project/src/greeter.ts",
+      "range": {
+        "start": {
+          "line": 9,
+          "character": 2
+        },
+        "end": {
+          "line": 11,
+          "character": 3
+        }
+      },
+      "selectionRange": {
+        "start": {
+          "line": 9,
+          "character": 2
+        },
+        "end": {
+          "line": 9,
+          "character": 7
+        }
+      }
+    },
+    "fromRanges": [
+      {
+        "start": {
+          "line": 10,
+          "character": 11
+        },
+        "end": {
+          "line": 10,
+          "character": 16
+        }
+      }
+    ]
+  }
+]

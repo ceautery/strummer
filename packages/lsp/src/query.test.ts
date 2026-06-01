@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { LanguageServerManager } from './manager.js'
 import {
   DEFINITION,
+  DOCUMENT_SYMBOLS,
   fakeSpawn,
   HOVER,
   INIT_UTF8,
   PROGRESS_BEGIN,
   type SpawnTracker,
+  TYPE_DEFINITION,
 } from './peer.js'
 import { LspGateError, LspQueryEngine } from './query.js'
 import { parseServerRegistry } from './registry.js'
@@ -128,6 +130,52 @@ describe('LspQueryEngine position mapping (human ↔ LSP, over recorded payloads
     })
     expect(r.encoding).toBe('utf-8')
     expect(r.serverInfo).toEqual({ name: 'typescript-language-server', version: '5.3.0' })
+  })
+})
+
+describe('LspQueryEngine typeDefinition', () => {
+  it('returns the type definition location (a plain Location[], no fullRange) mapped to human coords', async () => {
+    const engine = makeEngine({ onTypeDefinition: () => TYPE_DEFINITION() })
+    const r = await engine.query({ ...DEF_INPUT, kind: 'typeDefinition' })
+    expect(r.status).toBe('ok')
+    expect(r.kind).toBe('typeDefinition')
+    expect(r.locations).toHaveLength(1)
+    expect(r.locations?.[0]).toMatchObject({
+      uri: 'file:///project/src/greeter.ts',
+      range: { start: { line: 5 } }, // LSP 0-based line 4 → human line 5
+      mapped: true,
+    })
+    expect(r.locations?.[0]?.fullRange).toBeUndefined()
+  })
+})
+
+describe('LspQueryEngine documentSymbols (position-less)', () => {
+  it('returns the file outline with ranges mapped to human coords + recurses children', async () => {
+    const engine = makeEngine({ onDocumentSymbol: () => DOCUMENT_SYMBOLS() })
+    const r = await engine.query({
+      language: 'typescript',
+      projectRoot: ROOT,
+      file: 'src/greeter.ts',
+      kind: 'documentSymbols',
+    })
+    expect(r.status).toBe('ok')
+    expect(r.kind).toBe('documentSymbols')
+    const greeter = r.symbols?.find((s) => s.name === 'Greeter')
+    expect(greeter?.kindName).toBe('Class')
+    expect(greeter?.range.start.line).toBe(1) // LSP line 0 → human line 1
+    expect(greeter?.children?.map((c) => c.name)).toContain('greet')
+  })
+
+  it('requires no position, but a position-based kind without line/column is refused', async () => {
+    const engine = makeEngine({ onDefinition: () => DEFINITION() })
+    await expect(
+      engine.query({
+        language: 'typescript',
+        projectRoot: ROOT,
+        file: 'src/index.ts',
+        kind: 'definition',
+      }),
+    ).rejects.toBeInstanceOf(LspGateError)
   })
 })
 

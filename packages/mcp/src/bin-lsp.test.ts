@@ -48,10 +48,12 @@ describe('buildLspServerFromEnv', () => {
     expect(built.config.registry?.typescript?.command).toBe('typescript-language-server')
     expect(built.manager).toBeDefined()
     expect(await toolNames(built)).toEqual([
+      'lsp_document_symbols',
       'lsp_find_definition',
       'lsp_find_references',
       'lsp_hover',
       'lsp_languages',
+      'lsp_type_definition',
     ])
   })
 

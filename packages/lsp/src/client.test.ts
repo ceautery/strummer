@@ -3,6 +3,7 @@ import type { MessageConnection } from 'vscode-jsonrpc/node.js'
 import { LspClient } from './client.js'
 import {
   DEFINITION,
+  DOCUMENT_SYMBOLS,
   type FakeServerOptions,
   fakeServer,
   HOVER,
@@ -11,6 +12,7 @@ import {
   makePeerPair,
   PROGRESS_BEGIN,
   REFERENCES,
+  TYPE_DEFINITION,
 } from './peer.js'
 
 const ROOT = 'file:///project'
@@ -51,6 +53,7 @@ describe('LspClient.initialize (handshake)', () => {
   it('exposes the server capabilities', async () => {
     const { client } = await connectedClient()
     expect(client.supports('definitionProvider')).toBe(true)
+    expect(client.supports('typeDefinitionProvider')).toBe(true)
     expect(client.supports('referencesProvider')).toBe(true)
     expect(client.supports('hoverProvider')).toBe(true)
   })
@@ -70,6 +73,19 @@ describe('LspClient navigation (tri-state + normalization over recorded payloads
     expect(r.encoding).toBe('utf-16')
   })
 
+  it('typeDefinition: normalizes a real Location[] (server ignores linkSupport here) to ok', async () => {
+    const { client } = await connectedClient({ onTypeDefinition: () => TYPE_DEFINITION() })
+    const r = await client.typeDefinition(INDEX_URI, POS)
+    expect(r.status).toBe('ok')
+    expect(r.result).toHaveLength(1)
+    expect(r.result[0]).toMatchObject({
+      uri: 'file:///project/src/greeter.ts',
+      range: { start: { line: 4, character: 13 }, end: { line: 4, character: 20 } },
+    })
+    // A plain Location has no enclosing range.
+    expect(r.result[0]?.fullRange).toBeUndefined()
+  })
+
   it('references: normalizes a real Location[] to ok', async () => {
     const { client } = await connectedClient({ onReferences: () => REFERENCES() })
     const r = await client.references(INDEX_URI, POS)
@@ -82,6 +98,15 @@ describe('LspClient navigation (tri-state + normalization over recorded payloads
     const r = await client.hover(INDEX_URI, POS)
     expect(r.status).toBe('ok')
     expect(r.result?.value).toContain('Greeter')
+  })
+
+  it('documentSymbols: normalizes a real hierarchical DocumentSymbol[] with children + kind names', async () => {
+    const { client } = await connectedClient({ onDocumentSymbol: () => DOCUMENT_SYMBOLS() })
+    const r = await client.documentSymbols('file:///project/src/greeter.ts')
+    expect(r.status).toBe('ok')
+    const greeter = r.result.find((s) => s.name === 'Greeter')
+    expect(greeter?.kindName).toBe('Class')
+    expect(greeter?.children?.some((c) => c.name === 'greet')).toBe(true)
   })
 
   it('no_result: an empty result with no indexing in progress (single attempt)', async () => {

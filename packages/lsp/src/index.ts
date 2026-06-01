@@ -58,6 +58,7 @@ export {
   type LspQueryKind,
   type LspQueryResult,
   type ResultLocation,
+  type ResultSymbol,
 } from './query.js'
 export {
   LspRegistryError,

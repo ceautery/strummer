@@ -41,6 +41,7 @@ import {
   ConfigurationRequest,
   DefinitionRequest,
   DidOpenTextDocumentNotification,
+  DocumentSymbolRequest,
   ExitNotification,
   HoverRequest,
   InitializedNotification,
@@ -48,20 +49,25 @@ import {
   ReferencesRequest,
   RegistrationRequest,
   ShutdownRequest,
+  TypeDefinitionRequest,
   UnregistrationRequest,
   WorkDoneProgressCreateRequest,
 } from 'vscode-languageserver-protocol'
 import { type PositionEncoding, PREFERRED_ENCODINGS, resolvePositionEncoding } from './encoding.js'
 import {
+  type DocumentSymbol,
   decideStatus,
   type Hover,
   type Location,
   type LocationLink,
   type NormalizedHover,
   type NormalizedLocation,
+  type NormalizedSymbol,
+  normalizeDocumentSymbols,
   normalizeHover,
   normalizeLocations,
   type QueryStatus,
+  type SymbolInformation,
 } from './normalize.js'
 
 /** An operator-registry server entry: the binary + argv to spawn (structurally separate). */
@@ -297,6 +303,16 @@ export class LspClient {
     return this.navigateLocations(DefinitionRequest.method, { textDocument: { uri }, position })
   }
 
+  async typeDefinition(
+    uri: string,
+    position: { line: number; character: number },
+  ): Promise<NavResult<NormalizedLocation[]>> {
+    if (!this.supports('typeDefinitionProvider')) {
+      throw new LspUnsupportedError('server does not advertise typeDefinition support')
+    }
+    return this.navigateLocations(TypeDefinitionRequest.method, { textDocument: { uri }, position })
+  }
+
   async references(
     uri: string,
     position: { line: number; character: number },
@@ -322,6 +338,18 @@ export class LspClient {
       () => this.conn.sendRequest(HoverRequest.method, { textDocument: { uri }, position }),
       (raw) => normalizeHover(raw as Hover | null),
       (h) => h === null,
+    )
+  }
+
+  /** Document symbols — the file outline. Position-less (whole document); tri-state like the rest. */
+  async documentSymbols(uri: string): Promise<NavResult<NormalizedSymbol[]>> {
+    if (!this.supports('documentSymbolProvider')) {
+      throw new LspUnsupportedError('server does not advertise documentSymbol support')
+    }
+    return this.withRetry(
+      () => this.conn.sendRequest(DocumentSymbolRequest.method, { textDocument: { uri } }),
+      (raw) => normalizeDocumentSymbols(raw as DocumentSymbol[] | SymbolInformation[] | null),
+      (syms) => syms.length === 0,
     )
   }
 

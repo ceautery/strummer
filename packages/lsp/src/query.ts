@@ -29,7 +29,13 @@ import {
   toLspPosition,
 } from './encoding.js'
 import type { LanguageServerManager } from './manager.js'
-import type { LspRange, NormalizedHover, NormalizedLocation, QueryStatus } from './normalize.js'
+import type {
+  LspRange,
+  NormalizedHover,
+  NormalizedLocation,
+  NormalizedSymbol,
+  QueryStatus,
+} from './normalize.js'
 
 /** Thrown when the paired operator gate denies a query (allowRun off, root/file out of bounds). */
 export class LspGateError extends Error {
@@ -60,7 +66,20 @@ export interface LspQueryEngineOptions {
   readFile?: FileReader
 }
 
-export type LspQueryKind = 'definition' | 'references' | 'hover'
+export type LspQueryKind =
+  | 'definition'
+  | 'typeDefinition'
+  | 'references'
+  | 'hover'
+  | 'documentSymbols'
+
+/** The position-based kinds — those that require a `line`/`column`. */
+const POSITION_KINDS: ReadonlySet<LspQueryKind> = new Set([
+  'definition',
+  'typeDefinition',
+  'references',
+  'hover',
+])
 
 export interface LspQueryInput {
   /** The agent-facing language (resolved against the operator registry). */
@@ -69,10 +88,10 @@ export interface LspQueryInput {
   projectRoot: string
   /** The file to query, relative to `projectRoot` (or absolute within it). */
   file: string
-  /** 1-based human line. */
-  line: number
-  /** 1-based human column (counts Unicode code points). */
-  column: number
+  /** 1-based human line — required for the position-based kinds, ignored for `documentSymbols`. */
+  line?: number
+  /** 1-based human column (code points) — required for the position-based kinds. */
+  column?: number
   kind: LspQueryKind
   /** Optional toolchain provenance to echo (the surface computes via `detectInstalledVersion`). */
   toolchain?: { name: string; version: string | null }
@@ -92,11 +111,24 @@ export interface ResultLocation {
   mapped: boolean
 }
 
+/** A document symbol with its range mapped to human 1-based coords; children recurse. */
+export interface ResultSymbol {
+  name: string
+  kind: number
+  kindName: string
+  detail?: string
+  range: HumanRange
+  /** Set only for flat `SymbolInformation` results. */
+  container?: string
+  children?: ResultSymbol[]
+}
+
 export interface LspQueryResult {
   status: QueryStatus
   kind: LspQueryKind
   locations?: ResultLocation[]
   hover?: { value: string; range?: HumanRange }
+  symbols?: ResultSymbol[]
   serverInfo?: ServerInfo
   toolchain?: { name: string; version: string | null }
   encoding: PositionEncoding
@@ -124,20 +156,41 @@ export class LspQueryEngine {
       throw new LspGateError(`cannot read file ${input.file} in ${input.projectRoot}`)
     }
     const uri = pathToFileURL(absFile).toString()
+    if (
+      POSITION_KINDS.has(input.kind) &&
+      (input.line === undefined || input.column === undefined)
+    ) {
+      throw new LspGateError(`the ${input.kind} query requires a line and column`)
+    }
 
-    const nav = await this.manager.run<
-      NavResult<NormalizedLocation[]> | NavResult<NormalizedHover | null>
-    >(
+    type Nav =
+      | NavResult<NormalizedLocation[]>
+      | NavResult<NormalizedHover | null>
+      | NavResult<NormalizedSymbol[]>
+    const nav = await this.manager.run<Nav>(
       { language: input.language, projectRoot: input.projectRoot, uri, text },
-      (client): Promise<NavResult<NormalizedLocation[]> | NavResult<NormalizedHover | null>> => {
-        const pos = toLspPosition(text, input.line, input.column, client.encoding)
+      (client): Promise<Nav> => {
         switch (input.kind) {
-          case 'definition':
-            return client.definition(uri, pos)
-          case 'references':
-            return client.references(uri, pos)
-          case 'hover':
-            return client.hover(uri, pos)
+          case 'documentSymbols':
+            return client.documentSymbols(uri)
+          default: {
+            const pos = toLspPosition(
+              text,
+              input.line as number,
+              input.column as number,
+              client.encoding,
+            )
+            switch (input.kind) {
+              case 'definition':
+                return client.definition(uri, pos)
+              case 'typeDefinition':
+                return client.typeDefinition(uri, pos)
+              case 'references':
+                return client.references(uri, pos)
+              case 'hover':
+                return client.hover(uri, pos)
+            }
+          }
         }
       },
     )
@@ -147,7 +200,10 @@ export class LspQueryEngine {
 
   private shape(
     input: LspQueryInput,
-    nav: NavResult<NormalizedLocation[]> | NavResult<NormalizedHover | null>,
+    nav:
+      | NavResult<NormalizedLocation[]>
+      | NavResult<NormalizedHover | null>
+      | NavResult<NormalizedSymbol[]>,
     queriedUri: string,
     queriedText: string,
   ): LspQueryResult {
@@ -179,6 +235,12 @@ export class LspQueryEngine {
       }
     }
 
+    if (input.kind === 'documentSymbols') {
+      const symbols = (nav as NavResult<NormalizedSymbol[]>).result
+      // Document symbols are all in the QUERIED file; map every range with its text.
+      return { ...base, symbols: symbols.map((s) => this.mapSymbol(s, queriedText, encoding)) }
+    }
+
     const locations = (nav as NavResult<NormalizedLocation[]>).result
     const cache = new Map<string, string | undefined>()
     return {
@@ -206,6 +268,22 @@ export class LspQueryEngine {
       ...(loc.fullRange ? { fullRange: this.mapRange(text, loc.fullRange, encoding) } : {}),
       mapped: text !== undefined,
     }
+  }
+
+  /** Map a normalized document symbol (and its children) to human coords in the queried file. */
+  private mapSymbol(s: NormalizedSymbol, text: string, encoding: PositionEncoding): ResultSymbol {
+    const out: ResultSymbol = {
+      name: s.name,
+      kind: s.kind,
+      kindName: s.kindName,
+      range: this.mapRange(text, s.range, encoding),
+    }
+    if (s.detail !== undefined) out.detail = s.detail
+    if (s.container !== undefined) out.container = s.container
+    if (s.children && s.children.length > 0) {
+      out.children = s.children.map((c) => this.mapSymbol(c, text, encoding))
+    }
+    return out
   }
 
   private textForUri(uri: string, cache: Map<string, string | undefined>): string | undefined {

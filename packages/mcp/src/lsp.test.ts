@@ -30,6 +30,8 @@ interface ToolJson {
   truncated?: boolean
   fullHandle?: string
   hover?: { value: string }
+  symbolCount?: number
+  symbols?: Array<{ name: string; kindName: string; children?: unknown[] }>
   languages?: string[]
   servers?: unknown
 }
@@ -115,10 +117,12 @@ describe('lsp MCP surface gating', () => {
 
     const gated = await connect({ ...GATED, query: stubQuery(okDefinition).query })
     expect((await gated.listTools()).tools.map((t) => t.name).sort()).toEqual([
+      'lsp_document_symbols',
       'lsp_find_definition',
       'lsp_find_references',
       'lsp_hover',
       'lsp_languages',
+      'lsp_type_definition',
     ])
 
     // allowRun without an allowlist must NOT register the navigation tools.
@@ -169,6 +173,16 @@ describe('lsp navigation tools', () => {
     expect(data.serverInfo).toEqual({ name: 'typescript-language-server', version: '5.3.0' })
   })
 
+  it('lsp_type_definition queries the typeDefinition kind', async () => {
+    const stub = stubQuery(okDefinition)
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({ name: 'lsp_type_definition', arguments: DEF_ARGS })
+    const data = firstJson(res.content)
+    expect(stub.last()?.kind).toBe('typeDefinition')
+    expect(data.status).toBe('ok')
+    expect(data.locationCount).toBe(1)
+  })
+
   it('lsp_hover returns the hover value', async () => {
     const stub = stubQuery({
       status: 'ok',
@@ -181,6 +195,41 @@ describe('lsp navigation tools', () => {
     const data = firstJson(res.content)
     expect(stub.last()?.kind).toBe('hover')
     expect(data.hover?.value).toContain('Greeter')
+  })
+
+  it('lsp_document_symbols returns the outline (no position arg) for the documentSymbols kind', async () => {
+    const stub = stubQuery({
+      status: 'ok',
+      kind: 'documentSymbols',
+      encoding: 'utf-16',
+      symbols: [
+        {
+          name: 'Greeter',
+          kind: 5,
+          kindName: 'Class',
+          range: { start: { line: 1, column: 1 }, end: { line: 6, column: 2 } },
+          children: [
+            {
+              name: 'greet',
+              kind: 6,
+              kindName: 'Method',
+              range: { start: { line: 3, column: 3 }, end: { line: 5, column: 4 } },
+            },
+          ],
+        },
+      ],
+    })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({
+      name: 'lsp_document_symbols',
+      arguments: { language: 'typescript', projectRoot: '/project', file: 'src/greeter.ts' },
+    })
+    const data = firstJson(res.content)
+    expect(stub.last()?.kind).toBe('documentSymbols')
+    expect(stub.last()?.line).toBeUndefined() // position-less
+    expect(data.symbolCount).toBe(1)
+    expect(data.symbols?.[0]?.name).toBe('Greeter')
+    expect(data.symbols?.[0]?.children?.length).toBe(1)
   })
 
   it('passes through detected toolchain provenance', async () => {

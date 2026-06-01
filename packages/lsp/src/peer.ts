@@ -28,8 +28,13 @@ export function loadFixture(name: string): unknown {
 export const INIT = () => loadFixture('initialize-result.json')
 export const INIT_UTF8 = () => loadFixture('initialize-result-utf8.json')
 export const DEFINITION = () => loadFixture('definition-locationlink.json')
+export const TYPE_DEFINITION = () => loadFixture('type-definition-locations.json')
 export const REFERENCES = () => loadFixture('references-locations.json')
 export const HOVER = () => loadFixture('hover-markup.json')
+export const DOCUMENT_SYMBOLS = () => loadFixture('document-symbols-hierarchical.json')
+export const CALL_HIERARCHY_PREPARE = () => loadFixture('call-hierarchy-prepare.json')
+export const CALL_HIERARCHY_INCOMING = () => loadFixture('call-hierarchy-incoming.json')
+export const CALL_HIERARCHY_OUTGOING = () => loadFixture('call-hierarchy-outgoing.json')
 export const PROGRESS_BEGIN = () => loadFixture('progress-begin.json')
 
 export interface PeerPair {
@@ -58,8 +63,13 @@ export interface FakeServerOptions {
   initialize?: unknown
   onInitialize?: (params: unknown) => void
   onDefinition?: (params: unknown) => unknown
+  onTypeDefinition?: (params: unknown) => unknown
   onReferences?: (params: unknown) => unknown
   onHover?: (params: unknown) => unknown
+  onDocumentSymbol?: (params: unknown) => unknown
+  onPrepareCallHierarchy?: (params: unknown) => unknown
+  onIncomingCalls?: (params: unknown) => unknown
+  onOutgoingCalls?: (params: unknown) => unknown
   onShutdown?: () => void
   onDidOpen?: (params: unknown) => void
   /** When set, the definition handler emits this `$/progress` notification before replying. */
@@ -81,10 +91,30 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
     return opts.onDefinition?.(params) ?? null
   })
   server.onRequest(
+    'textDocument/typeDefinition',
+    (params: unknown) => opts.onTypeDefinition?.(params) ?? null,
+  )
+  server.onRequest(
     'textDocument/references',
     (params: unknown) => opts.onReferences?.(params) ?? null,
   )
   server.onRequest('textDocument/hover', (params: unknown) => opts.onHover?.(params) ?? null)
+  server.onRequest(
+    'textDocument/documentSymbol',
+    (params: unknown) => opts.onDocumentSymbol?.(params) ?? null,
+  )
+  server.onRequest(
+    'textDocument/prepareCallHierarchy',
+    (params: unknown) => opts.onPrepareCallHierarchy?.(params) ?? null,
+  )
+  server.onRequest(
+    'callHierarchy/incomingCalls',
+    (params: unknown) => opts.onIncomingCalls?.(params) ?? null,
+  )
+  server.onRequest(
+    'callHierarchy/outgoingCalls',
+    (params: unknown) => opts.onOutgoingCalls?.(params) ?? null,
+  )
   server.onRequest('shutdown', () => {
     opts.onShutdown?.()
     return null
