@@ -127,8 +127,19 @@ surface, paired deny-by-default gate adapted here (`allowQuarantine` + load-bear
 `allowedRoots` gate, injected TestRunner so no real spawn in the gate); slice 6 the MCP
 surface + `strummer-flake-mcp` bin (`flake_status`/`flake_candidates`/`flake_release`
 always on; `flake_run` behind the run gate; `flake_quarantine` behind the quarantine gate;
-bin requires `STRUMMER_FLAKE_DB` + the two independent paired gates). 553 TS + 45 Py
-green.)_
+bin requires `STRUMMER_FLAKE_DB` + the two independent paired gates). **`@strummer/mutate`
+is now COMPLETE (engine + agent surface):** the **Stryker/Vitest-4 compat spike resolved
+positively** (ADR 0010 update 2026-06-01 — vitest-runner 9.x declares `vitest >=2.0.0` +
+ships Vitest 4/4.1 support, so thin-wrap is viable and Stryker stays an injected,
+operator-spawned runner, NOT a gate dep); slice 1 pure `summarizeMutation` over the stable
+mutation-testing-elements report schema (no `@stryker-mutator` import) → mutationScore
+(detected/valid) + mutationScoreBasedOnCoveredCode + per-file metrics + an actionable
+`survivors` list (Survived + NoCoverage — the complement to coverage's forgotten-assertion
+catch); slice 2 the gated `runMutation` (spawn `stryker run --reporters json`, read,
+summarize; paired `allowRun`+`allowedRoots` gate + injected MutationRunner so no real
+Stryker in the gate; diff-scoped via `mutateFiles`→`--mutate` + `--incremental`) + the
+`mutate_summarize`(free)/`mutate_run`(gated) MCP surface + `strummer-mutate-mcp` bin. 574 TS
++ 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -474,13 +485,24 @@ better-sqlite3 `HistoryStore` (slice 2) + `parseVitestJson`/`ingestReport` (slic
 operator-gated `Quarantine` with mandatory expiry (slice 4) + the gated `runAndRecord`
 vitest spawner (slice 5) + the MCP surface/`strummer-flake-mcp` bin (slice 6:
 `flake_status`/`flake_candidates`/`flake_release` always on, `flake_run` + `flake_quarantine`
-each behind their own paired gate). **Next in the test-quality chain:** `@strummer/mutate`
-— **run the Stryker/Vitest-4 compat spike FIRST** (ADR 0010 blocker: Stryker's vitest-runner
-advertises Vitest v1–3; we are pinned to 4.1.x — decides thin-wrap vs command-runner
-fallback), then a pure `summarizeMutation` over a golden report, then the diff-scoped run +
-MCP surface. Then `@strummer/lsp` (last — the only candidate that breaks ARCHITECTURE §1's
-no-live-RPC rule). **Flake staged tail:** Python (pytest-json) adapter; optional `strummer
-flake` human CLI.
+each behind their own paired gate). **`@strummer/mutate` is now COMPLETE (engine + agent
+surface)** — the Stryker/Vitest-4 spike resolved (thin-wrap viable; Stryker injected, not a
+gate dep), pure `summarizeMutation` over the mutation-testing-elements schema, the gated
+diff-scoped `runMutation` (spawn `stryker run`), and the `mutate_summarize`/`mutate_run` MCP
+surface + `strummer-mutate-mcp` bin.
+
+**Next (the LAST Phase-4 candidate): `@strummer/lsp` — semantic code navigation
+(defs/refs/types/call hierarchy).** Highest *raw* leverage but sequenced last because it is
+the ONLY candidate that breaks ARCHITECTURE §1's no-live-RPC polyglot rule — a live,
+stateful, version-coupled subprocess JSON-RPC peer. Design constraints already locked in ADR
+0010 + ROADMAP: the green gate must run against a **fake in-process JSON-RPC peer** (no real
+language server in `pnpm gate`, mirroring the injected-runner pattern coverage/flake/mutate
+use); the **operator binds the server command**, the agent picks only a *language*; **v1 is
+reads-only**. This needs a short design pass (an LSP-bridge ADR — lifecycle, the initialize
+handshake, position/encoding model, the operator gate) BEFORE coding. **Phase-4 staged
+tails** (not blocking LSP): deps PyPI/RubyGems adapters; coverage `strummer coverage` CLI /
+`istanbul-lib-coverage` merging; flake Python (pytest-json) adapter; mutate Python
+(mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
 Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
 (`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in). The

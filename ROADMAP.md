@@ -522,10 +522,22 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `flake_quarantine` behind the quarantine gate. Bin requires `STRUMMER_FLAKE_DB` +
         the two independent paired gates.
   - [ ] *(staged)* Python (pytest-json) adapter; an optional `strummer flake` human CLI.
-- [ ] **Mutation testing** (`@strummer/mutate`) — are the tests meaningful? Run a
-      **Stryker/Vitest-4 compat spike first** (Stryker's vitest-runner advertises
-      Vitest v1–3; we are pinned to 4.1.x) before committing the slot. Pure
-      `summarizeMutation` over a golden report first; on-demand, diff-scoped.
+- [x] **Mutation testing** (`@strummer/mutate`) — **COMPLETE (engine + agent surface).**
+      Are the tests meaningful? **Stryker/Vitest-4 compat spike resolved** (ADR 0010 update
+      2026-06-01: vitest-runner 9.x declares `vitest >=2.0.0` + ships Vitest 4/4.1 support —
+      thin-wrap viable, no command-runner fallback; Stryker stays an injected, operator-
+      spawned runner, NOT a gate dep).
+  - [x] **Slice 1 — pure `summarizeMutation`.** Reads the stable mutation-testing-elements
+        report schema (no `@stryker-mutator` import); status tally → detected/undetected/
+        covered/valid/invalid/total + mutationScore (detected/valid) +
+        mutationScoreBasedOnCoveredCode (detected/covered), per-file metrics, and an
+        actionable `survivors` list (Survived + NoCoverage). Golden-fixture tested.
+  - [x] **Slice 2 — gated `runMutation` + MCP surface.** Spawns `stryker run --reporters
+        json`, reads the report, summarizes; paired `allowRun`+`allowedRoots` gate +
+        injected `MutationRunner` (no real Stryker in the gate); diff-scoped via
+        `mutateFiles`→`--mutate` + `--incremental`. `mutate_summarize` (free) +
+        `mutate_run` (gated) MCP tools + `strummer-mutate-mcp` bin.
+  - [ ] *(staged)* Python (mutmut / cosmic-ray) adapter; a `strummer mutate` human CLI.
 - [ ] **LSP bridge** — semantic code navigation (defs/refs/types/call hierarchy).
       Highest *raw* leverage but **last**: the only candidate that breaks
       ARCHITECTURE §1's no-live-RPC rule (a live, version-coupled subprocess). Green

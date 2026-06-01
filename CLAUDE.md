@@ -115,6 +115,11 @@ vision and `ARCHITECTURE.md` for the technical design.
   `ingestReport`; operator-gated `Quarantine` (mandatory expiry); gated `runAndRecord` vitest
   spawner; `flake_status`/`flake_candidates`/`flake_release`/`flake_run`/`flake_quarantine`
   MCP surface),
+  `mutate` (Phase-4 test-quality chain, COMPLETE: mutation testing — "are the tests
+  meaningful?"; pure `summarizeMutation` over the mutation-testing-elements report schema
+  (no `@stryker-mutator` import) → mutationScore + survivors; gated diff-scoped `runMutation`
+  spawning `stryker run` (injected runner, not a gate dep); `mutate_summarize`/`mutate_run`
+  MCP surface),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
