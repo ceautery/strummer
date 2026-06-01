@@ -91,6 +91,18 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     expect(b.config.httpCredentials).toBeUndefined()
   })
 
+  it('parses optional session wall-clock + max-pages caps (omitted when unset)', async () => {
+    const none = await build({})
+    expect(none.config.maxSessionMs).toBeUndefined()
+    expect(none.config.maxPages).toBeUndefined()
+    const capped = await build({
+      STRUMMER_BROWSER_SESSION_MS: '600000',
+      STRUMMER_BROWSER_MAX_PAGES: '3',
+    })
+    expect(capped.config.maxSessionMs).toBe(600000)
+    expect(capped.config.maxPages).toBe(3)
+  })
+
   it('gates storageState capture behind STRUMMER_BROWSER_ALLOW_STORAGE_STATE (default off)', async () => {
     expect((await build({})).config.allowStorageState).toBe(false)
     expect(

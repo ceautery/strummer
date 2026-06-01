@@ -50,6 +50,8 @@ export interface BrowserBinConfig {
   maxContexts: number
   idleTtlMs: number
   reaperIntervalMs: number
+  maxSessionMs?: number
+  maxPages?: number
   defaultTimeoutMs: number
   defaultNavigationTimeoutMs: number
   maxNodes?: number
@@ -133,6 +135,13 @@ export async function buildBrowserServerFromEnv(
   const maxContexts = num(env.STRUMMER_BROWSER_MAX_SESSIONS, 8)
   const idleTtlMs = num(env.STRUMMER_BROWSER_IDLE_TTL_MS, 300_000)
   const reaperIntervalMs = num(env.STRUMMER_BROWSER_REAPER_INTERVAL_MS, idleTtlMs)
+  // Optional resource caps — undefined (no cap) unless the operator sets them.
+  const maxSessionMs = env.STRUMMER_BROWSER_SESSION_MS
+    ? num(env.STRUMMER_BROWSER_SESSION_MS, 0)
+    : undefined
+  const maxPages = env.STRUMMER_BROWSER_MAX_PAGES
+    ? num(env.STRUMMER_BROWSER_MAX_PAGES, 0)
+    : undefined
   const defaultTimeoutMs = num(env.STRUMMER_BROWSER_TIMEOUT_MS, 0)
   const defaultNavigationTimeoutMs = num(env.STRUMMER_BROWSER_NAV_TIMEOUT_MS, 0)
   const maxNodes = env.STRUMMER_BROWSER_MAX_NODES
@@ -166,6 +175,8 @@ export async function buildBrowserServerFromEnv(
     defaultTimeoutMs,
     defaultNavigationTimeoutMs,
     httpCredentials,
+    maxSessionMs,
+    maxPages,
   })
   const server = createBrowserServer({
     manager,
@@ -188,6 +199,8 @@ export async function buildBrowserServerFromEnv(
     maxContexts,
     idleTtlMs,
     reaperIntervalMs,
+    maxSessionMs,
+    maxPages,
     defaultTimeoutMs,
     defaultNavigationTimeoutMs,
     maxNodes,

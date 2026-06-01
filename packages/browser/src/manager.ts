@@ -10,6 +10,12 @@ export interface BrowserManagerOptions {
   maxContexts?: number
   /** Idle time before a session is eligible for reaping, in ms. Default 5 min. */
   idleTtlMs?: number
+  /** Max wall-clock lifetime of a session, in ms — reaped past this even if active.
+   * Unset = no wall-clock cap (idle TTL still applies). */
+  maxSessionMs?: number
+  /** Max pages (tabs) per session context; pages opened beyond this (e.g. popups)
+   * are closed. Unset = no cap. */
+  maxPages?: number
   /** Per-action default timeout applied to each context, in ms. */
   defaultTimeoutMs?: number
   /** Per-navigation default timeout applied to each context, in ms. */
@@ -26,6 +32,7 @@ export interface BrowserManagerOptions {
 interface Session {
   context: BrowserContext
   lastUsedAt: number
+  createdAt: number
 }
 
 /**
@@ -37,9 +44,9 @@ interface Session {
  */
 export class BrowserManager {
   private readonly opts: Required<
-    Omit<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials'>
+    Omit<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages'>
   > &
-    Pick<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials'>
+    Pick<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages'>
   private readonly sessions = new Map<string, Session>()
   private readonly reapCallbacks: ((sessionId: string) => void | Promise<void>)[] = []
   private browser: Browser | undefined
@@ -56,6 +63,8 @@ export class BrowserManager {
       now: options.now ?? Date.now,
       gate: options.gate,
       httpCredentials: options.httpCredentials,
+      maxSessionMs: options.maxSessionMs,
+      maxPages: options.maxPages,
     }
   }
 
@@ -107,7 +116,16 @@ export class BrowserManager {
     if (this.opts.defaultNavigationTimeoutMs > 0) {
       context.setDefaultNavigationTimeout(this.opts.defaultNavigationTimeoutMs)
     }
-    this.sessions.set(sessionId, { context, lastUsedAt: this.opts.now() })
+    if (this.opts.maxPages !== undefined) {
+      const cap = this.opts.maxPages
+      // Close any page opened beyond the cap (e.g. a popup/new tab) — bounds the
+      // per-session page fan-out an app or executed action can create.
+      context.on('page', (page) => {
+        if (context.pages().length > cap) void page.close().catch(() => {})
+      })
+    }
+    const now = this.opts.now()
+    this.sessions.set(sessionId, { context, lastUsedAt: now, createdAt: now })
     return context
   }
 
@@ -144,11 +162,17 @@ export class BrowserManager {
     await session.context.close()
   }
 
-  /** Close every session idle for at least `idleTtlMs`. Returns the reaped ids. */
+  /**
+   * Close every session that is idle for at least `idleTtlMs` OR has exceeded the
+   * `maxSessionMs` wall-clock cap (if set). Returns the reaped ids.
+   */
   async sweepIdle(nowMs: number = this.opts.now()): Promise<string[]> {
+    const { idleTtlMs, maxSessionMs } = this.opts
     const reaped: string[] = []
     for (const [id, session] of this.sessions) {
-      if (nowMs - session.lastUsedAt >= this.opts.idleTtlMs) reaped.push(id)
+      const idle = nowMs - session.lastUsedAt >= idleTtlMs
+      const expired = maxSessionMs !== undefined && nowMs - session.createdAt >= maxSessionMs
+      if (idle || expired) reaped.push(id)
     }
     await Promise.all(reaped.map((id) => this.closeSession(id)))
     return reaped

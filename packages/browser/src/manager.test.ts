@@ -170,6 +170,26 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
     await expect(t.manager.createSession('new')).resolves.toBeDefined()
   })
 
+  it('reaps a session past the wall-clock cap even when actively used', async () => {
+    // high idle TTL so idle-reaping can't fire; the session is kept "fresh" by a
+    // touch — only the wall-clock (createdAt) cap should reap it
+    const t = setup({ idleTtlMs: 100_000, maxSessionMs: 10_000 })
+    await t.manager.createSession('s1') // createdAt = 1000
+    t.setNow(12_000)
+    t.manager.touch('s1') // lastUsedAt = 12000 → not idle
+    const reaped = await t.manager.sweepIdle()
+    expect(reaped).toContain('s1')
+    expect(t.manager.hasSession('s1')).toBe(false)
+  })
+
+  it('keeps a session within the wall-clock cap', async () => {
+    const t = setup({ idleTtlMs: 100_000, maxSessionMs: 10_000 })
+    await t.manager.createSession('s1') // createdAt = 1000
+    t.setNow(9_000) // age 8000 < 10000, idle 8000 < 100000
+    expect(await t.manager.sweepIdle()).toEqual([])
+    expect(t.manager.hasSession('s1')).toBe(true)
+  })
+
   it('closeSession closes + removes; unknown id is a no-op', async () => {
     const t = setup()
     const c = await t.manager.createSession('s1')
@@ -232,5 +252,25 @@ describe('BrowserManager (real headless chromium integration)', () => {
     expect(await page.title()).toBe('Lifecycle')
     await manager.shutdown()
     expect(manager.sessionCount).toBe(0)
+  }, 60_000)
+
+  it('caps pages per context, closing any page opened beyond maxPages', async () => {
+    const { chromium } = await import('playwright-core')
+    const manager = new BrowserManager({
+      launch: () => chromium.launch({ headless: true, args: ['--no-sandbox'] }),
+      maxPages: 1,
+    })
+    try {
+      const context = await manager.createSession('live')
+      const page = await context.newPage() // the one allowed page
+      await page.goto(baseUrl)
+      // a second page (e.g. a popup) is opened — the cap guard must close it
+      await context.newPage()
+      await new Promise((r) => setTimeout(r, 300))
+      expect(context.pages().length).toBe(1)
+      expect(page.isClosed()).toBe(false) // the original page survives
+    } finally {
+      await manager.shutdown()
+    }
   }, 60_000)
 })
