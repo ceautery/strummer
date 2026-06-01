@@ -6,7 +6,8 @@
   "license": "Apache-2.0",
   "bin": {
     "strummer-mcp": "./dist/bin.mjs",
-    "strummer-api-mcp": "./dist/bin-api.mjs"
+    "strummer-api-mcp": "./dist/bin-api.mjs",
+    "strummer-browser-mcp": "./dist/bin-browser.mjs"
   },
   "exports": {
     ".": {
@@ -19,7 +20,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts --dts",
+    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts --dts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
