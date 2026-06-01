@@ -214,9 +214,14 @@ Staged below; aspirational items are scheduled, not cut.
       `text`/`value`/`visible`/`count` (element, by ref or role+name) with
       **auto-waiting** (fast count-gated poll, not Playwright's default timeout);
       observed values redacted. MCP `browser_assert` tool (free read).
-- [ ] **Perf-audit tool** — Lighthouse 13.3.0 node API over CDP; scores +
-      core-metrics summary, full LHR JSON+HTML by handle; assert
-      shape/thresholds, never exact scores.
+- [x] **Perf-audit tool** — `auditPerf` (`perf.ts`) runs Lighthouse 13.3.0 node API
+      (`onlyCategories:['performance']`) via `chrome-launcher` at the operator
+      chromium path + operator flags (the bin passes the mandatory SSRF proxy +
+      loopback-bypass + WebRTC arg, so Lighthouse's nav traverses the egress
+      boundary). Score + core web-vitals (FCP/LCP/TBT/CLS/SI/TTI) summary inline; full
+      LHR JSON+HTML by handle, redacted before write. MCP `browser_perf_audit` is
+      standalone (own runId, no session) + allowlist-gated; assert shape/thresholds,
+      never exact scores.
 - [ ] **Network heavy mode** — `recordHar content:'attach' .zip` (or
       `tracing.startHar`) behind operator unlock; HAR replay/mocking via
       `page.route` for offline determinism.

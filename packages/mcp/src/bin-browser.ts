@@ -7,6 +7,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   ArtifactStore,
+  auditPerf,
   BrowserGate,
   BrowserManager,
   createSsrfProxy,
@@ -183,6 +184,25 @@ export async function buildBrowserServerFromEnv(
 
   const gate = new BrowserGate({ allowUnsafe, allowedHosts, allowDialogs })
   const store = new ArtifactStore(artifactsDir)
+  // Lighthouse spawns its OWN Chrome (chrome-launcher), so it gets the same egress
+  // boundary via flags: the mandatory SSRF proxy + loopback-bypass + WebRTC neutralize
+  // + the operator sandbox choice. Reports are redacted before write.
+  const perfChromeFlags = [
+    `--proxy-server=${proxy.url}`,
+    '--proxy-bypass-list=<-loopback>',
+    '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+    '--disable-gpu',
+    ...(headless ? ['--headless=new'] : []),
+    ...(noSandbox ? ['--no-sandbox'] : []),
+  ]
+  const runPerfAudit = (url: string, runId: string) =>
+    auditPerf(url, {
+      runId,
+      store,
+      chromePath: chromium.executablePath(),
+      chromeFlags: perfChromeFlags,
+      redact,
+    })
   const manager = new BrowserManager({
     launch: () => chromium.launch({ headless, proxy: { server: proxy.url }, args: launchArgs }),
     gate,
@@ -205,6 +225,7 @@ export async function buildBrowserServerFromEnv(
     allowScreenshots,
     downloadDir,
     uploadDir,
+    runPerfAudit,
     capture,
     maxNodes,
   })

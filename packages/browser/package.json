@@ -23,7 +23,9 @@
     "@strummer/assert": "workspace:*",
     "@strummer/safety": "workspace:*",
     "axe-core": "4.11.4",
+    "chrome-launcher": "1.2.1",
     "fflate": "^0.8.3",
+    "lighthouse": "13.3.0",
     "playwright-core": "1.60.0"
   }
 }

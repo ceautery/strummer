@@ -148,12 +148,24 @@ against in-process fixtures):
    `includeParams`. MCP `browser_trace_query` resolves the stored (already-redacted)
    trace by `runId` — **no live session needed** (query after close); errors actionably
    when trace capture was off. Schema probed against the 1.60.0 pin.
+25. **`browser_perf_audit` — Lighthouse perf over the node API.** `@strummer/browser`
+   `perf.ts`/`auditPerf(url, opts)` runs **Lighthouse 13.3.0** (`onlyCategories:
+   ['performance']`) by launching its own Chrome via **`chrome-launcher`** at the
+   operator chromium path + **operator-supplied flags** (the bin passes the mandatory
+   SSRF proxy + loopback-bypass + WebRTC arg, so Lighthouse's navigation traverses the
+   same egress boundary). Returns `{performanceScore, metrics[FCP/LCP/TBT/CLS/SI/TTI],
+   lighthouseVersion}`; the full LHR **JSON + HTML** reports are stored by handle
+   (`perf` / `perf-html`), **redacted before write**. MCP `browser_perf_audit` is
+   standalone (mints its own `runId`, no session), **allowlist-gated** at the surface
+   (`gate.checkNavigation`); the bin binds the real audit closure (absent ⇒ "not
+   enabled"). Per ADR 0006 callers assert metric **shape/thresholds, never exact
+   scores**. Feasibility + LHR shape probed against the pin.
 
-**265 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
-aspirational Phase-3 tail (ROADMAP: Lighthouse perf, network heavy/HAR, visual
-regression, `.bru` step persistence, multi-engine) or start **Phase 4** (cross-cutting
-verification: LSP bridge, impact-scoped test runner, mutation/flaky detection). See
-the detailed "Next action" section below + ROADMAP.
+**269 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+aspirational Phase-3 tail (ROADMAP: network heavy/HAR, visual regression, `.bru` step
+persistence, multi-engine) or start **Phase 4** (cross-cutting verification: LSP
+bridge, impact-scoped test runner, mutation/flaky detection). See the detailed "Next
+action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -472,9 +484,15 @@ into an action timeline (before/after by callId) + console + errors; MCP
 `browser_trace_query` reads the stored redacted trace by runId (no live session).
 Direct parser, no GUI subprocess. (`trace.ts`, real-chromium tested.)
 
-**Next (later Phase 3):** the aspirational tail only — Lighthouse perf, network
-heavy/HAR, visual regression, `.bru` step persistence, multi-engine. None blocking.
-TDD red→green; `pnpm gate` 100% green before each commit.
+**`browser_perf_audit`: DONE.** `auditPerf` runs Lighthouse 13.3.0 (perf category)
+via chrome-launcher with the operator's proxied/hardened flags; summary (score +
+core web-vitals) inline, full LHR JSON+HTML by handle (redacted). MCP
+`browser_perf_audit` is standalone + allowlist-gated; bin binds the audit closure.
+(`perf.ts`, real-Lighthouse tested; assert shape not scores.)
+
+**Next (later Phase 3):** the aspirational tail only — network heavy/HAR, visual
+regression, `.bru` step persistence, multi-engine. None blocking. TDD red→green;
+`pnpm gate` 100% green before each commit.
 
 ---
 

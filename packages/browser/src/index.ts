@@ -20,6 +20,13 @@ export {
 } from './driver.js'
 export { BrowserGate, type BrowserGateOptions, GateError } from './gate.js'
 export { BrowserManager, type BrowserManagerOptions } from './manager.js'
+export {
+  auditPerf,
+  type PerfAuditOptions,
+  type PerfAuditResult,
+  type PerfMetric,
+  type PerfSummary,
+} from './perf.js'
 export { createSsrfProxy, type SsrfProxy, type SsrfProxyOptions } from './proxy.js'
 export {
   type ConsoleEntry,

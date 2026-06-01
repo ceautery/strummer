@@ -70,6 +70,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     downloadDir?: string
     uploadDir?: string
     capture?: { trace?: boolean; console?: boolean; network?: boolean }
+    runPerfAudit?: Parameters<typeof createBrowserServer>[0]['runPerfAudit']
   }) {
     const gate = new BrowserGate({
       allowUnsafe: config.allowUnsafe,
@@ -99,6 +100,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       downloadDir: config.downloadDir,
       uploadDir: config.uploadDir,
       capture: config.capture,
+      runPerfAudit: config.runPerfAudit,
     })
     const [ct, st] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test', version: '0.0.0' })
@@ -159,6 +161,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_get_value',
       'browser_get_attribute',
       'browser_assert',
+      'browser_perf_audit',
       'browser_trace_query',
       'browser_audit_a11y',
       'browser_screenshot',
@@ -573,6 +576,51 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const noTrace = await call(client, 'browser_trace_query', { runId: 'no-such-run' })
     expect(noTrace.isError).toBe(true)
     expect(JSON.stringify(noTrace.content)).toMatch(/no trace/i)
+    await client.close()
+  })
+
+  it('browser_perf_audit: allowlist-gated, mints a runId, returns the summary + handles', async () => {
+    const calls: { url: string; runId: string }[] = []
+    const fakePerf = async (url: string, runId: string) => {
+      calls.push({ url, runId })
+      return {
+        summary: {
+          performanceScore: 0.92,
+          metrics: [{ id: 'first-contentful-paint', score: 1, numericValue: 600 }],
+          lighthouseVersion: '13.3.0',
+        },
+        reportHandle: `strummer://browser/run/${runId}/perf`,
+        htmlHandle: `strummer://browser/run/${runId}/perf-html`,
+      }
+    }
+    const { client } = await connect({ allowedHosts: ['app.test'], runPerfAudit: fakePerf })
+
+    const res = (await call(client, 'browser_perf_audit', { url: 'https://app.test/' }))
+      .structuredContent as {
+      runId: string
+      summary: { performanceScore: number; lighthouseVersion: string }
+      reportHandle: string
+    }
+    expect(res.summary.performanceScore).toBe(0.92)
+    expect(res.summary.lighthouseVersion).toBe('13.3.0')
+    expect(res.runId).toMatch(/[0-9a-f-]{36}/)
+    expect(res.reportHandle).toBe(`strummer://browser/run/${res.runId}/perf`)
+    expect(calls).toHaveLength(1) // the audit ran exactly once, with the minted runId
+    expect(calls[0]?.runId).toBe(res.runId)
+
+    // a non-allowlisted host is refused before any audit runs
+    const denied = await call(client, 'browser_perf_audit', { url: 'https://evil.test/' })
+    expect(denied.isError).toBe(true)
+    expect(JSON.stringify(denied.content)).toMatch(/denied|allowlist/i)
+    expect(calls).toHaveLength(1) // not invoked for the denied host
+    await client.close()
+  })
+
+  it('browser_perf_audit reports when perf is not operator-enabled', async () => {
+    const { client } = await connect({}) // no runPerfAudit wired
+    const res = await call(client, 'browser_perf_audit', { url: 'http://127.0.0.1/' })
+    expect(res.isError).toBe(true)
+    expect(JSON.stringify(res.content)).toMatch(/not enabled/i)
     await client.close()
   })
 

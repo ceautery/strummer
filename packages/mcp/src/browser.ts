@@ -6,6 +6,7 @@ import {
   type BrowserGate,
   type BrowserManager,
   PageDriver,
+  type PerfAuditResult,
   queryTrace,
   RunRecorder,
 } from '@strummer/browser'
@@ -59,6 +60,10 @@ export interface BrowserToolsOptions {
   /** Operator upload-allowlist dir. When set, `browser_upload` may set files
    * resolving to within it; unset ⇒ uploads denied (deny-by-default). */
   uploadDir?: string
+  /** Run a Lighthouse perf audit on a URL, keyed by a server-minted `runId`. The
+   * bin binds the operator chromium path + proxied/hardened flags + store + redactor
+   * here; absent ⇒ `browser_perf_audit` reports it is not enabled. */
+  runPerfAudit?: (url: string, runId: string) => Promise<PerfAuditResult>
   /** Token cap on inlined snapshot text. */
   maxNodes?: number
   /** Exact accessible-name matching when resolving refs. Default true. */
@@ -727,6 +732,45 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         runId: session.runId,
         ...(runArtifacts ? { artifacts: runArtifacts } : {}),
       })
+    },
+  )
+
+  server.registerTool(
+    'browser_perf_audit',
+    {
+      title: 'Performance audit (Lighthouse)',
+      description:
+        'Run a Lighthouse performance audit on a URL (gated by the operator host allowlist). Spawns ' +
+        'a fresh proxied Chrome and loads the page clean — independent of any session. Returns the ' +
+        'performance score + core web-vitals metrics; the full LHR JSON + HTML report are by handle. ' +
+        'Assert on metric shape/thresholds, never an exact score (scores vary). Requires operator enablement.',
+      inputSchema: { url: z.string().describe('absolute URL to audit') },
+      outputSchema: {
+        runId: z.string(),
+        summary: z.object({
+          performanceScore: z.number().nullable(),
+          metrics: z.array(
+            z.object({
+              id: z.string(),
+              score: z.number().nullable(),
+              numericValue: z.number().optional(),
+              displayValue: z.string().optional(),
+            }),
+          ),
+          lighthouseVersion: z.string(),
+        }),
+        reportHandle: z.string(),
+        htmlHandle: z.string(),
+      },
+    },
+    async (args) => {
+      if (!opts.runPerfAudit) {
+        throw new Error('performance audit is not enabled by the operator')
+      }
+      gate.checkNavigation(args.url) // same allowlist as browser_navigate
+      const runId = randomUUID()
+      const result = await opts.runPerfAudit(args.url, runId)
+      return reply({ runId, ...result })
     },
   )
 

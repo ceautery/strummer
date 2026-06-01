@@ -70,6 +70,9 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   operator set (`equals`/`contains`/`matches`/`gt`/…). Each **auto-waits** to its
   timeout; observed values are redacted. Returns `{pass, results}`.
 - **`browser_audit_a11y`** — axe-core audit; compact summary + report by handle.
+- **`browser_perf_audit`** — Lighthouse performance audit of a URL (allowlist-gated;
+  spawns a fresh proxied Chrome, independent of any session). Score + core web-vitals
+  inline; full LHR JSON + HTML by handle. Assert shape/thresholds, never exact scores.
 - **`browser_trace_query`** — parse a captured trace.zip (by `runId`; needs trace
   capture on) into an action timeline (API calls + timing + errors), console, and an
   errors list. No live session needed — query after the session closed; the trace is
