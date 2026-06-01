@@ -7,6 +7,8 @@ tools and resources. Two servers ship from this package:
   (Tools / Resource below).
 - **`strummer-api-mcp`** — the **API-testing** server over [`@strummer/api`](../api)
   (API tools below).
+- **`strummer-browser-mcp`** — the **browser/UI-testing** server over
+  [`@strummer/browser`](../browser) (browser tools below).
 
 ## Docs tools
 
@@ -47,6 +49,36 @@ one server serves many collections):
 the bin via env, never exposed as tool inputs (an agent can't authorize its own
 mutating requests). Mutations dry-run unless both are set (ADR 0004).
 
+## Browser tools (`strummer-browser-mcp`)
+
+Stateful, session-oriented (open → drive → close); all large artifacts by handle:
+
+- **`browser_open_session`** / **`browser_list_sessions`** / **`browser_close_session`**
+  — lifecycle. Open mints a server-side `sessionId` + `runId` (never agent inputs)
+  and reports `capturing` + `sessionCount`/`maxContexts`; close flushes and returns
+  the run artifact handles.
+- **`browser_navigate`** / **`browser_snapshot`** — drive + (re)capture a
+  token-capped ARIA snapshot whose elements carry `[ref=…]` ids.
+- **`browser_click`/`fill`/`fill_form`/`select`/`press`** — interact by ref;
+  mutations **dry-run** (redacted would-be-request preview) unless the operator
+  unlocked execution. `fill` resolves `{{secret:NAME}}` server-side (fail-closed).
+- **`browser_wait_for`** / **`browser_get_text`/`get_value`/`get_attribute`** —
+  read-like; reads are redacted and don't invalidate refs.
+- **`browser_audit_a11y`** — axe-core audit; compact summary + report by handle.
+- **`browser_save_storage_state`** — operator-gated; writes the password-equivalent
+  storageState to an operator-path artifact (handle + counts only, never inlined).
+- Resource **`strummer://browser/run/{runId}/{kind}`** — fetch a stored artifact
+  (`snapshot-s<gen>` / `a11y-s<n>` / `trace` / `console` / `network`) by handle.
+  The password-equivalent `storage-state` kind is **refused** (operator-path only).
+
+**Safety (all operator-set via `STRUMMER_BROWSER_*` env, never tool inputs):**
+navigation/mutation deny-by-default (`ALLOW_UNSAFE`, `ALLOWED_HOSTS`); a **mandatory**
+DNS-pinning SSRF proxy (loopback forced through it; `ALLOW_PRIVATE` opt-in);
+service-workers blocked + WebRTC egress neutralized; secret redaction across every
+artifact + the trace.zip; `{{secret:NAME}}` fill + origin-scoped `httpCredentials`
+(`HTTP_USERNAME/PASSWORD/ORIGIN`); caps `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/
+`IDLE_TTL_MS`; trace capture + `storageState` capture off unless explicitly enabled.
+
 ## Run
 
 ```bash
@@ -55,15 +87,19 @@ strummer-mcp <index.sqlite>          # docs; or: STRUMMER_INDEX=… strummer-mcp
 # API testing — mutations dry-run unless explicitly unlocked:
 strummer-api-mcp
 STRUMMER_ALLOW_UNSAFE=1 STRUMMER_ALLOWED_HOSTS=api.example.com strummer-api-mcp
+
+# Browser testing — deny-by-default; unlock + allowlist per operator policy:
+STRUMMER_BROWSER_ALLOWED_HOSTS=app.test,127.0.0.1 strummer-browser-mcp
 ```
 
-Both speak MCP over stdio.
+All three speak MCP over stdio.
 
 ### Register with Claude Code
 
 ```bash
-claude mcp add strummer     -- strummer-mcp /path/to/index.sqlite
-claude mcp add strummer-api -- strummer-api-mcp
+claude mcp add strummer         -- strummer-mcp /path/to/index.sqlite
+claude mcp add strummer-api     -- strummer-api-mcp
+claude mcp add strummer-browser -- strummer-browser-mcp
 ```
 
 ## Token economy

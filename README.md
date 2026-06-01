@@ -34,12 +34,18 @@ adapters). The **API-testing pillar's core is complete** too — `.bru` runner,
 secrets, deny-by-default mutation safety, captures/chaining, QuickJS scripts,
 OpenAPI/GraphQL contract validation, and both an MCP tool surface and a
 `strummer api …` CLI. The **browser/UI pillar (`@strummer/browser`, on
-`playwright-core`) is under active construction** — the engine has the browser
-lifecycle manager, ARIA-snapshot capture + imperative step tools, a
-deny-by-default action gate, and a two-tier SSRF defense (route allowlist + a
-DNS-pinning proxy, sharing `@strummer/safety` with the API pillar); the
-artifact-capture pipeline and the MCP/CLI surface come next. **The single source
-of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
+`playwright-core`) now has a complete agent surface** — the engine (browser
+lifecycle manager, ARIA-snapshot capture + imperative step tools, deny-by-default
+action gate, two-tier SSRF defense sharing `@strummer/safety`, and an artifact
+pipeline of trace/console/network by handle), a session-oriented **MCP surface**
+(`registerBrowserTools` + the `strummer-browser-mcp` bin) with a per-session mutex
+and the `strummer://browser/run/{runId}/{kind}` resource, the full **secret
+boundary** (`{{secret:NAME}}` fill, origin-scoped `httpCredentials`, `storageState`
+by handle, redaction across console/network/snapshot/reads/trace), and operator
+hardening (service-worker block, WebRTC-egress neutralization, session wall-clock +
+max-pages + max-contexts caps). Still to come: downloads/uploads/dialog/auth
+gating, a screenshot step tool, and a human `strummer browser` CLI. **The single
+source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
 
