@@ -65,6 +65,29 @@ function setup(opts?: Partial<BrowserManagerOptions>) {
 }
 
 describe('BrowserManager (fake browser, deterministic clock)', () => {
+  it('fires onReap with the session id BEFORE the context is closed (closeSession + sweepIdle)', async () => {
+    const t = setup()
+    const events: string[] = []
+    // the surface uses this to flush a RunRecorder's artifacts while the context
+    // (and its tracer) is still alive
+    t.manager.onReap((id) => {
+      events.push(`${id}:closed=${t.browser.contexts.at(-1)?.closed}`)
+    })
+
+    await t.manager.createSession('s1')
+    await t.manager.closeSession('s1')
+    expect(events).toEqual(['s1:closed=false'])
+    expect(t.browser.contexts[0]?.closed).toBe(true)
+
+    // sweepIdle reaps via closeSession → the hook fires there too
+    events.length = 0
+    await t.manager.createSession('s2')
+    t.setNow(1000 + 6000) // past idleTtlMs
+    await t.manager.sweepIdle()
+    expect(events).toEqual(['s2:closed=false'])
+    expect(t.browser.contexts[1]?.closed).toBe(true)
+  })
+
   it('launches the browser lazily and only once, shared across sessions', async () => {
     const t = setup()
     expect(t.launchCount).toBe(0)

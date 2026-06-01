@@ -36,6 +36,7 @@ export class BrowserManager {
   private readonly opts: Required<Omit<BrowserManagerOptions, 'launch' | 'gate'>> &
     Pick<BrowserManagerOptions, 'launch' | 'gate'>
   private readonly sessions = new Map<string, Session>()
+  private readonly reapCallbacks: ((sessionId: string) => void | Promise<void>)[] = []
   private browser: Browser | undefined
   private launching: Promise<Browser> | undefined
   private reaper: ReturnType<typeof setInterval> | undefined
@@ -108,11 +109,22 @@ export class BrowserManager {
     if (session) session.lastUsedAt = this.opts.now()
   }
 
+  /**
+   * Register a callback fired with a session id when that session is closed or
+   * reaped, **before** its context is torn down — so a consumer (the MCP
+   * surface) can flush a `RunRecorder`'s artifacts while the context (and its
+   * tracer) is still alive. Callbacks run in registration order and are awaited.
+   */
+  onReap(cb: (sessionId: string) => void | Promise<void>): void {
+    this.reapCallbacks.push(cb)
+  }
+
   /** Close and forget a session's context. Unknown ids are a no-op. */
   async closeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (!session) return
     this.sessions.delete(sessionId)
+    for (const cb of this.reapCallbacks) await cb(sessionId)
     await session.context.close()
   }
 
