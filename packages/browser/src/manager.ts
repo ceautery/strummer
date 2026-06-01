@@ -1,5 +1,6 @@
 import type { Browser, BrowserContext } from 'playwright-core'
 import type { BrowserGate } from './gate.js'
+import { harPathFor } from './har.js'
 import { installSafetyRoutes } from './routes.js'
 
 export interface BrowserManagerOptions {
@@ -32,6 +33,11 @@ export interface BrowserManagerOptions {
    * operator download-quarantine dir is configured, so the `PageDriver` can save +
    * record them. Operator config, never an agent input. */
   acceptDownloads?: boolean
+  /** Operator dir for "network heavy mode" HAR capture. When set, every session's
+   * context records a HAR (`content:'attach'`, `mode:'full'`) to `<dir>/<id>.zip`,
+   * written by Playwright on context close. Unset = no HAR. Operator config, never
+   * an agent input — HAR is a heavy secret surface (gated off by default). */
+  harDir?: string
 }
 
 interface Session {
@@ -49,11 +55,18 @@ interface Session {
  */
 export class BrowserManager {
   private readonly opts: Required<
-    Omit<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages'>
+    Omit<
+      BrowserManagerOptions,
+      'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages' | 'harDir'
+    >
   > &
-    Pick<BrowserManagerOptions, 'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages'>
+    Pick<
+      BrowserManagerOptions,
+      'launch' | 'gate' | 'httpCredentials' | 'maxSessionMs' | 'maxPages' | 'harDir'
+    >
   private readonly sessions = new Map<string, Session>()
   private readonly reapCallbacks: ((sessionId: string) => void | Promise<void>)[] = []
+  private readonly closedCallbacks: ((sessionId: string) => void | Promise<void>)[] = []
   private browser: Browser | undefined
   private launching: Promise<Browser> | undefined
   private reaper: ReturnType<typeof setInterval> | undefined
@@ -71,6 +84,7 @@ export class BrowserManager {
       httpCredentials: options.httpCredentials,
       maxSessionMs: options.maxSessionMs,
       maxPages: options.maxPages,
+      harDir: options.harDir,
     }
   }
 
@@ -118,6 +132,17 @@ export class BrowserManager {
       // deny-by-default: Playwright cancels downloads unless the operator enabled them
       acceptDownloads: this.opts.acceptDownloads,
       ...(this.opts.httpCredentials ? { httpCredentials: this.opts.httpCredentials } : {}),
+      // "network heavy mode": when the operator set a harDir, record a full HAR with
+      // bodies attached; Playwright flushes it to disk when this context closes.
+      ...(this.opts.harDir
+        ? {
+            recordHar: {
+              path: harPathFor(this.opts.harDir, sessionId),
+              content: 'attach' as const,
+              mode: 'full' as const,
+            },
+          }
+        : {}),
     })
     if (this.opts.gate) await installSafetyRoutes(context, this.opts.gate)
     if (this.opts.defaultTimeoutMs > 0) context.setDefaultTimeout(this.opts.defaultTimeoutMs)
@@ -161,6 +186,17 @@ export class BrowserManager {
     this.reapCallbacks.push(cb)
   }
 
+  /**
+   * Register a callback fired with a session id **after** its context has been
+   * closed — the mirror of {@link onReap}. A HAR is only written to disk when the
+   * context closes, so the surface uses this to finalize (redact + store) the HAR
+   * for both an explicit close and a reaped session. Callbacks run in registration
+   * order and are awaited.
+   */
+  onClosed(cb: (sessionId: string) => void | Promise<void>): void {
+    this.closedCallbacks.push(cb)
+  }
+
   /** Close and forget a session's context. Unknown ids are a no-op. */
   async closeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
@@ -168,6 +204,7 @@ export class BrowserManager {
     this.sessions.delete(sessionId)
     for (const cb of this.reapCallbacks) await cb(sessionId)
     await session.context.close()
+    for (const cb of this.closedCallbacks) await cb(sessionId)
   }
 
   /**
@@ -207,9 +244,13 @@ export class BrowserManager {
   /** Close all sessions and the browser; the manager can be reused afterward. */
   async shutdown(): Promise<void> {
     this.stopReaper()
+    const ids = [...this.sessions.keys()]
     const contexts = [...this.sessions.values()].map((s) => s.context)
     this.sessions.clear()
     await Promise.all(contexts.map((c) => c.close()))
+    // Fire onClosed for each session AFTER its context closed — so a consumer can
+    // finalize/clean a HAR (written on close) instead of leaving it raw on disk.
+    for (const id of ids) for (const cb of this.closedCallbacks) await cb(id)
     const browser = this.browser
     this.browser = undefined
     await browser?.close()

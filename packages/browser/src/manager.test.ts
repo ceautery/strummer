@@ -90,6 +90,45 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
     expect(t.browser.contexts[1]?.closed).toBe(true)
   })
 
+  it('fires onClosed with the session id AFTER the context is closed (closeSession + sweepIdle)', async () => {
+    const t = setup()
+    const events: string[] = []
+    // the surface uses this to finalize a HAR (written only on context close)
+    t.manager.onClosed((id) => {
+      events.push(`${id}:closed=${t.browser.contexts.at(-1)?.closed}`)
+    })
+
+    await t.manager.createSession('s1')
+    await t.manager.closeSession('s1')
+    expect(events).toEqual(['s1:closed=true'])
+
+    // sweepIdle reaps via closeSession → onClosed fires there too, after close
+    events.length = 0
+    await t.manager.createSession('s2')
+    t.setNow(1000 + 6000) // past idleTtlMs
+    await t.manager.sweepIdle()
+    expect(events).toEqual(['s2:closed=true'])
+  })
+
+  it('records a HAR per context when an operator harDir is set (content:attach, full)', async () => {
+    const t = setup({ harDir: '/tmp/strummer-har' })
+    await t.manager.createSession('sess-1')
+    const recordHar = t.browser.contexts[0]?.options?.recordHar as
+      | { path: string; content: string; mode: string }
+      | undefined
+    expect(recordHar?.path).toBe('/tmp/strummer-har/sess-1.zip')
+    expect(recordHar?.content).toBe('attach')
+    expect(recordHar?.mode).toBe('full')
+  })
+
+  it('omits recordHar when no harDir is configured', async () => {
+    const t = setup()
+    await t.manager.createSession('s1')
+    expect(
+      (t.browser.contexts[0]?.options as { recordHar?: unknown } | undefined)?.recordHar,
+    ).toBeUndefined()
+  })
+
   it('blocks service workers on every context (hardening default)', async () => {
     const t = setup()
     await t.manager.createSession('s1')
@@ -209,6 +248,20 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
     await expect(t.manager.closeSession('nope')).resolves.toBeUndefined()
   })
 
+  it('fires onClosed for every session on shutdown (so HARs get finalized/cleaned)', async () => {
+    const t = setup()
+    const closed: string[] = []
+    // onClosed fires after the context is closed — assert the context is already closed
+    t.manager.onClosed((id) => {
+      closed.push(id)
+      expect(t.browser.contexts.every((c) => c.closed)).toBe(true)
+    })
+    await t.manager.createSession('s1')
+    await t.manager.createSession('s2')
+    await t.manager.shutdown()
+    expect(closed.sort()).toEqual(['s1', 's2'])
+  })
+
   it('shutdown closes every context and the browser', async () => {
     const t = setup()
     await t.manager.createSession('s1')
@@ -262,6 +315,29 @@ describe('BrowserManager (real headless chromium integration)', () => {
     expect(await page.title()).toBe('Lifecycle')
     await manager.shutdown()
     expect(manager.sessionCount).toBe(0)
+  }, 60_000)
+
+  it('writes a HAR archive to the operator harDir when a session closes', async () => {
+    const { chromium } = await import('playwright-core')
+    const { existsSync, mkdtempSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { harPathFor } = await import('./har.js')
+    const harDir = mkdtempSync(join(tmpdir(), 'strummer-har-mgr-'))
+    const manager = new BrowserManager({
+      launch: () => chromium.launch({ headless: true, args: ['--no-sandbox'] }),
+      harDir,
+    })
+    try {
+      const context = await manager.createSession('live')
+      const page = await context.newPage()
+      await page.goto(baseUrl, { waitUntil: 'networkidle' })
+      await manager.closeSession('live') // closing flushes the HAR to disk
+      expect(existsSync(harPathFor(harDir, 'live'))).toBe(true)
+    } finally {
+      await manager.shutdown()
+      rmSync(harDir, { recursive: true, force: true })
+    }
   }, 60_000)
 
   it('caps pages per context, closing any page opened beyond maxPages', async () => {

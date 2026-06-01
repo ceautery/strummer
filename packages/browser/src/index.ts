@@ -19,6 +19,12 @@ export {
   type WouldRequest,
 } from './driver.js'
 export { BrowserGate, type BrowserGateOptions, GateError } from './gate.js'
+export {
+  type FinalizeHarOptions,
+  finalizeHar,
+  type HarSummary,
+  harPathFor,
+} from './har.js'
 export { BrowserManager, type BrowserManagerOptions } from './manager.js'
 export {
   auditPerf,
