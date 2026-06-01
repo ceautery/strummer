@@ -298,7 +298,11 @@ MCP surface in `packages/mcp/src/lsp.ts` + `bin-lsp.ts`; env
 
 # ADR-0011 Update — `lsp_rename` Write-Mode Design Contract
 
-- **Status:** Proposed (design; no production code yet) — extends ADR-0011 (the LSP bridge).
+- **Status:** Accepted — IMPLEMENTED across slices A–G (2026-06-01). Multi-file apply shipped
+  within the milestone (Slice F′), per the human decision. The fixture capture confirmed tsserver
+  5.3.0 returns the legacy `changes` map (not `documentChanges`) + a bare-`Range` `prepareRename`
+  + no resource operations on an ordinary rename — so the resource-op refuse cut stays an edge
+  case. Extends ADR-0011 (the LSP bridge).
 - **Date:** 2026-06-01
 - **Relates to:** ADR-0011 (parent), ADR-0006 (the browser action gate — the dry-run/execute precedent), ARCHITECTURE §1 (the no-live-RPC rule this pillar is the fenced exception to).
 

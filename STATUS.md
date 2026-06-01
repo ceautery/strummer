@@ -147,9 +147,10 @@ Stryker in the gate; diff-scoped via `mutateFiles`→`--mutate` + `--incremental
 `mutate_summarize`(free)/`mutate_run`(gated) MCP surface + `strummer-mutate-mcp` bin. With LSP
 slices 1–5 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts` + gated `query.ts` +
 MCP surface/bin) now also landed — Phase 4 pillars COMPLETE (at 659 TS). **Since then the
-non-blocking tails landed: the cross-pillar Python adapters (flake/coverage/deps/mutate) + the LSP
-capability-gated read tails — current count is 728 TS + 45 Py green; see the Next-action block for
-the detail.**)_
+non-blocking tails landed: the cross-pillar Python adapters (flake/coverage/deps/mutate), the LSP
+capability-gated read tails, and **LSP write-mode (`lsp_rename`, ADR 0011 addendum slices A–G:
+dry-run-default + a separate `allowWrite` gate)** — current count is 797 TS + 45 Py green; see the
+Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -659,14 +660,36 @@ part of the navigation group. Captured **fresh real `typescript-language-server`
 (`type-definition-locations.json`, `call-hierarchy-{prepare,incoming,outgoing}.json`; the deterministic
 gate still replays recorded payloads, NO real server in `pnpm gate`). The capture harness used an
 extended greeter project (a free `hello()` that `greet()` calls); provenance in the fixtures README.
-**Remaining non-blocking tails:** LSP write-mode (`rename`), `workspace/symbol`, `diagnostics`,
-multi-root, full toolchain-mismatch heuristic, a `strummer lsp` CLI; deps cosmic-ray/`runMutmut`
-spawner; the human CLIs (`strummer deps|coverage|flake|mutate`). **NEXT MILESTONE is again open** —
-a Phase-5 boundary or one of these tails.
+**LSP WRITE-MODE (`lsp_rename`) DONE, 797 TS + 45 Py green (ADR 0011 addendum, slices A–G):** the
+first WRITE surface. **Dry-run by default**; applies to disk only behind a SEPARATE operator gate
+`STRUMMER_LSP_ALLOW_WRITE` that is enforced to REQUIRE `allowRun` (hard bin-startup error otherwise).
+Design via the `lsp-write-mode-design` fan-out (3 research → synthesis → 2 adversarial critics →
+corrected contract, appended to ADR 0011); the adversarial pass caught real corruption/confinement
+holes (all folded). Slices: **A** pure `apply.ts` (`lspPositionToOffset` raw-terminator/CRLF-faithful
+JS-offset walker + `applyTextEdits` distinct-start/overlap-throw/descending-splice + `isPlausibleRenameName`)
+· **B** pure `normalizeWorkspaceEdit` (changes vs documentChanges, resource-ops flagged, annotations
+carried) — the captured fixture FLIPPED the design assumption: real tsserver 5.3.0 returns the legacy
+`changes` map (not `documentChanges`) + a bare-Range `prepareRename` + NO resource ops · **C** shared
+realpath-hardened write-confinement (`confine.ts`; symlink-escape closed, non-`file://` refused,
+confine-all-before-I/O) · **D** `client.rename`/`prepareRename` + the `textDocument.rename`/
+`workspace.workspaceEdit` handshake caps (object-form `renameProvider{prepareProvider}`) · **E**
+`client.applyEdited` full-text `didChange` doc-sync + open-map refcount→`{refs,version}` (strictly
+increasing) + inbound `workspace/applyEdit` deadlock guard · **F** `LspRenameEngine` single-file
+(dry-run preview with offset-faithful redacted hunks; gated apply: hash-drift refuse → `applyTextEdits`
+→ stage-then-commit writer seam → post-write `didChange`; SHA-256 digests) · **F′**
+`manager.runWithUris` (sorted multi-URI lock, deadlock-free) → atomic MULTI-FILE apply (confine-all,
+old-identifier staleness guard, stage-then-commit-all) · **G** the `lsp_rename` MCP tool (no `write`
+input — apply is the engine's internal decision; large edit sets by handle) + bin wiring. Fixtures
+captured from real `typescript-language-server` 5.3.0 (out-of-gate; gate replays recorded payloads, NO
+real server). Independent golden-file byte assertion (not `applyTextEdits` output) guards the writer.
+**Remaining non-blocking tails:** LSP `workspace/symbol`, `diagnostics`, multi-root, write-mode for
+resource ops + multi-file conflict reconciliation, full toolchain-mismatch heuristic, a `strummer lsp`
+CLI; deps cosmic-ray/`runMutmut` spawner; the human CLIs (`strummer deps|coverage|flake|mutate`).
+**NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
-`lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
-exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full
-toolchain-version-resolution matrix (the richer warn-on-mismatch), and a Python adapter posture; a
+`lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); then `workspace/symbol`,
+`diagnostics`, multi-root, the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
+write-mode resource-ops + multi-file conflict reconciliation, and a Python adapter posture; a
 human `strummer lsp` CLI mirroring the surface. **Other Phase-4 staged tails:** deps PyPI/RubyGems
 adapters; coverage `strummer coverage` CLI / `istanbul-lib-coverage` merging; flake Python
 (pytest-json) adapter; mutate Python (mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.

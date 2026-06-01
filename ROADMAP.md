@@ -362,7 +362,7 @@ Staged below; aspirational items are scheduled, not cut.
       verification tying browser network capture to the API pillar's contract
       validation.
 
-## Phase 4 — Cross-cutting verification tools  *(pillars COMPLETE — engine + agent surface; Python adapters (flake/coverage/deps/mutate) + LSP capability-gated read tails done; only non-blocking tails remain; sequence locked by ADR 0010)*
+## Phase 4 — Cross-cutting verification tools  *(pillars COMPLETE — engine + agent surface; Python adapters (flake/coverage/deps/mutate) + LSP capability-gated read tails + LSP write-mode (`lsp_rename`) done; only non-blocking tails remain; sequence locked by ADR 0010)*
 
 Sequence decided by the `phase4-design-research` fan-out (5 research streams →
 synthesis → 3 adversarial critics → corrected synthesis); see **ADR 0010** for the
@@ -635,8 +635,22 @@ Two independent tracks, then the test-quality chain, then LSP last:
         declares the `callHierarchy` capability so servers advertise it). All gated as part of the
         navigation group; `lsp_languages` already reported their capabilities. Fixtures captured
         from the **same real `typescript-language-server` 5.3.0** (provenance in the fixtures README).
-  - [ ] *(staged, not amputated)* write-mode (`rename`), `workspace/symbol` search,
-        `diagnostics`, multi-root, full toolchain-version resolution, Python adapter posture.
+  - [x] **Write-mode — `lsp_rename` (ADR 0011 addendum, slices A–G).** The first WRITE surface,
+        designed by the `lsp-write-mode-design` fan-out (adversarial pass folded in). **Dry-run by
+        default**; applies to disk only behind a SEPARATE `STRUMMER_LSP_ALLOW_WRITE` gate that is
+        enforced to require `allowRun`. Pure `applyTextEdits`/`lspPositionToOffset` (CRLF/BOM/non-BMP-
+        faithful, overlap-throwing) + `normalizeWorkspaceEdit` (changes vs documentChanges; resource
+        ops flagged + refused); realpath-hardened all-or-nothing confinement of every edited file;
+        `client.rename`/`prepareRename` + handshake caps; full-text `didChange` doc-sync (monotonic
+        version) + inbound `applyEdit` deadlock guard; single- AND multi-file apply via
+        `manager.runWithUris` (sorted multi-URI lock) with stage-then-commit-all + staleness guards +
+        SHA-256 audit digests; the `lsp_rename` MCP tool (no `write` input — apply is the engine's
+        internal decision) + bin wiring. Real-server fixtures captured out-of-gate (gate replays
+        recorded payloads, no real server). The capture flipped a design assumption: tsserver 5.3.0
+        returns the legacy `changes` map (not `documentChanges`) and no resource ops on a rename.
+  - [ ] *(staged, not amputated)* write-mode for resource ops + multi-file conflict reconciliation,
+        `workspace/symbol` search, `diagnostics`, multi-root, full toolchain-version resolution,
+        Python adapter posture, a `strummer lsp` CLI.
 
 ## Ongoing
 
