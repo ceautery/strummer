@@ -17,6 +17,13 @@
  */
 
 import semver from 'semver'
+import { cvssV3BaseScore } from './cvss.js'
+
+/** A CVSS severity entry (OSV schema): `type` like `CVSS_V3`, `score` is the vector string. */
+export interface OsvSeverity {
+  type: string
+  score: string
+}
 
 /** An OSV range event. Exactly one of the three keys is set per event. */
 export interface OsvEvent {
@@ -35,6 +42,7 @@ export interface OsvAffected {
   ranges?: OsvRange[]
   /** An explicit enumeration of affected versions (used instead of, or alongside, ranges). */
   versions?: string[]
+  severity?: OsvSeverity[]
   database_specific?: { severity?: string }
 }
 
@@ -46,6 +54,8 @@ export interface OsvAdvisory {
   summary?: string
   details?: string
   affected: OsvAffected[]
+  /** Top-level CVSS severity entries (the qualitative string lives in `database_specific`). */
+  severity?: OsvSeverity[]
   database_specific?: { severity?: string }
 }
 
@@ -61,7 +71,7 @@ export interface VulnerabilityMatch {
   fixedIn: string[]
 }
 
-/** Normalize a GHSA-style severity string to our fixed bucket. CVSS-vector scoring is a later slice. */
+/** Normalize a GHSA-style severity string to our fixed bucket. */
 function severityBucket(value: string | undefined): SeverityBucket {
   switch (value?.toUpperCase()) {
     case 'CRITICAL':
@@ -76,6 +86,48 @@ function severityBucket(value: string | undefined): SeverityBucket {
     default:
       return 'unknown'
   }
+}
+
+/** Map a CVSS base score to our bucket per the CVSS v3 qualitative rating scale.
+ * `0.0` (None) has no bucket of ours, so it stays `unknown` rather than overstating. */
+function severityFromScore(score: number): SeverityBucket {
+  if (score >= 9.0) return 'critical'
+  if (score >= 7.0) return 'high'
+  if (score >= 4.0) return 'moderate'
+  if (score >= 0.1) return 'low'
+  return 'unknown'
+}
+
+const BUCKET_RANK: Record<SeverityBucket, number> = {
+  critical: 4,
+  high: 3,
+  moderate: 2,
+  low: 1,
+  unknown: 0,
+}
+
+/**
+ * Resolve a matched advisory's severity bucket. The qualitative GHSA string
+ * (`database_specific.severity`, affected entry first then advisory) wins when present;
+ * otherwise fall back to the highest bucket derivable from any CVSS v3 vector on the
+ * matching affected entries or the advisory — so a vector-only advisory is no longer
+ * reported as `unknown`.
+ */
+function resolveSeverity(advisory: OsvAdvisory, hit: OsvAffected[]): SeverityBucket {
+  const qualitative = severityBucket(
+    hit.find((a) => a.database_specific?.severity)?.database_specific?.severity ??
+      advisory.database_specific?.severity,
+  )
+  if (qualitative !== 'unknown') return qualitative
+
+  let best: SeverityBucket = 'unknown'
+  for (const entry of [...hit.flatMap((a) => a.severity ?? []), ...(advisory.severity ?? [])]) {
+    const score = cvssV3BaseScore(entry.score)
+    if (score === undefined) continue
+    const bucket = severityFromScore(score)
+    if (BUCKET_RANK[bucket] > BUCKET_RANK[best]) best = bucket
+  }
+  return best
 }
 
 /** Coerce an arbitrary version-ish string into a comparable semver, or null if hopeless. */
@@ -177,10 +229,7 @@ export function matchVulnerabilities(
     const hit = relevant.filter((a) => affectedByEntry(installedVersion, a))
     if (hit.length === 0) continue
 
-    const severity = severityBucket(
-      hit.find((a) => a.database_specific?.severity)?.database_specific?.severity ??
-        advisory.database_specific?.severity,
-    )
+    const severity = resolveSeverity(advisory, hit)
     const fixedIn = [...new Set(hit.flatMap(fixedVersions))].sort((a, b) => compareVersions(a, b))
     matches.push({
       id: advisory.id,

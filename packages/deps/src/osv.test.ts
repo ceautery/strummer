@@ -73,6 +73,56 @@ describe('matchVulnerabilities — installed-version OSV range matching', () => 
     expect(matchVulnerabilities(advisories, npm('widget'), '0.9.0')).toEqual([])
   })
 
+  it('derives severity from a CVSS v3 vector when no qualitative string is present', () => {
+    const advisories: OsvAdvisory[] = [
+      {
+        id: 'OSV-CVSS',
+        // No database_specific.severity — only a CVSS vector (scores 9.8 ⇒ critical).
+        severity: [{ type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' }],
+        affected: [
+          {
+            package: { ecosystem: 'npm', name: 'widget' },
+            ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }, { fixed: '2.0.0' }] }],
+          },
+        ],
+      },
+    ]
+    expect(matchVulnerabilities(advisories, npm('widget'), '1.0.0')[0]?.severity).toBe('critical')
+  })
+
+  it('prefers the qualitative GHSA string over the CVSS vector when both are present', () => {
+    const advisories: OsvAdvisory[] = [
+      {
+        id: 'OSV-BOTH',
+        database_specific: { severity: 'LOW' },
+        severity: [{ type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' }],
+        affected: [
+          {
+            package: { ecosystem: 'npm', name: 'widget' },
+            ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }, { fixed: '2.0.0' }] }],
+          },
+        ],
+      },
+    ]
+    expect(matchVulnerabilities(advisories, npm('widget'), '1.0.0')[0]?.severity).toBe('low')
+  })
+
+  it('falls back to unknown when only a non-v3 (v2) CVSS vector is present', () => {
+    const advisories: OsvAdvisory[] = [
+      {
+        id: 'OSV-V2ONLY',
+        severity: [{ type: 'CVSS_V2', score: 'AV:N/AC:L/Au:N/C:C/I:C/A:C' }],
+        affected: [
+          {
+            package: { ecosystem: 'npm', name: 'widget' },
+            ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }, { fixed: '2.0.0' }] }],
+          },
+        ],
+      },
+    ]
+    expect(matchVulnerabilities(advisories, npm('widget'), '1.0.0')[0]?.severity).toBe('unknown')
+  })
+
   it('matches an explicitly enumerated affected version', () => {
     const advisories: OsvAdvisory[] = [
       {

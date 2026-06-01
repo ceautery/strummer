@@ -11,6 +11,7 @@ export {
   type SliceOptions,
   sliceChangelog,
 } from './changelog.js'
+export { cvssV3BaseScore } from './cvss.js'
 export {
   auditDeprecation,
   type DeprecationScope,
@@ -24,6 +25,7 @@ export {
   type OsvAffected,
   type OsvEvent,
   type OsvRange,
+  type OsvSeverity,
   type SeverityBucket,
   type VulnerabilityMatch,
 } from './osv.js'
