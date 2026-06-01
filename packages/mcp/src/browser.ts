@@ -5,6 +5,9 @@ import {
   auditA11y,
   type BrowserGate,
   type BrowserManager,
+  finalizeHar,
+  type HarSummary,
+  harPathFor,
   PageDriver,
   type PerfAuditResult,
   queryTrace,
@@ -60,6 +63,11 @@ export interface BrowserToolsOptions {
   /** Operator upload-allowlist dir. When set, `browser_upload` may set files
    * resolving to within it; unset ⇒ uploads denied (deny-by-default). */
   uploadDir?: string
+  /** Operator "network heavy mode" dir. When set (the bin also passes it to the
+   * manager so each context records a HAR), the session's HAR is finalized on
+   * close — redacted, stored by handle, surfaced in the close reply. Unset ⇒ no
+   * HAR. HAR is a heavy secret surface, so it is operator-gated off by default. */
+  harDir?: string
   /** Run a Lighthouse perf audit on a URL, keyed by a server-minted `runId`. The
    * bin binds the operator chromium path + proxied/hardened flags + store + redactor
    * here; absent ⇒ `browser_perf_audit` reports it is not enabled. */
@@ -82,6 +90,10 @@ interface BrowserSession {
   /** Monotonic a11y-audit counter → immutable `a11y-s<n>` handles. */
   auditIndex: number
   recorderStopped: boolean
+  /** HAR finalized (redact + store) once, on the first close/reap path to run. */
+  harFinalized: boolean
+  /** The finalized HAR summary, if any — surfaced in the close reply. */
+  harSummary?: HarSummary
 }
 
 const INSTRUCTIONS = `Strummer drives a real browser for UI testing, ARIA-snapshot first.
@@ -121,17 +133,37 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   }
   const allowStorageState = opts.allowStorageState ?? false
   const allowScreenshots = opts.allowScreenshots ?? false
+  const harDir = opts.harDir
   const registry = new Map<string, BrowserSession>()
   const now = () => Date.now()
 
   // When a session is reaped (idle TTL) or closed, flush its recorder while the
-  // context + tracer are still alive, then drop the registry entry. close_session
-  // flushes first and sets recorderStopped, so this only flushes the reaper path.
+  // context + tracer are still ALIVE. close_session flushes first and sets
+  // recorderStopped, so this only flushes the reaper path. The registry entry is
+  // dropped in onClosed (after the context closes + the HAR is finalized).
   manager.onReap(async (sessionId) => {
     const session = registry.get(sessionId)
     if (session?.recorder && !session.recorderStopped) {
       session.recorderStopped = true
       await session.recorder.stop()
+    }
+  })
+
+  // After the context has CLOSED, finalize the HAR (written only on close):
+  // redact + store it by handle and stash the summary, then drop the registry
+  // entry. Runs for both an explicit close and a reaped/shutdown session, so an
+  // unredacted HAR is never left on disk. Guarded so it finalizes once.
+  manager.onClosed(async (sessionId) => {
+    const session = registry.get(sessionId)
+    if (session && harDir && !session.harFinalized) {
+      session.harFinalized = true
+      const summary = await finalizeHar({
+        harPath: harPathFor(harDir, sessionId),
+        runId: session.runId,
+        store: artifacts,
+        redact,
+      })
+      if (summary) session.harSummary = summary
     }
     registry.delete(sessionId)
   })
@@ -237,6 +269,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         tail: Promise.resolve(),
         auditIndex: 0,
         recorderStopped: false,
+        harFinalized: false,
       })
       return reply({
         sessionId: id,
@@ -707,7 +740,8 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     {
       title: 'Close a browser session',
       description:
-        'Close the session, releasing its context. Flushes and returns the run artifact handles.',
+        'Close the session, releasing its context. Flushes and returns the run artifact handles ' +
+        '(console/network/trace, plus a HAR when network-heavy mode is operator-enabled).',
       inputSchema: { sessionId },
     },
     async (args) => {
@@ -722,15 +756,22 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
           session.recorderStopped = true
           runArtifacts = await session.recorder.stop()
         }
-        // closeSession fires onReap, which (seeing recorderStopped) just drops the
-        // registry entry — so flush BEFORE closing to capture the summaries.
+        // Flush the recorder BEFORE closing (its trace needs the context alive).
+        // closeSession then fires onReap (recorder already stopped → skipped) and,
+        // after the context closes, onClosed → which finalizes the HAR onto the
+        // session and drops the registry entry. We still hold `session`, so we can
+        // read its stashed har summary below.
         await manager.closeSession(args.sessionId)
         return { artifacts: runArtifacts }
       })
+      const allArtifacts =
+        runArtifacts || session.harSummary
+          ? { ...runArtifacts, ...(session.harSummary ? { har: session.harSummary } : {}) }
+          : undefined
       return reply({
         closed: true,
         runId: session.runId,
-        ...(runArtifacts ? { artifacts: runArtifacts } : {}),
+        ...(allArtifacts ? { artifacts: allArtifacts } : {}),
       })
     },
   )
@@ -815,7 +856,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     {
       title: 'Browser run artifact',
       description:
-        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / screenshot-s<n> / trace / console / network), by handle',
+        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / screenshot-s<n> / trace / console / network / har), by handle',
     },
     (uri, variables) => {
       const runId = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId

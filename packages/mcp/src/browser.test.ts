@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ArtifactStore, BrowserGate, BrowserManager } from '@strummer/browser'
+import { ArtifactStore, BrowserGate, BrowserManager, harPathFor } from '@strummer/browser'
 import { Redactor } from '@strummer/safety'
 import { type Browser, chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -69,6 +69,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     allowDialogs?: boolean
     downloadDir?: string
     uploadDir?: string
+    harDir?: string
     capture?: { trace?: boolean; console?: boolean; network?: boolean }
     runPerfAudit?: Parameters<typeof createBrowserServer>[0]['runPerfAudit']
   }) {
@@ -88,6 +89,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       maxContexts: config.maxContexts ?? 8,
       now: config.now,
       acceptDownloads: config.downloadDir !== undefined,
+      harDir: config.harDir,
     })
     const srv = createBrowserServer({
       manager,
@@ -99,6 +101,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       allowScreenshots: config.allowScreenshots,
       downloadDir: config.downloadDir,
       uploadDir: config.uploadDir,
+      harDir: config.harDir,
       capture: config.capture,
       runPerfAudit: config.runPerfAudit,
     })
@@ -621,6 +624,76 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const res = await call(client, 'browser_perf_audit', { url: 'http://127.0.0.1/' })
     expect(res.isError).toBe(true)
     expect(JSON.stringify(res.content)).toMatch(/not enabled/i)
+    await client.close()
+  })
+
+  it('captures a HAR by handle on close (operator-gated), redacted + served as a zip blob', async () => {
+    const harDir = mkdtempSync(join(baseDir, 'har-'))
+    const { client } = await connect({ harDir })
+    const open = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+      runId: string
+    }
+    // the document body itself carries a secret (value="hunter2-secret") → it lands
+    // in the HAR (content:'attach') and must be redacted before the archive is served
+    await call(client, 'browser_navigate', { sessionId: open.sessionId, url: baseUrl })
+
+    const close = (await call(client, 'browser_close_session', { sessionId: open.sessionId }))
+      .structuredContent as {
+      artifacts?: {
+        har?: { handle: string; entryCount: number; byStatus: Record<string, number> }
+      }
+    }
+    const har = close.artifacts?.har
+    expect(har?.handle).toBe(`strummer://browser/run/${open.runId}/har`)
+    expect(har?.entryCount).toBeGreaterThanOrEqual(1)
+
+    // served back as a base64 zip blob (binary), not inlined text
+    const res = await client.readResource({ uri: har?.handle as string })
+    const content = res.contents[0] as { mimeType: string; blob?: string; text?: string }
+    expect(content.mimeType).toBe('application/zip')
+    expect(content.text).toBeUndefined()
+    const zip = Buffer.from(content.blob as string, 'base64')
+    expect(zip.subarray(0, 2).toString('latin1')).toBe('PK') // zip magic
+    // the operator redactor is wired through finalizeHar; the deep
+    // redact-every-text-entry proof lives in the engine's har.test.ts.
+    await client.close()
+  })
+
+  it('captures no HAR when the operator has not set a harDir', async () => {
+    const { client } = await connect({})
+    const open = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(client, 'browser_navigate', { sessionId: open.sessionId, url: baseUrl })
+    const close = (await call(client, 'browser_close_session', { sessionId: open.sessionId }))
+      .structuredContent as { artifacts?: { har?: unknown } }
+    expect(close.artifacts?.har).toBeUndefined()
+    await client.close()
+  })
+
+  it('finalizes a reaped session’s HAR (no unredacted archive left behind)', async () => {
+    const harDir = mkdtempSync(join(baseDir, 'har-reap-'))
+    let nowMs = 1_000
+    const { client, manager, store } = await connect({
+      harDir,
+      idleTtlMs: 5_000,
+      now: () => nowMs,
+    })
+    const { sessionId, runId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+      runId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+
+    nowMs += 6_000
+    const reaped = await manager.sweepIdle()
+    expect(reaped).toContain(sessionId)
+    // onClosed finalized the HAR on the reaper path → it resolves on disk, redacted,
+    // and the raw staged file is gone
+    const stored = store.get(`strummer://browser/run/${runId}/har`)
+    expect(stored).toBeDefined()
+    expect(existsSync(harPathFor(harDir, sessionId))).toBe(false)
     await client.close()
   })
 

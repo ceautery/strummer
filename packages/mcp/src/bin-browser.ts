@@ -72,6 +72,8 @@ export interface BrowserBinConfig {
   downloadDir?: string
   /** Operator upload-allowlist dir (uploads denied when unset). */
   uploadDir?: string
+  /** Operator "network heavy mode" HAR output dir (no HAR capture when unset). */
+  harDir?: string
 }
 
 export interface BuiltBrowserServer {
@@ -142,6 +144,10 @@ export async function buildBrowserServerFromEnv(
   const acceptDownloads = downloadDir !== undefined
   // Uploads: deny-by-default. An operator allowlist dir is the exfiltration control.
   const uploadDir = env.STRUMMER_BROWSER_UPLOAD_DIR || undefined
+  // "Network heavy mode": HAR capture off unless the operator sets an output dir.
+  // HAR is a heavy secret surface (full req/resp headers+bodies), so it is gated
+  // off like the trace; the manager records it, the surface finalizes (redacted).
+  const harDir = env.STRUMMER_BROWSER_HAR_DIR || undefined
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -214,6 +220,7 @@ export async function buildBrowserServerFromEnv(
     maxSessionMs,
     maxPages,
     acceptDownloads,
+    harDir,
   })
   const server = createBrowserServer({
     manager,
@@ -225,6 +232,7 @@ export async function buildBrowserServerFromEnv(
     allowScreenshots,
     downloadDir,
     uploadDir,
+    harDir,
     runPerfAudit,
     capture,
     maxNodes,
@@ -253,6 +261,7 @@ export async function buildBrowserServerFromEnv(
     allowScreenshots,
     downloadDir,
     uploadDir,
+    harDir,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

@@ -133,4 +133,10 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'strummer-upq-'))
     expect((await build({ STRUMMER_BROWSER_UPLOAD_DIR: dir })).config.uploadDir).toBe(dir)
   })
+
+  it('records no HAR unless STRUMMER_BROWSER_HAR_DIR sets a network-heavy output dir', async () => {
+    expect((await build({})).config.harDir).toBeUndefined()
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-har-'))
+    expect((await build({ STRUMMER_BROWSER_HAR_DIR: dir })).config.harDir).toBe(dir)
+  })
 })
