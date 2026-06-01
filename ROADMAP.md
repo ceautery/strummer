@@ -449,12 +449,23 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `strummer://deps/{id}/{kind}` resource now serves both audit detail + changelog
         slices (decoupled from the changelog fetcher).
   - [ ] *(staged)* Python/PyPI + RubyGems advisory adapters.
-- [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A.*
+- [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A, building.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
       (the forgotten-assertion catch — the genuinely novel win under our TDD gate).
-      Slice 1 = the pure `uncoveredNewLines` differ over a real istanbul fixture, with
-      the no-statement `nonExecutable` third state encoded (ADR 0010). Live `runScoped`
-      needs a **child-process** boundary (single root vitest.config → no Vitest-in-Vitest).
+  - [x] **Slice 1 — pure `uncoveredNewLines` differ.** Classifies each diff-added line
+        against an istanbul `FileCoverage` (`statementMap`/`s`, the `coverage-final.json`
+        per-file shape) as `covered` / `uncovered` / `nonExecutable`, and surfaces the
+        executable-but-unhit lines. The no-statement **`nonExecutable` third state** is
+        encoded explicitly with a guard test (ADR 0010's correctness trap: istanbul derives
+        line coverage from `statementMap`, so a blank/brace line is in neither set). Line
+        hits mirror istanbul's `getLineCoverage` (max over statements per start line). Pure.
+  - [ ] diff → new-line extraction (parse a unified diff / git range into per-file
+        added-line sets) to feed the differ.
+  - [ ] live `runScoped` — run only the tests a diff touches. Needs a **child-process**
+        boundary (single root vitest.config → no Vitest-in-Vitest); pin `istanbul-lib-coverage`
+        when `CoverageMap` merging/summaries are needed.
+  - [ ] MCP surface + bin (paired deny-by-default operator gate for the code-running
+        `runScoped`, per ADR 0010).
 - [ ] **Flaky-test detection & quarantine** (`@strummer/flake`) — protects the
       deterministic green gate. Pure Wilson/binomial classifier over a run-history
       fixture first; quarantine **writes** are operator-gated (paired) with mandatory

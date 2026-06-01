@@ -79,8 +79,12 @@ vulns, distinct from `recommendedTarget`), and the `behindBy` freshness metric
 (`FreshnessVerdict.behindBy`: upgrade distance by semver component — releases/major/minor/
 patch). **CVSS-vector → bucket scoring also landed** (pure `cvssV3BaseScore` v3.0/3.1 base
 formula; `matchVulnerabilities` derives the severity bucket from a CVSS vector when no
-qualitative GHSA string is present, so a vector-only advisory is no longer `unknown`). 457
-TS + 45 Py green.)_
+qualitative GHSA string is present, so a vector-only advisory is no longer `unknown`).
+**Track A `@strummer/coverage` is now open (slice 1):** the pure `uncoveredNewLines` differ
+classifies a diff's added lines against an istanbul `FileCoverage` as covered / uncovered /
+`nonExecutable` and surfaces the executable-but-unhit lines (the forgotten-assertion catch);
+the no-statement `nonExecutable` third state + a guard test address ADR 0010's documented
+correctness trap. 463 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -413,7 +417,12 @@ CVSS-vector → bucket scoring is DONE** (pure `cvssV3BaseScore`; `matchVulnerab
 falls back to the CVSS vector's bucket when no qualitative GHSA string is present).
 **Next for deps:** the staged **Python/PyPI + RubyGems advisory adapters** (the non-npm
 ecosystems — `audit_project` is npm-only today; `detectInstalledVersion` already dispatches
-by ecosystem). In parallel, the
+by ecosystem). **Track A `@strummer/coverage` is now open** — slice 1 (the pure
+`uncoveredNewLines` differ) landed; its next slices are **diff → new-line extraction** (feed
+the differ from a unified diff / git range), then the live **`runScoped`** child-process
+runner (single root vitest.config ⇒ no Vitest-in-Vitest; pin `istanbul-lib-coverage` when
+`CoverageMap` merging is needed) behind a paired deny-by-default operator gate, then its MCP
+surface. In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
