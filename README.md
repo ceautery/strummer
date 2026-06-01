@@ -77,6 +77,15 @@ verdict for the version *actually installed*. Its **agent surface has shipped** 
 the shared `@strummer/artifacts`) + the `strummer-deps-mcp` bin. A human `strummer deps`
 CLI and the Python/PyPI + RubyGems advisory adapters are next.
 
+The parallel track, **`@strummer/coverage`**, is also complete — the "forgotten
+assertion" catch: given a diff it reports the lines a change *added* that no test
+exercised (`parseUnifiedDiff` + `uncoveredNewLines` + `uncoveredInDiff`, with an explicit
+non-executable third state), plus a gated, impact-scoped `runScoped` that runs only the
+tests a change touches (`vitest related`) with coverage. Agent surface: the
+`uncovered_in_diff` (read-only) + `run_scoped` (operator-gated) MCP tools +
+`strummer-coverage-mcp` bin. Next in the test-quality chain: flaky-test detection
+(`@strummer/flake`) → mutation testing → the LSP bridge.
+
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance

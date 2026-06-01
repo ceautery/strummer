@@ -404,7 +404,7 @@ against in-process fixtures):
    engines. (ADR 0009.)
 
 **(Point-in-time at Phase-3 close: 390 TS + 45 Py green; the authoritative current
-count is in the Phase-4 block above — 457 TS + 45 Py.)** _(Latest milestone:
+count is the one in the Phase-4 current-phase block at the top of this file.)** _(Latest milestone:
 **multi-engine** (item 34, ADR 0009) — firefox/webkit support landed; Phase 3 is
 now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
 keyring wiring, SSRF range-block + redirect re-check, contract reach, import).
