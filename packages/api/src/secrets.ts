@@ -1,5 +1,10 @@
 import type { SecretStore } from './model.js'
 
+// The redaction boundary is shared across pillars; it lives in @strummer/safety.
+// Re-exported here so existing `import { Redactor } from './secrets.js'` sites
+// (runner, prepare, script, …) keep working unchanged.
+export { Redactor } from '@strummer/safety'
+
 /** In-memory store (tests / explicit injection). */
 export class StaticSecretStore implements SecretStore {
   constructor(private readonly values: Record<string, string> = {}) {}
@@ -51,39 +56,4 @@ export function resolveSecretStore(opts: { keyring?: boolean } = {}): SecretStor
   return opts.keyring
     ? new ChainedSecretStore([new KeyringSecretStore(), new EnvSecretStore()])
     : new EnvSecretStore()
-}
-
-/**
- * Tracks resolved secret values and scrubs them (and common encodings) from any
- * text returned to the agent. Replacement is exact-substring, so no value ever
- * leaks through logs, bodies, headers, or error text.
- */
-export class Redactor {
-  private readonly entries: { name: string; encodings: string[] }[] = []
-
-  register(name: string, value: string): void {
-    if (!value) return
-    const encodings = [
-      value,
-      Buffer.from(value, 'utf8').toString('base64'),
-      encodeURIComponent(value),
-    ].filter((e) => e.length > 0)
-    this.entries.push({ name, encodings: [...new Set(encodings)] })
-  }
-
-  redact(text: string): string {
-    let out = text
-    for (const { name, encodings } of this.entries) {
-      for (const encoding of encodings) {
-        out = out.split(encoding).join(`[redacted:${name}]`)
-      }
-    }
-    return out
-  }
-
-  redactHeaders(headers: Record<string, string>): Record<string, string> {
-    const out: Record<string, string> = {}
-    for (const [key, value] of Object.entries(headers)) out[key] = this.redact(value)
-    return out
-  }
 }
