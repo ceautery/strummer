@@ -1,3 +1,4 @@
+export { type DiffFile, parseUnifiedDiff } from './diff.js'
 export {
   type ClassifiedLine,
   type FileCoverage,
