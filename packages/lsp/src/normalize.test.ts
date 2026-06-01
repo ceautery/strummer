@@ -10,6 +10,8 @@ import {
   normalizeDocumentSymbols,
   normalizeHover,
   normalizeLocations,
+  normalizeWorkspaceEdit,
+  type RawWorkspaceEdit,
   symbolKindName,
 } from './normalize.js'
 
@@ -123,5 +125,86 @@ describe('decideStatus (tri-state)', () => {
   })
   it('not_ready when empty AND not ready (never collapse into no_result)', () => {
     expect(decideStatus(true, false)).toBe('not_ready')
+  })
+})
+
+describe('normalizeWorkspaceEdit', () => {
+  it('returns empty for null/undefined and an edit with neither shape', () => {
+    expect(normalizeWorkspaceEdit(null)).toEqual({ files: [], resourceOps: [] })
+    expect(normalizeWorkspaceEdit(undefined)).toEqual({ files: [], resourceOps: [] })
+    expect(normalizeWorkspaceEdit({})).toEqual({ files: [], resourceOps: [] })
+  })
+
+  it('normalizes the REAL captured `changes` map (tsserver 5.3.0 rename), order preserved', () => {
+    const raw = fixture<RawWorkspaceEdit>('rename-changes.json')
+    const out = normalizeWorkspaceEdit(raw)
+    expect(out.resourceOps).toEqual([])
+    expect(out.files.map((f) => f.uri)).toEqual([
+      'file:///project/greeter.ts',
+      'file:///project/index.ts',
+    ])
+    expect(out.files[0]?.edits).toHaveLength(1)
+    expect(out.files[1]?.edits).toHaveLength(2)
+    expect(out.files[0]?.edits[0]).toEqual({
+      range: { start: { line: 4, character: 13 }, end: { line: 4, character: 20 } },
+      newText: 'Greeter2',
+    })
+    // per-file edit order preserved (import binding before the `new Greeter` usage)
+    expect(out.files[1]?.edits[0]?.range.start.line).toBe(0)
+    expect(out.files[1]?.edits[1]?.range.start.line).toBe(2)
+  })
+
+  it('normalizes the synthesized `documentChanges` form to the same files/edits', () => {
+    const dc = normalizeWorkspaceEdit(fixture<RawWorkspaceEdit>('rename-documentchanges.json'))
+    const ch = normalizeWorkspaceEdit(fixture<RawWorkspaceEdit>('rename-changes.json'))
+    expect(dc).toEqual(ch)
+  })
+
+  it('gives documentChanges PRECEDENCE when both shapes are present (never merges)', () => {
+    const raw: RawWorkspaceEdit = {
+      changes: { 'file:///project/ignored.ts': [{ range: RANGE, newText: 'NO' }] },
+      documentChanges: [
+        {
+          textDocument: { uri: 'file:///project/win.ts', version: 3 },
+          edits: [{ range: RANGE, newText: 'YES' }],
+        },
+      ],
+    }
+    const out = normalizeWorkspaceEdit(raw)
+    expect(out.files.map((f) => f.uri)).toEqual(['file:///project/win.ts'])
+  })
+
+  it('flags resource operations under resourceOps and NEVER as a file edit', () => {
+    const raw: RawWorkspaceEdit = {
+      documentChanges: [
+        {
+          textDocument: { uri: 'file:///project/a.ts', version: 1 },
+          edits: [{ range: RANGE, newText: 'x' }],
+        },
+        { kind: 'rename', oldUri: 'file:///project/a.ts', newUri: 'file:///project/b.ts' },
+        { kind: 'delete', uri: 'file:///project/old.ts' },
+      ],
+    }
+    const out = normalizeWorkspaceEdit(raw)
+    expect(out.files.map((f) => f.uri)).toEqual(['file:///project/a.ts'])
+    expect(out.resourceOps).toEqual([
+      { kind: 'rename', uris: ['file:///project/a.ts', 'file:///project/b.ts'] },
+      { kind: 'delete', uris: ['file:///project/old.ts'] },
+    ])
+  })
+
+  it('carries a needsConfirmation annotation as a preview-only signal (never silently dropped)', () => {
+    const raw: RawWorkspaceEdit = {
+      documentChanges: [
+        {
+          textDocument: { uri: 'file:///project/a.ts', version: 1 },
+          edits: [{ range: RANGE, newText: 'x', annotationId: 'danger' }],
+        },
+      ],
+      changeAnnotations: { danger: { label: 'Risky rename', needsConfirmation: true } },
+    }
+    const edit = normalizeWorkspaceEdit(raw).files[0]?.edits[0]
+    expect(edit?.needsConfirmation).toBe(true)
+    expect(edit?.annotationLabel).toBe('Risky rename')
   })
 })

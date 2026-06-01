@@ -281,3 +281,127 @@ export function decideStatus(isEmpty: boolean, ready: boolean): QueryStatus {
   if (!isEmpty) return 'ok'
   return ready ? 'no_result' : 'not_ready'
 }
+
+// --- WorkspaceEdit (write-mode, ADR 0011 addendum) -----------------------------------------
+
+/** A raw LSP `TextEdit` (or `AnnotatedTextEdit`, which adds `annotationId`). */
+export interface RawTextEdit {
+  range: LspRange
+  newText: string
+  annotationId?: string
+}
+
+/** A raw `TextDocumentEdit` documentChanges member: a versioned doc + its edits. */
+export interface RawTextDocumentEdit {
+  textDocument: { uri: string; version?: number | null }
+  edits: RawTextEdit[]
+}
+
+/** A raw file-resource operation documentChanges member (CreateFile/RenameFile/DeleteFile). */
+export interface RawResourceOperation {
+  kind: 'create' | 'rename' | 'delete'
+  uri?: string
+  oldUri?: string
+  newUri?: string
+}
+
+export interface RawWorkspaceEdit {
+  changes?: Record<string, RawTextEdit[]>
+  documentChanges?: (RawTextDocumentEdit | RawResourceOperation)[]
+  changeAnnotations?: Record<string, { label?: string; needsConfirmation?: boolean }>
+}
+
+/** One edit on a file, range kept in LSP 0-based form (mapped to human coords at the surface). */
+export interface NormalizedFileEdit {
+  range: LspRange
+  newText: string
+  /** A `needsConfirmation` change annotation rode this edit — preview-only, excluded from apply. */
+  needsConfirmation?: boolean
+  /** The change-annotation label, when one was attached. */
+  annotationLabel?: string
+}
+
+export interface NormalizedFileEdits {
+  uri: string
+  edits: NormalizedFileEdit[]
+}
+
+/** A flagged resource operation — v1 surfaces these in the preview and REFUSES them on apply. */
+export interface NormalizedResourceOp {
+  kind: 'create' | 'rename' | 'delete'
+  uris: string[]
+}
+
+export interface NormalizedWorkspaceEdit {
+  files: NormalizedFileEdits[]
+  resourceOps: NormalizedResourceOp[]
+}
+
+function isResourceOp(
+  member: RawTextDocumentEdit | RawResourceOperation,
+): member is RawResourceOperation {
+  const kind = (member as RawResourceOperation).kind
+  return kind === 'create' || kind === 'rename' || kind === 'delete'
+}
+
+/**
+ * Normalize a `WorkspaceEdit` to a uniform `files → edits` list plus a separate, flagged list of
+ * resource operations. Handles both shapes (ADR 0011 addendum §2.5):
+ * - `documentChanges` takes PRECEDENCE over `changes` when both are present (never merged).
+ * - Per-file and per-edit order is preserved.
+ * - `CreateFile`/`RenameFile`/`DeleteFile` members are surfaced under `resourceOps`, never
+ *   translated into a TextEdit (v1 refuses to apply them).
+ * - An `AnnotatedTextEdit` is normalized to `{range,newText}`; if its annotation is
+ *   `needsConfirmation` the edit carries `needsConfirmation: true` + the label (a preview-only
+ *   signal, excluded from apply) so the server's safety signal is never silently dropped.
+ *
+ * NOTE: real `typescript-language-server` 5.3.0 returns the legacy `changes` map for an ordinary
+ * rename even when the client advertises `documentChanges` (see `test/fixtures/README.md`); the
+ * `documentChanges` branch is exercised by a synthesized fixture.
+ */
+export function normalizeWorkspaceEdit(
+  raw: RawWorkspaceEdit | null | undefined,
+): NormalizedWorkspaceEdit {
+  if (raw == null) return { files: [], resourceOps: [] }
+  const annotations = raw.changeAnnotations ?? {}
+  const mapEdit = (e: RawTextEdit): NormalizedFileEdit => {
+    const out: NormalizedFileEdit = { range: e.range, newText: e.newText }
+    if (e.annotationId !== undefined) {
+      const ann = annotations[e.annotationId]
+      if (ann?.needsConfirmation) out.needsConfirmation = true
+      if (ann?.label !== undefined) out.annotationLabel = ann.label
+    }
+    return out
+  }
+
+  if (raw.documentChanges !== undefined) {
+    const files: NormalizedFileEdits[] = []
+    const resourceOps: NormalizedResourceOp[] = []
+    for (const member of raw.documentChanges) {
+      if (isResourceOp(member)) {
+        const uris =
+          member.kind === 'rename'
+            ? [member.oldUri, member.newUri].filter((u): u is string => u !== undefined)
+            : member.uri !== undefined
+              ? [member.uri]
+              : []
+        resourceOps.push({ kind: member.kind, uris })
+      } else {
+        files.push({ uri: member.textDocument.uri, edits: member.edits.map(mapEdit) })
+      }
+    }
+    return { files, resourceOps }
+  }
+
+  if (raw.changes !== undefined) {
+    return {
+      files: Object.entries(raw.changes).map(([uri, edits]) => ({
+        uri,
+        edits: edits.map(mapEdit),
+      })),
+      resourceOps: [],
+    }
+  }
+
+  return { files: [], resourceOps: [] }
+}

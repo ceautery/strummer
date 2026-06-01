@@ -1,0 +1,35 @@
+{
+  "documentChanges": [
+    {
+      "textDocument": { "uri": "file:///project/greeter.ts", "version": 1 },
+      "edits": [
+        {
+          "newText": "Greeter2",
+          "range": {
+            "start": { "line": 4, "character": 13 },
+            "end": { "line": 4, "character": 20 }
+          }
+        }
+      ]
+    },
+    {
+      "textDocument": { "uri": "file:///project/index.ts", "version": 1 },
+      "edits": [
+        {
+          "newText": "Greeter2",
+          "range": {
+            "start": { "line": 0, "character": 9 },
+            "end": { "line": 0, "character": 16 }
+          }
+        },
+        {
+          "newText": "Greeter2",
+          "range": {
+            "start": { "line": 2, "character": 14 },
+            "end": { "line": 2, "character": 21 }
+          }
+        }
+      ]
+    }
+  ]
+}
