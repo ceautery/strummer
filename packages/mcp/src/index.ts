@@ -28,6 +28,11 @@ export {
   type PackumentFetcher,
   registerDepsTools,
 } from './deps.js'
+export {
+  createFlakeServer,
+  type FlakeToolsOptions,
+  registerFlakeTools,
+} from './flake.js'
 
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */

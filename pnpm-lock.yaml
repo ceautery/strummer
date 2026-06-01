@@ -214,6 +214,9 @@ importers:
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed
+      '@strummer/flake':
+        specifier: workspace:*
+        version: link:../flake
       '@strummer/safety':
         specifier: workspace:*
         version: link:../safety
