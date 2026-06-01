@@ -23,9 +23,9 @@ structured, token-efficient output. Humans drive the same core through a CLI.
 
 Cross-cutting verification tools (see [`ROADMAP.md`](./ROADMAP.md)): dependency/version
 intelligence, coverage-aware impact-scoped test runs, flaky-test detection & quarantine,
-and mutation testing have **shipped**; semantic code navigation via an LSP bridge is the
-last one, in progress. (Visual-regression diffing and API contract/schema testing already
-shipped inside the browser and API pillars.)
+mutation testing, and semantic code navigation via an LSP bridge have **all shipped** —
+**Phase 4 is complete** (all five pillars: engine + agent surface). (Visual-regression
+diffing and API contract/schema testing already shipped inside the browser and API pillars.)
 
 ## Status
 
@@ -65,8 +65,9 @@ favor of LLM-first observability — the trace/HAR/console/video artifacts let t
 agent answer "what happened on this page" better than a human watching it render
 ([ADR 0008](./docs/decisions/0008-headless-only-llm-first-observability.md)).
 
-**Phase 4 (cross-cutting verification) is now underway** — the sequence was locked by
-a research + adversarial-verification fan-out
+**Phase 4 (cross-cutting verification) is complete** — all five pillars shipped (engine +
+agent surface); only explicitly-staged, non-blocking tails remain. The sequence was locked
+by a research + adversarial-verification fan-out
 ([ADR 0010](./docs/decisions/0010-phase4-cross-cutting-verification.md)):
 dependency intelligence ∥ coverage → flaky-test detection → mutation testing → an LSP
 bridge (last). The first pillar, **`@strummer/deps` (dependency/version
@@ -99,11 +100,18 @@ survivor list), a gated, diff-scoped `runMutation` spawning `stryker run`, and t
 Stryker/Vitest-4 compat blocker was resolved — [ADR 0010 update](./docs/decisions/0010-phase4-cross-cutting-verification.md)).
 
 The last pillar, **`@strummer/lsp`** (semantic code navigation — the documented,
-fenced exception to the no-live-RPC rule), is **in progress**: design locked in
+fenced exception to the no-live-RPC rule), is **done**: design locked in
 [ADR 0011](./docs/decisions/0011-lsp-bridge.md) (a research + 2-critic adversarial
-fan-out), with slice 1 — the pure position-encoding core (utf-8/16/32) and LSP-result
-normalizers — landed. The client/manager/query engine and the
-`lsp_find_definition`/`lsp_find_references`/`lsp_hover` MCP surface are next.
+fan-out), shipped as five slices — the pure position-encoding core (utf-8/16/32) and
+LSP-result normalizers, a `vscode-jsonrpc` client (encoding negotiation, tri-state
+readiness, deadlock-safe replies), the `(language, projectRoot)`-keyed manager (per-file
+mutex, in-flight-aware reaper) + operator-bound server registry, the gated `query.ts`
+engine, and the `lsp_find_definition`/`lsp_find_references`/`lsp_hover` (gated as a group)
++ always-on `lsp_languages` MCP surface + `strummer-lsp-mcp` bin. The whole pillar is
+tested against a fake in-process JSON-RPC peer replaying recorded real-server payloads —
+no real language server runs in the green gate. Staged next: capability-gated
+`lsp_type_definition`/`_document_symbols`/`_call_hierarchy`, write-mode, and a `strummer
+lsp` CLI.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
