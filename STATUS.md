@@ -54,8 +54,20 @@ new shared package with a **parameterized** `strummer://<prefix>/<id>/<kind>` ha
 prefix (browser keeps `browser/run`; deps/coverage emit their own — e.g.
 `strummer://deps/...`). Behavior-preserving — browser is a thin subclass that bakes in
 the `browser/run` prefix so every call site is unchanged; the full browser suite is the
-regression guard. This **unblocks the first handle-emitting Phase-4 slice**
-(`changelog_diff`). 428 TS + 45 Py green.)_
+regression guard. **`changelog_diff` landed (first handle-emitting deps slice):** a
+pure `sliceChangelog(markdown, {from, to?})` core in `@strummer/deps` (versioned ATX
+headings — Keep-a-Changelog `## [x.y.z] - date` + plain `## vX.Y.Z`; returns the
+sections in `(from, to]`, or `> from` when `to` is omitted, newest-first, semver-ordered;
+date tokens/"Unreleased" never become versions; unparseable bounds throw) + a
+`changelog_diff` MCP tool that detects the installed `from`, fetches the changelog via an
+**injected** fetcher, slices it, and returns a compact summary with the sliced markdown
+stored **by handle** in `@strummer/artifacts` (`deps` prefix) — served by a new
+`strummer://deps/{id}/{kind}` resource. Deny-by-default: the tool + resource register only
+when BOTH a fetcher and an artifact store are configured. Bin adds
+`STRUMMER_DEPS_ARTIFACT_DIR` (→ `ArtifactStore(dir,'deps')`) + a SSRF-pinned GitHub-raw
+CHANGELOG fetcher (packument repo → `raw.githubusercontent.com/<owner>/<repo>/HEAD/<file>`,
+`resolveAndPin` per attempt, private blocked by default). It is the first consumer of the
+extracted `@strummer/artifacts`. 441 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -371,10 +383,15 @@ slice 5 (the agent surface)** are landed: `audit_dependency` + `audit_project` M
 `@strummer/safety` `resolveAndPin` — **note:** `assertSsrfAllowed` does NOT exist on
 `safety`, only in the api package). **The shared `@strummer/artifacts` extraction is now
 DONE** (parameterized `strummer://<prefix>/<id>/<kind>`; browser rewired as a thin
-subclass, behavior-preserving). **Next for deps: `changelog_diff` by handle** — the first
-handle-emitting deps slice, now unblocked: build it over `@strummer/artifacts` (the
-`deps` prefix) with an injectable fetcher + operator-gated, SSRF-pinned (`resolveAndPin`)
-network, plus by-handle full `audit_project` detail. In parallel, the
+subclass, behavior-preserving), **and `changelog_diff` (the first handle-emitting deps
+slice) is DONE**: pure `sliceChangelog` core + the `changelog_diff` MCP tool (injected
+fetcher → slice → store by handle in `@strummer/artifacts` `deps` prefix → compact
+summary) + the `strummer://deps/{id}/{kind}` resource + bin wiring
+(`STRUMMER_DEPS_ARTIFACT_DIR` + SSRF-pinned GitHub-raw CHANGELOG fetch). **Next for deps:**
+by-handle full `audit_project` detail (now that `@strummer/artifacts` is wired into the
+deps surface); then the staged deferrals — vuln-aware "minimum safe upgrade" target,
+`behindBy` freshness, CVSS-vector → bucket scoring, and the Python/PyPI + RubyGems
+advisory adapters. In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket

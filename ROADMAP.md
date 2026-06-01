@@ -422,8 +422,17 @@ Two independent tracks, then the test-quality chain, then LSP last:
         (browser bakes in `browser/run`; deps/coverage emit their own). Behavior-
         preserving (browser suite is the regression guard); unblocks the first
         handle-emitting Phase-4 slice.
-  - [ ] `changelog_diff` MCP tool (over `@strummer/artifacts`, `deps` prefix) + by-handle
-        full `audit_project` detail.
+  - [x] **`changelog_diff`** — pure `sliceChangelog(markdown, {from, to?})` core
+        (versioned ATX headings, Keep-a-Changelog + plain `## vX.Y.Z`; sections in
+        `(from, to]` newest-first; semver-ordered) + the `changelog_diff` MCP tool: an
+        **injected** changelog fetcher → slice → store the sliced markdown **by handle**
+        in `@strummer/artifacts` (`deps` prefix), compact summary; new
+        `strummer://deps/{id}/{kind}` resource. Deny-by-default (registers only with both
+        a fetcher + artifact store). Bin: `STRUMMER_DEPS_ARTIFACT_DIR` + a SSRF-pinned
+        GitHub-raw CHANGELOG fetcher (packument repo → `raw.githubusercontent.com/HEAD`,
+        `resolveAndPin` per attempt). **First handle-emitting deps slice** — first
+        consumer of the extracted `@strummer/artifacts`.
+  - [ ] by-handle full `audit_project` detail (now that `@strummer/artifacts` is wired).
   - [ ] *(staged)* Python/PyPI + RubyGems advisory adapters.
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
