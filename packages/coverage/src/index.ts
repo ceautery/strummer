@@ -6,6 +6,15 @@ export {
   uncoveredInDiff,
 } from './report.js'
 export {
+  CoverageGateError,
+  defaultVitestRunner,
+  type RunScopedConfig,
+  runScoped,
+  type ScopedRunInput,
+  type ScopedRunResult,
+  type TestRunner,
+} from './run.js'
+export {
   type ClassifiedLine,
   type FileCoverage,
   type IstanbulPosition,
