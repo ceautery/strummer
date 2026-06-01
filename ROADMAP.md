@@ -432,7 +432,12 @@ Two independent tracks, then the test-quality chain, then LSP last:
         GitHub-raw CHANGELOG fetcher (packument repo → `raw.githubusercontent.com/HEAD`,
         `resolveAndPin` per attempt). **First handle-emitting deps slice** — first
         consumer of the extracted `@strummer/artifacts`.
-  - [ ] by-handle full `audit_project` detail (now that `@strummer/artifacts` is wired).
+  - [x] **by-handle full `audit_project` detail** — when an artifact store is configured,
+        `audit_project` stores the full per-package `DependencyAudit` verdicts (vulnerability
+        lists, deprecation messages, freshness) as one JSON blob by handle and surfaces
+        `detailHandle`; the inline result stays a compact roll-up. The
+        `strummer://deps/{id}/{kind}` resource now serves both audit detail + changelog
+        slices (decoupled from the changelog fetcher).
   - [ ] *(staged)* Python/PyPI + RubyGems advisory adapters.
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
