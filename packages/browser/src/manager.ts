@@ -57,6 +57,11 @@ export class BrowserManager {
     return this.sessions.size
   }
 
+  /** The operator-set concurrency cap (max live sessions). */
+  get maxContexts(): number {
+    return this.opts.maxContexts
+  }
+
   hasSession(sessionId: string): boolean {
     return this.sessions.has(sessionId)
   }

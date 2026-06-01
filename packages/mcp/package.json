@@ -25,8 +25,11 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@strummer/api": "workspace:*",
+    "@strummer/browser": "workspace:*",
     "@strummer/core": "workspace:*",
     "@strummer/embed": "workspace:*",
+    "@strummer/safety": "workspace:*",
+    "playwright-core": "1.60.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

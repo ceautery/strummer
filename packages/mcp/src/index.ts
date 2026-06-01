@@ -11,6 +11,11 @@ import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
 
 export { type ApiToolsOptions, createApiServer, registerApiTools } from './api.js'
+export {
+  type BrowserToolsOptions,
+  createBrowserServer,
+  registerBrowserTools,
+} from './browser.js'
 
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */

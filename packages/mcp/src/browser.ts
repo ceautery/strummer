@@ -1,0 +1,537 @@
+import { randomUUID } from 'node:crypto'
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
+import {
+  type ArtifactStore,
+  auditA11y,
+  type BrowserGate,
+  type BrowserManager,
+  PageDriver,
+  RunRecorder,
+} from '@strummer/browser'
+import type { Page } from 'playwright-core'
+import { z } from 'zod'
+
+/**
+ * Agent-facing MCP surface over the `@strummer/browser` engine (ADR 0006; the
+ * `browser-mcp-design` fan-out). Stateful, session-oriented: an agent opens a
+ * session, drives it over a sequence of stateless tool calls, and closes it.
+ *
+ * Safety is **operator-set** and never an agent input: the single `BrowserGate`,
+ * the SSRF proxy + Tier-1 routes (wired into the `BrowserManager` by the bin),
+ * artifact-capture enablement, and the `Redactor` all come from the server bin's
+ * config. No tool argument can flip a safety flag. Large artifacts (snapshots,
+ * trace/console/network) are returned **by handle** via the
+ * `strummer://browser/run/{runId}/{kind}` resource — never inlined.
+ */
+export interface BrowserToolsOptions {
+  /** The shared manager, built by the bin WITH the operator gate (so each
+   * context auto-gets the Tier-1 SSRF route allowlist) and the SSRF-proxy launch. */
+  manager: BrowserManager
+  /** The same operator gate the manager was built with — threaded into every
+   * `PageDriver` so navigation/mutation are gated identically. */
+  gate: BrowserGate
+  /** Shared on-disk artifact store backing the run-artifact resource. */
+  artifacts: ArtifactStore
+  /** Operator redactor applied to every text output (snapshots are redacted in the
+   * engine; reads + dry-run previews are redacted here). Default identity. */
+  redact?: (value: string) => string
+  /** Operator artifact-capture enablement. Default: console+network on, trace off
+   * (trace.zip is unredacted binary). */
+  capture?: { trace?: boolean; console?: boolean; network?: boolean }
+  /** Token cap on inlined snapshot text. */
+  maxNodes?: number
+  /** Exact accessible-name matching when resolving refs. Default true. */
+  exact?: boolean
+}
+
+interface BrowserSession {
+  runId: string
+  page: Page
+  driver: PageDriver
+  recorder?: RunRecorder
+  createdAt: number
+  lastUsedAt: number
+  /** Per-session promise chain serializing all driver calls for this session. */
+  tail: Promise<unknown>
+  /** Monotonic a11y-audit counter → immutable `a11y-s<n>` handles. */
+  auditIndex: number
+  recorderStopped: boolean
+}
+
+const INSTRUCTIONS = `Strummer drives a real browser for UI testing, ARIA-snapshot first.
+
+Open a session with \`browser_open_session\` (returns a sessionId + runId), then
+drive it: \`browser_navigate\`, \`browser_snapshot\`, and the interaction tools
+(\`browser_click\`/\`browser_fill\`/\`browser_select\`/\`browser_press\`) all return a
+token-capped ARIA snapshot whose elements carry [ref=…] ids — pass those refs to
+the interaction tools. Refs are per-snapshot: any navigate/snapshot/mutation
+supersedes earlier refs, so use the freshest snapshot. Reads
+(\`browser_get_text\`/\`browser_get_value\`/\`browser_get_attribute\`) do NOT
+invalidate refs. Close with \`browser_close_session\` to release the context and
+collect artifact handles. Full snapshots, the a11y report, and trace/console/
+network logs are returned by handle — read the
+\`strummer://browser/run/{runId}/{kind}\` resource.
+
+Navigation/mutation are deny-by-default and gated by the OPERATOR (host allowlist +
+unsafe unlock); mutations are dry-run unless the operator unlocked them. That is
+not something a caller can authorize. Secrets are redacted from everything you see.`
+
+function text(value: unknown) {
+  return { type: 'text' as const, text: JSON.stringify(value, null, 2) }
+}
+
+function reply(structured: Record<string, unknown>) {
+  return { content: [text(structured)], structuredContent: structured }
+}
+
+/** Register Strummer's browser-testing tools + run-artifact resource onto a server. */
+export function registerBrowserTools(server: McpServer, opts: BrowserToolsOptions): void {
+  const { manager, gate, artifacts } = opts
+  const redact = opts.redact ?? ((v: string) => v)
+  const capture = {
+    trace: opts.capture?.trace ?? false,
+    console: opts.capture?.console ?? true,
+    network: opts.capture?.network ?? true,
+  }
+  const registry = new Map<string, BrowserSession>()
+  const now = () => Date.now()
+
+  // When a session is reaped (idle TTL) or closed, flush its recorder while the
+  // context + tracer are still alive, then drop the registry entry. close_session
+  // flushes first and sets recorderStopped, so this only flushes the reaper path.
+  manager.onReap(async (sessionId) => {
+    const session = registry.get(sessionId)
+    if (session?.recorder && !session.recorderStopped) {
+      session.recorderStopped = true
+      await session.recorder.stop()
+    }
+    registry.delete(sessionId)
+  })
+
+  /** Resolve a live session or throw a clear, actionable error (never reuse a
+   * closed/reaped page). */
+  function requireSession(sessionId: string): BrowserSession {
+    const session = registry.get(sessionId)
+    if (!session || !manager.hasSession(sessionId)) {
+      registry.delete(sessionId)
+      throw new Error(
+        `session ${sessionId} expired or was reaped; open a new one with browser_open_session`,
+      )
+    }
+    manager.touch(sessionId)
+    session.lastUsedAt = now()
+    return session
+  }
+
+  /** Serialize a unit of work on a session behind its mutex (FIFO, error-safe). */
+  function enqueue<T>(session: BrowserSession, fn: () => Promise<T>): Promise<T> {
+    const result = session.tail.then(fn, fn)
+    session.tail = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+
+  const sessionId = z.string().describe('session id from browser_open_session')
+  const ref = z.string().describe('a [ref=…] id from the latest snapshot')
+
+  server.registerTool(
+    'browser_open_session',
+    {
+      title: 'Open a browser session',
+      description:
+        'Open a fresh, isolated browser session. Returns a server-minted sessionId + runId. ' +
+        'Takes no input — headless/safety/capture are all operator-set.',
+      inputSchema: {},
+      outputSchema: {
+        sessionId: z.string(),
+        runId: z.string(),
+        sessionCount: z.number().int(),
+        maxContexts: z.number().int(),
+        capturing: z.object({ trace: z.boolean(), console: z.boolean(), network: z.boolean() }),
+      },
+    },
+    async () => {
+      const id = randomUUID()
+      const runId = randomUUID()
+      let context: Awaited<ReturnType<BrowserManager['createSession']>>
+      try {
+        context = await manager.createSession(id)
+      } catch (err) {
+        throw new Error(
+          `${(err as Error).message} (sessionCount=${manager.sessionCount}, maxContexts=${manager.maxContexts})`,
+        )
+      }
+      const page = await context.newPage()
+      let recorder: RunRecorder | undefined
+      if (capture.trace || capture.console || capture.network) {
+        recorder = await RunRecorder.start(page, {
+          runId,
+          store: artifacts,
+          redact,
+          trace: capture.trace,
+          console: capture.console,
+          network: capture.network,
+        })
+      }
+      const driver = new PageDriver(page, {
+        runId,
+        store: artifacts,
+        gate,
+        redact,
+        maxNodes: opts.maxNodes,
+        exact: opts.exact,
+      })
+      registry.set(id, {
+        runId,
+        page,
+        driver,
+        recorder,
+        createdAt: now(),
+        lastUsedAt: now(),
+        tail: Promise.resolve(),
+        auditIndex: 0,
+        recorderStopped: false,
+      })
+      return reply({
+        sessionId: id,
+        runId,
+        sessionCount: manager.sessionCount,
+        maxContexts: manager.maxContexts,
+        capturing: capture,
+      })
+    },
+  )
+
+  server.registerTool(
+    'browser_list_sessions',
+    {
+      title: 'List open browser sessions',
+      description:
+        'List the open sessions (no page content). Use it to find stragglers at the cap.',
+      inputSchema: {},
+      outputSchema: {
+        sessions: z.array(
+          z.object({
+            sessionId: z.string(),
+            runId: z.string(),
+            createdAt: z.number(),
+            lastUsedAt: z.number(),
+          }),
+        ),
+        sessionCount: z.number().int(),
+        maxContexts: z.number().int(),
+      },
+    },
+    async () => {
+      const sessions = [...registry.entries()]
+        .filter(([id]) => manager.hasSession(id))
+        .map(([id, s]) => ({
+          sessionId: id,
+          runId: s.runId,
+          createdAt: s.createdAt,
+          lastUsedAt: s.lastUsedAt,
+        }))
+      return reply({
+        sessions,
+        sessionCount: manager.sessionCount,
+        maxContexts: manager.maxContexts,
+      })
+    },
+  )
+
+  server.registerTool(
+    'browser_navigate',
+    {
+      title: 'Navigate',
+      description:
+        'Navigate the session to a URL (gated by the operator host allowlist) and return the ' +
+        'resulting ARIA snapshot.',
+      inputSchema: { sessionId, url: z.string().describe('absolute URL to navigate to') },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.navigate(args.url))
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_snapshot',
+    {
+      title: 'Snapshot',
+      description:
+        'Re-capture the current page ARIA snapshot. NOTE: this bumps the generation and ' +
+        'supersedes all earlier refs — use get_text/get_value/get_attribute for ref-preserving reads.',
+      inputSchema: { sessionId },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.snapshot())
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_click',
+    {
+      title: 'Click',
+      description:
+        'Click a ref. Mutating: dry-run (a redacted preview of the would-be request) unless the ' +
+        'operator unlocked execution on an allowlisted host.',
+      inputSchema: { sessionId, ref },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.click(args.ref))
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_fill',
+    {
+      title: 'Fill',
+      description: 'Fill a ref (text input) with a value. Mutating: same gate as click.',
+      inputSchema: { sessionId, ref, value: z.string().describe('value to type') },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.fill(args.ref, args.value))
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_fill_form',
+    {
+      title: 'Fill a form',
+      description:
+        'Fill several refs in one step (all must belong to the current snapshot). Mutating: same gate.',
+      inputSchema: {
+        sessionId,
+        fields: z
+          .array(z.object({ ref: z.string(), value: z.string() }))
+          .describe('ref/value pairs from the current snapshot'),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.fillForm(args.fields))
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_select',
+    {
+      title: 'Select option(s)',
+      description: 'Select option(s) on a <select> ref. Mutating: same gate as click.',
+      inputSchema: {
+        sessionId,
+        ref,
+        values: z.union([z.string(), z.array(z.string())]).describe('option value(s) to select'),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () =>
+        session.driver.selectOption(args.ref, args.values),
+      )
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_press',
+    {
+      title: 'Press a key',
+      description:
+        'Press a key on a ref (or on the page when ref is omitted). Mutating: same gate as click.',
+      inputSchema: {
+        sessionId,
+        ref: z.string().nullable().optional().describe('target ref, or omit for the page'),
+        key: z.string().describe('key to press, e.g. "Enter"'),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.press(args.ref ?? null, args.key))
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_wait_for',
+    {
+      title: 'Wait for an element state',
+      description:
+        'Wait for a ref (or a role + optional accessible name) to reach a state, then re-snapshot. ' +
+        'A read-only synchronization affordance.',
+      inputSchema: {
+        sessionId,
+        ref: z.string().optional(),
+        role: z.string().optional(),
+        name: z.string().optional(),
+        state: z.enum(['attached', 'detached', 'visible', 'hidden']).optional(),
+        timeout: z.number().int().positive().optional(),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () =>
+        session.driver.waitFor({
+          ref: args.ref,
+          role: args.role,
+          name: args.name,
+          state: args.state,
+          timeout: args.timeout,
+        }),
+      )
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_get_text',
+    {
+      title: 'Get element text',
+      description: 'Read a ref’s text content (a free read; does not invalidate refs).',
+      inputSchema: { sessionId, ref },
+      outputSchema: { text: z.string().nullable() },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const value = await enqueue(session, () => session.driver.getText(args.ref))
+      return reply({ text: value === null ? null : redact(value) })
+    },
+  )
+
+  server.registerTool(
+    'browser_get_value',
+    {
+      title: 'Get input value',
+      description: 'Read a ref’s current input value (a free read; redacted).',
+      inputSchema: { sessionId, ref },
+      outputSchema: { value: z.string() },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const value = await enqueue(session, () => session.driver.getValue(args.ref))
+      return reply({ value: redact(value) })
+    },
+  )
+
+  server.registerTool(
+    'browser_get_attribute',
+    {
+      title: 'Get element attribute',
+      description: 'Read an HTML attribute off a ref (a free read; redacted).',
+      inputSchema: { sessionId, ref, name: z.string().describe('attribute name') },
+      outputSchema: { name: z.string(), value: z.string().nullable() },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const value = await enqueue(session, () => session.driver.getAttribute(args.ref, args.name))
+      return reply({ name: args.name, value: value === null ? null : redact(value) })
+    },
+  )
+
+  server.registerTool(
+    'browser_audit_a11y',
+    {
+      title: 'Accessibility audit',
+      description:
+        'Run an axe-core accessibility audit on the current page (a free read). Returns a compact ' +
+        'summary; the full report is by handle.',
+      inputSchema: { sessionId },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => {
+        session.auditIndex += 1
+        return auditA11y(session.page, {
+          runId: session.runId,
+          store: artifacts,
+          index: session.auditIndex,
+        })
+      })
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_close_session',
+    {
+      title: 'Close a browser session',
+      description:
+        'Close the session, releasing its context. Flushes and returns the run artifact handles.',
+      inputSchema: { sessionId },
+    },
+    async (args) => {
+      const session = registry.get(args.sessionId)
+      if (!session || !manager.hasSession(args.sessionId)) {
+        registry.delete(args.sessionId)
+        throw new Error(`session ${args.sessionId} is not open`)
+      }
+      const { artifacts: runArtifacts } = await enqueue(session, async () => {
+        let runArtifacts: Awaited<ReturnType<RunRecorder['stop']>> | undefined
+        if (session.recorder && !session.recorderStopped) {
+          session.recorderStopped = true
+          runArtifacts = await session.recorder.stop()
+        }
+        // closeSession fires onReap, which (seeing recorderStopped) just drops the
+        // registry entry — so flush BEFORE closing to capture the summaries.
+        await manager.closeSession(args.sessionId)
+        return { artifacts: runArtifacts }
+      })
+      return reply({
+        closed: true,
+        runId: session.runId,
+        ...(runArtifacts ? { artifacts: runArtifacts } : {}),
+      })
+    },
+  )
+
+  server.registerResource(
+    'browser-run',
+    new ResourceTemplate('strummer://browser/run/{runId}/{kind}', { list: undefined }),
+    {
+      title: 'Browser run artifact',
+      description:
+        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / trace / console / network), by handle',
+    },
+    (uri, variables) => {
+      const runId = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId
+      const kind = Array.isArray(variables.kind) ? variables.kind[0] : variables.kind
+      const handle = `strummer://browser/run/${runId}/${kind}`
+      const artifact = artifacts.get(handle)
+      if (!artifact) {
+        throw new Error(`No stored artifact for ${handle}`)
+      }
+      const isBinary = artifact.contentType === 'application/zip'
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: artifact.contentType,
+            ...(isBinary
+              ? { blob: artifact.body.toString('base64') }
+              : { text: artifact.body.toString('utf8') }),
+          },
+        ],
+      }
+    },
+  )
+}
+
+/** Build a standalone Strummer browser MCP server over a prepared manager. */
+export function createBrowserServer(opts: BrowserToolsOptions): McpServer {
+  const server = new McpServer(
+    { name: 'strummer-browser', version: '0.0.0' },
+    { instructions: INSTRUCTIONS },
+  )
+  registerBrowserTools(server, opts)
+  return server
+}

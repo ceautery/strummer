@@ -159,28 +159,36 @@ export class PageDriver {
   }
 
   async click(ref: string): Promise<StepResult> {
-    return this.interact('click', ref, () => this.locator(ref).click())
+    const locator = this.locator(ref) // resolve eagerly so a bad ref throws before the gate/dry-run
+    return this.interact('click', ref, () => locator.click())
   }
 
   async fill(ref: string, value: string): Promise<StepResult> {
-    return this.interact('fill', ref, () => this.locator(ref).fill(value))
+    const locator = this.locator(ref)
+    return this.interact('fill', ref, () => locator.fill(value))
   }
 
   /** Fill several fields (resolved against the current snapshot) then settle once. */
   async fillForm(fields: { ref: string; value: string }[]): Promise<StepResult> {
+    const resolved = fields.map((field) => ({
+      locator: this.locator(field.ref),
+      value: field.value,
+    }))
     return this.interact('fill_form', undefined, async () => {
-      for (const field of fields) await this.locator(field.ref).fill(field.value)
+      for (const { locator, value } of resolved) await locator.fill(value)
     })
   }
 
   async selectOption(ref: string, values: string | string[]): Promise<StepResult> {
-    return this.interact('select', ref, () => this.locator(ref).selectOption(values))
+    const locator = this.locator(ref)
+    return this.interact('select', ref, () => locator.selectOption(values))
   }
 
   /** Press a key on a ref's element, or on the page when `ref` is null. */
   async press(ref: string | null, key: string): Promise<StepResult> {
+    const locator = ref === null ? null : this.locator(ref)
     return this.interact('press', ref ?? undefined, () =>
-      ref === null ? this.page.keyboard.press(key) : this.locator(ref).press(key),
+      locator === null ? this.page.keyboard.press(key) : locator.press(key),
     )
   }
 
