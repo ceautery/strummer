@@ -158,6 +158,9 @@ export interface RunResponse {
   captured: Record<string, unknown>
   /** Resource handle for the response body — never inlined. */
   bodyHandle: string
+  /** Redirect hops followed before the final response (redacted locations).
+   * Empty when no redirect was followed. */
+  redirects?: { status: number; location: string }[]
 }
 
 export interface RunResult {

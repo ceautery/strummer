@@ -33,6 +33,9 @@ beforeAll(async () => {
     } else if (req.url === '/things' && req.method === 'POST') {
       res.writeHead(201, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ created: true }))
+    } else if (req.url === '/redirect') {
+      res.writeHead(302, { location: '/health' })
+      res.end()
     } else {
       res.writeHead(404)
       res.end()
@@ -74,6 +77,26 @@ get {
 post {
   url: {{baseUrl}}/things
 }
+`,
+  )
+
+  writeFileSync(
+    join(dir, 'follow-redirect.bru'),
+    `meta {
+  name: follow-redirect
+}
+get {
+  url: {{baseUrl}}/redirect
+}
+`,
+  )
+
+  writeFileSync(
+    join(dir, 'follow-redirect.strummer.yml'),
+    `assertions:
+  - source: status
+    op: equals
+    value: 200
 `,
   )
 
@@ -196,6 +219,17 @@ describe('cli api', () => {
     } finally {
       delete process.env.STRUMMER_SECRET_API_TOKEN
     }
+  })
+
+  it('run --max-redirects follows a redirect to a passing final response', async () => {
+    const c = capture()
+    const code = await run(
+      ['api', 'run', dir, 'follow-redirect', '--var', `baseUrl=${baseUrl}`, '--max-redirects', '3'],
+      c.io,
+    )
+    expect(code).toBe(0)
+    expect(c.out()).toContain('200')
+    expect(c.out()).toContain('PASS')
   })
 
   it('run --block-private refuses a loopback target (SSRF hardened)', async () => {

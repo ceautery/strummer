@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { type DnsLookup, SsrfError } from '@strummer/safety'
-import { type Dispatcher, request } from 'undici'
+import { type Dispatcher, type FormData, request } from 'undici'
 import { ArtifactStore } from './artifacts.js'
 import { evaluateAssertions, extractCaptures } from './assert.js'
 import type { Collection, PreparedRequest, RunResult, ScriptTest, SecretStore } from './model.js'
 import { prepareRequest } from './prepare.js'
-import { assertSsrfAllowed, checkGate } from './safety.js'
+import { assertSsrfAllowed, checkGate, isMutating } from './safety.js'
 import { runScript } from './script.js'
 import { EnvSecretStore, Redactor } from './secrets.js'
 
@@ -28,6 +28,42 @@ export interface RunOptions {
   allowPrivate?: boolean
   /** Injectable DNS resolver for the SSRF pre-flight (tests). */
   lookup?: DnsLookup
+  /** Maximum redirect hops to follow (default 0 = don't follow; return the 3xx).
+   * Every hop is re-checked: SSRF range-block + the mutation host-allowlist. */
+  maxRedirects?: number
+}
+
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308])
+/** Headers dropped when a redirect crosses to a different host (browser-like). */
+const CROSS_ORIGIN_DROP = new Set(['authorization', 'cookie'])
+
+function headerValue(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | undefined {
+  const v = headers[name]
+  return Array.isArray(v) ? v[0] : v
+}
+
+/** Method/body for the next hop. 303 (and POST on 301/302) downgrades to GET and
+ * drops the body; 307/308 preserve both. */
+function redirectTransition(
+  status: number,
+  method: string,
+  body: string | Buffer | FormData | undefined,
+): { method: string; body: string | Buffer | FormData | undefined } {
+  if (status === 303 || ((status === 301 || status === 302) && method.toUpperCase() === 'POST')) {
+    return { method: 'GET', body: undefined }
+  }
+  return { method, body }
+}
+
+function dropCrossOriginHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    if (!CROSS_ORIGIN_DROP.has(key.toLowerCase())) out[key] = value
+  }
+  return out
 }
 
 function hasHeader(headers: Record<string, string>, name: string): boolean {
@@ -124,11 +160,79 @@ export async function runRequest(
   }
 
   const started = performance.now()
-  const res = await request(prepared.url, {
-    method: prepared.method as Dispatcher.HttpMethod,
-    headers: sendHeaders,
-    body: prepared.body?.content,
+  const maxRedirects = opts.maxRedirects ?? 0
+  const redirects: { status: number; location: string }[] = []
+
+  let currentUrl = prepared.url
+  let currentMethod = prepared.method
+  let currentHeaders = sendHeaders
+  let currentBody = prepared.body?.content
+
+  let res = await request(currentUrl, {
+    method: currentMethod as Dispatcher.HttpMethod,
+    headers: currentHeaders,
+    body: currentBody,
   })
+
+  // Follow redirects (opt-in), re-checking every hop: SSRF range-block, then the
+  // mutation host-allowlist, then strip credential headers on a host change.
+  while (REDIRECT_CODES.has(res.statusCode) && redirects.length < maxRedirects) {
+    const location = headerValue(res.headers, 'location')
+    if (!location) break
+    await res.body.dump() // drain the intermediate response before the next hop
+
+    let nextUrl: string
+    try {
+      nextUrl = new URL(location, currentUrl).toString()
+    } catch {
+      break // unparseable Location — surface the 3xx as the response
+    }
+
+    try {
+      await assertSsrfAllowed(nextUrl, { allowPrivate: opts.allowPrivate, lookup: opts.lookup })
+    } catch (err) {
+      if (err instanceof SsrfError) {
+        return {
+          request: redactedRequest,
+          sent: false,
+          dryRun: false,
+          reason: `blocked redirect: ${err.message}`,
+        }
+      }
+      throw err
+    }
+
+    const next = redirectTransition(res.statusCode, currentMethod, currentBody)
+    if (isMutating(next.method)) {
+      const g = checkGate(next.method, hostOf(nextUrl), {
+        allowUnsafe: opts.allowUnsafe,
+        allowedHosts: opts.allowedHosts,
+      })
+      if (!g.allowed) {
+        return {
+          request: redactedRequest,
+          sent: false,
+          dryRun: true,
+          reason: `redirect blocked: ${g.reason}`,
+        }
+      }
+    }
+
+    const sameHost = hostOf(nextUrl) === hostOf(currentUrl)
+    const nextHeaders = sameHost ? currentHeaders : dropCrossOriginHeaders(currentHeaders)
+    redirects.push({ status: res.statusCode, location: redactor.redact(nextUrl) })
+
+    res = await request(nextUrl, {
+      method: next.method as Dispatcher.HttpMethod,
+      headers: nextHeaders,
+      body: next.body,
+    })
+    currentUrl = nextUrl
+    currentMethod = next.method
+    currentHeaders = nextHeaders
+    currentBody = next.body
+  }
+
   const bodyText = await res.body.text()
   const latencyMs = performance.now() - started
   const headers = flattenHeaders(res.headers)
@@ -186,6 +290,7 @@ export async function runRequest(
       scriptTests,
       captured,
       bodyHandle,
+      redirects,
     },
   }
 }

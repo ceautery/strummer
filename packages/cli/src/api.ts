@@ -150,9 +150,17 @@ const RUN_OPTIONS = {
   unsafe: { type: 'boolean' },
   'allow-host': { type: 'string', multiple: true },
   'block-private': { type: 'boolean' },
+  'max-redirects': { type: 'string' },
   keyring: { type: 'boolean' },
   json: { type: 'boolean' },
 } as const
+
+/** Parse `--max-redirects` (a non-negative integer) or undefined. */
+function parseMaxRedirects(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined
+  const n = Number(raw)
+  return Number.isInteger(n) && n >= 0 ? n : undefined
+}
 
 /** Secret store for a run: opt into the OS keyring (chained ahead of env) with
  * `--keyring`, else the env default (`STRUMMER_SECRET_<NAME>`). */
@@ -202,6 +210,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     allowUnsafe: values.unsafe ?? false,
     allowedHosts: values['allow-host'],
     allowPrivate: !values['block-private'],
+    maxRedirects: parseMaxRedirects(values['max-redirects']),
     secrets: secretsFor(values.keyring),
     artifacts,
   })
@@ -271,6 +280,7 @@ async function cmdRunCollection(args: string[], io: CliIO): Promise<number> {
     allowUnsafe: values.unsafe ?? false,
     allowedHosts: values['allow-host'],
     allowPrivate: !values['block-private'],
+    maxRedirects: parseMaxRedirects(values['max-redirects']),
     secrets: secretsFor(values.keyring),
     stopOnFailure: values['stop-on-failure'] ?? false,
     artifacts,

@@ -15,6 +15,7 @@ const FIXTURE = resolve(here, '../test/fixtures/sample')
 describe('runRequest (offline, in-process server)', () => {
   let server: Server
   let baseUrl: string
+  let localhostBase: string
 
   beforeAll(async () => {
     server = createServer((req, res) => {
@@ -36,13 +37,31 @@ describe('runRequest (offline, in-process server)', () => {
           res.writeHead(201, { 'content-type': 'application/json' })
           res.end(JSON.stringify({ received, contentType: req.headers['content-type'] ?? null }))
         })
+      } else if (req.url === '/redirect') {
+        // → /health (same origin)
+        res.writeHead(302, { location: '/health' })
+        res.end()
+      } else if (req.url === '/redirect-evil') {
+        // → the cloud-metadata endpoint (SSRF via redirect)
+        res.writeHead(302, { location: 'http://169.254.169.254/latest/' })
+        res.end()
+      } else if (req.url === '/redirect-xorigin') {
+        // → a DIFFERENT hostname (localhost vs 127.0.0.1) to exercise header stripping
+        res.writeHead(302, { location: `${localhostBase}/echo` })
+        res.end()
+      } else if (req.url === '/redirect-307-things') {
+        // 307 preserves method + body → POST to a different hostname
+        res.writeHead(307, { location: `${localhostBase}/things` })
+        res.end()
       } else {
         res.writeHead(404)
         res.end()
       }
     })
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const { port } = server.address() as AddressInfo
+    baseUrl = `http://127.0.0.1:${port}`
+    localhostBase = `http://localhost:${port}`
   })
   afterAll(async () => {
     await new Promise<void>((r) => server.close(() => r()))
@@ -279,6 +298,60 @@ describe('runRequest (offline, in-process server)', () => {
     })
     expect(result.sent).toBe(false)
     expect(result.reason).toMatch(/block/i)
+  })
+
+  it('does NOT follow redirects by default (returns the 3xx)', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'follow-redirect', {
+      vars: { baseUrl },
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(302)
+    expect(result.response?.redirects ?? []).toHaveLength(0)
+  })
+
+  it('follows redirects up to maxRedirects and returns the final response', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'follow-redirect', {
+      vars: { baseUrl },
+      maxRedirects: 5,
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(200)
+    expect(result.response?.redirects).toEqual([
+      { status: 302, location: expect.stringContaining('/health') },
+    ])
+  })
+
+  it('re-checks SSRF on each redirect hop (302 → metadata IP is refused)', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'redirect-evil', {
+      vars: { baseUrl },
+      maxRedirects: 5,
+    })
+    expect(result.sent).toBe(false)
+    expect(result.reason).toMatch(/block/i)
+  })
+
+  it('strips Authorization on a cross-origin redirect', async () => {
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'redirect-xorigin', {
+      vars: { baseUrl },
+      maxRedirects: 5,
+      artifacts,
+    })
+    expect(result.response?.status).toBe(200)
+    // The cross-origin (localhost) echo must NOT have received the Authorization header.
+    const echoed = JSON.parse(artifacts.get(result.response?.bodyHandle ?? '')?.body ?? '{}')
+    expect(echoed.headers.authorization).toBeUndefined()
+  })
+
+  it('re-applies the mutation gate to a redirect target host (307 → non-allowlisted host)', async () => {
+    const result = await runRequest(loadCollection(FIXTURE), 'redirect-307-things', {
+      vars: { baseUrl },
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'], // localhost (the redirect target) is NOT allowlisted
+      maxRedirects: 5,
+    })
+    expect(result.sent).toBe(false)
+    expect(result.reason).toMatch(/allowlist|redirect/i)
   })
 
   it('runs a post-response script: tests + programmatic capture', async () => {
