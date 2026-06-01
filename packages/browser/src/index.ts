@@ -6,7 +6,9 @@ export {
   type PageDriverOptions,
   type StepResult,
   type WaitForOptions,
+  type WouldRequest,
 } from './driver.js'
+export { BrowserGate, type BrowserGateOptions, GateError } from './gate.js'
 export { BrowserManager, type BrowserManagerOptions } from './manager.js'
 export {
   type AriaSnapshotSource,

@@ -118,9 +118,13 @@ Staged below; aspirational items are scheduled, not cut.
       navigating/mutating step re-captures under a new snapshot generation and
       returns a scoped diff + capped snapshot + handle; refs tagged by generation
       (`s2e3`) so a stale ref fails loudly instead of matching a wrong element.
-- [ ] **Deny-by-default action gate** — reads free; navigation/mutation/download/
-      upload/dialog-accept/auth gated by operator unlock + allowlist;
-      interception-based `dry_run` mutation preview.
+- [x] **Deny-by-default action gate** (`BrowserGate` + `PageDriver` wiring) —
+      operator-set `{allowUnsafe, allowedHosts}`; reads free; navigation gated by
+      host allowlist; mutating interactions **dry-run by default** (one-shot route
+      captures + aborts the would-be request, returns a preview) and execute only
+      with `allowUnsafe` + an allowlisted host; hard-deny otherwise. Config is
+      operator-set, never an agent input. (Downloads/uploads/dialog/auth gating +
+      postData redaction land with the artifact/SSRF slices.)
 - [ ] **Tier-1 route allowlist** — `browserContext.route` deny-by-default +
       private/link-local/metadata literal block; `serviceWorkers:'block'`; dialog
       auto-dismiss.

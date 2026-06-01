@@ -186,17 +186,30 @@ against an in-process fixture (fill/click/select/press/wait_for/stale-ref).
 **155 TS + 45 Py green.**
 
 This completes a usable interaction unit (lifecycle + snapshot + step tools) —
-**the milestone boundary; slices 2–4 pushed to `main`.**
+slices 2–4 pushed to `main`.
 
-**Next, per ROADMAP Phase 3 (in rough order):** (1) the **deny-by-default action
-gate** — reads free; navigation/mutation/download/upload/dialog-accept/auth gated
-by operator unlock + host allowlist; interception-based `dry_run` preview. The
-`PageDriver` is the raw interaction layer the gate wraps. (2) The **two-tier SSRF
-defense** (route allowlist + loopback DNS-pinning proxy), factoring
-`@strummer/safety` (SSRF classifier + redaction) out of `@strummer/api`. (3) The
-**artifact-capture pipeline** (trace/console/network by handle). Plus the session
-wall-clock cap + max-pages (deferred from the lifecycle slice). Continue TDD
-red→green; `pnpm gate` 100% green before each commit.
+**Slice 5 (deny-by-default action gate): DONE.** `BrowserGate` (`gate.ts`,
+operator-set `{allowUnsafe, allowedHosts}`) + `PageDriver` wiring: reads free;
+`navigate` gated by host allowlist (`checkNavigation` → `GateError`); mutating
+interactions (click/fill/fillForm/selectOption/press) **dry-run by default** — a
+one-shot `page.route` captures + aborts the first would-be request and returns a
+`{dryRun, wouldRequest}` preview — and **execute** only with `allowUnsafe` + an
+allowlisted current host (hard-deny otherwise). Gate omitted ⇒ raw ungated layer
+(the MCP surface always supplies one). Pure policy tests + chromium integration
+(navigate allow/deny, dry-run captures+blocks a POST, execute sends it). **161 TS
++ 45 Py green.** Committed to `main`; **not yet pushed** — push after the SSRF
+slice rounds out the safety story.
+
+**Next, per ROADMAP Phase 3:** (1) **two-tier SSRF defense** — Tier-1
+`browserContext.route` deny-by-default allowlist + private/link-local/metadata
+literal block; Tier-2 loopback **DNS-pinning proxy** (resolved-IP enforcement +
+redirect re-check) closing the rebinding hole hostname matching can't see —
+**factoring `@strummer/safety`** (SSRF range classifier + secret redaction) out of
+`@strummer/api`, shared by both pillars. This also brings **postData redaction**
+into the gate's dry-run preview (currently identity). (2) Downloads/uploads/
+dialog/auth gating. (3) Artifact-capture pipeline (trace/console/network by
+handle). Plus session wall-clock + max-pages. TDD red→green; `pnpm gate` 100%
+green before each commit.
 
 ---
 

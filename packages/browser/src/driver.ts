@@ -1,9 +1,17 @@
-import type { Locator, Page } from 'playwright-core'
+import type { Locator, Page, Route } from 'playwright-core'
 import type { ArtifactStore } from './artifacts.js'
+import type { BrowserGate } from './gate.js'
 import { captureSnapshot, diffSnapshots, type RefDescriptor, type Snapshot } from './snapshot.js'
 
 type Role = Parameters<Page['getByRole']>[0]
 type WaitState = 'attached' | 'detached' | 'visible' | 'hidden'
+
+/** The request a dry-run interaction would have fired (captured + aborted). */
+export interface WouldRequest {
+  method: string
+  url: string
+  postData?: string
+}
 
 export interface StepResult {
   /** The step kind: `navigate` | `click` | `fill` | `fill_form` | `select` | `press` | `wait_for` | `snapshot`. */
@@ -18,6 +26,10 @@ export interface StepResult {
   truncated: boolean
   /** Handle to the full post-action snapshot, when a store is configured. */
   snapshotHandle?: string
+  /** True when the gate ran this interaction in dry-run (network suppressed). */
+  dryRun?: boolean
+  /** In dry-run, the first request the action would have fired (then aborted). */
+  wouldRequest?: WouldRequest | null
 }
 
 export interface PageDriverOptions {
@@ -29,6 +41,12 @@ export interface PageDriverOptions {
   maxNodes?: number
   /** Exact accessible-name matching when resolving refs. Default true. */
   exact?: boolean
+  /** Operator-set deny-by-default gate. Omit for the raw, ungated layer (the MCP
+   * surface always supplies one). */
+  gate?: BrowserGate
+  /** Redactor applied to dry-run `postData` before it surfaces. Default identity;
+   * the real secret-redactor is wired in with `@strummer/safety`. */
+  redact?: (value: string) => string
 }
 
 export interface WaitForOptions {
@@ -56,11 +74,16 @@ export interface WaitForOptions {
 export class PageDriver {
   private current: Snapshot | undefined
   private generation = 0
+  private readonly gate: BrowserGate | undefined
+  private readonly redact: (value: string) => string
 
   constructor(
     private readonly page: Page,
     private readonly opts: PageDriverOptions = {},
-  ) {}
+  ) {
+    this.gate = opts.gate
+    this.redact = opts.redact ?? ((v) => v)
+  }
 
   /** The current snapshot's ref → descriptor map (empty before the first capture). */
   get refs(): Map<string, RefDescriptor> {
@@ -120,36 +143,81 @@ export class PageDriver {
   }
 
   async navigate(url: string): Promise<StepResult> {
+    this.gate?.checkNavigation(url)
     await this.page.goto(url, { waitUntil: 'load' })
     return this.settle('navigate')
   }
 
   async click(ref: string): Promise<StepResult> {
-    await this.locator(ref).click()
-    return this.settle('click', ref)
+    return this.interact('click', ref, () => this.locator(ref).click())
   }
 
   async fill(ref: string, value: string): Promise<StepResult> {
-    await this.locator(ref).fill(value)
-    return this.settle('fill', ref)
+    return this.interact('fill', ref, () => this.locator(ref).fill(value))
   }
 
   /** Fill several fields (resolved against the current snapshot) then settle once. */
   async fillForm(fields: { ref: string; value: string }[]): Promise<StepResult> {
-    for (const field of fields) await this.locator(field.ref).fill(field.value)
-    return this.settle('fill_form')
+    return this.interact('fill_form', undefined, async () => {
+      for (const field of fields) await this.locator(field.ref).fill(field.value)
+    })
   }
 
   async selectOption(ref: string, values: string | string[]): Promise<StepResult> {
-    await this.locator(ref).selectOption(values)
-    return this.settle('select', ref)
+    return this.interact('select', ref, () => this.locator(ref).selectOption(values))
   }
 
   /** Press a key on a ref's element, or on the page when `ref` is null. */
   async press(ref: string | null, key: string): Promise<StepResult> {
-    if (ref === null) await this.page.keyboard.press(key)
-    else await this.locator(ref).press(key)
-    return this.settle('press', ref ?? undefined)
+    return this.interact('press', ref ?? undefined, () =>
+      ref === null ? this.page.keyboard.press(key) : this.locator(ref).press(key),
+    )
+  }
+
+  /**
+   * Run a mutating interaction through the gate: execute it directly when no
+   * gate is configured or the gate authorizes it; otherwise dry-run it (perform
+   * the action with a one-shot route that captures + aborts the first request)
+   * and report what it would have sent. Throws `GateError` on a hard deny.
+   */
+  private async interact(
+    action: string,
+    ref: string | undefined,
+    perform: () => Promise<unknown>,
+  ): Promise<StepResult> {
+    if (this.gate && this.gate.decideMutation(this.page.url()) === 'dry-run') {
+      const wouldRequest = await this.dryRun(perform)
+      return { ...(await this.settle(action, ref)), dryRun: true, wouldRequest }
+    }
+    await perform()
+    return this.settle(action, ref)
+  }
+
+  /** Perform `action` while intercepting + aborting its first request, returning that request. */
+  private async dryRun(perform: () => Promise<unknown>): Promise<WouldRequest | null> {
+    let captured: WouldRequest | null = null
+    const handler = async (route: Route): Promise<void> => {
+      if (!captured) {
+        const req = route.request()
+        const body = req.postData()
+        captured = {
+          method: req.method(),
+          url: req.url(),
+          ...(body ? { postData: this.redact(body) } : {}),
+        }
+      }
+      await route.abort()
+    }
+    await this.page.route('**/*', handler)
+    try {
+      await perform()
+      await this.page.waitForTimeout(300) // let any triggered request reach the interceptor
+    } catch {
+      // an aborted navigation/request can reject the action — expected in dry-run
+    } finally {
+      await this.page.unroute('**/*', handler)
+    }
+    return captured
   }
 
   async waitFor(options: WaitForOptions): Promise<StepResult> {
