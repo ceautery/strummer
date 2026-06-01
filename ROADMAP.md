@@ -573,12 +573,15 @@ Two independent tracks, then the test-quality chain, then LSP last:
         mutex, in-flight-aware reaper that never reaps mid-request with a clock-driven
         shutdown→exit grace before `dispose()`. Shared fake-peer harness factored to
         `src/peer.ts`. 10 + 8 tests.
-  - [ ] **Slice 4 — gated `query.ts`.** `lspQuery` mirroring `runScoped` — the paired
+  - [x] **Slice 4 — gated `query.ts`.** `LspQueryEngine` mirroring `runScoped` — the paired
         deny-by-default gate (`allowRun` + `allowedRoots` + deadline, `LspGateError`/
-        `assertAllowed`); doc-URI confinement to the project root; human↔LSP position mapping
-        via `toLspPosition`/`fromLspPosition` + the negotiated `client.encoding`;
-        `serverInfo.version` provenance + v1 warn-on-toolchain-mismatch (reusing
-        `core.detectInstalledVersion`).
+        `assertAllowed`, never spawns when denied); queried-file confinement to the project
+        root (no traversal); human↔LSP position mapping via `toLspPosition`/`fromLspPosition`
+        + the negotiated `client.encoding` (result ranges mapped back per target file, `+1`
+        fallback when unreadable); tri-state passthrough; `serverInfo` provenance +
+        serverInfo-absent `versionWarning`; echoes optional `toolchain` provenance. 10 tests.
+        (The warn-on-toolchain-mismatch heuristic reusing `core.detectInstalledVersion` is
+        staged to the surface slice, which has the `core` dep.)
   - [ ] **Slice 5 — MCP surface + `strummer-lsp-mcp` bin.** `lsp_find_definition`/
         `lsp_find_references`/`lsp_hover` (gated as a group); always-on `lsp_languages`
         (reports bound languages + advertised capabilities + server version, never

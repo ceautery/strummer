@@ -17,6 +17,7 @@ import {
   StreamMessageReader,
   StreamMessageWriter,
 } from 'vscode-jsonrpc/node.js'
+import type { ServerSpawn } from './client.js'
 
 export function loadFixture(name: string): unknown {
   return JSON.parse(
@@ -56,11 +57,13 @@ export function makePeerPair(): PeerPair {
 export interface FakeServerOptions {
   initialize?: unknown
   onInitialize?: (params: unknown) => void
-  onDefinition?: () => unknown
-  onReferences?: () => unknown
-  onHover?: () => unknown
+  onDefinition?: (params: unknown) => unknown
+  onReferences?: (params: unknown) => unknown
+  onHover?: (params: unknown) => unknown
   onShutdown?: () => void
-  onDidOpen?: () => void
+  onDidOpen?: (params: unknown) => void
+  /** When set, the definition handler emits this `$/progress` notification before replying. */
+  emitProgressBeforeDefinition?: unknown
 }
 
 /** Wire a fake LSP server: answers the handshake + drained notifications, plus the given replies. */
@@ -70,14 +73,58 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
     return opts.initialize ?? INIT()
   })
   server.onNotification('initialized', () => {})
-  server.onNotification('textDocument/didOpen', () => opts.onDidOpen?.())
-  server.onRequest('textDocument/definition', () => opts.onDefinition?.() ?? null)
-  server.onRequest('textDocument/references', () => opts.onReferences?.() ?? null)
-  server.onRequest('textDocument/hover', () => opts.onHover?.() ?? null)
+  server.onNotification('textDocument/didOpen', (params: unknown) => opts.onDidOpen?.(params))
+  server.onRequest('textDocument/definition', (params: unknown) => {
+    if (opts.emitProgressBeforeDefinition !== undefined) {
+      server.sendNotification('$/progress', opts.emitProgressBeforeDefinition)
+    }
+    return opts.onDefinition?.(params) ?? null
+  })
+  server.onRequest(
+    'textDocument/references',
+    (params: unknown) => opts.onReferences?.(params) ?? null,
+  )
+  server.onRequest('textDocument/hover', (params: unknown) => opts.onHover?.(params) ?? null)
   server.onRequest('shutdown', () => {
     opts.onShutdown?.()
     return null
   })
   server.onNotification('exit', () => {})
   server.listen()
+}
+
+export interface SpawnTracker {
+  /** A `ServerSpawn` returning a fresh fake peer per call (each wired with `fakeServer`). */
+  spawn: ServerSpawn
+  /** One record per spawn — `disposed` flips when the manager calls `dispose()`. */
+  spawns: Array<{ disposed: boolean }>
+  /** Tear down every peer created by this tracker (call in `afterEach`). */
+  disposeAll: () => void
+}
+
+/** A `ServerSpawn` over fresh in-process fake peers, tracking spawn count + disposal. */
+export function fakeSpawn(opts: FakeServerOptions = {}): SpawnTracker {
+  const spawns: Array<{ disposed: boolean }> = []
+  const peerDisposers: Array<() => void> = []
+  const spawn: ServerSpawn = () => {
+    const { client, server, dispose } = makePeerPair()
+    fakeServer(server, opts)
+    const rec = { disposed: false }
+    spawns.push(rec)
+    peerDisposers.push(dispose)
+    return {
+      connection: client,
+      dispose: () => {
+        rec.disposed = true
+        dispose()
+      },
+    }
+  }
+  return {
+    spawn,
+    spawns,
+    disposeAll: () => {
+      for (const d of peerDisposers) d()
+    },
+  }
 }

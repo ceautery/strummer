@@ -6,11 +6,12 @@
 ## Current phase
 
 **Phase 4 — Cross-cutting verification: UNDERWAY (4 of 5 pillars complete; LSP — the last —
-in progress, slices 1–3 landed).** _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`,
-and `@strummer/mutate` are all COMPLETE (engine + agent surface); `@strummer/lsp` is the only
-remaining candidate — design locked in **ADR 0011**, slices 1–3 landed: pure encoding + normalize
-(1), `client.ts` LSP JSON-RPC client (2), and `registry.ts` + `manager.ts` lifecycle (3) — all
-over the fake-peer harness. Design pass done via the `phase4-design-research` fan-out — 5 parallel research
+in progress, slices 1–4 landed; only the MCP surface + bin remain).** _(`@strummer/deps`,
+`@strummer/coverage`, `@strummer/flake`, and `@strummer/mutate` are all COMPLETE (engine + agent
+surface); `@strummer/lsp` is the only remaining candidate — design locked in **ADR 0011**, slices
+1–4 landed: pure encoding + normalize (1), `client.ts` LSP JSON-RPC client (2), `registry.ts` +
+`manager.ts` lifecycle (3), and the gated `query.ts` engine (4) — all over the fake-peer harness.
+Design pass done via the `phase4-design-research` fan-out — 5 parallel research
 streams → synthesis → 3 adversarial critics → corrected synthesis; captured in **ADR
 0010**. Sequence (by leverage-per-effort): **`@strummer/deps` (dependency/version
 intelligence) first** ∥ `@strummer/coverage` (parallel track), then `@strummer/flake`
@@ -143,8 +144,8 @@ catch); slice 2 the gated `runMutation` (spawn `stryker run --reporters json`, r
 summarize; paired `allowRun`+`allowedRoots` gate + injected MutationRunner so no real
 Stryker in the gate; diff-scoped via `mutateFiles`→`--mutate` + `--incremental`) + the
 `mutate_summarize`(free)/`mutate_run`(gated) MCP surface + `strummer-mutate-mcp` bin. With LSP
-slices 1–3 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts`) now also landed,
-**636 TS + 45 Py green**.)_
+slices 1–4 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts` + gated `query.ts`)
+now also landed, **646 TS + 45 Py green**.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -556,16 +557,30 @@ request start/end; reap = LSP `shutdown`→`exit` then a **clock-driven `delay` 
 hard `connection.dispose()`/SIGKILL) + a production `startReaper(intervalMs)` trigger. The shared
 fake-peer test harness was factored to `src/peer.ts` (test-only, not in the barrel/`dist`; gained
 an `onInitialize` capture so the manager test asserts `rootUri` pinning). 10 registry + 8 manager
-tests; **636 TS + 45 Py green**. **Next action: code ADR-0011 slice 4 — gated `query.ts`**
-(`lspQuery(config, input, deps)` mirroring coverage's `runScoped`: the **paired deny-by-default
-gate** — `allowRun` + `allowedRoots` + per-request deadline, `LspGateError`/`assertAllowed`;
-confine the queried doc URI to the project root; read the file text, convert the human 1-based
-line:col → LSP position via `toLspPosition`+`client.encoding`, drive `manager.run`, then map result
-ranges back via `fromLspPosition`; the **v1 warn-on-toolchain-mismatch** hook reusing
-`core.detectInstalledVersion` lives here). Then the MCP surface + `strummer-lsp-mcp` bin
-(`lsp_find_definition`/`_references`/`_hover` gated as a group; always-on `lsp_languages`; large
-results by handle via `@strummer/artifacts` `lsp` prefix; env `STRUMMER_LSP_ALLOW_RUN`/
-`_PROJECT_ROOTS`/`_TIMEOUT_MS`/`_SERVERS`(JSON)/`_ARTIFACT_DIR`). **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
+tests. **Slice 4 is LANDED:** the gated `query.ts` — `LspQueryEngine` mirroring coverage's
+`runScoped`: the **paired deny-by-default gate** (`allowRun` + `allowedRoots` + the manager's
+per-request deadline; `LspGateError`/`assertAllowed`; refuses + **never spawns** when denied),
+**queried-file confinement to the project root** (no `..` traversal/absolute escape), human↔LSP
+position mapping (`toLspPosition` on the way in with the negotiated `client.encoding`; result ranges
+mapped **back** via `fromLspPosition` reading **each target file's own text** — a definition
+legitimately lives in another file/dep — with a documented best-effort `+1` fallback flagged
+`mapped:false` when a target is unreadable), **tri-state passthrough** (ok/not_ready/no_result, never
+collapsed), and version provenance (`serverInfo` on every result + a `versionWarning` when the
+server reports none; echoes optional caller-supplied `toolchain` provenance). 10 query tests; **646
+TS + 45 Py green**. The richer **warn-on-toolchain-mismatch** heuristic (reusing
+`core.detectInstalledVersion`) is deliberately staged to the surface (it has the `core` dep + is
+genuinely per-server heuristic). **Next action: code ADR-0011 slice 5 — the MCP surface +
+`strummer-lsp-mcp` bin** (`packages/mcp/src/lsp.ts` + `bin-lsp.ts`): `lsp_find_definition`/
+`lsp_find_references`/`lsp_hover` **gated as a group** (registered only when `allowRun` + a non-empty
+root allowlist + a non-empty server registry are set — there is NO free-read tier); the always-on,
+no-spawn **`lsp_languages`** (reports bound languages + — once a server has initialized in-session —
+its advertised capabilities + `serverInfo.version`, **never** the command/path); large results
+(hundreds of references) as a compact head inline + the full list **by handle** via
+`@strummer/artifacts` (`lsp` prefix, `strummer://lsp/{id}/{kind}` resource, registered only when a
+store is set); the bin is the sole reader of `STRUMMER_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/
+`_SERVERS`(JSON)/`_ARTIFACT_DIR` (+ optional `_MAX_SERVERS`/`_IDLE_TTL_MS`), parsed with the shared
+`bool`/`csv`/`num` helpers + the executable-tail guard copied verbatim, and wires the `toolchain`
+provenance via `core.detectInstalledVersion`. **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
 adapters; coverage `strummer coverage` CLI / `istanbul-lib-coverage` merging; flake Python
 (pytest-json) adapter; mutate Python (mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
 Phase 3

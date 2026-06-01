@@ -48,6 +48,17 @@ export {
   symbolKindName,
 } from './normalize.js'
 export {
+  type FileReader,
+  type HumanRange,
+  LspGateError,
+  LspQueryEngine,
+  type LspQueryEngineOptions,
+  type LspQueryInput,
+  type LspQueryKind,
+  type LspQueryResult,
+  type ResultLocation,
+} from './query.js'
+export {
   LspRegistryError,
   parseServerRegistry,
   resolveServer,

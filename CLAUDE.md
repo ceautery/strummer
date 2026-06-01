@@ -136,9 +136,14 @@ vision and `ARCHITECTURE.md` for the technical design.
   (`LanguageServerManager` keyed by `(language, projectRoot)`, shared/lazy spawn via the
   injected seam, `rootUri` pinned to the allowlisted root, per-`(server,uri)` async mutex,
   in-flight-aware reaper that never reaps mid-request + clock-driven `shutdown`→`exit` grace
-  before `dispose()`); shared in-process peer test harness factored to `src/peer.ts`. Staged:
-  gated `query.ts` (`lspQuery` paired-gate + version-warn) + `lsp_find_definition`/`_references`/
-  `_hover` + `lsp_languages` MCP surface),
+  before `dispose()`); shared in-process peer test harness factored to `src/peer.ts`. Slice 4
+  landed: gated `query.ts` (`LspQueryEngine` mirroring coverage's `runScoped` — paired
+  deny-by-default `allowRun`+`allowedRoots`+deadline gate via `LspGateError`; queried-file
+  confinement to the project root; human↔LSP position mapping via `toLspPosition`/`fromLspPosition`
+  + the negotiated `client.encoding` — result ranges mapped back per target file, best-effort `+1`
+  when unreadable; tri-state passthrough; `serverInfo` provenance + serverInfo-absent
+  `versionWarning`; echoes optional `toolchain` provenance). Staged: `lsp_find_definition`/
+  `_references`/`_hover` + `lsp_languages` MCP surface + `strummer-lsp-mcp` bin),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
