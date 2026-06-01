@@ -2,6 +2,7 @@ export { type A11ySummary, type A11yViolationSummary, summarizeA11y } from './a1
 export { ArtifactStore, type BrowserArtifact } from './artifacts.js'
 export { type A11yAuditOptions, type A11yAuditResult, auditA11y } from './audit.js'
 export {
+  type DialogEvent,
   PageDriver,
   type PageDriverOptions,
   type ScreenshotOptions,

@@ -116,4 +116,9 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
       (await build({ STRUMMER_BROWSER_ALLOW_SCREENSHOTS: 'true' })).config.allowScreenshots,
     ).toBe(true)
   })
+
+  it('gates dialog acceptance behind STRUMMER_BROWSER_ALLOW_DIALOGS (default off)', async () => {
+    expect((await build({})).config.allowDialogs).toBe(false)
+    expect((await build({ STRUMMER_BROWSER_ALLOW_DIALOGS: 'yes' })).config.allowDialogs).toBe(true)
+  })
 })

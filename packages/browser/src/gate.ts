@@ -27,6 +27,11 @@ export interface BrowserGateOptions {
   allowUnsafe?: boolean
   /** Hosts the agent may navigate to / mutate on. Default empty (nothing allowed). */
   allowedHosts?: string[]
+  /** Operator unlock for JS dialogs (alert/confirm/prompt/beforeunload). Default
+   * false: dialogs are auto-**dismissed** (a `confirm` returns false, a `prompt`
+   * returns null), so a destructive flow gated behind a confirm cannot proceed.
+   * When true, dialogs are auto-**accepted**. Operator-set, never a tool input. */
+  allowDialogs?: boolean
 }
 
 function hostOf(url: string): string | undefined {
@@ -40,10 +45,17 @@ function hostOf(url: string): string | undefined {
 export class BrowserGate {
   private readonly allowUnsafe: boolean
   private readonly allowedHosts: Set<string>
+  private readonly allowDialogs: boolean
 
   constructor(options: BrowserGateOptions = {}) {
     this.allowUnsafe = options.allowUnsafe ?? false
     this.allowedHosts = new Set((options.allowedHosts ?? []).map((h) => h.toLowerCase()))
+    this.allowDialogs = options.allowDialogs ?? false
+  }
+
+  /** True when the operator has unlocked accepting JS dialogs (else dismiss). */
+  allowsDialogs(): boolean {
+    return this.allowDialogs
   }
 
   /** True when the URL's host is on the operator allowlist. */

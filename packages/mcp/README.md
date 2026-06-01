@@ -79,9 +79,11 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
 **Safety (all operator-set via `STRUMMER_BROWSER_*` env, never tool inputs):**
 navigation/mutation deny-by-default (`ALLOW_UNSAFE`, `ALLOWED_HOSTS`); a **mandatory**
 DNS-pinning SSRF proxy (loopback forced through it; `ALLOW_PRIVATE` opt-in);
-service-workers blocked + WebRTC egress neutralized; secret redaction across every
-artifact + the trace.zip; `{{secret:NAME}}` fill + origin-scoped `httpCredentials`
-(`HTTP_USERNAME/PASSWORD/ORIGIN`); caps `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/
+service-workers blocked + WebRTC egress neutralized; JS dialogs dismissed by
+default (`ALLOW_DIALOGS` to accept; each recorded, redacted, on the step result);
+secret redaction across every artifact + the trace.zip; `{{secret:NAME}}` fill +
+origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
+`MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/
 `IDLE_TTL_MS`; trace capture + `storageState` capture (`ALLOW_STORAGE_STATE`) +
 screenshot capture (`ALLOW_SCREENSHOTS`) all off unless explicitly enabled.
 

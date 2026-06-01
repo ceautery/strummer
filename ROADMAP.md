@@ -126,8 +126,11 @@ Staged below; aspirational items are scheduled, not cut.
       host allowlist; mutating interactions **dry-run by default** (one-shot route
       captures + aborts the would-be request, returns a preview) and execute only
       with `allowUnsafe` + an allowlisted host; hard-deny otherwise. Config is
-      operator-set, never an agent input. (Downloads/uploads/dialog/auth gating +
-      postData redaction land with the artifact/SSRF slices.)
+      operator-set, never an agent input. _(Dialog gating now lands: `PageDriver`
+      installs `page.on('dialog')` → dismiss-by-default + record `DialogEvent`s onto
+      `StepResult.dialogs`; `BrowserGate.allowDialogs` (bin `ALLOW_DIALOGS`) flips to
+      accept. Auth = origin-scoped `httpCredentials` (done). Downloads/uploads gating
+      still scheduled — see the Downloads-quarantine bullet.)_
 - [x] **Factor `@strummer/safety`** — shared SSRF range classifier (`isBlockedIp`/
       `isBlockedHost`/`isBlockedHostLiteral`, `ipaddr.js`, fail-closed) +
       `resolveAndPin` (DNS resolve → refuse blocked range → pinned IP) + the
@@ -203,6 +206,8 @@ Staged below; aspirational items are scheduled, not cut.
       `page.route` for offline determinism.
 - [ ] **Downloads quarantine** dir + saveAs path validation; uploads confined to
       an operator upload-allowlist dir; download/upload as gated structured events.
+      _(Dialog gating — the sibling page-event safety primitive — shipped: dismiss
+      by default, operator `ALLOW_DIALOGS` to accept, recorded as `DialogEvent`s.)_
 - [ ] **Container hardening ADR** — seccomp profile + dropped caps + read-only FS
       + non-root by default; `--no-sandbox` as documented operator-gated fallback;
       disable WebRTC/QUIC in the hardened profile.

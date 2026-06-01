@@ -21,6 +21,7 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>MCP</title></head><
   <input id="pw" type="text" aria-label="Secret">
   <button id="go">Submit</button>
   <button id="login">Login</button>
+  <button id="del">Delete</button>
   <script>
     document.cookie = 'sid=secret-cookie'
     localStorage.setItem('token', 'secret-cookie')
@@ -28,6 +29,7 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>MCP</title></head><
       fetch('/submit?token=hunter2-secret', { method: 'POST', body: 'x=1' }).catch(() => {}))
     document.getElementById('login').addEventListener('click', () =>
       fetch('/login', { method: 'POST', body: 'pw=' + document.getElementById('pw').value }).catch(() => {}))
+    document.getElementById('del').addEventListener('click', () => confirm('Remove hunter2-secret?'))
   </script>
 </body></html>`
 
@@ -62,10 +64,12 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     now?: () => number
     allowStorageState?: boolean
     allowScreenshots?: boolean
+    allowDialogs?: boolean
   }) {
     const gate = new BrowserGate({
       allowUnsafe: config.allowUnsafe,
       allowedHosts: config.allowedHosts ?? ['127.0.0.1'],
+      allowDialogs: config.allowDialogs,
     })
     const store = new ArtifactStore(mkdtempSync(join(baseDir, 'store-')))
     const secrets = new Map([['pw', 'hunter2-secret']])
@@ -357,6 +361,50 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const res = await call(client, 'browser_screenshot', { sessionId })
     expect(res.isError).toBe(true)
     expect(JSON.stringify(res.content)).toMatch(/not enabled/i)
+    await client.close()
+  })
+
+  it('dismisses a JS dialog by default; accepts + records it (redacted) when unlocked', async () => {
+    type StepWithDialogs = StepSC & {
+      dialogs?: { type: string; message: string; accepted: boolean }[]
+    }
+    // default: dialogs dismissed (allowUnsafe so the click executes, allowDialogs off)
+    const dismissCx = await connect({ allowUnsafe: true })
+    const dis = (await call(dismissCx.client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const disNav = (
+      await call(dismissCx.client, 'browser_navigate', {
+        sessionId: dis.sessionId,
+        url: baseUrl,
+      })
+    ).structuredContent as StepSC
+    const disClick = (
+      await call(dismissCx.client, 'browser_click', {
+        sessionId: dis.sessionId,
+        ref: refByName(disNav.snapshot, 'button', 'Delete'),
+      })
+    ).structuredContent as StepWithDialogs
+    expect(disClick.dialogs?.[0]?.accepted).toBe(false)
+    expect(disClick.dialogs?.[0]?.type).toBe('confirm')
+    await dismissCx.client.close()
+
+    // operator unlock: dialogs accepted, message redacted (carries a secret)
+    const { client } = await connect({ allowUnsafe: true, allowDialogs: true })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
+      .structuredContent as StepSC
+    const res = (
+      await call(client, 'browser_click', {
+        sessionId,
+        ref: refByName(nav.snapshot, 'button', 'Delete'),
+      })
+    ).structuredContent as StepWithDialogs
+    expect(res.dialogs?.[0]?.accepted).toBe(true)
+    expect(res.dialogs?.[0]?.message).toBe('Remove [redacted:pw]?')
+    expect(JSON.stringify(res)).not.toContain('hunter2-secret')
     await client.close()
   })
 

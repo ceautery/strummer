@@ -1,4 +1,4 @@
-import type { Locator, Page, Route } from 'playwright-core'
+import type { Dialog, Locator, Page, Route } from 'playwright-core'
 import type { ArtifactStore } from './artifacts.js'
 import type { BrowserGate } from './gate.js'
 import { captureSnapshot, diffSnapshots, type RefDescriptor, type Snapshot } from './snapshot.js'
@@ -11,6 +11,15 @@ export interface WouldRequest {
   method: string
   url: string
   postData?: string
+}
+
+/** A JS dialog the page raised during a step (alert/confirm/prompt/beforeunload). */
+export interface DialogEvent {
+  type: string
+  /** The dialog text, redacted. */
+  message: string
+  /** True when the operator unlocked dialogs (accepted); false when dismissed. */
+  accepted: boolean
 }
 
 export interface StepResult {
@@ -34,6 +43,9 @@ export interface StepResult {
    * the gate authorizes on the *document* host, so this surfaces a would-be
    * egress to a different host for accurate operator review. */
   crossOriginEgress?: boolean
+  /** JS dialogs the page raised during this step (handled deny-by-default —
+   * dismissed unless the operator unlocked dialogs). Omitted when none fired. */
+  dialogs?: DialogEvent[]
 }
 
 export interface PageDriverOptions {
@@ -99,6 +111,8 @@ export class PageDriver {
   private screenshotIndex = 0
   private readonly gate: BrowserGate | undefined
   private readonly redact: (value: string) => string
+  /** Dialogs raised since the last `settle()`, drained onto its StepResult. */
+  private pendingDialogs: DialogEvent[] = []
 
   constructor(
     private readonly page: Page,
@@ -106,6 +120,31 @@ export class PageDriver {
   ) {
     this.gate = opts.gate
     this.redact = opts.redact ?? ((v) => v)
+    // Deny-by-default dialog handling. Registering ANY dialog listener overrides
+    // Playwright's auto-dismiss, so this handler always resolves the dialog
+    // (dismiss, or accept when the operator unlocked it) — a missing handler
+    // would hang the page. Guarded for the raw unit layer where `page` is a stub.
+    if (typeof this.page.on === 'function') {
+      this.page.on('dialog', (dialog) => {
+        void this.handleDialog(dialog)
+      })
+    }
+  }
+
+  /** Dismiss (default) or accept (operator-unlocked) a dialog, recording it. */
+  private async handleDialog(dialog: Dialog): Promise<void> {
+    const accepted = this.gate?.allowsDialogs() ?? false
+    this.pendingDialogs.push({
+      type: dialog.type(),
+      message: this.redact(dialog.message()),
+      accepted,
+    })
+    try {
+      if (accepted) await dialog.accept()
+      else await dialog.dismiss()
+    } catch {
+      // the dialog may already be handled (e.g. page closing) — safe to ignore
+    }
   }
 
   /** The current snapshot's ref → descriptor map (empty before the first capture). */
@@ -155,6 +194,7 @@ export class PageDriver {
     const prev = this.current
     const next = await this.capture()
     this.current = next
+    const dialogs = this.pendingDialogs.splice(0)
     return {
       action,
       ...(ref !== undefined ? { ref } : {}),
@@ -162,6 +202,7 @@ export class PageDriver {
       snapshot: next.text,
       truncated: next.truncated,
       ...(next.fullHandle !== undefined ? { snapshotHandle: next.fullHandle } : {}),
+      ...(dialogs.length ? { dialogs } : {}),
     }
   }
 

@@ -44,6 +44,8 @@ export interface BrowserBinConfig {
   allowUnsafe: boolean
   allowedHosts: string[]
   allowPrivate: boolean
+  /** Whether JS dialogs are accepted (true) or dismissed (false, default). */
+  allowDialogs: boolean
   headless: boolean
   noSandbox: boolean
   capture: { trace: boolean; console: boolean; network: boolean }
@@ -126,6 +128,7 @@ export async function buildBrowserServerFromEnv(
     .map((h) => h.trim())
     .filter(Boolean)
   const allowPrivate = bool(env.STRUMMER_BROWSER_ALLOW_PRIVATE)
+  const allowDialogs = bool(env.STRUMMER_BROWSER_ALLOW_DIALOGS)
   const allowStorageState = bool(env.STRUMMER_BROWSER_ALLOW_STORAGE_STATE)
   const allowScreenshots = bool(env.STRUMMER_BROWSER_ALLOW_SCREENSHOTS)
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
@@ -168,7 +171,7 @@ export async function buildBrowserServerFromEnv(
     ...(noSandbox ? ['--no-sandbox'] : []),
   ]
 
-  const gate = new BrowserGate({ allowUnsafe, allowedHosts })
+  const gate = new BrowserGate({ allowUnsafe, allowedHosts, allowDialogs })
   const store = new ArtifactStore(artifactsDir)
   const manager = new BrowserManager({
     launch: () => chromium.launch({ headless, proxy: { server: proxy.url }, args: launchArgs }),
@@ -197,6 +200,7 @@ export async function buildBrowserServerFromEnv(
     allowUnsafe,
     allowedHosts,
     allowPrivate,
+    allowDialogs,
     headless,
     noSandbox,
     capture,

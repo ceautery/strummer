@@ -7,6 +7,7 @@ import { type Browser, type BrowserContext, chromium, type Page } from 'playwrig
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ArtifactStore } from './artifacts.js'
 import { PageDriver } from './driver.js'
+import { BrowserGate } from './gate.js'
 
 // Real-browser step sequences (navigate → act → re-snapshot, several times) run
 // longer than Vitest's 5s default.
@@ -19,11 +20,18 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>Steps</title></head
   <button id="add">Add</button>
   <ul id="list"></ul>
   <button id="later">Later</button>
+  <button id="del">Delete</button>
   <script>
     const $ = (id) => document.getElementById(id)
     $('add').addEventListener('click', () => {
       const li = document.createElement('li')
       li.textContent = $('name').value || 'item'
+      $('list').appendChild(li)
+    })
+    $('del').addEventListener('click', () => {
+      const ok = confirm('Delete everything?')
+      const li = document.createElement('li')
+      li.textContent = ok ? 'deleted' : 'kept'
       $('list').appendChild(li)
     })
     $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('add').click() })
@@ -178,5 +186,58 @@ describe('PageDriver — step tools (real headless chromium)', () => {
     expect(result.handle).toBeUndefined()
     expect(result.byteSize).toBeGreaterThan(0)
     expect(result.contentType).toBe('image/png')
+  })
+
+  async function gatedDriver(gate: BrowserGate): Promise<PageDriver> {
+    const page = await context.newPage()
+    const driver = new PageDriver(page, { gate })
+    await driver.navigate(baseUrl)
+    return driver
+  }
+
+  it('dismisses a confirm dialog by default and records the event', async () => {
+    // allowUnsafe so the click executes (not dry-run); allowDialogs stays off
+    const gate = new BrowserGate({ allowUnsafe: true, allowedHosts: ['127.0.0.1'] })
+    const driver = await gatedDriver(gate)
+    const result = await driver.click(refFor(driver, 'button', 'Delete'))
+    expect(result.dialogs).toEqual([
+      { type: 'confirm', message: 'Delete everything?', accepted: false },
+    ])
+    // dismissed → confirm() returned false → 'kept'
+    expect(result.snapshot).toContain('kept')
+    expect(result.snapshot).not.toContain('deleted')
+  })
+
+  it('accepts a confirm dialog when the operator unlocked dialogs', async () => {
+    const gate = new BrowserGate({
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'],
+      allowDialogs: true,
+    })
+    const driver = await gatedDriver(gate)
+    const result = await driver.click(refFor(driver, 'button', 'Delete'))
+    expect(result.dialogs?.[0]).toEqual({
+      type: 'confirm',
+      message: 'Delete everything?',
+      accepted: true,
+    })
+    expect(result.snapshot).toContain('deleted')
+  })
+
+  it('redacts a dialog message before it surfaces', async () => {
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowUnsafe: true, allowedHosts: ['127.0.0.1'], allowDialogs: true }),
+      redact: (v) => v.replace('everything', '[redacted]'),
+    })
+    await driver.navigate(baseUrl)
+    const result = await driver.click(refFor(driver, 'button', 'Delete'))
+    expect(result.dialogs?.[0]?.message).toBe('Delete [redacted]?')
+  })
+
+  it('omits the dialogs field on a step that triggered none', async () => {
+    const driver = await freshDriver()
+    const result = await driver.snapshot()
+    expect(result.dialogs).toBeUndefined()
   })
 })

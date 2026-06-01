@@ -89,10 +89,19 @@ against in-process fixtures):
    is unredactable pixels, so it is gated like the trace.zip; the run-artifact
    resource serves PNGs as a base64 blob (`image/png` → binary). Bin-wired via
    `STRUMMER_BROWSER_ALLOW_SCREENSHOTS` (default off).
+19. **Dialog gating — deny-by-default:** `PageDriver` installs a `page.on('dialog')`
+   handler that **dismisses** alert/confirm/prompt/beforeunload by default (a
+   `confirm` returns false, so a destructive flow gated behind it cannot proceed)
+   and records each as a `DialogEvent {type, message(redacted), accepted}` drained
+   onto the triggering step's `StepResult.dialogs`. Operator opt-in
+   `BrowserGate.allowDialogs` flips to **accept**; bin-wired via
+   `STRUMMER_BROWSER_ALLOW_DIALOGS` (default off). Registering the handler overrides
+   Playwright's auto-dismiss, so the page never hangs.
 
-**230 TS + 45 Py tests green; committed to `main`.** **Next action:** downloads/
-uploads/dialog/auth gating, and (deferred) the human **`strummer browser` CLI**.
-See the detailed "Next action" section below + ROADMAP Phase 3.
+**237 TS + 45 Py tests green; committed to `main`.** **Next action:** downloads/
+uploads gating (auth is already covered by origin-scoped `httpCredentials`), and
+(deferred) the human **`strummer browser` CLI**. See the detailed "Next action"
+section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -379,9 +388,15 @@ inlined; does NOT re-snapshot so refs survive); MCP `browser_screenshot` gated
 (same posture as the trace.zip); the resource serves PNGs as a base64 blob;
 bin-wired via `STRUMMER_BROWSER_ALLOW_SCREENSHOTS` (default off).
 
-**Next (later Phase 3):** downloads/uploads/dialog/auth gating; and the deferred
-human **`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before
-each commit.
+**Dialog gating: DONE.** `PageDriver` installs `page.on('dialog')` →
+dismiss-by-default (override of Playwright's auto-dismiss, so the page never hangs)
++ record `DialogEvent {type, message(redacted), accepted}` onto
+`StepResult.dialogs`; `BrowserGate.allowDialogs` flips to accept; bin-wired via
+`STRUMMER_BROWSER_ALLOW_DIALOGS` (default off).
+
+**Next (later Phase 3):** downloads + uploads gating (auth = origin-scoped
+`httpCredentials`, done); and the deferred human **`strummer browser` CLI**. TDD
+red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

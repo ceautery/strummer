@@ -39,6 +39,12 @@ describe('BrowserGate policy (pure, operator-set)', () => {
       ),
     ).toThrow(GateError)
   })
+
+  it('allowsDialogs: deny-by-default, true only when the operator unlocks it', () => {
+    expect(new BrowserGate().allowsDialogs()).toBe(false)
+    expect(new BrowserGate({ allowedHosts: ['example.com'] }).allowsDialogs()).toBe(false)
+    expect(new BrowserGate({ allowDialogs: true }).allowsDialogs()).toBe(true)
+  })
 })
 
 describe('BrowserGate × PageDriver (real headless chromium)', () => {
