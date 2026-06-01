@@ -465,6 +465,11 @@ Two independent tracks, then the test-quality chain, then LSP last:
         removed/added lines whose content starts with `-`/`+`, and handles multi-hunk/
         multi-file (incl. prefix-less, no `diff --git`), new/deleted files, and the
         no-newline marker. Pure.
+  - [x] **Slice 3 — `uncoveredInDiff`.** Joins the two halves: parse the diff → match each
+        file to its `coverage-final.json` entry → classify → report every executable-but-unhit
+        new line across the diff + a per-file breakdown + aggregate summary. Path
+        reconciliation: exact `<projectRoot>/<path>` when given, else a **unique** path-suffix
+        match (refuses an ambiguous >1-key match); cross-platform path normalization. Pure.
   - [ ] live `runScoped` — run only the tests a diff touches. Needs a **child-process**
         boundary (single root vitest.config → no Vitest-in-Vitest); pin `istanbul-lib-coverage`
         when `CoverageMap` merging/summaries are needed.

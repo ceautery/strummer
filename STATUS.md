@@ -86,7 +86,11 @@ classifies a diff's added lines against an istanbul `FileCoverage` as covered / 
 the no-statement `nonExecutable` third state + a guard test address ADR 0010's documented
 correctness trap. **Slice 2 landed:** `parseUnifiedDiff` extracts per-file new-side added
 lines from a unified diff (count-tracking hunk state machine; handles multi-file/prefix-less/
-new/deleted files) to feed the differ. 471 TS + 45 Py green.)_
+new/deleted files). **Slice 3 landed:** `uncoveredInDiff` joins the two halves — parse the
+diff → match each file to its `coverage-final.json` entry (path reconciliation: exact
+`<projectRoot>/<path>` else a unique path-suffix match, ambiguous refused) → classify →
+report every executable-but-unhit new line + per-file breakdown + aggregate summary. The
+pure offline core of the forgotten-assertion catch is now complete. 478 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -419,13 +423,12 @@ CVSS-vector → bucket scoring is DONE** (pure `cvssV3BaseScore`; `matchVulnerab
 falls back to the CVSS vector's bucket when no qualitative GHSA string is present).
 **Next for deps:** the staged **Python/PyPI + RubyGems advisory adapters** (the non-npm
 ecosystems — `audit_project` is npm-only today; `detectInstalledVersion` already dispatches
-by ecosystem). **Track A `@strummer/coverage` is open** — slice 1 (`uncoveredNewLines` differ) + slice 2
-(`parseUnifiedDiff`, diff → new-side added lines) landed. Next coverage slices: a small
-**integrator** pairing the parsed diff with `coverage-final.json` (path normalization —
-diff repo-relative paths vs istanbul absolute keys), then the live **`runScoped`**
-child-process runner (single root vitest.config ⇒ no Vitest-in-Vitest; pin
-`istanbul-lib-coverage` when `CoverageMap` merging is needed) behind a paired
-deny-by-default operator gate, then its MCP surface. In parallel, the
+by ecosystem). **Track A `@strummer/coverage` is open** — slices 1–3 landed (`uncoveredNewLines` differ,
+`parseUnifiedDiff`, and the `uncoveredInDiff` integrator) — **the pure offline core of the
+forgotten-assertion catch is complete.** Next coverage slices: the live **`runScoped`**
+child-process runner (run only the tests a diff touches; single root vitest.config ⇒ no
+Vitest-in-Vitest; pin `istanbul-lib-coverage` when `CoverageMap` merging is needed) behind a
+paired deny-by-default operator gate, then its MCP surface. In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
