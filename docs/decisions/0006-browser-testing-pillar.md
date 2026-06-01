@@ -132,9 +132,11 @@ the hardened profile disables WebRTC (scheduled).
 > classifier gained three classes — `global` / `private` (loopback/RFC1918/CGNAT/
 > unique-local) / `blocked` (link-local incl. 169.254.169.254 metadata,
 > multicast, …) — and an operator `allowPrivate` opt-in permitting `private`
-> targets **but never `blocked` ones**. Default blocks both. Scheduled:
-> `serviceWorkers:'block'`, WebRTC/QUIC disable, and wiring the proxy into the
-> server bin's launch.
+> targets **but never `blocked` ones**. Default blocks both. _(Update 2026-06-01:
+> the proxy is now wired into the bin's launch as mandatory; `serviceWorkers:
+> 'block'` is a `BrowserManager` context default; WebRTC is neutralized via the
+> launch arg `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`. QUIC
+> rides the same proxied path; a dedicated QUIC-disable flag is a future refinement.)_
 
 > **Update (2026-06-01) — MCP surface + server bin (grounded by the
 > `browser-mcp-design` fan-out: 3 designs → 2 adversarial critics → synthesis).**

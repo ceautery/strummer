@@ -141,8 +141,10 @@ Staged below; aspirational items are scheduled, not cut.
       connect to the pinned IP), so allowlisted-hostname rebinding is refused
       (HTTP→502 / tunnel refused); redirects re-checked (each hop is a fresh
       request). Operator `allowPrivate` opt-in permits loopback/RFC1918 for
-      local-app testing but never link-local/metadata. (`serviceWorkers:'block'` +
-      WebRTC disable + wiring the proxy into the server bin still scheduled.)
+      local-app testing but never link-local/metadata. _(Now wired into the bin's
+      launch as mandatory; `serviceWorkers:'block'` is a `BrowserManager` context
+      default and WebRTC is neutralized via
+      `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` — `9207224`.)_
 - [x] **Secret boundary** (ADR 0006 §6) — `{{secret:NAME}}` fill resolution
       server-side at the fill boundary (fail-closed, bin-wired from
       `STRUMMER_BROWSER_SECRET_*`); origin-scoped `httpCredentials` applied per

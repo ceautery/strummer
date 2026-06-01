@@ -72,12 +72,16 @@ against in-process fixtures):
    `RunRecorder.stop` unzips the trace.zip (fflate), scrubs its text entries (JSONL
    metadata + DOM/sources snapshots), and re-zips before write; binary resources
    pass through. **ADR 0006 §6 secret boundary is now COMPLETE.**
+16. **Browser hardening — `serviceWorkers:'block'` + WebRTC** (`9207224`):
+   `BrowserManager` blocks service workers on every context (no SW cache/intercept
+   bypassing the Tier-1 SSRF layer); the bin adds
+   `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` (WebRTC limited to
+   proxied UDP — no P2P egress bypassing the SSRF proxy, no local-IP leak).
 
-**219 TS + 45 Py tests green; all pushed to `main`.** **Next action:**
-`serviceWorkers:'block'` + WebRTC disable (small hardening), downloads/uploads/
-dialog/auth gating, session wall-clock + max-pages, an on-demand screenshot step
-tool, and (deferred) the human **`strummer browser` CLI**. See the detailed "Next
-action" section below + ROADMAP Phase 3.
+**221 TS + 45 Py tests green; all pushed to `main`.** **Next action:** downloads/
+uploads/dialog/auth gating, session wall-clock + max-pages, an on-demand screenshot
+step tool, and (deferred) the human **`strummer browser` CLI**. See the detailed
+"Next action" section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -351,10 +355,12 @@ top of console/network (8b), dry-run preview (8a), snapshot (A1), and surface-re
 (Milestone B) redaction. Scheduled refinements (not blocking): HAR bodies;
 `storageState`/userDataDir **import** for operator login-reuse.
 
-**Next (later Phase 3):** `serviceWorkers:'block'` + WebRTC disable; downloads/
-uploads/dialog/auth gating; session wall-clock + max-pages; an on-demand screenshot
-step tool; and the deferred human **`strummer browser` CLI**. TDD red→green;
-`pnpm gate` 100% green before each commit.
+**Hardening — `serviceWorkers:'block'` + WebRTC: DONE (`9207224`).** SWs blocked on
+every context; WebRTC limited to proxied UDP via a launch arg.
+
+**Next (later Phase 3):** downloads/uploads/dialog/auth gating; session wall-clock +
+max-pages; an on-demand screenshot step tool; and the deferred human
+**`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 
