@@ -2,7 +2,9 @@
 node_modules/
 dist/
 build/
+# Coverage report output anywhere — but NOT the @strummer/coverage source package.
 coverage/
+!packages/coverage/
 *.tsbuildinfo
 .turbo/
 .pnpm-store/
