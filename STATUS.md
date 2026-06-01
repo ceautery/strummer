@@ -6,13 +6,14 @@
 ## Current phase
 
 **Phase 3 — Browser/UI testing pillar: ENGINE + SAFETY + ARTIFACT PIPELINE + MCP
-SURFACE + HUMAN CLI COMPLETE.** _(Latest: the **container-hardening ADR** (item 32,
-`docs/decisions/0007`) documenting the deployment/kernel boundary behind the
-in-process spine; on top of **vision/coordinate caps** (item 31) and **video
-capture** (item 30). Remaining tail: visual regression (deferred, flake-prone),
-developer live-view (needs Xvfb/VNC infra), and multi-engine — **blocked in this dev
-container** (only chromium binaries; `playwright-core` is the thin core with no
-`install` CLI), needs the CI/Docker image's firefox/webkit.)_ The agent surface AND the human `strummer browser`
+SURFACE + HUMAN CLI COMPLETE.** _(Latest: **visual regression** (item 33) —
+`compareScreenshots` (pixelmatch) + `browser_visual_compare`, deterministic engine,
+committed baselines deferred; on top of the **container-hardening ADR** (item 32),
+**vision/coordinate caps** (item 31), and **video capture** (item 30). Remaining
+tail: developer live-view (headed needs Xvfb/VNC; headless CDP finicky with
+playwright-core) and multi-engine — **blocked in this dev container** (only chromium
+binaries; `playwright-core` is the thin core with no `install` CLI), needs the
+CI/Docker image's firefox/webkit.)_ The agent surface AND the human `strummer browser`
 CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
 auth) is done, plus trace-query, browser assertions, Lighthouse perf,
 **network heavy mode (HAR capture + replay)**, and **persisted `.bru` browser-step
@@ -265,16 +266,31 @@ against in-process fixtures):
    code/tests) — extends ADR 0006 §7's one-liner; referenced from ARCHITECTURE §10 +
    ROADMAP. The dev harness (`docker/`) stays separate (gitignored).
 
-**319 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
-aspirational Phase-3 tail — **visual regression** (the flake-prone one), **developer
-live-view** (the headed path needs Xvfb/VNC infra not in this container; the headless
-`--remote-debugging-port` path is finicky alongside playwright-core's own CDP), and
-**multi-engine** (firefox/webkit; **blocked in this container** — only chromium is
-installed, so it needs the CI/Docker image's binaries) — or start **Phase 4**
-(cross-cutting verification: LSP bridge, impact-scoped test runner, mutation/flaky
-detection). The deferred `browser_run_flow` follow-up (item 29), **video capture**
-(item 30), **vision/coordinate caps** (item 31), and the **container-hardening ADR**
-(item 32, ADR 0007) are now done. See the detailed "Next action" section below + ROADMAP.
+33. **Visual regression — `compareScreenshots` engine + `browser_visual_compare`.**
+   `@strummer/browser` `visual.ts` (pixelmatch 7.2.0 + pngjs 7.0.0): a **pure,
+   deterministic** pixel diff — diff count/ratio, `maxDiffPixelRatio`/`maxDiffPixels`
+   budget, pixel-rect `mask[]` (dynamic regions), size-mismatch hard-fail, diff PNG.
+   `PageDriver.screenshot()` gained stable-capture options (`animations:'disabled'`/
+   `caret:'hide'`/`clip`). MCP `browser_visual_compare` (operator `baselineDir`,
+   **deny-by-default**): captures the current page, diffs vs `<name>.png`, stores the
+   diff PNG by `visual-diff-s<n>` handle on mismatch; `update:true` records a baseline
+   (**separately** operator-gated `allowBaselineUpdate` — an agent can't rewrite the
+   golden). Bin: `STRUMMER_BROWSER_BASELINE_DIR` + `_ALLOW_BASELINE_UPDATE`. The
+   flake-prone part — **committing** cross-platform baselines — is deferred (operator-
+   managed, generated in the pinned Docker image keyed by name/browser/platform), so
+   the green gate stays deterministic: tested with in-memory PNGs + a real-chromium
+   **self-captured** baseline (nothing committed to the repo).
+
+**328 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+aspirational Phase-3 tail — **developer live-view** (the headed path needs Xvfb/VNC
+infra not in this container; the headless `--remote-debugging-port` path is finicky
+alongside playwright-core's own CDP) and **multi-engine** (firefox/webkit; **blocked
+in this container** — only chromium is installed, so it needs the CI/Docker image's
+binaries) — or start **Phase 4** (cross-cutting verification: LSP bridge,
+impact-scoped test runner, mutation/flaky detection). The deferred `browser_run_flow`
+follow-up (item 29), **video capture** (item 30), **vision/coordinate caps** (item
+31), the **container-hardening ADR** (item 32, ADR 0007), and **visual regression**
+(item 33) are now done. See the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -621,14 +637,15 @@ caller `{{var}}`s + operator-resolved `{{secret:NAME}}` (fail-closed) + surface
 error redaction. Deny-by-default via `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface
 now at parity with `strummer browser run`.
 
-**Next (later Phase 3):** the aspirational tail only — visual regression (the
-flake-prone one; baselines in the pinned Docker image), developer live-view (the
-headed path needs Xvfb/VNC infra not present here), and multi-engine (firefox/webkit;
-**blocked in this dev container** — only chromium binaries are installed and
-`playwright-core` has no `install` CLI, so this needs the CI/Docker image's engines).
-Video capture (item 30), vision/coordinate caps (item 31), and the container-hardening
-ADR (item 32, ADR 0007) are now **done**. None blocking. TDD red→green; `pnpm gate`
-100% green before each commit.
+**Next (later Phase 3):** the aspirational tail only — developer live-view (the
+headed path needs Xvfb/VNC infra not present here; the headless
+`--remote-debugging-port` path is finicky alongside playwright-core's own CDP) and
+multi-engine (firefox/webkit; **blocked in this dev container** — only chromium
+binaries are installed and `playwright-core` has no `install` CLI, so this needs the
+CI/Docker image's engines). Video capture (item 30), vision/coordinate caps (item
+31), the container-hardening ADR (item 32, ADR 0007), and visual regression (item 33,
+committed baselines deferred) are now **done**. None blocking. TDD red→green;
+`pnpm gate` 100% green before each commit.
 
 ---
 

@@ -285,10 +285,21 @@ Staged below; aspirational items are scheduled, not cut.
       operator-gated **headed profile** (Xvfb → x11vnc → noVNC) for in-browser
       watching. Default remains headless; for *reviewing* a run, the trace viewer
       + video are the deterministic, CI-friendly path.
-- [ ] **Visual regression** — `toHaveScreenshot` (pixelmatch) default with
-      `animations:'disabled'`/`caret:'hide'`/`mask[]`/`maxDiffPixelRatio`;
-      baselines generated in the pinned Docker image keyed by (name,browser,
-      platform); `odiff` opt-in for large corpora.
+- [x] **Visual regression** — `@strummer/browser` `visual.ts` `compareScreenshots`
+      (pixelmatch 7.2.0 + pngjs 7.0.0): a **pure, deterministic** pixel diff —
+      diff-pixel count/ratio, `maxDiffPixelRatio`/`maxDiffPixels` budget, pixel-rect
+      `mask[]` for dynamic regions, size-mismatch hard-fail, diff PNG. `PageDriver.
+      screenshot()` gains stable-capture options (`animations:'disabled'`/
+      `caret:'hide'`/`clip`). MCP `browser_visual_compare` (operator `baselineDir`,
+      deny-by-default): captures the current page, diffs vs the named baseline, stores
+      the diff PNG by `visual-diff-s<n>` handle on mismatch; `update:true` records a
+      baseline (separately operator-gated — an agent can't rewrite the golden). Bin:
+      `STRUMMER_BROWSER_BASELINE_DIR` + `STRUMMER_BROWSER_ALLOW_BASELINE_UPDATE`. The
+      flake-prone part — **committing** cross-platform baselines — is deferred: they
+      are operator-managed, generated in the pinned Docker image keyed by (name,
+      browser, platform). `odiff` opt-in for large corpora is future. Tested
+      deterministically (in-memory PNGs + a real-chromium self-captured baseline, so
+      nothing is committed to the repo).
 - [x] **`.bru` + sidecar persistence** for replayable browser step flows
       (semantic locators, not persisted refs) — mirrors ADR 0004. `flow.ts`: a
       Bruno-openable `<name>.bru` (meta) + `<name>.strummer.yml` sidecar holding

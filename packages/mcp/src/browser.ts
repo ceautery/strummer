@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
   type ArtifactStore,
   auditA11y,
   type BrowserGate,
   type BrowserManager,
+  compareScreenshots,
   finalizeHar,
   finalizeVideo,
   type HarSummary,
@@ -93,6 +96,14 @@ export interface BrowserToolsOptions {
    * by handle, surfaced in the close reply. Unset ⇒ no video. Video is unredactable
    * pixels, so it is operator-gated off by default (same posture as the trace). */
   videoDir?: string
+  /** Operator visual-regression baseline dir. When set, `browser_visual_compare`
+   * resolves a baseline by name (`<name>.png` within this dir) and diffs the current
+   * page against it. Unset ⇒ the tool is disabled (deny-by-default). */
+  baselineDir?: string
+  /** Allow `browser_visual_compare {update:true}` to (over)write a baseline from the
+   * current page. Default false — recording a baseline is the operator's call (the
+   * accepted golden), so an agent cannot silently rewrite what "correct" means. */
+  allowBaselineUpdate?: boolean
   /** Run a Lighthouse perf audit on a URL, keyed by a server-minted `runId`. The
    * bin binds the operator chromium path + proxied/hardened flags + store + redactor
    * here; absent ⇒ `browser_perf_audit` reports it is not enabled. */
@@ -114,6 +125,8 @@ interface BrowserSession {
   tail: Promise<unknown>
   /** Monotonic a11y-audit counter → immutable `a11y-s<n>` handles. */
   auditIndex: number
+  /** Monotonic visual-diff counter → immutable `visual-diff-s<n>` handles. */
+  visualIndex: number
   recorderStopped: boolean
   /** HAR finalized (redact + store) once, on the first close/reap path to run. */
   harFinalized: boolean
@@ -174,6 +187,8 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   const allowStorageState = opts.allowStorageState ?? false
   const allowScreenshots = opts.allowScreenshots ?? false
   const allowVision = opts.allowVision ?? false
+  const baselineDir = opts.baselineDir
+  const allowBaselineUpdate = opts.allowBaselineUpdate ?? false
   const harDir = opts.harDir
   const videoDir = opts.videoDir
   const registry = new Map<string, BrowserSession>()
@@ -326,6 +341,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         lastUsedAt: now(),
         tail: Promise.resolve(),
         auditIndex: 0,
+        visualIndex: 0,
         recorderStopped: false,
         harFinalized: false,
         videoFinalized: false,
@@ -793,6 +809,126 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   )
 
   server.registerTool(
+    'browser_visual_compare',
+    {
+      title: 'Visual regression compare',
+      description:
+        'Capture the current page (animations frozen, caret hidden) and diff it pixel-for-pixel ' +
+        'against a stored baseline (by name) via pixelmatch. Returns pass + diff pixel count/ratio; on ' +
+        'a mismatch the diff image is stored by handle (visual-diff-s<n>). Pass maxDiffPixelRatio / ' +
+        'maxDiffPixels to set a budget and mask[] to ignore dynamic regions. With update:true (operator-' +
+        'gated) it (over)writes the baseline from the current page. Requires an operator baseline dir. ' +
+        'Assert on a diff budget, not exact pixels — baselines are platform/browser-specific.',
+      inputSchema: {
+        sessionId,
+        name: z
+          .string()
+          .describe('baseline name (resolved to <name>.png in the operator baseline dir)'),
+        update: z
+          .boolean()
+          .optional()
+          .describe('record/overwrite the baseline from the current page (operator-gated)'),
+        fullPage: z.boolean().optional().describe('capture the full scrollable page'),
+        threshold: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe('pixelmatch per-pixel color sensitivity 0..1 (default 0.1)'),
+        maxDiffPixelRatio: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe('max differing pixels as a ratio of total (default 0)'),
+        maxDiffPixels: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('max differing pixels (absolute)'),
+        mask: z
+          .array(
+            z.object({
+              x: z.number(),
+              y: z.number(),
+              width: z.number(),
+              height: z.number(),
+            }),
+          )
+          .optional()
+          .describe('rectangles (image pixels) to ignore — dynamic regions'),
+      },
+    },
+    async (args) => {
+      if (!baselineDir) {
+        throw new Error(
+          'visual regression is not enabled by the operator (no baseline dir configured)',
+        )
+      }
+      const session = requireSession(args.sessionId)
+      const file = join(baselineDir, `${args.name.replace(/[^\w.-]/g, '_')}.png`)
+      // Capture under the session mutex; the PNG lands in the store under its handle.
+      const shot = await enqueue(session, () =>
+        session.driver.screenshot({ fullPage: args.fullPage }),
+      )
+      const captured = shot.handle ? artifacts.get(shot.handle)?.body : undefined
+      if (!captured) {
+        throw new Error('screenshot capture failed')
+      }
+      if (args.update) {
+        if (!allowBaselineUpdate) {
+          throw new Error('baseline update is not enabled by the operator')
+        }
+        writeFileSync(file, captured)
+        return reply({
+          name: args.name,
+          updated: true,
+          pass: true,
+          baselineExists: true,
+          capturedHandle: shot.handle,
+        })
+      }
+      if (!existsSync(file)) {
+        return reply({
+          name: args.name,
+          pass: false,
+          baselineExists: false,
+          capturedHandle: shot.handle,
+          note: 'no baseline — re-run with update:true (operator-gated) to record one',
+        })
+      }
+      const result = compareScreenshots(captured, readFileSync(file), {
+        threshold: args.threshold,
+        maxDiffPixelRatio: args.maxDiffPixelRatio,
+        maxDiffPixels: args.maxDiffPixels,
+        mask: args.mask,
+      })
+      let diffHandle: string | undefined
+      if (!result.pass && result.diffPng) {
+        session.visualIndex += 1
+        diffHandle = artifacts.put(
+          session.runId,
+          `visual-diff-s${session.visualIndex}`,
+          result.diffPng,
+          'image/png',
+        )
+      }
+      return reply({
+        name: args.name,
+        baselineExists: true,
+        capturedHandle: shot.handle,
+        pass: result.pass,
+        diffPixels: result.diffPixels,
+        totalPixels: result.totalPixels,
+        diffPixelRatio: result.diffPixelRatio,
+        sizeMismatch: result.sizeMismatch,
+        ...(diffHandle ? { diffHandle } : {}),
+      })
+    },
+  )
+
+  server.registerTool(
     'browser_downloads',
     {
       title: 'Collect downloads',
@@ -1060,7 +1196,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     {
       title: 'Browser run artifact',
       description:
-        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / screenshot-s<n> / trace / console / network / har / video), by handle',
+        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / screenshot-s<n> / visual-diff-s<n> / trace / console / network / har / video), by handle',
     },
     (uri, variables) => {
       const runId = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId

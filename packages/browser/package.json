@@ -22,12 +22,17 @@
     "@axe-core/playwright": "4.11.3",
     "@strummer/assert": "workspace:*",
     "@strummer/safety": "workspace:*",
-    "axe-core": "4.11.4",
     "@usebruno/lang": "^0.36.0",
+    "axe-core": "4.11.4",
     "chrome-launcher": "1.2.1",
     "fflate": "^0.8.3",
     "lighthouse": "13.3.0",
+    "pixelmatch": "7.2.0",
     "playwright-core": "1.60.0",
+    "pngjs": "7.0.0",
     "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/pngjs": "6.0.5"
   }
 }

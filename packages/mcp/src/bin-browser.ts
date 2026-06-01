@@ -80,6 +80,10 @@ export interface BrowserBinConfig {
   replayDir?: string
   /** Operator persisted-flows dir (browser_list_flows/browser_run_flow denied when unset). */
   flowsDir?: string
+  /** Operator visual-regression baseline dir (browser_visual_compare denied when unset). */
+  baselineDir?: string
+  /** Whether browser_visual_compare may (over)write a baseline from the current page. */
+  allowBaselineUpdate: boolean
   /** Operator video-capture dir (no video recorded when unset). */
   videoDir?: string
   /** Optional recorded-video frame-size cap (both width + height required). */
@@ -166,6 +170,10 @@ export async function buildBrowserServerFromEnv(
   // Persisted flows: deny-by-default. An operator flows dir holds the replayable
   // .bru + sidecar flows browser_run_flow may run (by name, no caller path).
   const flowsDir = env.STRUMMER_BROWSER_FLOWS_DIR || undefined
+  // Visual regression: compare off unless an operator baseline dir is set; recording
+  // a baseline (the accepted golden) is separately gated so an agent can't rewrite it.
+  const baselineDir = env.STRUMMER_BROWSER_BASELINE_DIR || undefined
+  const allowBaselineUpdate = bool(env.STRUMMER_BROWSER_ALLOW_BASELINE_UPDATE)
   // Video capture: off unless the operator sets an output dir. Video is unredactable
   // pixels (gated off like the trace/screenshots). An optional size cap needs BOTH
   // dimensions; the session wall-clock cap (SESSION_MS) bounds duration.
@@ -267,6 +275,8 @@ export async function buildBrowserServerFromEnv(
     replayDir,
     flowsDir,
     videoDir,
+    baselineDir,
+    allowBaselineUpdate,
     runPerfAudit,
     capture,
     maxNodes,
@@ -301,6 +311,8 @@ export async function buildBrowserServerFromEnv(
     flowsDir,
     videoDir,
     videoSize,
+    baselineDir,
+    allowBaselineUpdate,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

@@ -96,7 +96,7 @@ vision and `ARCHITECTURE.md` for the technical design.
   embedding), `api` (API-testing engine: `.bru`, runner, assertions, secrets,
   safety, scripts), `browser` (browser/UI engine: lifecycle, ARIA-snapshot +
   step tools, action gate, two-tier SSRF, a11y audit, HAR capture/replay,
-  video capture, persisted `.bru` flows — on `playwright-core`),
+  video capture, visual regression, persisted `.bru` flows — on `playwright-core`),
   `safety` (shared SSRF range classifier + secret redaction, used by `api` +
   `browser`), `assert` (shared declarative-assertion operator core — `AssertionOp`
   + `applyOp` — used by `api` + `browser`), `mcp` (server), `cli` (terminal).

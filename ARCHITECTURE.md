@@ -306,6 +306,13 @@ packages/assert/   # NEW shared module: declarative-assertion operator core
 - **Audits.** `@axe-core/playwright` 4.11.3 (a11y, free read) + Lighthouse 13.3.0
   over CDP (perf); cheap summaries, full reports by handle; assert
   shape/thresholds, never exact perf scores.
+- **Visual regression.** `compareScreenshots` (**pixelmatch** 7.2.0 + **pngjs**
+  7.0.0) — a pure pixel diff with a `maxDiffPixelRatio`/`maxDiffPixels` budget +
+  pixel-rect masks; stable capture (`animations:'disabled'`/`caret:'hide'`).
+  `browser_visual_compare` is operator-gated (`BASELINE_DIR`; baseline writes behind
+  `ALLOW_BASELINE_UPDATE`), diff PNG by handle. **Committing** cross-platform
+  baselines is deferred — operator-managed, generated in the pinned Docker image
+  keyed by (name, browser, platform) — so the engine stays green-gate-deterministic.
 - **MCP surface:** snapshot/step tools, `browser_trace_query`, `audit.a11y`,
   `audit.perf`, `validate`-style assertions; CLI mirrors these. Browser binaries
   come from `mcr.microsoft.com/playwright:v1.60.0-noble` (lockstep with the pin).

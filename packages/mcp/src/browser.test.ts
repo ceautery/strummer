@@ -74,6 +74,8 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     replayDir?: string
     flowsDir?: string
     videoDir?: string
+    baselineDir?: string
+    allowBaselineUpdate?: boolean
     capture?: { trace?: boolean; console?: boolean; network?: boolean }
     runPerfAudit?: Parameters<typeof createBrowserServer>[0]['runPerfAudit']
   }) {
@@ -111,6 +113,8 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       replayDir: config.replayDir,
       flowsDir: config.flowsDir,
       videoDir: config.videoDir,
+      baselineDir: config.baselineDir,
+      allowBaselineUpdate: config.allowBaselineUpdate,
       capture: config.capture,
       runPerfAudit: config.runPerfAudit,
     })
@@ -184,6 +188,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_run_flow',
       'browser_vision_click',
       'browser_vision_move',
+      'browser_visual_compare',
       'browser_close_session',
     ]) {
       expect(names).toContain(t)
@@ -419,6 +424,88 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(click.snapshot).toContain('[ref=')
     expect(click.dryRun).toBeFalsy() // executed (allowUnsafe + allowlisted host)
     await client.close()
+  })
+
+  it('visual regression: update writes a baseline, re-compare passes, a change fails with a diff handle', async () => {
+    const baselineDir = mkdtempSync(join(baseDir, 'baseline-'))
+    const { client } = await connect({ baselineDir, allowBaselineUpdate: true, allowUnsafe: true })
+    const { sessionId, runId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+      runId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+
+    // 1) no baseline yet → record one with update:true
+    const created = (
+      await call(client, 'browser_visual_compare', { sessionId, name: 'home', update: true })
+    ).structuredContent as { updated: boolean; baselineExists: boolean }
+    expect(created.updated).toBe(true)
+    expect(existsSync(join(baselineDir, 'home.png'))).toBe(true)
+
+    // 2) re-compare the unchanged page → passes (allow a sliver for AA jitter)
+    const same = (
+      await call(client, 'browser_visual_compare', {
+        sessionId,
+        name: 'home',
+        maxDiffPixelRatio: 0.02,
+      })
+    ).structuredContent as { pass: boolean; diffPixelRatio: number; baselineExists: boolean }
+    expect(same.baselineExists).toBe(true)
+    expect(same.pass).toBe(true)
+    expect(same.diffPixelRatio).toBeLessThan(0.02)
+
+    // 3) change the page (type into the Secret field) → compare fails + a diff handle
+    const snap = (await call(client, 'browser_snapshot', { sessionId })).structuredContent as StepSC
+    const secretRef = refByName(snap.snapshot, 'textbox', 'Secret')
+    await call(client, 'browser_fill', { sessionId, ref: secretRef, value: 'VISIBLE-CHANGE' })
+    const changed = (await call(client, 'browser_visual_compare', { sessionId, name: 'home' }))
+      .structuredContent as { pass: boolean; diffPixels: number; diffHandle?: string }
+    expect(changed.pass).toBe(false)
+    expect(changed.diffPixels).toBeGreaterThan(0)
+    expect(changed.diffHandle).toBeDefined()
+    // the diff artifact resolves as a PNG blob
+    const res = await client.readResource({ uri: changed.diffHandle as string })
+    const content = res.contents[0] as { mimeType: string; blob?: string }
+    expect(content.mimeType).toBe('image/png')
+    expect(
+      Buffer.from(content.blob as string, 'base64')
+        .subarray(0, 4)
+        .toString('hex'),
+    ).toBe('89504e47')
+    expect(runId).toMatch(/[0-9a-f-]{36}/)
+    await client.close()
+  })
+
+  it('visual compare is deny-by-default; baseline update needs operator enablement', async () => {
+    // no baselineDir at all → disabled
+    const off = await connect({})
+    const s1 = (await call(off.client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(off.client, 'browser_navigate', { sessionId: s1.sessionId, url: baseUrl })
+    const denied = await call(off.client, 'browser_visual_compare', {
+      sessionId: s1.sessionId,
+      name: 'home',
+    })
+    expect(denied.isError).toBe(true)
+    expect(JSON.stringify(denied.content)).toMatch(/not enabled/i)
+    await off.client.close()
+
+    // baselineDir set but updates NOT enabled → update is refused
+    const baselineDir = mkdtempSync(join(baseDir, 'baseline-noup-'))
+    const noUp = await connect({ baselineDir }) // allowBaselineUpdate defaults off
+    const s2 = (await call(noUp.client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(noUp.client, 'browser_navigate', { sessionId: s2.sessionId, url: baseUrl })
+    const refused = await call(noUp.client, 'browser_visual_compare', {
+      sessionId: s2.sessionId,
+      name: 'home',
+      update: true,
+    })
+    expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused.content)).toMatch(/not enabled|update/i)
+    await noUp.client.close()
   })
 
   it('vision tools are deny-by-default: disabled unless the operator enabled vision', async () => {

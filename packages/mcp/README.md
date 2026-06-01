@@ -86,6 +86,13 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   a blind click on a *point* sidesteps the accessible-tree safety story; the click
   still goes through the mutation gate. Prefer ref-based `browser_click` whenever the
   element is in the snapshot.
+- **`browser_visual_compare`** — visual regression: capture the current page
+  (animations frozen, caret hidden) and pixel-diff it against a stored baseline (by
+  name) via pixelmatch. Returns pass + diff pixel count/ratio; the diff PNG is stored
+  by `visual-diff-s<n>` handle on a mismatch. `maxDiffPixelRatio`/`maxDiffPixels` set
+  the budget, `mask[]` ignores dynamic regions. Operator-gated (`BASELINE_DIR`);
+  `update:true` records the baseline only when `ALLOW_BASELINE_UPDATE` is set (an
+  agent can't rewrite the golden). Assert on a diff budget, not exact pixels.
 - **`browser_upload`** — set file(s) on a file-input ref. Deny-by-default: requires
   an operator upload-allowlist dir and confines every path within it (no traversal/
   absolute escape), so an agent can't upload arbitrary local files.
@@ -131,7 +138,8 @@ uploads confined to an operator allowlist dir (`UPLOAD_DIR`, denied when unset);
 HAR capture off unless an operator output dir (`HAR_DIR`) is set + HAR replay off
 unless a replay dir (`REPLAY_HAR_DIR`) is set, both deny-by-default; persisted-flow
 replay off unless a flows dir (`FLOWS_DIR`) is set; video capture off unless a video
-dir (`VIDEO_DIR`) is set; secret
+dir (`VIDEO_DIR`) is set; visual-regression compare off unless a baseline dir
+(`BASELINE_DIR`) is set + baseline writes gated behind `ALLOW_BASELINE_UPDATE`; secret
 redaction across every artifact + the trace.zip + the HAR; `{{secret:NAME}}` fill +
 origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
 `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/

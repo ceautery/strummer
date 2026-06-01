@@ -78,3 +78,9 @@ export {
   type TraceQueryResult,
 } from './trace.js'
 export { type FinalizeVideoOptions, finalizeVideo, type VideoSummary } from './video.js'
+export {
+  type CompareScreenshotsOptions,
+  compareScreenshots,
+  type VisualComparison,
+  type VisualMaskRect,
+} from './visual.js'

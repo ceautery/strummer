@@ -130,6 +130,14 @@ export interface ReplayResult {
 export interface ScreenshotOptions {
   /** Capture the full scrollable page rather than just the viewport. Default false. */
   fullPage?: boolean
+  /** Stabilize animations for a deterministic capture (default `'disabled'` — finite
+   * CSS animations/transitions are fast-forwarded to the end and held). For
+   * visual-regression captures this avoids mid-animation flake. */
+  animations?: 'disabled' | 'allow'
+  /** Hide the text caret for a deterministic capture (default `'hide'`). */
+  caret?: 'hide' | 'initial'
+  /** Capture only a sub-rectangle of the page (viewport pixels). */
+  clip?: { x: number; y: number; width: number; height: number }
 }
 
 export interface ScreenshotResult {
@@ -355,7 +363,14 @@ export class PageDriver {
    */
   async screenshot(options: ScreenshotOptions = {}): Promise<ScreenshotResult> {
     const fullPage = options.fullPage ?? false
-    const buf = await this.page.screenshot({ fullPage })
+    const buf = await this.page.screenshot({
+      fullPage,
+      // Default to a deterministic capture (animations frozen, caret hidden) so the
+      // same page yields the same pixels — what visual-regression comparison needs.
+      animations: options.animations ?? 'disabled',
+      caret: options.caret ?? 'hide',
+      ...(options.clip ? { clip: options.clip } : {}),
+    })
     this.screenshotIndex += 1
     const handle =
       this.opts.store && this.opts.runId !== undefined

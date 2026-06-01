@@ -157,6 +157,18 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     expect((await build({ STRUMMER_BROWSER_FLOWS_DIR: dir })).config.flowsDir).toBe(dir)
   })
 
+  it('disables visual compare unless STRUMMER_BROWSER_BASELINE_DIR is set; gates baseline update', async () => {
+    expect((await build({})).config.baselineDir).toBeUndefined()
+    expect((await build({})).config.allowBaselineUpdate).toBe(false)
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-baseline-'))
+    const on = await build({
+      STRUMMER_BROWSER_BASELINE_DIR: dir,
+      STRUMMER_BROWSER_ALLOW_BASELINE_UPDATE: '1',
+    })
+    expect(on.config.baselineDir).toBe(dir)
+    expect(on.config.allowBaselineUpdate).toBe(true)
+  })
+
   it('records no video unless STRUMMER_BROWSER_VIDEO_DIR is set; parses an optional size cap', async () => {
     expect((await build({})).config.videoDir).toBeUndefined()
     expect((await build({})).config.videoSize).toBeUndefined()
