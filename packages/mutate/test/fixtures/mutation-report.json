@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": { "high": 80, "low": 60 },
+  "files": {
+    "src/math.ts": {
+      "language": "typescript",
+      "source": "export const add = (a, b) => a + b\nexport const sub = (a, b) => a - b\n",
+      "mutants": [
+        {
+          "id": "0",
+          "mutatorName": "ArithmeticOperator",
+          "replacement": "a - b",
+          "status": "Killed",
+          "location": { "start": { "line": 1, "column": 30 }, "end": { "line": 1, "column": 35 } }
+        },
+        {
+          "id": "1",
+          "mutatorName": "ArithmeticOperator",
+          "replacement": "a + b",
+          "status": "Survived",
+          "location": { "start": { "line": 2, "column": 30 }, "end": { "line": 2, "column": 35 } }
+        },
+        {
+          "id": "2",
+          "mutatorName": "BlockStatement",
+          "replacement": "{}",
+          "status": "Timeout",
+          "location": { "start": { "line": 1, "column": 1 }, "end": { "line": 1, "column": 36 } }
+        }
+      ]
+    },
+    "src/util.ts": {
+      "language": "typescript",
+      "source": "export const noop = () => {}\nexport const dead = () => 42\n",
+      "mutants": [
+        {
+          "id": "3",
+          "mutatorName": "BooleanLiteral",
+          "status": "Survived",
+          "location": { "start": { "line": 1, "column": 1 }, "end": { "line": 1, "column": 2 } }
+        },
+        {
+          "id": "4",
+          "mutatorName": "ArrowFunction",
+          "status": "NoCoverage",
+          "location": { "start": { "line": 2, "column": 27 }, "end": { "line": 2, "column": 29 } }
+        },
+        {
+          "id": "5",
+          "mutatorName": "ObjectLiteral",
+          "status": "CompileError",
+          "location": { "start": { "line": 1, "column": 27 }, "end": { "line": 1, "column": 29 } }
+        },
+        {
+          "id": "6",
+          "mutatorName": "StringLiteral",
+          "status": "Ignored",
+          "location": { "start": { "line": 2, "column": 27 }, "end": { "line": 2, "column": 29 } }
+        }
+      ]
+    }
+  }
+}
