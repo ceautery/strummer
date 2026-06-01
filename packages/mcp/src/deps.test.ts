@@ -285,6 +285,46 @@ describe('strummer deps MCP surface', () => {
     expect(sc.errors.map((e) => e.package)).toEqual(['ghost'])
   })
 
+  it('audit_project omits a detail handle when no artifact store is configured', async () => {
+    const client = await connect(createDepsServer({ fetchPackument, osvDir }))
+    clients.push(client)
+    const res = await client.callTool({ name: 'audit_project', arguments: { project } })
+    expect((res.structuredContent as { detailHandle?: string }).detailHandle).toBeUndefined()
+  })
+
+  it('audit_project stores the full per-package verdicts by handle when a store is set', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    tmpDirs.push(dir)
+    const client = await connect(
+      createDepsServer({ fetchPackument, osvDir, artifacts: new ArtifactStore(dir, 'deps') }),
+    )
+    clients.push(client)
+
+    const res = await client.callTool({ name: 'audit_project', arguments: { project } })
+    const handle = (res.structuredContent as { detailHandle: string }).detailHandle
+    expect(handle).toMatch(/^strummer:\/\/deps\/.+\/audit$/)
+
+    // The full detail (vulnerability ids, deprecation messages, freshness) is by handle,
+    // never inlined in the compact roll-up.
+    const read = await client.readResource({ uri: handle })
+    const content = read.contents[0] as { text: string; mimeType: string }
+    expect(content.mimeType).toBe('application/json')
+    const detail = JSON.parse(content.text) as {
+      audits: {
+        package: string
+        vulnerabilities: { id: string; fixedIn: string[] }[]
+        deprecated: { isDeprecated: boolean; message?: string }
+        freshness: { latest?: string }
+      }[]
+    }
+    const lodash = detail.audits.find((a) => a.package === 'lodash')
+    expect(lodash?.vulnerabilities[0]?.id).toBe('GHSA-lodash-test')
+    expect(lodash?.vulnerabilities[0]?.fixedIn).toContain('4.17.21')
+    expect(lodash?.freshness.latest).toBe('4.17.21')
+    const leftPad = detail.audits.find((a) => a.package === 'left-pad')
+    expect(leftPad?.deprecated.message).toContain('padStart')
+  })
+
   it('exposes changelog_diff only when an artifact store + fetcher are configured', async () => {
     const without = await connect(createDepsServer({ fetchPackument }))
     clients.push(without)

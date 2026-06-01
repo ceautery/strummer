@@ -36,9 +36,10 @@ export interface DepsToolsOptions {
   /** OPERATOR: injected changelog source (see {@link ChangelogFetcher}). Absent ⇒
    * `changelog_diff` reports it is not enabled. */
   fetchChangelog?: ChangelogFetcher
-  /** OPERATOR: on-disk artifact store (prefix `deps`) backing `changelog_diff`'s
-   * by-handle output. Absent ⇒ `changelog_diff` reports it is not enabled (a sliced
-   * changelog is large/multi-version, so it is returned by handle, never inlined). */
+  /** OPERATOR: on-disk artifact store (prefix `deps`) backing by-handle output —
+   * `changelog_diff`'s sliced markdown and `audit_project`'s full per-package
+   * verdicts. Absent ⇒ `changelog_diff` is not registered and `audit_project` omits
+   * its `detailHandle` (large/multi-package output is returned by handle, never inlined). */
   artifacts?: ArtifactStore
 }
 
@@ -66,6 +67,11 @@ Network access to fetch package metadata/changelogs is operator-gated and off by
 
 function text(value: unknown) {
   return { type: 'text' as const, text: JSON.stringify(value, null, 2) }
+}
+
+/** Filesystem-safe artifact id (it becomes a directory name under the store). */
+function safeId(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, '-')
 }
 
 /** Load advisories + snapshotDate for an ecosystem, or empty when no snapshot dir is set. */
@@ -189,8 +195,10 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
       title: 'Audit every installed dependency in a project',
       description:
         'Scan a project manifest and roll up a COMPACT per-dependency verdict (severity, ' +
-        'deprecated, outdated, finding count) plus a summary. For full detail on one package ' +
-        'call audit_dependency. v1 supports the npm ecosystem.',
+        'deprecated, outdated, finding count) plus a summary. When an artifact store is ' +
+        'configured the full per-package verdicts (vulnerability lists, deprecation messages, ' +
+        'freshness) are stored BY HANDLE (`detailHandle` → the strummer://deps/{id}/{kind} ' +
+        'resource); otherwise drill into one package with audit_dependency. v1 supports npm.',
       inputSchema: {
         project: z.string().describe('absolute path to the project root'),
         ecosystem: ecosystemArg,
@@ -219,6 +227,9 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
         hasFindings: boolean
       }[] = []
       const errors: { package: string; error: string }[] = []
+      // The full per-package verdicts (vulnerability lists, deprecation messages,
+      // freshness) — too large to inline, surfaced by handle when a store is set.
+      const fullAudits: DependencyAudit[] = []
 
       // Sequential keeps output deterministic and is gentle on the registry.
       for (const name of names) {
@@ -231,6 +242,7 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
             advisories,
             snapshotDate,
           )
+          fullAudits.push(audit)
           dependencies.push({
             package: name,
             installedVersion: audit.installedVersion,
@@ -261,100 +273,40 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
         osvSnapshotLoaded: loaded,
         snapshotDate,
       }
-      const structured = { project: args.project, ecosystem, summary, dependencies, errors }
+
+      // When an artifact store is configured, persist the full verdicts by handle so
+      // the agent can drill into one package's vulnerabilities without re-running the
+      // scan; the inline result stays a compact roll-up either way.
+      const detailHandle = opts.artifacts?.put(
+        safeId(args.project),
+        'audit',
+        JSON.stringify({ project: args.project, ecosystem, audits: fullAudits }, null, 2),
+        'application/json',
+      )
+      const structured = {
+        project: args.project,
+        ecosystem,
+        summary,
+        dependencies,
+        errors,
+        detailHandle,
+      }
       return { content: [text(structured)], structuredContent: structured }
     },
   )
 
-  // changelog_diff emits large, multi-version markdown by handle, so it is enabled
-  // only when the operator has wired BOTH a changelog fetcher and an artifact store
-  // (deny-by-default: absent either, the tool/resource are not registered at all).
-  if (opts.fetchChangelog !== undefined && opts.artifacts !== undefined) {
-    const fetchChangelog = opts.fetchChangelog
+  // Anything emitted by handle (changelog slices, full audit_project detail) is
+  // served by one resource, registered whenever an artifact store is configured.
+  if (opts.artifacts !== undefined) {
     const store = opts.artifacts
-
-    server.registerTool(
-      'changelog_diff',
-      {
-        title: 'Diff a dependency changelog across an upgrade',
-        description:
-          'Slice a package CHANGELOG to the versions between the INSTALLED version (from) and ' +
-          'an upgrade target (to), so you can see what actually changed before recommending a ' +
-          'bump. Returns a COMPACT summary (versions covered, source) + the sliced markdown by ' +
-          'handle — read the strummer://deps/{id}/{kind} resource for the full text.',
-        inputSchema: {
-          project: z
-            .string()
-            .optional()
-            .describe('project root, to auto-detect the installed `from` version'),
-          package: z.string().describe('package name'),
-          ecosystem: ecosystemArg,
-          from: z
-            .string()
-            .optional()
-            .describe('lower bound (exclusive); defaults to the detected installed version'),
-          to: z
-            .string()
-            .optional()
-            .describe('upgrade target (inclusive); omit for everything newer than `from`'),
-        },
-      },
-      async (args) => {
-        const ecosystem = (args.ecosystem ?? 'npm') as OsvEcosystem
-        let from = args.from
-        if (from === undefined) {
-          if (args.project === undefined) {
-            throw new Error('provide `from` or `project` so the installed version can be detected')
-          }
-          const detected = detectInstalledVersion(args.project, args.package, {
-            ecosystem: DETECT_ECOSYSTEM[ecosystem],
-          })
-          if (detected.version === null) {
-            throw new Error(
-              `could not detect an installed version of "${args.package}" in ${args.project}`,
-            )
-          }
-          from = detected.version
-        }
-
-        const { text: markdown, source } = await fetchChangelog(args.package, ecosystem)
-        const slice = sliceChangelog(markdown, { from, to: args.to })
-        const body = slice.entries.map((e) => e.body).join('\n\n')
-
-        // Sanitize the version-pair into a filesystem-safe artifact id (it becomes a dir).
-        const id = `${args.package}-${slice.from}-to-${slice.to ?? 'latest'}`.replace(
-          /[^A-Za-z0-9._-]/g,
-          '-',
-        )
-        const handle = store.put(id, 'changelog', body, 'text/markdown')
-        const structured = {
-          package: args.package,
-          ecosystem,
-          from: slice.from,
-          to: slice.to ?? null,
-          versionsCovered: slice.entries.map((e) => e.version),
-          entryCount: slice.entries.length,
-          allVersions: slice.allVersions,
-          source,
-          handle,
-          byteSize: Buffer.byteLength(body),
-          contentType: 'text/markdown',
-          note:
-            slice.entries.length === 0
-              ? 'no changelog sections fall in the requested range'
-              : undefined,
-        }
-        return { content: [text(structured)], structuredContent: structured }
-      },
-    )
 
     server.registerResource(
       'deps-artifact',
       new ResourceTemplate('strummer://deps/{id}/{kind}', { list: undefined }),
       {
         title: 'Dependency artifact',
-        description: 'A stored deps artifact (e.g. a sliced changelog) by handle',
-        mimeType: 'text/markdown',
+        description: 'A stored deps artifact (a sliced changelog or full audit detail) by handle',
+        mimeType: 'application/json',
       },
       (uri, variables) => {
         const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
@@ -370,6 +322,86 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
         }
       },
     )
+
+    // changelog_diff emits large, multi-version markdown by handle, so beyond the
+    // store it additionally needs a changelog fetcher — deny-by-default: absent the
+    // fetcher, the tool is not registered at all.
+    if (opts.fetchChangelog !== undefined) {
+      const fetchChangelog = opts.fetchChangelog
+
+      server.registerTool(
+        'changelog_diff',
+        {
+          title: 'Diff a dependency changelog across an upgrade',
+          description:
+            'Slice a package CHANGELOG to the versions between the INSTALLED version (from) and ' +
+            'an upgrade target (to), so you can see what actually changed before recommending a ' +
+            'bump. Returns a COMPACT summary (versions covered, source) + the sliced markdown by ' +
+            'handle — read the strummer://deps/{id}/{kind} resource for the full text.',
+          inputSchema: {
+            project: z
+              .string()
+              .optional()
+              .describe('project root, to auto-detect the installed `from` version'),
+            package: z.string().describe('package name'),
+            ecosystem: ecosystemArg,
+            from: z
+              .string()
+              .optional()
+              .describe('lower bound (exclusive); defaults to the detected installed version'),
+            to: z
+              .string()
+              .optional()
+              .describe('upgrade target (inclusive); omit for everything newer than `from`'),
+          },
+        },
+        async (args) => {
+          const ecosystem = (args.ecosystem ?? 'npm') as OsvEcosystem
+          let from = args.from
+          if (from === undefined) {
+            if (args.project === undefined) {
+              throw new Error(
+                'provide `from` or `project` so the installed version can be detected',
+              )
+            }
+            const detected = detectInstalledVersion(args.project, args.package, {
+              ecosystem: DETECT_ECOSYSTEM[ecosystem],
+            })
+            if (detected.version === null) {
+              throw new Error(
+                `could not detect an installed version of "${args.package}" in ${args.project}`,
+              )
+            }
+            from = detected.version
+          }
+
+          const { text: markdown, source } = await fetchChangelog(args.package, ecosystem)
+          const slice = sliceChangelog(markdown, { from, to: args.to })
+          const body = slice.entries.map((e) => e.body).join('\n\n')
+
+          const id = safeId(`${args.package}-${slice.from}-to-${slice.to ?? 'latest'}`)
+          const handle = store.put(id, 'changelog', body, 'text/markdown')
+          const structured = {
+            package: args.package,
+            ecosystem,
+            from: slice.from,
+            to: slice.to ?? null,
+            versionsCovered: slice.entries.map((e) => e.version),
+            entryCount: slice.entries.length,
+            allVersions: slice.allVersions,
+            source,
+            handle,
+            byteSize: Buffer.byteLength(body),
+            contentType: 'text/markdown',
+            note:
+              slice.entries.length === 0
+                ? 'no changelog sections fall in the requested range'
+                : undefined,
+          }
+          return { content: [text(structured)], structuredContent: structured }
+        },
+      )
+    }
   }
 }
 
