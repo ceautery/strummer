@@ -105,9 +105,13 @@ Staged below; aspirational items are scheduled, not cut.
       idle-TTL `sweepIdle` + `startReaper`, per-context default action/navigation
       timeouts, `closeSession`/`shutdown`. (Session wall-clock cap + max-pages
       land with the step tools.)
-- [ ] **ARIA-snapshot capture + serializer** (copied Apache-2.0, attributed)
-      emitting token-capped scoped diffs + a full-snapshot handle; per-snapshot
-      ref-id minting (non-persisted).
+- [x] **ARIA-snapshot capture + serializer** (`snapshot.ts`) — parses the public
+      `locator.ariaSnapshot()` YAML and **mints our own ref-ids** (1.60.0 lacks
+      `_snapshotForAI`/snapshot-refs; see ADR 0006 update 2026-06-01, a revision
+      of the "copy @playwright/mcp's serializer" open fork). `buildSnapshot`
+      (parse → mint → token-capped serialize), `captureSnapshot` (+ full-snapshot
+      handle), `diffSnapshots` (scoped, ref-independent); refs → semantic-locator
+      descriptors `{role,name,nth}`, per-snapshot/non-persisted.
 - [ ] **Imperative step tools** over refs/semantic locators (navigate, click,
       fill, fill_form batch, select, press, wait_for, snapshot, query,
       get_text/attr) with auto-waiting.

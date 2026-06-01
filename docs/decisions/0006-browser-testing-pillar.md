@@ -49,6 +49,20 @@ capability for canvas / non-AX-tree UI. Autonomous self-healing replay is
 rejected for v1 (scheduled in ROADMAP). On disk, replayable flows are a
 `.bru`-style steps file + sidecar using **semantic locators** (not refs).
 
+> **Update (2026-06-01) — how refs are obtained (empirical revision of the
+> open-fork default).** The research's open fork resolved to *copy
+> `@playwright/mcp`'s Apache-2.0 ARIA serializer*, which consumes
+> `page._snapshotForAI()` output. Probing the pinned **`playwright-core` 1.60.0**
+> showed that API does **not exist** there (it's a 1.61-alpha feature — exactly
+> why `@playwright/mcp` pins the alpha), and `locator.ariaSnapshot({ref:true})`
+> emits **no ref-ids** in 1.60.0. So Strummer instead parses the **public, stable
+> `locator.ariaSnapshot()` YAML** and **mints its own ref-ids**, each mapping to a
+> semantic-locator descriptor (`{role, name, nth}`) resolved via
+> `getByRole(role,{name}).nth(nth)`. This keeps us on a stable pinned API (a prime
+> directive) and avoids a code-copy sync burden, at the cost of owning a small
+> snapshot parser. Implemented in `packages/browser/src/snapshot.ts`
+> (`buildSnapshot`/`captureSnapshot`/`diffSnapshots`).
+
 ### 3. All artifacts by handle; on-disk store; trace via the trace CLI
 
 Capture trace.zip (`tracing.start{screenshots,snapshots,sources}`→`stop`),

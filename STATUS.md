@@ -161,19 +161,29 @@ scaffolded; `ArtifactStore`/`summarizeA11y`/`auditA11y`, TDD against an offline
 fixture + real headless Chromium; CI + docker harness provision Chromium). The
 slice deliberately deferred visual baselines + Lighthouse scores (the flaky parts).
 
-**Slice 2 (browser lifecycle manager): DONE & committed.** `BrowserManager` —
-lazy single shared browser, ephemeral isolated context per session, `maxContexts`
-cap, idle-TTL `sweepIdle` + `startReaper`, per-context default timeouts,
-`closeSession`/`shutdown`. TDD with a fake browser (deterministic clock) + a
-real-chromium integration test. **138 TS + 45 Py green.**
+**Slice 2 (browser lifecycle manager): DONE.** `BrowserManager` — lazy single
+shared browser, ephemeral isolated context per session, `maxContexts` cap,
+idle-TTL `sweepIdle` + `startReaper`, per-context default timeouts,
+`closeSession`/`shutdown`. (Fake browser + deterministic clock + real-chromium
+integration.)
 
-**Next, per ROADMAP Phase 3 (in rough order):** (1) **ARIA-snapshot capture +
-serializer** (copy `@playwright/mcp`'s Apache-2.0 serializer with attribution) →
-token-capped diff + full-snapshot handle, per-snapshot ref-ids; (2) **imperative
-step tools** over refs (these also bring the session wall-clock cap + max-pages);
-then the safety gate, the two-tier SSRF defense (factoring `@strummer/safety` out
-of `@strummer/api`), and the artifact-capture pipeline. Continue TDD red→green;
-`pnpm gate` must be 100% green before each commit.
+**Slice 3 (ARIA-snapshot capture + serializer): DONE.** `snapshot.ts` —
+`buildSnapshot`/`captureSnapshot`/`diffSnapshots`. NOTE the empirical revision of
+the ADR open fork: `playwright-core` 1.60.0 has **no** `_snapshotForAI` and **no**
+ref-ids in `ariaSnapshot()`, so Strummer parses the public `ariaSnapshot()` YAML
+and **mints its own ref-ids** → semantic-locator descriptors `{role,name,nth}`
+(per-snapshot, non-persisted), token-capped serialize + full-snapshot handle +
+ref-independent diff. (See ADR 0006 update 2026-06-01.) **146 TS + 45 Py green.**
+These two slices are committed to `main` but **not yet pushed** — push at the next
+milestone (when the step tools make interaction usable end to end).
+
+**Next, per ROADMAP Phase 3 (in rough order):** (1) **imperative step tools** over
+refs (`navigate`/`click`/`fill`/`select`/`press`/`wait_for`/`snapshot`/`query`/
+`get_text/attr`), resolving refs via the snapshot descriptors + `getByRole`; these
+also bring the session wall-clock cap + max-pages; (2) the **deny-by-default
+action gate** + interception dry-run; (3) the **two-tier SSRF defense** (factoring
+`@strummer/safety` out of `@strummer/api`); then the artifact-capture pipeline.
+Continue TDD red→green; `pnpm gate` must be 100% green before each commit.
 
 ---
 
