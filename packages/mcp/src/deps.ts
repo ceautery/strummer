@@ -223,6 +223,7 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
         deprecated: boolean
         isOutdated: boolean
         recommendedTarget?: string
+        minimumSafeUpgrade?: string
         vulnerabilityCount: number
         hasFindings: boolean
       }[] = []
@@ -250,6 +251,7 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
             deprecated: audit.deprecated.isDeprecated,
             isOutdated: audit.freshness.isOutdated,
             recommendedTarget: audit.recommendedTarget,
+            minimumSafeUpgrade: audit.minimumSafeUpgrade,
             vulnerabilityCount: audit.vulnerabilities.length,
             hasFindings: audit.hasFindings,
           })

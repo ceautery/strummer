@@ -249,6 +249,7 @@ describe('strummer deps MCP surface', () => {
         worstSeverity: string
         deprecated: boolean
         isOutdated: boolean
+        minimumSafeUpgrade?: string
         vulnerabilityCount: number
         hasFindings: boolean
       }[]
@@ -264,6 +265,7 @@ describe('strummer deps MCP surface', () => {
     expect(lodash?.worstSeverity).toBe('high')
     expect(lodash?.vulnerabilityCount).toBe(1)
     expect(lodash?.isOutdated).toBe(true)
+    expect(lodash?.minimumSafeUpgrade).toBe('4.17.21') // 4.17.20 still vulnerable, 4.17.21 clears it
     const tiny = sc.dependencies.find((d) => d.package === 'tiny')
     expect(tiny?.hasFindings).toBe(false)
     expect(sc.errors).toEqual([])

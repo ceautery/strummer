@@ -56,6 +56,9 @@ describe('auditDependency — composite installed-version verdict', () => {
       isOutdated: true,
     })
     expect(audit.recommendedTarget).toBe('1.2.0')
+    // The advisory is fixed in 1.5.0, so every 1.x release stays vulnerable: the
+    // minimum SAFE upgrade crosses a major to 2.0.0 — distinct from recommendedTarget.
+    expect(audit.minimumSafeUpgrade).toBe('2.0.0')
     expect(audit.snapshotDate).toBe('2024-01-02T00:00:00Z')
     expect(audit.hasFindings).toBe(true)
   })
@@ -79,7 +82,94 @@ describe('auditDependency — composite installed-version verdict', () => {
       isOutdated: false,
     })
     expect(audit.recommendedTarget).toBeUndefined()
+    expect(audit.minimumSafeUpgrade).toBeUndefined() // nothing vulnerable ⇒ no security target
     expect(audit.hasFindings).toBe(false)
+  })
+
+  it('minimumSafeUpgrade picks a same-major patch when one clears the vuln', () => {
+    const earlyFix: OsvAdvisory[] = [
+      {
+        id: 'OSV-EARLY',
+        database_specific: { severity: 'HIGH' },
+        affected: [
+          {
+            package: { ecosystem: 'npm', name: 'oldpkg' },
+            ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }, { fixed: '1.2.0' }] }],
+          },
+        ],
+      },
+    ]
+    const audit = auditDependency({
+      packageName: 'oldpkg',
+      ecosystem: 'npm',
+      installedVersion: '1.0.0',
+      packument,
+      advisories: earlyFix,
+    })
+    // 1.2.0 is >= the 1.2.0 fix, so the closest clean release is the same-major patch.
+    expect(audit.minimumSafeUpgrade).toBe('1.2.0')
+  })
+
+  it('minimumSafeUpgrade skips a release that fixes one advisory but is hit by another', () => {
+    const overlapping: OsvAdvisory[] = [
+      {
+        id: 'OSV-A',
+        database_specific: { severity: 'HIGH' },
+        affected: [
+          {
+            package: { ecosystem: 'npm', name: 'oldpkg' },
+            ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }, { fixed: '2.0.0' }] }],
+          },
+        ],
+      },
+      {
+        id: 'OSV-B',
+        database_specific: { severity: 'CRITICAL' },
+        affected: [
+          {
+            package: { ecosystem: 'npm', name: 'oldpkg' },
+            // affects exactly 2.0.0 (introduced 2.0.0, fixed 2.1.0)
+            ranges: [{ type: 'SEMVER', events: [{ introduced: '2.0.0' }, { fixed: '2.1.0' }] }],
+          },
+        ],
+      },
+    ]
+    const audit = auditDependency({
+      packageName: 'oldpkg',
+      ecosystem: 'npm',
+      installedVersion: '1.0.0',
+      packument,
+      advisories: overlapping,
+    })
+    // installed 1.0.0 matches OSV-A. 1.2.0 still in OSV-A; 2.0.0 clears OSV-A but is hit
+    // by OSV-B; 2.1.0 is clear of both ⇒ the minimum safe upgrade.
+    expect(audit.vulnerabilities.map((v) => v.id)).toEqual(['OSV-A'])
+    expect(audit.minimumSafeUpgrade).toBe('2.1.0')
+  })
+
+  it('minimumSafeUpgrade is undefined when no available release clears the vuln', () => {
+    const unfixed: OsvAdvisory[] = [
+      {
+        id: 'OSV-UNFIXED',
+        database_specific: { severity: 'HIGH' },
+        affected: [
+          {
+            package: { ecosystem: 'npm', name: 'oldpkg' },
+            // open-ended: affects everything from 0 with no fix.
+            ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }] }],
+          },
+        ],
+      },
+    ]
+    const audit = auditDependency({
+      packageName: 'oldpkg',
+      ecosystem: 'npm',
+      installedVersion: '1.0.0',
+      packument,
+      advisories: unfixed,
+    })
+    expect(audit.vulnerabilities.map((v) => v.id)).toEqual(['OSV-UNFIXED'])
+    expect(audit.minimumSafeUpgrade).toBeUndefined()
   })
 
   it('worstSeverity is the maximum across multiple matched vulnerabilities', () => {

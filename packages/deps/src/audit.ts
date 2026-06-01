@@ -41,9 +41,18 @@ export interface DependencyAudit {
   /**
    * The conservative upgrade target: the newest same-major release, when it is newer
    * than installed (avoids recommending a blind major bump). For security upgrades,
-   * consult each vulnerability's `fixedIn`.
+   * consult `minimumSafeUpgrade` or each vulnerability's `fixedIn`.
    */
   recommendedTarget?: string
+  /**
+   * The lowest stable release newer than the installed version that is free of ALL
+   * known vulnerabilities in the supplied advisories — re-matched per candidate, so a
+   * release that fixes the originally-matched advisory but is hit by a *different* one
+   * is skipped. `undefined` when nothing is vulnerable or no available release clears
+   * them. Distinct from `recommendedTarget` (freshness-conservative, same-major): a
+   * security fix may require crossing a major boundary.
+   */
+  minimumSafeUpgrade?: string
   /** Staleness proxy carried through from the OSV snapshot the advisories came from. */
   snapshotDate?: string
   /** True if anything actionable was found (deprecated or any matched vulnerability). */
@@ -102,6 +111,27 @@ function computeFreshness(installed: string, packument: Packument): FreshnessVer
   return { installed, latest, latestSameMajor, isOutdated }
 }
 
+/**
+ * The lowest stable release newer than `installed` that matches zero advisories.
+ * Each candidate is re-evaluated against the full advisory set (not just the
+ * advisories that hit `installed`), so a release that merely closes the original
+ * vulnerability but opens another is not recommended.
+ */
+function lowestSafeVersion(
+  packument: Packument,
+  advisories: OsvAdvisory[],
+  pkg: { ecosystem: string; name: string },
+  installed: string,
+): string | undefined {
+  const candidates = stableVersions(packument)
+    .filter((v) => semver.gt(v, installed))
+    .sort((a, b) => semver.compare(a, b))
+  for (const candidate of candidates) {
+    if (matchVulnerabilities(advisories, pkg, candidate).length === 0) return candidate
+  }
+  return undefined
+}
+
 function worstOf(vulnerabilities: VulnerabilityMatch[]): SeverityBucket | 'none' {
   if (vulnerabilities.length === 0) return 'none'
   return vulnerabilities.reduce<SeverityBucket>(
@@ -136,6 +166,11 @@ export function auditDependency(input: AuditDependencyInput): DependencyAudit {
       ? freshness.latestSameMajor
       : undefined
 
+  const minimumSafeUpgrade =
+    vulnerabilities.length > 0 && semver.valid(installedVersion) !== null
+      ? lowestSafeVersion(packument, advisories, { ecosystem, name: packageName }, installedVersion)
+      : undefined
+
   return {
     package: packageName,
     ecosystem,
@@ -145,6 +180,7 @@ export function auditDependency(input: AuditDependencyInput): DependencyAudit {
     worstSeverity: worstOf(vulnerabilities),
     freshness,
     recommendedTarget,
+    minimumSafeUpgrade,
     snapshotDate,
     hasFindings: deprecated.isDeprecated || vulnerabilities.length > 0,
   }
