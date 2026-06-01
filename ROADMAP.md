@@ -263,8 +263,20 @@ Staged below; aspirational items are scheduled, not cut.
       `animations:'disabled'`/`caret:'hide'`/`mask[]`/`maxDiffPixelRatio`;
       baselines generated in the pinned Docker image keyed by (name,browser,
       platform); `odiff` opt-in for large corpora.
-- [ ] **`.bru` + sidecar persistence** for replayable browser step flows
-      (semantic locators, not persisted refs) — mirrors ADR 0004.
+- [x] **`.bru` + sidecar persistence** for replayable browser step flows
+      (semantic locators, not persisted refs) — mirrors ADR 0004. `flow.ts`: a
+      Bruno-openable `<name>.bru` (meta) + `<name>.strummer.yml` sidecar holding
+      ordered `steps` (navigate/click/fill/select/press/wait_for/assert), keyed by
+      `SemanticLocator {role,name?,nth?}`. `loadFlow`/`loadFlowCollection` parse +
+      validate (fail-loud) into a typed model; `runFlow(driver, flow, opts)` replays
+      sequentially with `{{var}}` interpolation + fail-closed `{{secret:NAME}}`
+      resolution (driver redactor scrubs cleartext; assert expected-values get vars
+      only, never secrets). PageDriver gained semantic-locator action methods
+      (`clickAt`/`fillAt`/`selectAt`/`pressAt`) driving via `getByRole` directly +
+      reusing the mutation gate. Surfaced by `strummer browser run <flow.bru>`
+      (--var/--unsafe/--allow-host/--json, exit-nonzero on failure); example in
+      `examples/browser/login/`. (An MCP `browser_run_flow` tool is a scheduled
+      follow-up — the CLI is the primary surface for replayable/CI flows.)
 - [ ] **Multi-engine** (firefox/webkit) install + cross-engine determinism
       (chromium-only for v1).
 - [ ] *(aspirational, scheduled not cut)* optional `@playwright/mcp` embed via

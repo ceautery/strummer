@@ -8,10 +8,10 @@
 **Phase 3 — Browser/UI testing pillar: ENGINE + SAFETY + ARTIFACT PIPELINE + MCP
 SURFACE + HUMAN CLI COMPLETE.** The agent surface AND the human `strummer browser`
 CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
-auth) is done, plus trace-query, browser assertions, Lighthouse perf, and now
-**network heavy mode (HAR capture + replay)**. Remaining Phase 3 work is the
-aspirational tail (visual regression, `.bru` step persistence, multi-engine — all
-scheduled in ROADMAP, none blocking). Design locked by a 5-stream
+auth) is done, plus trace-query, browser assertions, Lighthouse perf,
+**network heavy mode (HAR capture + replay)**, and **persisted `.bru` browser-step
+flows**. Remaining Phase 3 work is the aspirational tail (visual regression,
+multi-engine — both scheduled in ROADMAP, none blocking). Design locked by a 5-stream
 research workflow w/ adversarial verification (`docs/research/2026-05-31-pillar3-
 browser-testing.md`); captured in **ADR 0006 (+ dated updates) + ARCHITECTURE §10
 + ROADMAP Phase 3**. A new pure-TS **`@strummer/browser`** built **thin on stable
@@ -187,11 +187,28 @@ against in-process fixtures):
    server down, replay → page still loads from the HAR. **Network heavy mode is now
    COMPLETE.**
 
-**286 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
-aspirational Phase-3 tail (ROADMAP: visual regression — the flake-prone one,
-`.bru` step persistence, multi-engine) or start **Phase 4** (cross-cutting
-verification: LSP bridge, impact-scoped test runner, mutation/flaky detection).
-See the detailed "Next action" section below + ROADMAP.
+28. **Persisted `.bru` browser-step flows** (`227263a`/`d7ad2a4`/`e23427e`; mirrors
+   ADR 0004). New `@strummer/browser` `flow.ts`: a Bruno-openable `<name>.bru`
+   (meta) + `<name>.strummer.yml` sidecar holding ordered `steps`, keyed by
+   `SemanticLocator {role,name?,nth?}` (NOT ephemeral refs, so a flow is stable
+   across runs). `loadFlow`/`loadFlowCollection` parse + validate (fail-loud);
+   `runFlow(driver, flow, opts)` replays sequentially with `{{var}}` interpolation +
+   fail-closed `{{secret:NAME}}` resolution (driver redactor scrubs cleartext;
+   assert expected-values get vars only, never secrets — no cleartext `expected`
+   leak). A step that throws stops the flow `ok:false`; a failed assertion fails the
+   flow but continues. PageDriver gained semantic-locator action methods
+   (`clickAt`/`fillAt`/`selectAt`/`pressAt`) driving via `getByRole` directly,
+   reusing the same mutation gate; factored a shared `locatorFor()`; `waitFor` takes
+   `nth`. Surfaced by **`strummer browser run <flow.bru>`** (`@strummer/cli`,
+   --var/--unsafe/--allow-host/--json, exit-nonzero on failure, env-secret redaction)
+   + bundled `examples/browser/login/` with an offline guard test. (MCP
+   `browser_run_flow` tool is a scheduled follow-up — CLI is the primary flow surface.)
+
+**300 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+aspirational Phase-3 tail (ROADMAP: visual regression — the flake-prone one;
+multi-engine) or start **Phase 4** (cross-cutting verification: LSP bridge,
+impact-scoped test runner, mutation/flaky detection). See the detailed "Next
+action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -524,9 +541,15 @@ operator replay-dir confinement). MCP `browser_close_session` surfaces the HAR,
 `browser_replay_har` arms replay. Bin: `STRUMMER_BROWSER_HAR_DIR` /
 `STRUMMER_BROWSER_REPLAY_HAR_DIR`. Operator-gated, deny-by-default.
 
+**Persisted `.bru` browser-step flows: DONE** (`227263a`/`d7ad2a4`/`e23427e`).
+`flow.ts` (model + `loadFlow`/`loadFlowCollection` + `runFlow`); PageDriver
+`clickAt`/`fillAt`/`selectAt`/`pressAt` semantic-locator methods; `strummer browser
+run <flow.bru>`; `examples/browser/login/`. Steps key off semantic locators, not
+refs. MCP `browser_run_flow` tool noted as a follow-up.
+
 **Next (later Phase 3):** the aspirational tail only — visual regression (the
-flake-prone one; baselines in the pinned Docker image), `.bru` step persistence,
-multi-engine. None blocking. TDD red→green; `pnpm gate` 100% green before each commit.
+flake-prone one; baselines in the pinned Docker image), multi-engine. None
+blocking. TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

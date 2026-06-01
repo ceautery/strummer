@@ -253,6 +253,24 @@ shape/thresholds, never exact perf scores** (run-to-run variable).
 > `@sentry/node` must be made "inert/offline" is **not** load-bearing — its
 > telemetry is opt-in and off by default.
 
+### 9. Persisted browser flows: literal `.bru` + sidecar, semantic-locator steps (update 2026-06-01)
+
+Replayable flows mirror ADR 0004's API-pillar split: a Bruno-openable `<name>.bru`
+(its `meta.name`) + a colocated `<name>.strummer.yml` sidecar holding the ordered
+`steps`. Bruno's `.bru` grammar is HTTP-request-shaped and can't represent a
+click/fill sequence, so the `.bru` stays a minimal (inert-to-Bruno) container and
+the sidecar carries the real content — a deliberate "honor the format + sidecar
+pattern literally" choice over inventing a new flow file. The load-bearing
+decision: steps key off **semantic locators** (`{role, name?, nth?}`, driven via
+`getByRole(...).nth()`), **not** the ephemeral per-snapshot ref-ids — refs are a
+discovery affordance for the agent and don't persist, whereas a saved flow must be
+stable across runs and snapshot-cap-independent. `runFlow` reuses the live engine
+wholesale: the same mutation gate (dry-run vs execute), the same redactor, and
+`{{var}}`/`{{secret:NAME}}` resolution as the API pillar (assert *expected* values
+get `{{var}}` only — never secrets — so a cleartext expected can't leak). Primary
+surface is the human/CI `strummer browser run`; an MCP `browser_run_flow` tool is a
+scheduled follow-up.
+
 ### Cross-pillar refactor
 
 Lift the SSRF/private-IP range classifier (`ipaddr.js`) and the secret-resolution

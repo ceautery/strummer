@@ -50,10 +50,11 @@ max-pages + max-contexts caps). The complete **deny-by-default gating bundle**
 pillars — with auto-waiting), a **trace-query** tool (action timeline from a
 trace.zip), a **Lighthouse perf audit**, **network heavy mode** (HAR capture —
 redacted, by handle — and `routeFromHAR` replay for deterministic offline runs),
-and a human **`strummer browser` CLI** (snapshot/audit/screenshot) have all landed.
-Remaining browser work is the aspirational tail (visual regression, `.bru` step
-persistence, multi-engine). **The single source of truth for "what phase are we on"
-is [`STATUS.md`](./STATUS.md).**
+**persisted `.bru` browser-step flows** (replayable, semantic-locator-keyed —
+`strummer browser run`), and a human **`strummer browser` CLI** (snapshot/audit/
+screenshot/run) have all landed. Remaining browser work is the aspirational tail
+(visual regression, multi-engine). **The single source of truth for "what phase
+are we on" is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
 
