@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-06-01T00:00:00Z",
+  "note": "Synthetic run-history fixture for the pure flake classifier. Shaped like the future private better-sqlite3 history store: per-test ordered runs of {passed, at}. The classifier reads only `passed`; `at` is carried for later windowing slices.",
+  "tests": [
+    {
+      "id": "packages/api/src/runner.test.ts > retries a 503 then succeeds",
+      "runs": [
+        { "passed": true, "at": "2026-05-30T09:00:00Z" },
+        { "passed": false, "at": "2026-05-30T15:00:00Z" },
+        { "passed": true, "at": "2026-05-31T09:00:00Z" },
+        { "passed": true, "at": "2026-05-31T15:00:00Z" },
+        { "passed": false, "at": "2026-05-31T21:00:00Z" },
+        { "passed": true, "at": "2026-06-01T03:00:00Z" },
+        { "passed": true, "at": "2026-06-01T09:00:00Z" },
+        { "passed": false, "at": "2026-06-01T15:00:00Z" },
+        { "passed": true, "at": "2026-06-01T21:00:00Z" },
+        { "passed": true, "at": "2026-06-02T03:00:00Z" }
+      ]
+    },
+    {
+      "id": "packages/core/src/db.test.ts > opens the golden index",
+      "runs": [
+        { "passed": true, "at": "2026-05-30T09:00:00Z" },
+        { "passed": true, "at": "2026-05-31T09:00:00Z" },
+        { "passed": true, "at": "2026-05-31T15:00:00Z" },
+        { "passed": true, "at": "2026-06-01T03:00:00Z" },
+        { "passed": true, "at": "2026-06-01T15:00:00Z" },
+        { "passed": true, "at": "2026-06-02T03:00:00Z" }
+      ]
+    },
+    {
+      "id": "packages/browser/src/proxy.test.ts > refuses a rebinding host",
+      "runs": [
+        { "passed": false, "at": "2026-05-30T09:00:00Z" },
+        { "passed": false, "at": "2026-05-31T09:00:00Z" },
+        { "passed": false, "at": "2026-05-31T21:00:00Z" },
+        { "passed": false, "at": "2026-06-01T09:00:00Z" },
+        { "passed": false, "at": "2026-06-02T03:00:00Z" }
+      ]
+    },
+    {
+      "id": "packages/deps/src/audit.test.ts > brand new, only run twice",
+      "runs": [
+        { "passed": true, "at": "2026-06-01T21:00:00Z" },
+        { "passed": true, "at": "2026-06-02T03:00:00Z" }
+      ]
+    },
+    {
+      "id": "packages/coverage/src/run.test.ts > flaked once on first sighting",
+      "runs": [
+        { "passed": true, "at": "2026-06-01T21:00:00Z" },
+        { "passed": false, "at": "2026-06-02T03:00:00Z" }
+      ]
+    },
+    {
+      "id": "packages/safety/src/redactor.test.ts > never been run",
+      "runs": []
+    }
+  ]
+}

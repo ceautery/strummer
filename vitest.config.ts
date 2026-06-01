@@ -15,6 +15,7 @@ export default defineConfig({
       ),
       '@strummer/deps': fileURLToPath(new URL('./packages/deps/src/index.ts', import.meta.url)),
       '@strummer/embed': fileURLToPath(new URL('./packages/embed/src/index.ts', import.meta.url)),
+      '@strummer/flake': fileURLToPath(new URL('./packages/flake/src/index.ts', import.meta.url)),
       '@strummer/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
       '@strummer/browser': fileURLToPath(
         new URL('./packages/browser/src/index.ts', import.meta.url),
