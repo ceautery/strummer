@@ -26,8 +26,13 @@ const INDEX_TS = `import { Greeter } from './greeter'
 const g = new Greeter('world')
 console.log(g.greet())
 `
-// The INDEPENDENTLY hand-computed golden (NOT applyTextEdits output — avoids a tautology).
+// The INDEPENDENTLY hand-computed goldens (NOT applyTextEdits output — avoids a tautology).
 const GREETER2_TS = GREETER_TS.replace('export class Greeter {', 'export class Greeter2 {')
+const INDEX2_TS = `import { Greeter2 } from './greeter'
+
+const g = new Greeter2('world')
+console.log(g.greet())
+`
 
 const DECL_RANGE = { start: { line: 4, character: 13 }, end: { line: 4, character: 20 } } // `Greeter`
 const IMPORT_RANGE = { start: { line: 0, character: 9 }, end: { line: 0, character: 16 } }
@@ -193,8 +198,64 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
     expect(r.digests?.[0]?.before).not.toBe(r.digests?.[0]?.after)
   })
 
-  it('REFUSES to apply a multi-file rename (previewed only) until the multi-URI lock lands', async () => {
+  it('applies a MULTI-FILE rename atomically across all edited files (Slice F′)', async () => {
+    const writes: FileWrite[] = []
+    const writer: RenameWriter = {
+      commit: (w) => {
+        writes.push(...w)
+        return { written: w.map((x) => x.absPath) }
+      },
+    }
     const { root, manager } = setup({ onRename: multiFileEdit })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer,
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.status).toBe('ok')
+    expect(r.applied).toBe(true)
+    expect(r.fileCount).toBe(2)
+    // BOTH files staged in one commit (stage-then-commit-all), byte-matching the goldens.
+    const byPath = new Map(writes.map((w) => [w.absPath, w.newText]))
+    expect(byPath.get(join(root, 'greeter.ts'))).toBe(GREETER2_TS)
+    expect(byPath.get(join(root, 'index.ts'))).toBe(INDEX2_TS)
+    expect(r.digests?.map((d) => d.file).sort()).toEqual(['greeter.ts', 'index.ts'])
+  })
+
+  it('REFUSES a multi-file apply when ANY edited file is out of the project root', async () => {
+    const { root, manager } = setup({
+      onRename: (params) => {
+        const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+        return {
+          changes: {
+            [uri]: [{ newText: 'Greeter2', range: DECL_RANGE }],
+            'file:///etc/evil.ts': [{ newText: 'Greeter2', range: DECL_RANGE }],
+          },
+        }
+      },
+    })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer: THROWING_WRITER, // confine-all aborts before any write
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/outside the project root/i)
+  })
+
+  it('REFUSES the apply when an edit site no longer matches the renamed symbol (drift)', async () => {
+    const { root, manager } = setup({ onRename: multiFileEdit })
+    // Drift index.ts on disk so the usage edit site no longer holds `Greeter`.
+    writeFileSync(
+      join(root, 'index.ts'),
+      "import { Greeter } from './greeter'\n\nconst g = new Flobber('world')\nconsole.log(g.greet())\n",
+    )
     const engine = new LspRenameEngine({
       manager,
       allowRun: true,
@@ -204,8 +265,7 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
     })
     const r = await engine.rename(renameInput(root))
     expect(r.applied).toBe(false)
-    expect(r.refused).toMatch(/multi-file/i)
-    expect(r.fileCount).toBe(2)
+    expect(r.refused).toMatch(/no longer matches|changed on disk/i)
   })
 
   it('flags an out-of-root edit, never reads its bytes, and refuses the apply', async () => {

@@ -141,6 +141,35 @@ describe('LanguageServerManager per-(server, uri) mutex', () => {
   })
 })
 
+describe('LanguageServerManager.runWithUris (multi-uri lock, Slice F′)', () => {
+  it('serializes two concurrent multi-uri runs sharing uris, regardless of order (deadlock-free)', async () => {
+    const { spawn } = makeSpawn()
+    const { mgr } = makeManager(spawn)
+    await mgr.run(INPUT, async () => 'warmup') // force spawn+init+cache
+
+    let active = 0
+    let maxActive = 0
+    const body = async () => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await flush()
+      active -= 1
+      return 'done'
+    }
+    const uris = ['file:///project/a.ts', 'file:///project/b.ts']
+    const results = await Promise.all([
+      mgr.runWithUris({ language: 'typescript', projectRoot: ROOT, uris }, body),
+      // reversed input order — the SORTED acquisition still prevents a lock-ordering cycle.
+      mgr.runWithUris(
+        { language: 'typescript', projectRoot: ROOT, uris: [...uris].reverse() },
+        body,
+      ),
+    ])
+    expect(results).toEqual(['done', 'done'])
+    expect(maxActive).toBe(1) // never overlapped despite the shared uris
+  })
+})
+
 describe('LanguageServerManager reaper', () => {
   it('reaps an idle server: shutdown → clock-driven grace → dispose', async () => {
     let shut = false
