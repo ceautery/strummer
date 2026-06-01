@@ -211,6 +211,29 @@ describe('runRequest (offline, in-process server)', () => {
     expect(echoed.received).not.toContain(token)
   })
 
+  it('sends a raw file body (bytes from disk) with the declared content-type', async () => {
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'create-thing-file', {
+      vars: { baseUrl },
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'],
+      artifacts,
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(201)
+
+    // Preview names the file + size + content-type, never inlining the bytes.
+    expect(result.request.body).toContain('payload.bin')
+    expect(result.request.body).toContain('application/octet-stream')
+    expect(result.request.body).toContain('bytes')
+    expect(result.request.body).not.toContain('RAW-FILE-BODY-CONTENT')
+
+    // The server received the raw file bytes under the declared content-type.
+    const echoed = JSON.parse(artifacts.get(result.response?.bodyHandle ?? '')?.body ?? '{}')
+    expect(echoed.contentType).toContain('application/octet-stream')
+    expect(echoed.received).toContain('RAW-FILE-BODY-CONTENT')
+  })
+
   it('sends a graphql body as {query, variables} JSON with secrets resolved + redacted', async () => {
     const token = 'gql-secret-789'
     const artifacts = new ArtifactStore()

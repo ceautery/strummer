@@ -1,0 +1,15 @@
+meta {
+  name: create-thing-file
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/things
+  body: file
+  auth: none
+}
+
+body:file {
+  file: @file(payload.bin) @contentType(application/octet-stream)
+}

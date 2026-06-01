@@ -95,6 +95,9 @@ async function materializeBody(
   if (body.type === 'multipart-form') {
     return materializeMultipart(body, fill, baseDir)
   }
+  if (body.type === 'file') {
+    return materializeFile(body, fill, baseDir)
+  }
   if (body.content !== undefined) {
     const content = fill(body.content)
     return { contentType: RAW_CONTENT_TYPE[body.type] ?? 'text/plain', content, preview: content }
@@ -134,6 +137,26 @@ async function materializeMultipart(
     }
   }
   return { content: form, preview: lines.join('\n') }
+}
+
+/**
+ * A raw file body — the file's bytes are sent as the request body under the
+ * declared content type (default `application/octet-stream`). Path resolved
+ * against the collection dir (same operator-config trust model as multipart).
+ * The preview names the file by path + byte size + content type; the bytes are
+ * never inlined into agent-facing output.
+ */
+async function materializeFile(
+  body: RequestBody,
+  fill: (text: string) => string,
+  baseDir?: string,
+): Promise<PreparedBody | undefined> {
+  if (!body.file) return undefined
+  const filled = fill(body.file.filePath)
+  const buf = await readFile(resolve(baseDir ?? '', filled))
+  const contentType = body.file.contentType || 'application/octet-stream'
+  const preview = `<file: ${filled} (${buf.byteLength} bytes, ${contentType})>`
+  return { contentType, content: buf, preview }
 }
 
 /** A GraphQL-over-HTTP envelope: `{query, variables}` as JSON. Variables (a JSON
