@@ -8,9 +8,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   ArtifactStore,
   auditPerf,
+  type BrowserEngine,
   BrowserGate,
   BrowserManager,
   createSsrfProxy,
+  engineLauncher,
+  engineLaunchOptions,
+  resolveEngine,
   type SsrfProxy,
 } from '@strummer/browser'
 import { Redactor } from '@strummer/safety'
@@ -47,6 +51,8 @@ export interface BrowserBinConfig {
   allowPrivate: boolean
   /** Whether JS dialogs are accepted (true) or dismissed (false, default). */
   allowDialogs: boolean
+  /** The browser engine the server drives (operator-selected; default chromium). */
+  engine: BrowserEngine
   headless: boolean
   noSandbox: boolean
   capture: { trace: boolean; console: boolean; network: boolean }
@@ -186,6 +192,9 @@ export async function buildBrowserServerFromEnv(
       : undefined
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
+  // Operator-selected engine (default chromium). Resolved EARLY so a typo fails
+  // loud before any resource (proxy, browser) is allocated. One engine per server.
+  const engine: BrowserEngine = resolveEngine(env.STRUMMER_BROWSER_ENGINE)
   const capture = {
     trace: bool(env.STRUMMER_BROWSER_CAPTURE_TRACE), // OFF by default (unredacted binary)
     console: bool(env.STRUMMER_BROWSER_CAPTURE_CONSOLE, true),
@@ -212,23 +221,24 @@ export async function buildBrowserServerFromEnv(
   // MANDATORY Tier-2 DNS-pinning proxy — deliberately no disable env.
   const proxy = await createSsrfProxy({ allowPrivate })
 
-  // Hardening launch args (always on):
+  // Chromium is the hardened default — it gets the loopback-bypass +
+  // WebRTC-neutralize CLI args below; Firefox/WebKit rely on the always-on Tier-1
+  // route allowlist + the proxy (see engineLaunchOptions).
+  const launchSpec = { headless, proxyServer: proxy.url, noSandbox }
+  // Hardening launch args (chromium only; empty for firefox/webkit):
   // - --proxy-bypass-list=<-loopback> forces loopback through the pinning proxy too
   //   (Chromium bypasses the proxy for localhost by default).
   // - --force-webrtc-ip-handling-policy=disable_non_proxied_udp neutralizes WebRTC
   //   egress: only proxied UDP is allowed (no P2P bypass of the SSRF proxy, no local
   //   IP leak). --no-sandbox stays an explicit operator opt-in.
-  const launchArgs = [
-    '--proxy-bypass-list=<-loopback>',
-    '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-    ...(noSandbox ? ['--no-sandbox'] : []),
-  ]
+  const launchArgs = engineLaunchOptions(engine, launchSpec).args ?? []
 
   const gate = new BrowserGate({ allowUnsafe, allowedHosts, allowDialogs })
   const store = new ArtifactStore(artifactsDir)
-  // Lighthouse spawns its OWN Chrome (chrome-launcher), so it gets the same egress
-  // boundary via flags: the mandatory SSRF proxy + loopback-bypass + WebRTC neutralize
-  // + the operator sandbox choice. Reports are redacted before write.
+  // Lighthouse spawns its OWN Chrome (chrome-launcher) and is Chrome-only, so the
+  // perf audit ALWAYS uses chromium regardless of the session engine. It gets the
+  // same egress boundary via flags: the mandatory SSRF proxy + loopback-bypass +
+  // WebRTC neutralize + the operator sandbox choice. Reports are redacted before write.
   const perfChromeFlags = [
     `--proxy-server=${proxy.url}`,
     '--proxy-bypass-list=<-loopback>',
@@ -246,7 +256,7 @@ export async function buildBrowserServerFromEnv(
       redact,
     })
   const manager = new BrowserManager({
-    launch: () => chromium.launch({ headless, proxy: { server: proxy.url }, args: launchArgs }),
+    launch: engineLauncher(engine, launchSpec),
     gate,
     maxContexts,
     idleTtlMs,
@@ -287,6 +297,7 @@ export async function buildBrowserServerFromEnv(
     allowedHosts,
     allowPrivate,
     allowDialogs,
+    engine,
     headless,
     noSandbox,
     capture,

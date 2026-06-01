@@ -5,16 +5,19 @@ import { parseArgs } from 'node:util'
 import {
   ArtifactStore,
   auditA11y,
+  type BrowserEngine,
   BrowserGate,
   BrowserManager,
   createSsrfProxy,
+  engineLauncher,
   type FlowResult,
   loadFlow,
   PageDriver,
+  resolveEngine,
   runFlow,
 } from '@strummer/browser'
 import { Redactor } from '@strummer/safety'
-import { chromium, type Page } from 'playwright-core'
+import type { Browser, Page } from 'playwright-core'
 import type { CliIO } from './index.js'
 
 /**
@@ -32,6 +35,7 @@ interface BrowserFlags {
   allowPrivate: boolean
   noSandbox: boolean
   headed: boolean
+  engine: BrowserEngine
 }
 
 /** Flags shared by every browser command. */
@@ -40,6 +44,7 @@ const COMMON_OPTIONS = {
   'allow-private': { type: 'boolean' },
   'no-sandbox': { type: 'boolean' },
   headed: { type: 'boolean' },
+  engine: { type: 'string' },
   json: { type: 'boolean' },
 } as const
 
@@ -48,6 +53,7 @@ type CommonValues = {
   'allow-private'?: boolean
   'no-sandbox'?: boolean
   headed?: boolean
+  engine?: string
 }
 
 function flagsFrom(values: CommonValues): BrowserFlags {
@@ -56,7 +62,19 @@ function flagsFrom(values: CommonValues): BrowserFlags {
     allowPrivate: values['allow-private'] ?? false,
     noSandbox: values['no-sandbox'] ?? false,
     headed: values.headed ?? false,
+    engine: resolveEngine(values.engine),
   }
+}
+
+/** Launch thunk for a `BrowserManager`, honoring the selected engine + the
+ * mandatory SSRF proxy (chromium gets the hardening args; firefox/webkit get the
+ * proxy + the Tier-1 route allowlist). */
+function launchFor(flags: BrowserFlags, proxyUrl: string): () => Promise<Browser> {
+  return engineLauncher(flags.engine, {
+    headless: !flags.headed,
+    proxyServer: proxyUrl,
+    noSandbox: flags.noSandbox,
+  })
 }
 
 interface SessionContext {
@@ -88,16 +106,7 @@ async function withSession(
   const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-cli-')))
   const manager = new BrowserManager({
     gate,
-    launch: () =>
-      chromium.launch({
-        headless: !flags.headed,
-        proxy: { server: proxy.url },
-        args: [
-          '--proxy-bypass-list=<-loopback>',
-          '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-          ...(flags.noSandbox ? ['--no-sandbox'] : []),
-        ],
-      }),
+    launch: launchFor(flags, proxy.url),
   })
   try {
     const context = await manager.createSession('cli')
@@ -116,18 +125,25 @@ async function withSession(
 
 export async function runBrowser(args: string[], io: CliIO): Promise<number> {
   const [sub, ...rest] = args
-  switch (sub) {
-    case 'snapshot':
-      return cmdSnapshot(rest, io)
-    case 'audit':
-      return cmdAudit(rest, io)
-    case 'screenshot':
-      return cmdScreenshot(rest, io)
-    case 'run':
-      return cmdRun(rest, io)
-    default:
-      io.err(`unknown browser subcommand: ${sub ?? '(none)'}\n`)
-      return 1
+  try {
+    switch (sub) {
+      case 'snapshot':
+        return await cmdSnapshot(rest, io)
+      case 'audit':
+        return await cmdAudit(rest, io)
+      case 'screenshot':
+        return await cmdScreenshot(rest, io)
+      case 'run':
+        return await cmdRun(rest, io)
+      default:
+        io.err(`unknown browser subcommand: ${sub ?? '(none)'}\n`)
+        return 1
+    }
+  } catch (err) {
+    // Early flag-validation errors (e.g. an unknown --engine) surface as a clean
+    // message + exit 1 rather than an uncaught rejection.
+    io.err(`${(err as Error).message}\n`)
+    return 1
   }
 }
 
@@ -197,16 +213,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
   const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-flow-')))
   const manager = new BrowserManager({
     gate,
-    launch: () =>
-      chromium.launch({
-        headless: !flags.headed,
-        proxy: { server: proxy.url },
-        args: [
-          '--proxy-bypass-list=<-loopback>',
-          '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-          ...(flags.noSandbox ? ['--no-sandbox'] : []),
-        ],
-      }),
+    launch: launchFor(flags, proxy.url),
   })
   try {
     const context = await manager.createSession('cli')

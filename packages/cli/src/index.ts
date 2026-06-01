@@ -39,7 +39,7 @@ API testing:
   strummer api import <postman|insomnia|openapi|har> <source-file> <dest-dir>  [--name <n>]
 
 Browser testing (single-shot; the typed host is auto-allowed):
-  strummer browser snapshot <url>    [--allow-host <h>…] [--allow-private] [--no-sandbox] [--headed] [--json]
+  strummer browser snapshot <url>    [--allow-host <h>…] [--allow-private] [--no-sandbox] [--headed] [--engine chromium|firefox|webkit] [--json]
   strummer browser audit <url>       [same flags]   (exit 1 if any a11y violations)
   strummer browser screenshot <url>  [--out <file>] [--full-page] [same flags]
   strummer browser run <flow.bru>    [--var k=v…] [--unsafe] [--allow-host <h>…] [same flags]  (replay a persisted flow; exit 1 on failure)

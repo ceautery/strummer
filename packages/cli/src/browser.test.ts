@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { firefox } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { run } from './index.js'
 
@@ -52,6 +53,24 @@ describe('strummer browser CLI (real headless chromium)', () => {
     expect(c.out()).toContain('button "Press"')
     expect(c.out()).toContain('CLI Page')
   })
+
+  it('rejects an unknown --engine with a clean error (exit 1, no crash)', async () => {
+    const c = capture()
+    const code = await run(['browser', 'snapshot', baseUrl, ...SAFE, '--engine', 'safari'], c.io)
+    expect(code).toBe(1)
+    expect(c.err().toLowerCase()).toContain('unknown browser engine')
+  })
+
+  it.skipIf(!existsSync(firefox.executablePath()))(
+    'snapshot drives a real Firefox via --engine firefox',
+    async () => {
+      const c = capture()
+      const code = await run(['browser', 'snapshot', baseUrl, ...SAFE, '--engine', 'firefox'], c.io)
+      expect(code).toBe(0)
+      expect(c.out()).toContain('button "Press"')
+      expect(c.out()).toContain('CLI Page')
+    },
+  )
 
   it('audit reports the alt-less image and exits non-zero on violations', async () => {
     const c = capture()

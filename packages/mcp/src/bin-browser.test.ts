@@ -49,6 +49,29 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     )
   })
 
+  it('defaults to the chromium engine', async () => {
+    const b = await build({})
+    expect(b.config.engine).toBe('chromium')
+  })
+
+  it('selects firefox/webkit via STRUMMER_BROWSER_ENGINE — and drops the chromium-only args', async () => {
+    for (const engine of ['firefox', 'webkit']) {
+      const b = await build({ STRUMMER_BROWSER_ENGINE: engine })
+      expect(b.config.engine).toBe(engine)
+      // chromium CLI flags would error/no-op on firefox/webkit, so they're omitted.
+      expect(b.config.launchArgs).toEqual([])
+    }
+  })
+
+  it('fails loud on an unknown engine', async () => {
+    await expect(
+      buildBrowserServerFromEnv({
+        STRUMMER_BROWSER_ARTIFACTS_DIR: mkdtempSync(join(tmpdir(), 'strummer-binc-')),
+        STRUMMER_BROWSER_ENGINE: 'safari',
+      }),
+    ).rejects.toThrow(/unknown browser engine/i)
+  })
+
   it('defaults trace capture OFF and console/network ON; trace opt-in flips it', async () => {
     const off = await build({})
     expect(off.config.capture).toEqual({ trace: false, console: true, network: true })

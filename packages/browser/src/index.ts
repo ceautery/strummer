@@ -21,6 +21,15 @@ export {
   type WouldRequest,
 } from './driver.js'
 export {
+  type BrowserEngine,
+  browserTypeFor,
+  type EngineLaunchSpec,
+  engineLauncher,
+  engineLaunchOptions,
+  isBrowserEngine,
+  resolveEngine,
+} from './engine.js'
+export {
   type BrowserFlow,
   type FlowCollection,
   type FlowResult,
