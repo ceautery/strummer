@@ -139,4 +139,10 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'strummer-har-'))
     expect((await build({ STRUMMER_BROWSER_HAR_DIR: dir })).config.harDir).toBe(dir)
   })
+
+  it('denies HAR replay unless STRUMMER_BROWSER_REPLAY_HAR_DIR sets a replay dir', async () => {
+    expect((await build({})).config.replayDir).toBeUndefined()
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-replay-'))
+    expect((await build({ STRUMMER_BROWSER_REPLAY_HAR_DIR: dir })).config.replayDir).toBe(dir)
+  })
 })

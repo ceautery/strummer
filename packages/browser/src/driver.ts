@@ -50,11 +50,11 @@ function sanitizeFilename(name: string): string {
 }
 
 /** Resolve `file` (relative → under `root`) and confirm it stays inside `root`. */
-function resolveWithin(root: string, file: string): string {
+function resolveWithin(root: string, file: string, label = 'upload'): string {
   const r = resolve(root)
   const abs = isAbsolute(file) ? resolve(file) : resolve(r, file)
   if (abs !== r && !abs.startsWith(r + sep)) {
-    throw new GateError(`upload "${file}" denied — outside the operator upload allowlist`)
+    throw new GateError(`${label} "${file}" denied — outside the operator ${label} allowlist`)
   }
   return abs
 }
@@ -111,6 +111,20 @@ export interface PageDriverOptions {
    * exfiltration control — an agent cannot upload arbitrary local files. Operator
    * config, never a tool input. */
   uploadDir?: string
+  /** Operator HAR-replay dir. `replayFromHar` may only replay a HAR resolving to
+   * within this dir; unset ⇒ replay denied (deny-by-default). Operator config,
+   * never a tool input — replay serves page content from a file, so the source
+   * archive must be operator-trusted. */
+  replayDir?: string
+}
+
+/** Result of arming HAR replay on the page (no page action yet). */
+export interface ReplayResult {
+  action: 'replay_har'
+  /** The replayed HAR (relative to the operator replay dir). */
+  har: string
+  /** Unmatched requests are aborted (strict offline determinism, no egress). */
+  notFound: 'abort'
 }
 
 export interface ScreenshotOptions {
@@ -396,6 +410,24 @@ export class PageDriver {
     const locator = this.locator(ref)
     await locator.setInputFiles(resolved)
     return this.settle('upload', ref)
+  }
+
+  /**
+   * Arm "network heavy mode" **replay**: serve this page's requests from a
+   * recorded HAR instead of the network (`page.routeFromHAR`, `notFound:'abort'`),
+   * for offline determinism. Call it BEFORE navigating. **Deny-by-default:**
+   * requires an operator replay dir, and the HAR must resolve to within it (no
+   * traversal/absolute escape). Unmatched requests are aborted, so replay makes no
+   * network egress and a captured run reproduces exactly. The source archive must
+   * be operator-trusted (it dictates what the page sees), hence the operator dir.
+   */
+  async replayFromHar(har: string): Promise<ReplayResult> {
+    if (this.opts.replayDir === undefined) {
+      throw new GateError('HAR replay not enabled — no operator replay dir configured')
+    }
+    const harPath = resolveWithin(this.opts.replayDir, har, 'replay')
+    await this.page.routeFromHAR(harPath, { notFound: 'abort' })
+    return { action: 'replay_har', har, notFound: 'abort' }
   }
 
   /** Press a key on a ref's element, or on the page when `ref` is null. */

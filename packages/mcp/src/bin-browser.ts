@@ -74,6 +74,8 @@ export interface BrowserBinConfig {
   uploadDir?: string
   /** Operator "network heavy mode" HAR output dir (no HAR capture when unset). */
   harDir?: string
+  /** Operator HAR-replay dir (replay denied when unset). */
+  replayDir?: string
 }
 
 export interface BuiltBrowserServer {
@@ -148,6 +150,9 @@ export async function buildBrowserServerFromEnv(
   // HAR is a heavy secret surface (full req/resp headers+bodies), so it is gated
   // off like the trace; the manager records it, the surface finalizes (redacted).
   const harDir = env.STRUMMER_BROWSER_HAR_DIR || undefined
+  // HAR replay (offline determinism): deny-by-default. An operator replay dir is
+  // the trust boundary — the source HAR dictates what the page is served.
+  const replayDir = env.STRUMMER_BROWSER_REPLAY_HAR_DIR || undefined
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -233,6 +238,7 @@ export async function buildBrowserServerFromEnv(
     downloadDir,
     uploadDir,
     harDir,
+    replayDir,
     runPerfAudit,
     capture,
     maxNodes,
@@ -262,6 +268,7 @@ export async function buildBrowserServerFromEnv(
     downloadDir,
     uploadDir,
     harDir,
+    replayDir,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

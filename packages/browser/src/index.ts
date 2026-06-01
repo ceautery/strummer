@@ -12,6 +12,7 @@ export {
   type DownloadEvent,
   PageDriver,
   type PageDriverOptions,
+  type ReplayResult,
   type ScreenshotOptions,
   type ScreenshotResult,
   type StepResult,

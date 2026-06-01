@@ -68,6 +68,10 @@ export interface BrowserToolsOptions {
    * close — redacted, stored by handle, surfaced in the close reply. Unset ⇒ no
    * HAR. HAR is a heavy secret surface, so it is operator-gated off by default. */
   harDir?: string
+  /** Operator HAR-replay dir. When set, `browser_replay_har` may arm replay from a
+   * HAR resolving to within it; unset ⇒ replay denied (deny-by-default). The source
+   * archive dictates what the page sees, so it must be operator-trusted. */
+  replayDir?: string
   /** Run a Lighthouse perf audit on a URL, keyed by a server-minted `runId`. The
    * bin binds the operator chromium path + proxied/hardened flags + store + redactor
    * here; absent ⇒ `browser_perf_audit` reports it is not enabled. */
@@ -109,6 +113,9 @@ invalidate refs. Close with \`browser_close_session\` to release the context and
 collect artifact handles. Full snapshots, the a11y report, screenshots
 (\`browser_screenshot\`, operator-gated), and trace/console/network logs are
 returned by handle — read the \`strummer://browser/run/{runId}/{kind}\` resource.
+
+For deterministic offline runs, \`browser_replay_har\` (operator-gated) serves the
+session from a recorded HAR instead of the network — call it BEFORE navigating.
 
 Navigation/mutation are deny-by-default and gated by the OPERATOR (host allowlist +
 unsafe unlock); mutations are dry-run unless the operator unlocked them. That is
@@ -258,6 +265,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         exact: opts.exact,
         downloadDir: opts.downloadDir,
         uploadDir: opts.uploadDir,
+        replayDir: opts.replayDir,
       })
       registry.set(id, {
         runId,
@@ -315,6 +323,32 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         sessionCount: manager.sessionCount,
         maxContexts: manager.maxContexts,
       })
+    },
+  )
+
+  server.registerTool(
+    'browser_replay_har',
+    {
+      title: 'Replay from a HAR (offline determinism)',
+      description:
+        'Arm "network heavy mode" replay: serve this session’s requests from a recorded HAR instead ' +
+        'of the network, for deterministic offline runs. Call it BEFORE browser_navigate. Unmatched ' +
+        'requests are aborted (no egress). Deny-by-default: requires an operator HAR-replay dir, and ' +
+        'the HAR must resolve to within it (paths are relative to that dir; no traversal).',
+      inputSchema: {
+        sessionId,
+        har: z.string().describe('HAR file path within the operator replay dir'),
+      },
+      outputSchema: {
+        action: z.literal('replay_har'),
+        har: z.string(),
+        notFound: z.literal('abort'),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.replayFromHar(args.har))
+      return reply({ ...result })
     },
   )
 

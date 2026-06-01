@@ -70,6 +70,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     downloadDir?: string
     uploadDir?: string
     harDir?: string
+    replayDir?: string
     capture?: { trace?: boolean; console?: boolean; network?: boolean }
     runPerfAudit?: Parameters<typeof createBrowserServer>[0]['runPerfAudit']
   }) {
@@ -102,6 +103,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       downloadDir: config.downloadDir,
       uploadDir: config.uploadDir,
       harDir: config.harDir,
+      replayDir: config.replayDir,
       capture: config.capture,
       runPerfAudit: config.runPerfAudit,
     })
@@ -165,6 +167,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_get_attribute',
       'browser_assert',
       'browser_perf_audit',
+      'browser_replay_har',
       'browser_trace_query',
       'browser_audit_a11y',
       'browser_screenshot',
@@ -694,6 +697,52 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const stored = store.get(`strummer://browser/run/${runId}/har`)
     expect(stored).toBeDefined()
     expect(existsSync(harPathFor(harDir, sessionId))).toBe(false)
+    await client.close()
+  })
+
+  it('replays from a recorded HAR (operator-gated); denies traversal + when unset', async () => {
+    // record a HAR into an operator replay dir (raw context — this is the seed run)
+    const replayDir = mkdtempSync(join(baseDir, 'replay-'))
+    const recCtx = await browser.newContext({
+      recordHar: { path: harPathFor(replayDir, 'rec'), content: 'attach', mode: 'full' },
+    })
+    const recPage = await recCtx.newPage()
+    await recPage.goto(baseUrl, { waitUntil: 'networkidle' })
+    await recCtx.close()
+
+    const { client } = await connect({ replayDir })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const res = (await call(client, 'browser_replay_har', { sessionId, har: 'rec.zip' }))
+      .structuredContent as { action: string; har: string; notFound: string }
+    expect(res.action).toBe('replay_har')
+    expect(res.har).toBe('rec.zip')
+    expect(res.notFound).toBe('abort')
+
+    // navigating after replay is armed is served from the HAR (here the server is
+    // still up; the offline-determinism proof lives in the engine's replay.test.ts)
+    const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
+      .structuredContent as StepSC
+    expect(nav.snapshot).toContain('[ref=')
+
+    // a traversal path outside the operator replay dir is denied
+    const bad = await call(client, 'browser_replay_har', { sessionId, har: '../../../etc/hosts' })
+    expect(bad.isError).toBe(true)
+    expect(JSON.stringify(bad.content)).toMatch(/replay/i)
+
+    // with no operator replay dir, replay is denied entirely (deny-by-default)
+    const noDir = await connect({})
+    const nd = (await call(noDir.client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const denied = await call(noDir.client, 'browser_replay_har', {
+      sessionId: nd.sessionId,
+      har: 'rec.zip',
+    })
+    expect(denied.isError).toBe(true)
+    expect(JSON.stringify(denied.content)).toMatch(/not enabled/i)
+    await noDir.client.close()
     await client.close()
   })
 
