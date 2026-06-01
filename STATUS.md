@@ -77,7 +77,10 @@ The `strummer://deps/{id}/{kind}` resource now serves both audit detail + change
 vuln-aware `minimumSafeUpgrade` target also landed (lowest release clearing all known
 vulns, distinct from `recommendedTarget`), and the `behindBy` freshness metric
 (`FreshnessVerdict.behindBy`: upgrade distance by semver component — releases/major/minor/
-patch). 448 TS + 45 Py green.)_
+patch). **CVSS-vector → bucket scoring also landed** (pure `cvssV3BaseScore` v3.0/3.1 base
+formula; `matchVulnerabilities` derives the severity bucket from a CVSS vector when no
+qualitative GHSA string is present, so a vector-only advisory is no longer `unknown`). 457
+TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -404,10 +407,12 @@ lowest stable release newer than installed that re-matches ZERO advisories — r
 per candidate against the full set, so a release fixing the original vuln but hit by another
 is skipped; distinct from the conservative same-major `recommendedTarget`; surfaced in
 `audit_dependency` + the `audit_project` roll-up), **and the `behindBy` freshness metric is
-DONE** (`FreshnessVerdict.behindBy`: upgrade distance by semver component). **Next for deps:**
-the remaining staged deferrals — CVSS-vector → bucket scoring (slices 2–4 bucket the GHSA
-`database_specific.severity` string; CVSS vectors currently → `unknown`), and the staged
-Python/PyPI + RubyGems advisory adapters. In parallel, the
+DONE** (`FreshnessVerdict.behindBy`: upgrade distance by semver component), **and
+CVSS-vector → bucket scoring is DONE** (pure `cvssV3BaseScore`; `matchVulnerabilities`
+falls back to the CVSS vector's bucket when no qualitative GHSA string is present).
+**Next for deps:** the staged **Python/PyPI + RubyGems advisory adapters** (the non-npm
+ecosystems — `audit_project` is npm-only today; `detectInstalledVersion` already dispatches
+by ecosystem). In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket

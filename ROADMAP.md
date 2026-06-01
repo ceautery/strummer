@@ -390,8 +390,12 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `snapshotDate` (newest advisory `modified`) so "no known vulns" is never
         treated as authoritative; fail loud on an absent ecosystem snapshot. Real FS
         round-trip in tests, zero network.
-  - [ ] CVSS-vector → bucket scoring (defer; slices 2–3 bucket the GHSA
-        `database_specific.severity` string, CVSS vectors → `unknown`).
+  - [x] **CVSS-vector → bucket scoring** — pure `cvssV3BaseScore` (CVSS v3.0/v3.1 base
+        formula + official Roundup, verified against the spec's example vectors; v2/v4 →
+        undefined). `matchVulnerabilities` keeps the qualitative GHSA
+        `database_specific.severity` authoritative, else derives the bucket from the
+        highest CVSS v3 vector on the matching affected entries / advisory (OSV `severity[]`
+        `{type, score}`), so a vector-only advisory no longer reports `unknown`.
   - [x] **Slice 4 — `auditDependency`**: pure roll-up composing `auditDeprecation` +
         `matchVulnerabilities` + freshness (latest / latestSameMajor / isOutdated via
         `semver`, prereleases excluded) into one verdict — `worstSeverity`,
