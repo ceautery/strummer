@@ -188,6 +188,8 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/lsp: {}
+
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
