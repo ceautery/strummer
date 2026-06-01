@@ -485,11 +485,11 @@ Two independent tracks, then the test-quality chain, then LSP last:
         the live vitest subprocess runner. **The coverage pillar's agent surface is complete.**
   - [ ] *(staged)* pin `istanbul-lib-coverage` if `CoverageMap` merging/summaries are needed;
         a `strummer coverage` human CLI; Python (coverage.py) adapter.
-- [ ] **Flaky-test detection & quarantine** (`@strummer/flake`) — protects the
-      deterministic green gate. Pure Wilson/binomial classifier over a run-history
-      fixture first; quarantine **writes** are operator-gated (paired) with mandatory
-      expiry. Opens its own private `better-sqlite3` history DB (a second SQLite owner,
-      outside the docs-pillar core invariant — noted in ADR 0010).
+- [x] **Flaky-test detection & quarantine** (`@strummer/flake`) — **COMPLETE (engine +
+      agent surface).** Protects the deterministic green gate. Pure Wilson/binomial
+      classifier over a run-history fixture first; quarantine **writes** operator-gated
+      (paired) with mandatory expiry. Opens its own private `better-sqlite3` history DB (a
+      second SQLite owner, outside the docs-pillar core invariant — noted in ADR 0010).
   - [x] **Slice 1 — pure `wilsonInterval` + `classifyHistory`/`classifyHistories`.**
         The Wilson score interval for a binomial proportion (clamped to [0,1], degenerate
         zero for zero runs — chosen over naive p̂=failures/runs, which is overconfident at
@@ -502,9 +502,26 @@ Two independent tracks, then the test-quality chain, then LSP last:
         magnitude the (later, operator-gated) quarantine slice thresholds on. Pure/offline
         over a committed `run-history.json` fixture shaped like the future history store
         ({passed, at} runs; `at` ignored). No runtime deps yet.
-  - [ ] *(next)* the private `better-sqlite3` run-history store (record/query runs) feeding
-        the classifier; then the operator-gated quarantine **writes** (paired gate +
-        mandatory expiry); then the MCP surface; Python (pytest-json) adapter staged.
+  - [x] **Slice 2 — `HistoryStore`.** The private better-sqlite3 run-history DB (append-only
+        `test_run` + `flake_meta`); `recordRun`/`recordRuns`, `history`/`histories`
+        (`limitPerTest`/`since`), `classify()` straight from the store. better-sqlite3
+        ^12.10.0 = flake's first explicit pinned dep.
+  - [x] **Slice 3 — `parseVitestJson` + `ingestReport`.** Pure parser of a `vitest run
+        --reporter=json` report → RecordedRuns (stable `<relFile> > <ancestorTitles>title`
+        ids, skipped/pending/todo dropped), over a committed real-shaped fixture.
+  - [x] **Slice 4 — `Quarantine` (operator-gated writes).** Paired gate adapted to this
+        surface: `allowQuarantine` + load-bearing `maxExpiryMs` (mandatory expiry, refused
+        past the cap, no permanent quarantine). Writes upsert; reads/`release` ungated +
+        expiry-aware. Pure `quarantineCandidates` proposes (never `broken`/`reliable`).
+  - [x] **Slice 5 — `runAndRecord` (gated vitest runner).** Spawns `vitest run
+        --reporter=json` (`repeat` × suite), records, classifies; mirrors coverage's
+        runScoped (paired `allowRun`+`allowedRoots` gate, injected TestRunner — no real
+        spawn in the gate).
+  - [x] **Slice 6 — MCP surface + `strummer-flake-mcp` bin.** Always-on reads
+        (`flake_status`/`flake_candidates`/`flake_release`); `flake_run` behind the run gate;
+        `flake_quarantine` behind the quarantine gate. Bin requires `STRUMMER_FLAKE_DB` +
+        the two independent paired gates.
+  - [ ] *(staged)* Python (pytest-json) adapter; an optional `strummer flake` human CLI.
 - [ ] **Mutation testing** (`@strummer/mutate`) — are the tests meaningful? Run a
       **Stryker/Vitest-4 compat spike first** (Stryker's vitest-runner advertises
       Vitest v1–3; we are pinned to 4.1.x) before committing the slot. Pure

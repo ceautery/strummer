@@ -112,7 +112,23 @@ run count (observed inconsistency = flaky); an all-pass/all-fail history is `rel
 conservative, sample-size-aware magnitude the (later, operator-gated) quarantine slice
 thresholds on. Pure/offline over a committed `run-history.json` fixture shaped like the
 future private better-sqlite3 history store ({passed, at} runs; `at` ignored). No runtime
-deps yet (better-sqlite3 arrives with the history-DB slice). 509 TS + 45 Py green.)_
+deps yet (better-sqlite3 arrives with the history-DB slice). **`@strummer/flake` is now
+COMPLETE (engine + agent surface), slices 2–6:** slice 2 `HistoryStore` — the private
+better-sqlite3 run-history DB (append-only `test_run` + `flake_meta`; record/history/
+classify; a SECOND SQLite owner per ADR 0010, outside the docs-pillar invariant); slice 3
+`parseVitestJson` + `ingestReport` — pure parser of a `vitest run --reporter=json` report
+→ RecordedRuns (stable `<relFile> > <ancestorTitles>title` ids, skipped/pending/todo
+dropped), over a committed real-shaped fixture; slice 4 `Quarantine` — the only WRITE
+surface, paired deny-by-default gate adapted here (`allowQuarantine` + load-bearing
+`maxExpiryMs`; expiry MANDATORY, refused past the cap, no permanent quarantine; reads/
+`release` ungated + expiry-aware; pure `quarantineCandidates` proposes, never `broken`/
+`reliable`); slice 5 `runAndRecord` — the gated vitest runner (spawn `--reporter=json`,
+`repeat`×suite, record, classify; mirrors coverage's runScoped — paired `allowRun`+
+`allowedRoots` gate, injected TestRunner so no real spawn in the gate); slice 6 the MCP
+surface + `strummer-flake-mcp` bin (`flake_status`/`flake_candidates`/`flake_release`
+always on; `flake_run` behind the run gate; `flake_quarantine` behind the quarantine gate;
+bin requires `STRUMMER_FLAKE_DB` + the two independent paired gates). 553 TS + 45 Py
+green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -452,14 +468,19 @@ landed**, **and the MCP surface + `strummer-coverage-mcp` bin landed** — so **
 `@strummer/coverage` pillar (engine + agent surface) is complete** (`uncovered_in_diff`
 free/read-only + gated `run_scoped`). **Next for deps/coverage:** the staged
 **Python/PyPI + RubyGems advisory adapters** (deps) and, optionally, a `strummer coverage`
-human CLI / `istanbul-lib-coverage` for `CoverageMap` merging. **The test-quality chain is
-now open — `@strummer/flake` slice 1 landed:** the pure `wilsonInterval` + `classifyHistory`/
-`classifyHistories` classifier (states `flaky`/`reliable`/`broken`/`insufficient-data`;
-`flakeScore` = Wilson lower bound of the failure rate) over a committed `run-history.json`
-fixture; pure/offline, no runtime deps yet. **Next for flake:** the private better-sqlite3
-run-history store (record/query runs) feeding the classifier → operator-gated quarantine
-**writes** (paired gate + mandatory expiry) → MCP surface; then `@strummer/mutate` (after a
-Stryker/Vitest-4 compat spike) → `@strummer/lsp` (last).
+human CLI / `istanbul-lib-coverage` for `CoverageMap` merging. **`@strummer/flake` is now
+COMPLETE (engine + agent surface)** — the pure Wilson classifier (slice 1) + the private
+better-sqlite3 `HistoryStore` (slice 2) + `parseVitestJson`/`ingestReport` (slice 3) + the
+operator-gated `Quarantine` with mandatory expiry (slice 4) + the gated `runAndRecord`
+vitest spawner (slice 5) + the MCP surface/`strummer-flake-mcp` bin (slice 6:
+`flake_status`/`flake_candidates`/`flake_release` always on, `flake_run` + `flake_quarantine`
+each behind their own paired gate). **Next in the test-quality chain:** `@strummer/mutate`
+— **run the Stryker/Vitest-4 compat spike FIRST** (ADR 0010 blocker: Stryker's vitest-runner
+advertises Vitest v1–3; we are pinned to 4.1.x — decides thin-wrap vs command-runner
+fallback), then a pure `summarizeMutation` over a golden report, then the diff-scoped run +
+MCP surface. Then `@strummer/lsp` (last — the only candidate that breaks ARCHITECTURE §1's
+no-live-RPC rule). **Flake staged tail:** Python (pytest-json) adapter; optional `strummer
+flake` human CLI.
 Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
 (`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in). The
