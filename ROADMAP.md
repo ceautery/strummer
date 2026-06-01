@@ -448,7 +448,14 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `detailHandle`; the inline result stays a compact roll-up. The
         `strummer://deps/{id}/{kind}` resource now serves both audit detail + changelog
         slices (decoupled from the changelog fetcher).
-  - [ ] *(staged)* Python/PyPI + RubyGems advisory adapters.
+  - [x] **Multi-ecosystem version algebra (ADR 0012)** — a pluggable `VersionComparator`
+        threaded through `audit.ts`/`osv.ts` (npm behavior-preserving via `semverComparator`);
+        `pep440Comparator` on the pinned `@renovatebot/pep440` (conformance + OSV-PyPI range tests);
+        and **PyPI `audit_dependency` end-to-end** — `pypiJsonToPackument` + PEP 503
+        `normalizePypiName`, the per-ecosystem comparator map in the surface, and a PyPI JSON-API
+        packument fetcher in the bin (`STRUMMER_DEPS_PYPI_REGISTRY`). `changelog_diff` stays npm-only.
+  - [ ] *(staged)* PyPI `audit_project` (a Python-manifest dependency-name reader); RubyGems
+        (`@renovatebot/ruby-semver` `gemComparator` + the RubyGems API fetcher).
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A, building.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
       (the forgotten-assertion catch — the genuinely novel win under our TDD gate).

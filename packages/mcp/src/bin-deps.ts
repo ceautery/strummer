@@ -3,7 +3,12 @@ import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ArtifactStore } from '@strummer/artifacts'
-import type { Packument } from '@strummer/deps'
+import {
+  normalizePypiName,
+  type Packument,
+  type PyPiJson,
+  pypiJsonToPackument,
+} from '@strummer/deps'
 import { resolveAndPin } from '@strummer/safety'
 import { type ChangelogFetcher, createDepsServer, type PackumentFetcher } from './deps.js'
 
@@ -18,6 +23,8 @@ export interface DepsBinConfig {
   allowNetwork: boolean
   /** npm registry base URL the packument fetcher targets. */
   registry: string
+  /** PyPI JSON-API base URL (`<base>/<project>/json`) the PyPI packument fetcher targets. */
+  pypiRegistry: string
   /** Permit a loopback/private registry mirror (e.g. a local Verdaccio). Default
    * false — the public registry is global, so private targets are refused unless
    * the operator opts in. */
@@ -46,21 +53,32 @@ function packumentUrl(registry: string, packageName: string): string {
  * pre-flight resolve-and-refuse (an accepted narrow TOCTOU vs the browser proxy's
  * true pinning; the registry is operator-configured, not agent-supplied).
  */
-function makeFetcher(registry: string, allowPrivate: boolean): PackumentFetcher {
+function makeFetcher(
+  registry: string,
+  pypiRegistry: string,
+  allowPrivate: boolean,
+): PackumentFetcher {
   return async (packageName, ecosystem) => {
-    if (ecosystem !== 'npm') {
-      throw new Error(
-        `network packument fetch supports the npm ecosystem only (got "${ecosystem}")`,
-      )
+    if (ecosystem === 'npm') {
+      const url = packumentUrl(registry, packageName)
+      await resolveAndPin(new URL(url).hostname, undefined, { allowPrivate })
+      const res = await fetch(url, { headers: { accept: 'application/json' } })
+      if (!res.ok) {
+        throw new Error(`registry returned ${res.status} for ${packageName}`)
+      }
+      return (await res.json()) as Packument
     }
-    const url = packumentUrl(registry, packageName)
-    const host = new URL(url).hostname
-    await resolveAndPin(host, undefined, { allowPrivate })
-    const res = await fetch(url, { headers: { accept: 'application/json' } })
-    if (!res.ok) {
-      throw new Error(`registry returned ${res.status} for ${packageName}`)
+    if (ecosystem === 'PyPI') {
+      const base = pypiRegistry.replace(/\/+$/, '')
+      const url = `${base}/${encodeURIComponent(normalizePypiName(packageName))}/json`
+      await resolveAndPin(new URL(url).hostname, undefined, { allowPrivate })
+      const res = await fetch(url, { headers: { accept: 'application/json' } })
+      if (!res.ok) {
+        throw new Error(`PyPI returned ${res.status} for ${packageName}`)
+      }
+      return pypiJsonToPackument((await res.json()) as PyPiJson)
     }
-    return (await res.json()) as Packument
+    throw new Error(`network packument fetch supports npm and PyPI (got "${ecosystem}")`)
   }
 }
 
@@ -88,8 +106,12 @@ const CHANGELOG_FILES = [
  * `raw.githubusercontent.com/<owner>/<repo>/HEAD/<file>` (HEAD = default branch),
  * SSRF-pinning the raw host on every attempt. Fails loud if no repo/changelog is found.
  */
-function makeChangelogFetcher(registry: string, allowPrivate: boolean): ChangelogFetcher {
-  const fetchPackument = makeFetcher(registry, allowPrivate)
+function makeChangelogFetcher(
+  registry: string,
+  pypiRegistry: string,
+  allowPrivate: boolean,
+): ChangelogFetcher {
+  const fetchPackument = makeFetcher(registry, pypiRegistry, allowPrivate)
   return async (packageName, ecosystem) => {
     if (ecosystem !== 'npm') {
       throw new Error(`changelog fetch supports the npm ecosystem only (got "${ecosystem}")`)
@@ -116,6 +138,7 @@ function makeChangelogFetcher(registry: string, allowPrivate: boolean): Changelo
  *   STRUMMER_DEPS_ARTIFACT_DIR=/var/lib/strummer/deps # backs changelog_diff handles
  *   STRUMMER_DEPS_ALLOW_NETWORK=1                     # enable packument + changelog fetch
  *   STRUMMER_DEPS_NPM_REGISTRY=https://registry.npmjs.org
+ *   STRUMMER_DEPS_PYPI_REGISTRY=https://pypi.org/pypi  # PyPI JSON API base
  *   STRUMMER_DEPS_ALLOW_PRIVATE=1                     # permit a local registry mirror
  */
 export function buildDepsServerFromEnv(
@@ -126,15 +149,16 @@ export function buildDepsServerFromEnv(
     artifactDir: env.STRUMMER_DEPS_ARTIFACT_DIR || undefined,
     allowNetwork: bool(env.STRUMMER_DEPS_ALLOW_NETWORK),
     registry: env.STRUMMER_DEPS_NPM_REGISTRY || 'https://registry.npmjs.org',
+    pypiRegistry: env.STRUMMER_DEPS_PYPI_REGISTRY || 'https://pypi.org/pypi',
     allowPrivate: bool(env.STRUMMER_DEPS_ALLOW_PRIVATE),
   }
   const server = createDepsServer({
     osvDir: config.osvDir,
     fetchPackument: config.allowNetwork
-      ? makeFetcher(config.registry, config.allowPrivate)
+      ? makeFetcher(config.registry, config.pypiRegistry, config.allowPrivate)
       : undefined,
     fetchChangelog: config.allowNetwork
-      ? makeChangelogFetcher(config.registry, config.allowPrivate)
+      ? makeChangelogFetcher(config.registry, config.pypiRegistry, config.allowPrivate)
       : undefined,
     artifacts:
       config.artifactDir !== undefined ? new ArtifactStore(config.artifactDir, 'deps') : undefined,

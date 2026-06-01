@@ -16,8 +16,16 @@ describe('strummer-deps-mcp bin config (operator env)', () => {
       artifactDir: undefined,
       allowNetwork: false,
       registry: 'https://registry.npmjs.org',
+      pypiRegistry: 'https://pypi.org/pypi',
       allowPrivate: false,
     })
+  })
+
+  it('reads the PyPI registry base from STRUMMER_DEPS_PYPI_REGISTRY', () => {
+    const { config } = buildDepsServerFromEnv({
+      STRUMMER_DEPS_PYPI_REGISTRY: 'https://pypi.example.test/pypi',
+    })
+    expect(config.pypiRegistry).toBe('https://pypi.example.test/pypi')
   })
 
   it('reads the OSV snapshot dir from STRUMMER_DEPS_OSV_DB_DIR', () => {

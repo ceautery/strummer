@@ -96,10 +96,10 @@ function makeProject(deps: Record<string, string>, installed: Record<string, str
   return dir
 }
 
-function makeOsvSnapshot(advisories: OsvAdvisory[]): string {
+function makeOsvSnapshot(advisories: OsvAdvisory[], ecosystem = 'npm'): string {
   const root = mkdtempSync(join(tmpdir(), 'strummer-deps-osv-'))
   tmpDirs.push(root)
-  const ecoDir = join(root, 'npm')
+  const ecoDir = join(root, ecosystem)
   mkdirSync(ecoDir, { recursive: true })
   const zipInput: Record<string, Uint8Array> = {}
   for (const a of advisories) zipInput[`${a.id}.json`] = strToU8(JSON.stringify(a))
@@ -387,5 +387,71 @@ describe('strummer deps MCP surface', () => {
       arguments: { project, package: 'lodash' },
     })
     expect(res.isError).toBe(true)
+  })
+
+  // ---- PyPI (ADR 0012 slice 3) -------------------------------------------
+
+  it('audit_dependency audits an installed PyPI package with PEP 440 + a normalized OSV name', async () => {
+    // Django 5.0.0 is installed (requirements.txt), vulnerable per a PyPI ECOSYSTEM range.
+    const pyProject = mkdtempSync(join(tmpdir(), 'strummer-deps-py-'))
+    tmpDirs.push(pyProject)
+    writeFileSync(join(pyProject, 'requirements.txt'), 'Django==5.0.0\n')
+
+    const djangoPackument: Packument = {
+      name: 'django',
+      'dist-tags': { latest: '5.0.4' },
+      versions: {
+        '5.0.0': { version: '5.0.0' },
+        '5.0.3': { version: '5.0.3' },
+        '5.0.4': { version: '5.0.4' },
+      },
+    }
+    const fetchPyPi: PackumentFetcher = async (name, ecosystem) => {
+      expect(ecosystem).toBe('PyPI')
+      // The agent typed "Django"; OSV/PyPI canonical name is "django".
+      if (name === 'Django') return djangoPackument
+      throw new Error(`no fixture packument for ${name}`)
+    }
+
+    const djangoAdvisory: OsvAdvisory = {
+      id: 'PYSEC-2024-1',
+      modified: '2024-03-01T00:00:00Z',
+      aliases: ['CVE-2024-0001'],
+      summary: 'SQL injection in Django',
+      database_specific: { severity: 'CRITICAL' },
+      affected: [
+        {
+          package: { ecosystem: 'PyPI', name: 'django' },
+          ranges: [{ type: 'ECOSYSTEM', events: [{ introduced: '5.0' }, { fixed: '5.0.3' }] }],
+        },
+      ],
+    }
+    const pyOsvDir = makeOsvSnapshot([djangoAdvisory], 'PyPI')
+
+    const client = await connect(createDepsServer({ fetchPackument: fetchPyPi, osvDir: pyOsvDir }))
+    clients.push(client)
+    const res = await client.callTool({
+      name: 'audit_dependency',
+      arguments: { project: pyProject, package: 'Django', ecosystem: 'PyPI' },
+    })
+    const sc = res.structuredContent as {
+      package: string
+      ecosystem: string
+      installedVersion: string
+      worstSeverity: string
+      vulnerabilities: { id: string; fixedIn: string[] }[]
+      recommendedTarget?: string
+      minimumSafeUpgrade?: string
+      osvSnapshotLoaded: boolean
+    }
+    expect(sc.package).toBe('django') // PEP 503-normalized for the OSV match
+    expect(sc.ecosystem).toBe('PyPI')
+    expect(sc.installedVersion).toBe('5.0.0')
+    expect(sc.worstSeverity).toBe('critical')
+    expect(sc.vulnerabilities[0]?.id).toBe('PYSEC-2024-1')
+    expect(sc.vulnerabilities[0]?.fixedIn).toContain('5.0.3')
+    expect(sc.minimumSafeUpgrade).toBe('5.0.3') // lowest stable clearing the advisory
+    expect(sc.recommendedTarget).toBe('5.0.4') // newest same-major
+    expect(sc.osvSnapshotLoaded).toBe(true)
   })
 })

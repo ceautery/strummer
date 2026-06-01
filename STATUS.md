@@ -607,15 +607,27 @@ istanbul `FileCoverage`: one synthetic single-line statement per executed/missin
 1, missing→0, excluded omitted→`nonExecutable`). The differ (`uncoveredInDiff`/`uncoveredNewLines`)
 is unchanged (ecosystem-agnostic); `uncovered_in_diff` gained a `coverageFormat: istanbul|coveragepy`
 discriminator so the Python path is agent-reachable.
-**Next: deps PyPI** — the heavy one. semver is hardcoded in ~7 funcs across `packages/deps/src/audit.ts`
-(`stableVersions`/`maxVersion`/`computeFreshness`/`computeBehindBy`/`lowestSafeVersion`) and `osv.ts`
-(`clean`/`compareVersions`) + `changelog.ts`; PyPI=PEP 440, RubyGems=Gem, neither semver-comparable
-(OSV ships them as `ECOSYSTEM` ranges the code silently mis-coerces today). Plan: a pluggable
-`VersionComparator` (npm=semver, PyPI=PEP 440, Gem) threaded through those funcs + a PyPI packument
-fetcher (PyPI JSON API). `loadOsvSnapshot`/`detectInstalledVersion` are ALREADY ecosystem-generic;
-`audit_project` hard-rejects non-npm at `deps.ts:213` (lift that). Likely its own ADR + several slices.
-Then **mutate (mutmut)** last. **PRIOR next-action (the fallback once Python adapters land): a Phase-5
-boundary or the other explicitly-staged tails.**
+**deps PyPI: DESIGN (ADR 0012) + slices 1-3 DONE, 693 TS + 45 Py green.** Fan-out design pass
+(PEP440/Gem comparator libs + OSV/registry semantics + the call-site seam) → ADR 0012: pin
+`@renovatebot/pep440` + `@renovatebot/ruby-semver` behind a pluggable `VersionComparator`,
+hand-roll fallback documented; `changelog_diff` stays npm/semver-only; OSV `ECOSYSTEM` ranges
+must use the ecosystem comparator (semver silently mis-coerces PEP440/Gem). **Slice 1:** the
+`VersionComparator` seam (`comparator.ts` + `semverComparator`) threaded through `audit.ts`/`osv.ts`,
+behavior-preserving for npm (the 46-test deps suite is the guard); `behindBy`/`latestSameMajor` now
+derive from `releaseComponents()`. **Slice 2:** `pep440Comparator` (`pep440.ts`, on the pinned
+`@renovatebot/pep440` — loads under tsc/tsdown/Vitest; `compare`→`Math.sign`) + PEP 440 canonical-
+sequence conformance fixtures + OSV-PyPI range-scan tests (correct across the prerelease/epoch
+boundary semver mis-handles). **Slice 3:** PyPI `audit_dependency` end-to-end — pure `pypiJsonToPackument`
++ PEP 503 `normalizePypiName` (`pypi.ts`), a per-ecosystem `COMPARATORS` map + `comparatorFor`/`matchName`
+in `packages/mcp/src/deps.ts`, and a PyPI JSON-API packument fetcher in `bin-deps.ts`
+(`STRUMMER_DEPS_PYPI_REGISTRY`, default `https://pypi.org/pypi`). RubyGems stays unsupported (clear
+error from `comparatorFor`); `audit_project` stays npm-only.
+**Next for deps:** (slice 3b) PyPI `audit_project` — needs a Python-manifest dependency-NAME reader
+(pyproject `[project].dependencies`/poetry, requirements.txt); then **slice 4 RubyGems**
+(`gemComparator` on `@renovatebot/ruby-semver` — validate it loads, hand-roll fallback ready — + the
+RubyGems API fetcher). **Then `mutate` (mutmut)** is the last Python-adapter pillar.
+**PRIOR next-action (the fallback once Python adapters land): a Phase-5 boundary or the other
+explicitly-staged tails.**
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (behind per-server capability detection — `normalizeDocumentSymbols` already
 exists); then write-mode (`rename`), `workspace/symbol`, `diagnostics`, multi-root, the full

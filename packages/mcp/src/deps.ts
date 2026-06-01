@@ -7,9 +7,13 @@ import {
   auditDependency,
   type DependencyAudit,
   loadOsvSnapshot,
+  normalizePypiName,
   type OsvAdvisory,
   type Packument,
+  pep440Comparator,
+  semverComparator,
   sliceChangelog,
+  type VersionComparator,
 } from '@strummer/deps'
 import { z } from 'zod'
 
@@ -51,6 +55,25 @@ const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
   npm: 'node',
   PyPI: 'python',
   RubyGems: 'ruby',
+}
+
+/** Version algebra per ecosystem (ADR 0012). RubyGems (Gem) is staged — absent here. */
+const COMPARATORS: Partial<Record<OsvEcosystem, VersionComparator>> = {
+  npm: semverComparator,
+  PyPI: pep440Comparator,
+}
+
+function comparatorFor(ecosystem: OsvEcosystem): VersionComparator {
+  const cmp = COMPARATORS[ecosystem]
+  if (cmp === undefined) {
+    throw new Error(`version comparison for the ${ecosystem} ecosystem is not yet supported`)
+  }
+  return cmp
+}
+
+/** The name OSV matches on. PyPI advisory names are PEP 503-normalized; npm uses the name as-is. */
+function matchName(packageName: string, ecosystem: OsvEcosystem): string {
+  return ecosystem === 'PyPI' ? normalizePypiName(packageName) : packageName
 }
 
 const INSTRUCTIONS = `Strummer answers dependency/version questions for the version of a
@@ -123,12 +146,13 @@ async function auditOne(
   }
   const packument = await opts.fetchPackument(packageName, ecosystem)
   return auditDependency({
-    packageName,
+    packageName: matchName(packageName, ecosystem),
     ecosystem,
     installedVersion: detected.version,
     packument,
     advisories,
     snapshotDate,
+    comparator: comparatorFor(ecosystem),
   })
 }
 
@@ -177,12 +201,13 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
       }
       const packument = await opts.fetchPackument(args.package, ecosystem)
       const audit = auditDependency({
-        packageName: args.package,
+        packageName: matchName(args.package, ecosystem),
         ecosystem,
         installedVersion: detected.version,
         packument,
         advisories,
         snapshotDate,
+        comparator: comparatorFor(ecosystem),
       })
       const structured = { ...audit, detectedSource: detected.source, osvSnapshotLoaded: loaded }
       return { content: [text(structured)], structuredContent: structured }

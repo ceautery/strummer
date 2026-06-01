@@ -31,4 +31,10 @@ export {
   type VulnerabilityMatch,
 } from './osv.js'
 export { pep440Comparator } from './pep440.js'
+export {
+  normalizePypiName,
+  type PyPiJson,
+  type PyPiReleaseFile,
+  pypiJsonToPackument,
+} from './pypi.js'
 export { loadOsvSnapshot, type OsvSnapshot } from './snapshot.js'
