@@ -6,11 +6,11 @@
 ## Current phase
 
 **Phase 4 — Cross-cutting verification: UNDERWAY (4 of 5 pillars complete; LSP — the last —
-in progress, slices 1–2 landed).** _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`,
+in progress, slices 1–3 landed).** _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`,
 and `@strummer/mutate` are all COMPLETE (engine + agent surface); `@strummer/lsp` is the only
-remaining candidate — design locked in **ADR 0011**, slice 1 (pure encoding + normalize) and
-slice 2 (`client.ts` — the LSP JSON-RPC client over the fake-peer harness) landed. Design pass
-done via the `phase4-design-research` fan-out — 5 parallel research
+remaining candidate — design locked in **ADR 0011**, slices 1–3 landed: pure encoding + normalize
+(1), `client.ts` LSP JSON-RPC client (2), and `registry.ts` + `manager.ts` lifecycle (3) — all
+over the fake-peer harness. Design pass done via the `phase4-design-research` fan-out — 5 parallel research
 streams → synthesis → 3 adversarial critics → corrected synthesis; captured in **ADR
 0010**. Sequence (by leverage-per-effort): **`@strummer/deps` (dependency/version
 intelligence) first** ∥ `@strummer/coverage` (parallel track), then `@strummer/flake`
@@ -143,7 +143,8 @@ catch); slice 2 the gated `runMutation` (spawn `stryker run --reporters json`, r
 summarize; paired `allowRun`+`allowedRoots` gate + injected MutationRunner so no real
 Stryker in the gate; diff-scoped via `mutateFiles`→`--mutate` + `--incremental`) + the
 `mutate_summarize`(free)/`mutate_run`(gated) MCP surface + `strummer-mutate-mcp` bin. With LSP
-slices 1–2 (encoding/normalize + `client.ts`) now also landed, **618 TS + 45 Py green**.)_
+slices 1–3 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts`) now also landed,
+**636 TS + 45 Py green**.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -540,15 +541,31 @@ CJS-without-`exports` dep). Tested against a **fake in-process JSON-RPC peer** (
 `PassThrough` duplex streams à la vscode-jsonrpc's TestDuplex) replaying **RECORDED real-server
 payloads** captured out-of-gate from `typescript-language-server` 5.3.0 (definition returned as
 a real `LocationLink[]`, references as `Location[]`, hover as `MarkupContent`, a genuine indexing
-`$/progress` begin/end pair; provenance in `test/fixtures/README.md`). 13 client tests, **618 TS +
-45 Py green**. **Next action: code ADR-0011 slice 3 — `manager.ts` + `registry.ts`**
-(`LanguageServerManager` keyed by `(language, projectRoot)`, shared across MCP sessions, longer
-idle TTL than browser's; **per-`(server, uri)` async mutex** serializing the open+query critical
-section; in-flight-aware reaper that never reaps `inFlight > 0`, sends LSP `shutdown`→`exit` with a
-clock-driven grace before `dispose()`; `rootUri`/`workspaceFolders` pinned to the allowlisted root;
-the operator-bound JSON `language→{command,args[],initializationOptions}` registry). Then gated
-`query.ts` (`lspQuery` mirroring `runScoped` — `LspGateError`/`assertAllowed`/deadline/injected
-spawn) → MCP surface + `strummer-lsp-mcp` bin. **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
+`$/progress` begin/end pair; provenance in `test/fixtures/README.md`). 13 client tests.
+**Slice 3 is LANDED:** `registry.ts` — the operator-bound JSON `language→{command,args[],
+initializationOptions?}` registry (`parseServerRegistry` fails loud on malformed config; `command`
++ `args[]` **structurally separate**, no `lang=cmd args;…` DSL the engine would re-split;
+`resolveServer` refuses an unbound language, never spawning an unregistered server) + `manager.ts`
+— `LanguageServerManager` keyed by `(language, projectRoot)`, **shared across MCP sessions** with a
+longer idle TTL than browser's (15 min default), lazy spawn via the injected `serverSpawn` seam,
+**`rootUri`/`workspaceFolders` pinned to the allowlisted `projectRoot`** (agent never supplies a
+root; a root outside `allowedRoots` is refused **before any spawn**), a **per-`(server, uri)` async
+mutex** (chained-promise locks) serializing the open+query critical section, and an
+**in-flight-aware reaper** (`sweepIdle(nowMs)` never reaps `inFlight > 0`; resets the idle clock on
+request start/end; reap = LSP `shutdown`→`exit` then a **clock-driven `delay` grace** before the
+hard `connection.dispose()`/SIGKILL) + a production `startReaper(intervalMs)` trigger. The shared
+fake-peer test harness was factored to `src/peer.ts` (test-only, not in the barrel/`dist`; gained
+an `onInitialize` capture so the manager test asserts `rootUri` pinning). 10 registry + 8 manager
+tests; **636 TS + 45 Py green**. **Next action: code ADR-0011 slice 4 — gated `query.ts`**
+(`lspQuery(config, input, deps)` mirroring coverage's `runScoped`: the **paired deny-by-default
+gate** — `allowRun` + `allowedRoots` + per-request deadline, `LspGateError`/`assertAllowed`;
+confine the queried doc URI to the project root; read the file text, convert the human 1-based
+line:col → LSP position via `toLspPosition`+`client.encoding`, drive `manager.run`, then map result
+ranges back via `fromLspPosition`; the **v1 warn-on-toolchain-mismatch** hook reusing
+`core.detectInstalledVersion` lives here). Then the MCP surface + `strummer-lsp-mcp` bin
+(`lsp_find_definition`/`_references`/`_hover` gated as a group; always-on `lsp_languages`; large
+results by handle via `@strummer/artifacts` `lsp` prefix; env `STRUMMER_LSP_ALLOW_RUN`/
+`_PROJECT_ROOTS`/`_TIMEOUT_MS`/`_SERVERS`(JSON)/`_ARTIFACT_DIR`). **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
 adapters; coverage `strummer coverage` CLI / `istanbul-lib-coverage` merging; flake Python
 (pytest-json) adapter; mutate Python (mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
 Phase 3

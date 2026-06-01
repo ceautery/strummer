@@ -565,12 +565,21 @@ Two independent tracks, then the test-quality chain, then LSP last:
         against a fake in-process JSON-RPC peer (paired `PassThrough` streams) replaying
         RECORDED `typescript-language-server` 5.3.0 payloads. `vscode-jsonrpc` +
         `vscode-languageserver-protocol` added as explicit pins; 13 tests.
-  - [ ] **Slice 3 — `manager.ts` + gated `query.ts`.** `LanguageServerManager` keyed by
-        (language, projectRoot), per-(server,uri) mutex, in-flight-aware reaper with a
-        clock-driven shutdown→exit grace; `LspGateError`, `assertAllowed`, `rootUri`
-        pinned to the allowlist; `serverInfo.version` provenance + v1 warn-on-toolchain-
-        mismatch (reusing `core.detectInstalledVersion`).
-  - [ ] **Slice 4 — MCP surface + `strummer-lsp-mcp` bin.** `lsp_find_definition`/
+  - [x] **Slice 3 — `registry.ts` + `manager.ts`.** The operator-bound JSON
+        `language→{command,args[],initializationOptions?}` registry (command/args
+        structurally separate, no DSL; unbound language refused). `LanguageServerManager`
+        keyed by (language, projectRoot), shared/lazy spawn via the injected seam, `rootUri`
+        pinned to the allowlisted root (refused before spawn), per-(server,uri) chained-promise
+        mutex, in-flight-aware reaper that never reaps mid-request with a clock-driven
+        shutdown→exit grace before `dispose()`. Shared fake-peer harness factored to
+        `src/peer.ts`. 10 + 8 tests.
+  - [ ] **Slice 4 — gated `query.ts`.** `lspQuery` mirroring `runScoped` — the paired
+        deny-by-default gate (`allowRun` + `allowedRoots` + deadline, `LspGateError`/
+        `assertAllowed`); doc-URI confinement to the project root; human↔LSP position mapping
+        via `toLspPosition`/`fromLspPosition` + the negotiated `client.encoding`;
+        `serverInfo.version` provenance + v1 warn-on-toolchain-mismatch (reusing
+        `core.detectInstalledVersion`).
+  - [ ] **Slice 5 — MCP surface + `strummer-lsp-mcp` bin.** `lsp_find_definition`/
         `lsp_find_references`/`lsp_hover` (gated as a group); always-on `lsp_languages`
         (reports bound languages + advertised capabilities + server version, never
         commands/paths); large results by handle (`strummer://lsp/{id}/{kind}`). Env

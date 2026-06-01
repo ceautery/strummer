@@ -1,91 +1,31 @@
-import { readFileSync } from 'node:fs'
-import { PassThrough } from 'node:stream'
-import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  createMessageConnection,
-  type MessageConnection,
-  StreamMessageReader,
-  StreamMessageWriter,
-} from 'vscode-jsonrpc/node.js'
+import type { MessageConnection } from 'vscode-jsonrpc/node.js'
 import { LspClient } from './client.js'
-
-/**
- * The deterministic harness (ADR 0011): a fake in-process JSON-RPC PEER — a second
- * `createMessageConnection` over paired in-memory duplex streams (vscode-jsonrpc's own
- * `TestDuplex` pattern) — so the client exercises REAL Content-Length framing + id
- * correlation while staying offline. The peer replays the RECORDED real-server payloads
- * committed under `test/fixtures/` (see the fixtures README for provenance), turning the
- * gate from a tautology into a real net for the encoding/shape bugs.
- */
-function loadFixture(name: string): unknown {
-  return JSON.parse(
-    readFileSync(fileURLToPath(new URL(`../test/fixtures/${name}`, import.meta.url)), 'utf8'),
-  )
-}
-
-const INIT = () => loadFixture('initialize-result.json')
-const INIT_UTF8 = () => loadFixture('initialize-result-utf8.json')
-const DEFINITION = () => loadFixture('definition-locationlink.json')
-const REFERENCES = () => loadFixture('references-locations.json')
-const HOVER = () => loadFixture('hover-markup.json')
-const PROGRESS_BEGIN = () => loadFixture('progress-begin.json')
+import {
+  DEFINITION,
+  type FakeServerOptions,
+  fakeServer,
+  HOVER,
+  INIT,
+  INIT_UTF8,
+  makePeerPair,
+  PROGRESS_BEGIN,
+  REFERENCES,
+} from './peer.js'
 
 const ROOT = 'file:///project'
 const INDEX_URI = 'file:///project/src/index.ts'
 const POS = { line: 2, character: 16 }
 
-interface Peer {
-  client: MessageConnection
-  server: MessageConnection
-}
-
 const disposers: Array<() => void> = []
 
-function makePeerPair(): Peer {
-  const c2s = new PassThrough()
-  const s2c = new PassThrough()
-  const client = createMessageConnection(new StreamMessageReader(s2c), new StreamMessageWriter(c2s))
-  const server = createMessageConnection(new StreamMessageReader(c2s), new StreamMessageWriter(s2c))
-  disposers.push(() => {
-    client.dispose()
-    server.dispose()
-  })
-  return { client, server }
-}
-
-/** A fake server that always answers the handshake + drained notifications, plus the given replies. */
-function fakeServer(
-  server: MessageConnection,
-  opts: {
-    initialize?: unknown
-    onDefinition?: () => unknown
-    onReferences?: () => unknown
-    onHover?: () => unknown
-    onShutdown?: () => void
-    onDidOpen?: () => void
-  } = {},
-): void {
-  server.onRequest('initialize', () => opts.initialize ?? INIT())
-  server.onNotification('initialized', () => {})
-  server.onNotification('textDocument/didOpen', () => opts.onDidOpen?.())
-  server.onRequest('textDocument/definition', () => opts.onDefinition?.() ?? null)
-  server.onRequest('textDocument/references', () => opts.onReferences?.() ?? null)
-  server.onRequest('textDocument/hover', () => opts.onHover?.() ?? null)
-  server.onRequest('shutdown', () => {
-    opts.onShutdown?.()
-    return null
-  })
-  server.onNotification('exit', () => {})
-  server.listen()
-}
-
 async function connectedClient(
-  opts: Parameters<typeof fakeServer>[1] & {
+  opts: FakeServerOptions & {
     clientOptions?: ConstructorParameters<typeof LspClient>[1]
   } = {},
 ): Promise<{ client: LspClient; server: MessageConnection }> {
-  const { client: cConn, server } = makePeerPair()
+  const { client: cConn, server, dispose } = makePeerPair()
+  disposers.push(dispose)
   fakeServer(server, opts)
   const client = new LspClient(cConn, { timeoutMs: 1000, ...opts.clientOptions })
   await client.initialize(ROOT)

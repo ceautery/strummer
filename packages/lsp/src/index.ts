@@ -22,6 +22,12 @@ export {
   toLspPosition,
 } from './encoding.js'
 export {
+  LanguageServerManager,
+  type LanguageServerManagerOptions,
+  LspManagerError,
+  type QueryInput,
+} from './manager.js'
+export {
   type DocumentSymbol,
   decideStatus,
   type Hover,
@@ -41,3 +47,10 @@ export {
   type SymbolInformation,
   symbolKindName,
 } from './normalize.js'
+export {
+  LspRegistryError,
+  parseServerRegistry,
+  resolveServer,
+  type ServerRegistry,
+  type ServerRegistryEntry,
+} from './registry.js'

@@ -130,8 +130,15 @@ vision and `ARCHITECTURE.md` for the technical design.
   tri-state readiness gated on `$/progress` within one operator deadline + injected clock).
   `vscode-jsonrpc` + `vscode-languageserver-protocol` added as explicit pins; tested against a
   fake in-process JSON-RPC peer (paired duplex streams) replaying RECORDED real-server payloads
-  (captured from `typescript-language-server` 5.3.0; see `test/fixtures/README.md`). Staged:
-  manager.ts/query.ts + `lsp_find_definition`/`_references`/`_hover` MCP surface),
+  (captured from `typescript-language-server` 5.3.0; see `test/fixtures/README.md`). Slice 3
+  landed: `registry.ts` (operator-bound JSON `language→{command,args[],initializationOptions?}`;
+  command/args structurally separate — no DSL; unbound language refused) + `manager.ts`
+  (`LanguageServerManager` keyed by `(language, projectRoot)`, shared/lazy spawn via the
+  injected seam, `rootUri` pinned to the allowlisted root, per-`(server,uri)` async mutex,
+  in-flight-aware reaper that never reaps mid-request + clock-driven `shutdown`→`exit` grace
+  before `dispose()`); shared in-process peer test harness factored to `src/peer.ts`. Staged:
+  gated `query.ts` (`lspQuery` paired-gate + version-warn) + `lsp_find_definition`/`_references`/
+  `_hover` + `lsp_languages` MCP surface),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
