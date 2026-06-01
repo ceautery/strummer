@@ -107,7 +107,7 @@ interface PostmanBody {
 }
 
 function postmanBody(body: PostmanBody | undefined): ImportedBody | undefined {
-  if (!body || !body.mode) return undefined
+  if (!body?.mode) return undefined
   if (body.mode === 'raw') {
     const lang = body.options?.raw?.language
     const type = lang === 'json' || lang === 'xml' ? lang : 'text'
@@ -159,7 +159,7 @@ export function importInsomnia(doc: unknown): ImportResult {
 function insomniaBody(
   body: { mimeType?: string; text?: string; params?: NameValue[] } | undefined,
 ): ImportedBody | undefined {
-  if (!body || !body.mimeType) return undefined
+  if (!body?.mimeType) return undefined
   if (body.mimeType.includes('json')) return { type: 'json', content: body.text ?? '' }
   if (body.mimeType.includes('xml')) return { type: 'xml', content: body.text ?? '' }
   if (body.mimeType.includes('x-www-form-urlencoded')) {
