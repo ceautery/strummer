@@ -234,7 +234,8 @@ against in-process fixtures):
    `video/*` as a base64 blob. Bin: `STRUMMER_BROWSER_VIDEO_DIR` (+ `_VIDEO_WIDTH`/
    `_HEIGHT` size cap; the session wall-clock cap bounds duration). Real-chromium
    tested (asserts the EBML/webm container magic). **ffmpeg is present in the cache**
-   (Playwright needs it for video).
+   (Playwright needs it for video). Operator enablement + the on-close `video` handle
+   are documented in `examples/browser/README.md` ("Recording the run as video").
 
 **313 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
 aspirational Phase-3 tail — **visual regression** (the flake-prone one) and
