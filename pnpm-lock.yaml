@@ -195,6 +195,9 @@ importers:
       '@strummer/core':
         specifier: workspace:*
         version: link:../core
+      '@strummer/coverage':
+        specifier: workspace:*
+        version: link:../coverage
       '@strummer/deps':
         specifier: workspace:*
         version: link:../deps

@@ -8,7 +8,8 @@
     "strummer-mcp": "./dist/bin.mjs",
     "strummer-api-mcp": "./dist/bin-api.mjs",
     "strummer-browser-mcp": "./dist/bin-browser.mjs",
-    "strummer-deps-mcp": "./dist/bin-deps.mjs"
+    "strummer-deps-mcp": "./dist/bin-deps.mjs",
+    "strummer-coverage-mcp": "./dist/bin-coverage.mjs"
   },
   "exports": {
     ".": {
@@ -21,7 +22,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts src/bin-deps.ts --dts",
+    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts src/bin-deps.ts src/bin-coverage.ts --dts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
     "@strummer/artifacts": "workspace:*",
     "@strummer/browser": "workspace:*",
     "@strummer/core": "workspace:*",
+    "@strummer/coverage": "workspace:*",
     "@strummer/deps": "workspace:*",
     "@strummer/embed": "workspace:*",
     "@strummer/safety": "workspace:*",
