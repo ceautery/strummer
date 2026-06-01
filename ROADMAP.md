@@ -250,8 +250,16 @@ Staged below; aspirational items are scheduled, not cut.
 - [ ] **Container hardening ADR** — seccomp profile + dropped caps + read-only FS
       + non-root by default; `--no-sandbox` as documented operator-gated fallback;
       disable WebRTC/QUIC in the hardened profile.
-- [ ] **Vision/coordinate capability** behind operator-gated `--caps=vision` for
-      canvas/non-AX-tree UI (screenshot-pixel click/move), off by default.
+- [x] **Vision/coordinate capability** — operator-gated `allowVision` (off by
+      default) for canvas / non-AX-tree UI the ARIA-snapshot path can't address.
+      `PageDriver.mouseClick(x,y)` drives the raw pointer at a viewport coordinate
+      **through the same mutation gate** as the ref/semantic clicks (dry-run vs
+      execute); `mouseMove(x,y)` is non-mutating positioning (hover egress still
+      governed by the always-on SSRF layer). MCP `browser_vision_click`/
+      `browser_vision_move` are off by default (a blind click on a *point* sidesteps
+      the accessible-tree safety story); **decoupled from `allowScreenshots`** so an
+      operator can permit read-only screenshots without blind clicks. Bin:
+      `STRUMMER_BROWSER_ALLOW_VISION`. Real-chromium tested (coordinate recorder).
 - [x] **Video capture** (webm) operator-gated with size caps. `video.ts`
       `finalizeVideo` reads the `.webm` Playwright writes on context close, stores it
       by `strummer://browser/run/<id>/video` handle (no redaction — video is

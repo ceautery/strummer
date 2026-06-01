@@ -60,6 +60,13 @@ export interface BrowserToolsOptions {
    * is unredactable pixels (a secret rendered in the DOM would land in the image),
    * so it is operator-gated like the trace.zip. */
   allowScreenshots?: boolean
+  /** Allow `browser_vision_click`/`browser_vision_move` — blind coordinate pointer
+   * control for canvas / non-AX-tree UI the ARIA-snapshot path can't reach. Default
+   * false: clicking a *point* (not a known element) sidesteps the accessible-tree
+   * safety story, so it is an explicit operator opt-in (the click still goes through
+   * the mutation gate). Decoupled from `allowScreenshots` — an operator can permit
+   * read-only screenshots without permitting blind clicks. */
+  allowVision?: boolean
   /** Operator download-quarantine dir. When set (the bin also flips the manager's
    * `acceptDownloads` on), started downloads are saved here and surfaced by
    * `browser_downloads`; when unset, downloads are denied (cancelled). */
@@ -139,6 +146,10 @@ To replay a saved test, \`browser_list_flows\` shows the persisted \`.bru\` flow
 operator made available and \`browser_run_flow\` replays one (by name) on a session
 — driving through the same gate/redactor as the step tools.
 
+Prefer ref-based tools. For canvas / non-AX-tree UI the snapshot can't address,
+\`browser_vision_click\`/\`browser_vision_move\` (operator-gated) drive the pointer at
+a viewport coordinate — a blind click on a point, so use it only as a last resort.
+
 Navigation/mutation are deny-by-default and gated by the OPERATOR (host allowlist +
 unsafe unlock); mutations are dry-run unless the operator unlocked them. That is
 not something a caller can authorize. Secrets are redacted from everything you see.`
@@ -162,6 +173,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   }
   const allowStorageState = opts.allowStorageState ?? false
   const allowScreenshots = opts.allowScreenshots ?? false
+  const allowVision = opts.allowVision ?? false
   const harDir = opts.harDir
   const videoDir = opts.videoDir
   const registry = new Map<string, BrowserSession>()
@@ -732,6 +744,50 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
       const result = await enqueue(session, () =>
         session.driver.screenshot({ fullPage: args.fullPage }),
       )
+      return reply({ ...result })
+    },
+  )
+
+  const x = z.number().describe('viewport x coordinate in CSS pixels (e.g. from a screenshot)')
+  const y = z.number().describe('viewport y coordinate in CSS pixels (e.g. from a screenshot)')
+
+  server.registerTool(
+    'browser_vision_click',
+    {
+      title: 'Click at a coordinate (vision)',
+      description:
+        'Click a viewport coordinate (CSS pixels) — the escape hatch for canvas / non-AX-tree UI the ' +
+        'ARIA snapshot can’t address. Prefer ref-based browser_click whenever the element is in the ' +
+        'snapshot; this is a BLIND click on a point. Mutating: dry-run unless the operator unlocked ' +
+        'execution on an allowlisted host. Requires operator vision enablement.',
+      inputSchema: { sessionId, x, y },
+    },
+    async (args) => {
+      if (!allowVision) {
+        throw new Error('vision/coordinate input is not enabled by the operator')
+      }
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.mouseClick(args.x, args.y))
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
+    'browser_vision_move',
+    {
+      title: 'Move the pointer to a coordinate (vision)',
+      description:
+        'Move the pointer to a viewport coordinate (CSS pixels) — e.g. to hover a canvas widget — then ' +
+        're-snapshot. Non-mutating positioning; hover-triggered egress is still governed by the SSRF ' +
+        'layer. Requires operator vision enablement.',
+      inputSchema: { sessionId, x, y },
+    },
+    async (args) => {
+      if (!allowVision) {
+        throw new Error('vision/coordinate input is not enabled by the operator')
+      }
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () => session.driver.mouseMove(args.x, args.y))
       return reply({ ...result })
     },
   )

@@ -479,6 +479,29 @@ export class PageDriver {
     )
   }
 
+  // ── Vision / coordinate caps (canvas + non-AX-tree UI) ──────────────────────
+  // The ARIA-snapshot path can't reach pixels painted on a <canvas> or a custom
+  // widget with no accessible role. These drive the raw pointer at a viewport
+  // coordinate (CSS pixels, from a screenshot). It is a blind escape hatch — you
+  // click a point, not a known element — so the MCP surface gates it behind an
+  // operator `allowVision` cap (off by default), exactly as the screenshot tool is
+  // gated; this engine method is the raw capability the surface gates.
+
+  /** Click at a viewport coordinate. A mutation — routed through the same gate
+   * (dry-run vs execute) as the ref/semantic clicks. */
+  async mouseClick(x: number, y: number): Promise<StepResult> {
+    return this.interact('vision_click', undefined, () => this.page.mouse.click(x, y))
+  }
+
+  /** Move the pointer to a viewport coordinate (e.g. to hover a canvas widget).
+   * Non-mutating positioning — not routed through the mutation gate; any
+   * hover-triggered egress is still governed by the always-on Tier-1 route
+   * allowlist + the SSRF proxy, which apply to every request regardless. */
+  async mouseMove(x: number, y: number): Promise<StepResult> {
+    await this.page.mouse.move(x, y)
+    return this.settle('vision_move')
+  }
+
   /**
    * Run a mutating interaction through the gate: execute it directly when no
    * gate is configured or the gate authorizes it; otherwise dry-run it (perform

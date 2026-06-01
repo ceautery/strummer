@@ -117,6 +117,11 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     ).toBe(true)
   })
 
+  it('gates vision/coordinate input behind STRUMMER_BROWSER_ALLOW_VISION (default off)', async () => {
+    expect((await build({})).config.allowVision).toBe(false)
+    expect((await build({ STRUMMER_BROWSER_ALLOW_VISION: '1' })).config.allowVision).toBe(true)
+  })
+
   it('gates dialog acceptance behind STRUMMER_BROWSER_ALLOW_DIALOGS (default off)', async () => {
     expect((await build({})).config.allowDialogs).toBe(false)
     expect((await build({ STRUMMER_BROWSER_ALLOW_DIALOGS: 'yes' })).config.allowDialogs).toBe(true)

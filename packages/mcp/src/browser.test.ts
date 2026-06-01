@@ -66,6 +66,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     now?: () => number
     allowStorageState?: boolean
     allowScreenshots?: boolean
+    allowVision?: boolean
     allowDialogs?: boolean
     downloadDir?: string
     uploadDir?: string
@@ -103,6 +104,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       resolveSecret: (name) => secrets.get(name),
       allowStorageState: config.allowStorageState,
       allowScreenshots: config.allowScreenshots,
+      allowVision: config.allowVision,
       downloadDir: config.downloadDir,
       uploadDir: config.uploadDir,
       harDir: config.harDir,
@@ -180,6 +182,8 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_save_storage_state',
       'browser_list_flows',
       'browser_run_flow',
+      'browser_vision_click',
+      'browser_vision_move',
       'browser_close_session',
     ]) {
       expect(names).toContain(t)
@@ -398,6 +402,37 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const res = await call(client, 'browser_screenshot', { sessionId })
     expect(res.isError).toBe(true)
     expect(JSON.stringify(res.content)).toMatch(/not enabled/i)
+    await client.close()
+  })
+
+  it('vision click/move (operator-gated): drives the pointer at a coordinate, re-snapshots', async () => {
+    const { client } = await connect({ allowVision: true, allowUnsafe: true })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+    const move = (await call(client, 'browser_vision_move', { sessionId, x: 20, y: 25 }))
+      .structuredContent as StepSC
+    expect(move.snapshot).toContain('[ref=') // re-snapshot returned
+    const click = (await call(client, 'browser_vision_click', { sessionId, x: 30, y: 40 }))
+      .structuredContent as StepSC
+    expect(click.snapshot).toContain('[ref=')
+    expect(click.dryRun).toBeFalsy() // executed (allowUnsafe + allowlisted host)
+    await client.close()
+  })
+
+  it('vision tools are deny-by-default: disabled unless the operator enabled vision', async () => {
+    const { client } = await connect({}) // allowVision defaults off
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+    const click = await call(client, 'browser_vision_click', { sessionId, x: 10, y: 10 })
+    expect(click.isError).toBe(true)
+    expect(JSON.stringify(click.content)).toMatch(/not enabled/i)
+    const move = await call(client, 'browser_vision_move', { sessionId, x: 10, y: 10 })
+    expect(move.isError).toBe(true)
+    expect(JSON.stringify(move.content)).toMatch(/not enabled/i)
     await client.close()
   })
 

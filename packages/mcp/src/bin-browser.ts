@@ -68,6 +68,8 @@ export interface BrowserBinConfig {
   allowStorageState: boolean
   /** Whether browser_screenshot is enabled (unredactable PNG pixels). */
   allowScreenshots: boolean
+  /** Whether browser_vision_click/move are enabled (blind coordinate input). */
+  allowVision: boolean
   /** Operator download-quarantine dir (downloads denied/cancelled when unset). */
   downloadDir?: string
   /** Operator upload-allowlist dir (uploads denied when unset). */
@@ -146,6 +148,8 @@ export async function buildBrowserServerFromEnv(
   const allowDialogs = bool(env.STRUMMER_BROWSER_ALLOW_DIALOGS)
   const allowStorageState = bool(env.STRUMMER_BROWSER_ALLOW_STORAGE_STATE)
   const allowScreenshots = bool(env.STRUMMER_BROWSER_ALLOW_SCREENSHOTS)
+  // Vision/coordinate input (blind pixel click/move) — off by default, like screenshots.
+  const allowVision = bool(env.STRUMMER_BROWSER_ALLOW_VISION)
   // Downloads: deny-by-default. An operator quarantine dir flips acceptDownloads on
   // AND tells the driver where to save; unset ⇒ contexts cancel every download.
   const downloadDir = env.STRUMMER_BROWSER_DOWNLOAD_DIR || undefined
@@ -256,6 +260,7 @@ export async function buildBrowserServerFromEnv(
     resolveSecret,
     allowStorageState,
     allowScreenshots,
+    allowVision,
     downloadDir,
     uploadDir,
     harDir,
@@ -288,6 +293,7 @@ export async function buildBrowserServerFromEnv(
     secretNames,
     allowStorageState,
     allowScreenshots,
+    allowVision,
     downloadDir,
     uploadDir,
     harDir,

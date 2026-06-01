@@ -41,7 +41,10 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>Steps</title></head
       const p = document.createElement('p'); p.setAttribute('role','status'); p.textContent = 'Done'
       document.body.appendChild(p)
     }, 150))
-  </script>
+    // coordinate recorders for the vision/coordinate caps (script-only; no ARIA change)
+    document.addEventListener('click', (e) => { window.__lastClick = [e.clientX, e.clientY] })
+    document.addEventListener('mousemove', (e) => { window.__lastMove = [e.clientX, e.clientY] })
+</script>
 </body></html>`
 
 describe('PageDriver — ref resolution guard (no browser)', () => {
@@ -365,5 +368,47 @@ describe('PageDriver — step tools (real headless chromium)', () => {
     ])
     expect(r?.pass).toBe(false)
     expect(r?.actual).toBe(false)
+  })
+
+  // ── Vision / coordinate caps (mouseClick / mouseMove) ───────────────────────
+  it('mouseClick dispatches a click at the given viewport coordinate (gate unlocked)', async () => {
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowUnsafe: true, allowedHosts: ['127.0.0.1'] }),
+    })
+    await driver.navigate(baseUrl)
+    const result = await driver.mouseClick(40, 50)
+    expect(result.action).toBe('vision_click')
+    expect(result.dryRun).toBeFalsy()
+    const last = await page.evaluate(
+      () => (globalThis as unknown as { __lastClick?: number[] }).__lastClick,
+    )
+    expect(last).toEqual([40, 50])
+  })
+
+  it('mouseMove moves the pointer to the given coordinate (non-mutating, no gate unlock needed)', async () => {
+    const page = await context.newPage()
+    // a LOCKED gate (no allowUnsafe) — a move is positioning, not a mutation
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowedHosts: ['127.0.0.1'] }),
+    })
+    await driver.navigate(baseUrl)
+    const result = await driver.mouseMove(33, 44)
+    expect(result.action).toBe('vision_move')
+    expect(result.dryRun).toBeFalsy()
+    const last = await page.evaluate(
+      () => (globalThis as unknown as { __lastMove?: number[] }).__lastMove,
+    )
+    expect(last).toEqual([33, 44])
+  })
+
+  it('mouseClick is governed by the mutation gate: dry-runs when not unlocked', async () => {
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowedHosts: ['127.0.0.1'] }), // allowUnsafe omitted ⇒ dry-run
+    })
+    await driver.navigate(baseUrl)
+    const result = await driver.mouseClick(40, 50)
+    expect(result.dryRun).toBe(true)
   })
 })

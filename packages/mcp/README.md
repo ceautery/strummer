@@ -80,6 +80,12 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
 - **`browser_screenshot`** — operator-gated (off by default; pixels can't be
   redacted, like the trace.zip); captures a PNG to a `screenshot-s<n>` handle
   (summary only, never inlined) and does not invalidate refs.
+- **`browser_vision_click`** / **`browser_vision_move`** — drive the pointer at a
+  viewport coordinate (CSS pixels, e.g. from a screenshot) for canvas / non-AX-tree
+  UI the snapshot can't address. Operator-gated **off by default** (`ALLOW_VISION`) —
+  a blind click on a *point* sidesteps the accessible-tree safety story; the click
+  still goes through the mutation gate. Prefer ref-based `browser_click` whenever the
+  element is in the snapshot.
 - **`browser_upload`** — set file(s) on a file-input ref. Deny-by-default: requires
   an operator upload-allowlist dir and confines every path within it (no traversal/
   absolute escape), so an agent can't upload arbitrary local files.
@@ -130,7 +136,8 @@ redaction across every artifact + the trace.zip + the HAR; `{{secret:NAME}}` fil
 origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
 `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/
 `IDLE_TTL_MS`; trace capture + `storageState` capture (`ALLOW_STORAGE_STATE`) +
-screenshot capture (`ALLOW_SCREENSHOTS`) all off unless explicitly enabled.
+screenshot capture (`ALLOW_SCREENSHOTS`) + vision/coordinate input (`ALLOW_VISION`)
+all off unless explicitly enabled.
 
 ## Run
 
