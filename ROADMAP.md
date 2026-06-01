@@ -538,11 +538,42 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `mutateFiles`→`--mutate` + `--incremental`. `mutate_summarize` (free) +
         `mutate_run` (gated) MCP tools + `strummer-mutate-mcp` bin.
   - [ ] *(staged)* Python (mutmut / cosmic-ray) adapter; a `strummer mutate` human CLI.
-- [ ] **LSP bridge** — semantic code navigation (defs/refs/types/call hierarchy).
-      Highest *raw* leverage but **last**: the only candidate that breaks
-      ARCHITECTURE §1's no-live-RPC rule (a live, version-coupled subprocess). Green
-      gate runs against a fake in-process JSON-RPC peer; operator binds the server
-      command (agent picks only a *language*); v1 reads-only.
+- [ ] **LSP bridge** (`@strummer/lsp`) — semantic code navigation. Highest *raw*
+      leverage but **last**: the documented exception to ARCHITECTURE §1's no-live-RPC
+      rule (a live, version-coupled subprocess). **Design DONE — ADR 0011** (3-stream
+      research → synthesis → 2 adversarial critics; the adversarial pass reshaped it).
+      Locked decisions: the right analogy is the **browser subprocess** (resident,
+      code-executing — ADR 0007 container), not the test-runner; paired `allowRun`+
+      `allowedRoots` gate (load-bearing *because indexing runs project code*); **operator
+      binds a JSON `language→{command,args[]}` registry**, agent picks only a *language*;
+      **v1 reads-only**; green gate uses a **fake in-process JSON-RPC peer replaying
+      recorded real-server payloads** (no real server in the gate — stricter than the
+      other pillars).
+  - [ ] **Slice 1 — pure `encoding.ts` + `normalize.ts`.** `toLspCharacter` (utf-8/16/32,
+        non-BMP fixture tests — the #1 silent-wrong trap) + result normalizers (`Location`
+        vs `LocationLink`, `DocumentSymbol` vs `SymbolInformation`, tri-state
+        ok/not_ready/no_result). No spawn, no network.
+  - [ ] **Slice 2 — `client.ts`.** Handshake (initialize advertising
+        `positionEncodings:["utf-16","utf-8"]` → read back the negotiated encoding;
+        initialized; didOpen full-text once, refcounted, no didClose by default),
+        capability-gated requests, deadlock-safe inbound replies, tri-state readiness
+        gated on `$/progress` inside the single operator deadline; injected `serverSpawn`
+        seam tested against the fake in-process peer.
+  - [ ] **Slice 3 — `manager.ts` + gated `query.ts`.** `LanguageServerManager` keyed by
+        (language, projectRoot), per-(server,uri) mutex, in-flight-aware reaper with a
+        clock-driven shutdown→exit grace; `LspGateError`, `assertAllowed`, `rootUri`
+        pinned to the allowlist; `serverInfo.version` provenance + v1 warn-on-toolchain-
+        mismatch (reusing `core.detectInstalledVersion`).
+  - [ ] **Slice 4 — MCP surface + `strummer-lsp-mcp` bin.** `lsp_find_definition`/
+        `lsp_find_references`/`lsp_hover` (gated as a group); always-on `lsp_languages`
+        (reports bound languages + advertised capabilities + server version, never
+        commands/paths); large results by handle (`strummer://lsp/{id}/{kind}`). Env
+        `STRUMMER_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/`_SERVERS`(JSON)/
+        `_ARTIFACT_DIR`.
+  - [ ] *(staged, not amputated)* `lsp_type_definition`/`lsp_document_symbols`/
+        `lsp_call_hierarchy` (behind per-server capability detection); then write-mode
+        (`rename`), `workspace/symbol` search, `diagnostics`, multi-root, full
+        toolchain-version resolution, Python adapter posture.
 
 ## Ongoing
 

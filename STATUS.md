@@ -491,18 +491,33 @@ gate dep), pure `summarizeMutation` over the mutation-testing-elements schema, t
 diff-scoped `runMutation` (spawn `stryker run`), and the `mutate_summarize`/`mutate_run` MCP
 surface + `strummer-mutate-mcp` bin.
 
-**Next (the LAST Phase-4 candidate): `@strummer/lsp` — semantic code navigation
-(defs/refs/types/call hierarchy).** Highest *raw* leverage but sequenced last because it is
-the ONLY candidate that breaks ARCHITECTURE §1's no-live-RPC polyglot rule — a live,
-stateful, version-coupled subprocess JSON-RPC peer. Design constraints already locked in ADR
-0010 + ROADMAP: the green gate must run against a **fake in-process JSON-RPC peer** (no real
-language server in `pnpm gate`, mirroring the injected-runner pattern coverage/flake/mutate
-use); the **operator binds the server command**, the agent picks only a *language*; **v1 is
-reads-only**. This needs a short design pass (an LSP-bridge ADR — lifecycle, the initialize
-handshake, position/encoding model, the operator gate) BEFORE coding. **Phase-4 staged
-tails** (not blocking LSP): deps PyPI/RubyGems adapters; coverage `strummer coverage` CLI /
-`istanbul-lib-coverage` merging; flake Python (pytest-json) adapter; mutate Python
-(mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
+**LAST Phase-4 candidate: `@strummer/lsp` — semantic code navigation. DESIGN DONE (ADR
+0011); coding NOT started.** The design pass ran as the `lsp-bridge-design` fan-out (3
+research streams → synthesis → 2 adversarial critics — the adversarial pass materially
+reshaped it, ADR-0010 style). Locked decisions (full detail in **ADR 0011**): it is the
+**documented, fenced exception** to ARCHITECTURE §1's no-live-RPC rule (the LSP subprocess
+must never touch the docs SQLite; results ephemeral); the right analogy is the **browser
+subprocess** (resident, code-executing → runs inside the ADR-0007 hardened container), NOT
+the test-runner — `allowRun`+`allowedRoots` is load-bearing *because indexing executes
+project code*; the **operator binds a JSON `language→{command,args[]}` registry**, the agent
+picks only a *language*; **v1 reads-only**; the green gate uses a **fake in-process JSON-RPC
+peer replaying recorded real-server payloads** (no real server in `pnpm gate` — a deliberate,
+stricter posture than coverage/flake/mutate). The adversarial pass forced these into the
+design: **position-encoding is the #1 silent-wrong trap** (a pure `toLspCharacter` for
+utf-8/16/32 with non-BMP fixture tests; read back the negotiated `positionEncoding`, fail
+loud on unsupported); **tri-state results** (ok / not_ready / no_result — never collapse
+"still indexing" into "no definition"), one operator deadline with `$/progress`-gated retry
+inside it; a **per-(server,uri) mutex** + open-once/refcount docs + in-flight-aware reaper;
+**`serverInfo.version` provenance + v1 warn-on-toolchain-mismatch** (honoring "answer for the
+installed version"); `vscode-jsonrpc` + `vscode-languageserver-protocol` as **explicit pins**
+(the playwright-core pattern, not a hand-roll); **MVP = `lsp_find_definition`/
+`lsp_find_references`/`lsp_hover`** (hover restored, call-hierarchy staged behind capability
+detection). **Next action: code ADR-0011 slice 1** — the pure `encoding.ts` + `normalize.ts`
+core (no spawn/network) over committed real-server-payload fixtures, TDD red→green. Then
+client.ts (handshake/tri-state vs the fake peer) → manager.ts + gated query.ts → MCP surface
++ `strummer-lsp-mcp` bin. **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
+adapters; coverage `strummer coverage` CLI / `istanbul-lib-coverage` merging; flake Python
+(pytest-json) adapter; mutate Python (mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
 Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
 (`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in). The
