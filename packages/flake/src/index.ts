@@ -10,6 +10,15 @@ export {
   wilsonInterval,
 } from './classify.js'
 export {
+  type CandidateOptions,
+  Quarantine,
+  type QuarantineEntry,
+  QuarantineGateError,
+  type QuarantinePolicy,
+  type QuarantineRequest,
+  quarantineCandidates,
+} from './quarantine.js'
+export {
   type ParseReportOptions,
   parseVitestJson,
   type VitestAssertion,
