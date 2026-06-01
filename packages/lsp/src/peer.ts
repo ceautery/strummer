@@ -36,6 +36,9 @@ export const CALL_HIERARCHY_PREPARE = () => loadFixture('call-hierarchy-prepare.
 export const CALL_HIERARCHY_INCOMING = () => loadFixture('call-hierarchy-incoming.json')
 export const CALL_HIERARCHY_OUTGOING = () => loadFixture('call-hierarchy-outgoing.json')
 export const PROGRESS_BEGIN = () => loadFixture('progress-begin.json')
+export const INIT_RENAME = () => loadFixture('initialize-result-rename.json')
+export const PREPARE_RENAME = () => loadFixture('prepare-rename.json')
+export const RENAME_CHANGES = () => loadFixture('rename-changes.json')
 
 export interface PeerPair {
   client: MessageConnection
@@ -70,6 +73,8 @@ export interface FakeServerOptions {
   onPrepareCallHierarchy?: (params: unknown) => unknown
   onIncomingCalls?: (params: unknown) => unknown
   onOutgoingCalls?: (params: unknown) => unknown
+  onPrepareRename?: (params: unknown) => unknown
+  onRename?: (params: unknown) => unknown
   onShutdown?: () => void
   onDidOpen?: (params: unknown) => void
   /** When set, the definition handler emits this `$/progress` notification before replying. */
@@ -115,6 +120,11 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
     'callHierarchy/outgoingCalls',
     (params: unknown) => opts.onOutgoingCalls?.(params) ?? null,
   )
+  server.onRequest(
+    'textDocument/prepareRename',
+    (params: unknown) => opts.onPrepareRename?.(params) ?? null,
+  )
+  server.onRequest('textDocument/rename', (params: unknown) => opts.onRename?.(params) ?? null)
   server.onRequest('shutdown', () => {
     opts.onShutdown?.()
     return null

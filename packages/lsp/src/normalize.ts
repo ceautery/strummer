@@ -405,3 +405,39 @@ export function normalizeWorkspaceEdit(
 
   return { files: [], resourceOps: [] }
 }
+
+/** `textDocument/prepareRename` raw result variants. */
+export type RawPrepareRename =
+  | LspRange
+  | { range: LspRange; placeholder?: string }
+  | { defaultBehavior: boolean }
+
+/** Normalized prepareRename outcome — a non-null value means the position IS renameable. */
+export interface PrepareRenameOutcome {
+  /** The renameable token range, when the server provided one. */
+  range?: LspRange
+  /** A suggested placeholder (the existing identifier), when provided. */
+  placeholder?: string
+  /** The server signalled default behavior (renameable; it derives the range itself). */
+  defaultBehavior?: boolean
+}
+
+/**
+ * Normalize a `prepareRename` result. `null` ⇒ the position is NOT renameable (the engine maps
+ * this to a structured refusal, distinct from a tri-state `no_result`). A bare `Range`,
+ * `{range, placeholder}`, and `{defaultBehavior}` all mean renameable — the real
+ * `typescript-language-server` 5.3.0 returns a bare `Range` (see `test/fixtures/README.md`).
+ */
+export function normalizePrepareRename(
+  raw: RawPrepareRename | null | undefined,
+): PrepareRenameOutcome | null {
+  if (raw == null) return null
+  if ('start' in raw && 'end' in raw) return { range: raw }
+  if ('range' in raw) {
+    const out: PrepareRenameOutcome = { range: raw.range }
+    if (raw.placeholder !== undefined) out.placeholder = raw.placeholder
+    return out
+  }
+  if ('defaultBehavior' in raw) return { defaultBehavior: raw.defaultBehavior }
+  return {}
+}

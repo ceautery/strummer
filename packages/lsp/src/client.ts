@@ -49,8 +49,10 @@ import {
   HoverRequest,
   InitializedNotification,
   InitializeRequest,
+  PrepareRenameRequest,
   ReferencesRequest,
   RegistrationRequest,
+  RenameRequest,
   ShutdownRequest,
   TypeDefinitionRequest,
   UnregistrationRequest,
@@ -69,13 +71,19 @@ import {
   type NormalizedHover,
   type NormalizedLocation,
   type NormalizedSymbol,
+  type NormalizedWorkspaceEdit,
   normalizeCallHierarchyItem,
   normalizeDocumentSymbols,
   normalizeHover,
   normalizeIncomingCalls,
   normalizeLocations,
   normalizeOutgoingCalls,
+  normalizePrepareRename,
+  normalizeWorkspaceEdit,
+  type PrepareRenameOutcome,
   type QueryStatus,
+  type RawPrepareRename,
+  type RawWorkspaceEdit,
   type SymbolInformation,
 } from './normalize.js'
 
@@ -228,6 +236,19 @@ export class LspClient {
   }
 
   /**
+   * `prepareRename` is advertised only by the OBJECT form `renameProvider: {prepareProvider:true}`
+   * — the boolean `supports()` helper cannot detect it, so the engine must check this before
+   * calling `prepareRename` (bare `renameProvider: true` supports rename but not prepare).
+   */
+  get supportsPrepareRename(): boolean {
+    const rp = this._capabilities.renameProvider as
+      | { prepareProvider?: boolean }
+      | boolean
+      | undefined
+    return typeof rp === 'object' && rp !== null && rp.prepareProvider === true
+  }
+
+  /**
    * Handshake. Registers the deadlock-safe inbound handlers + the `$/progress` listener
    * BEFORE `listen()`, advertises the preferred encodings, then reads back the negotiated
    * encoding + capabilities + provenance and sends `initialized`.
@@ -255,9 +276,25 @@ export class LspClient {
           hover: { contentFormat: ['markdown', 'plaintext'] },
           documentSymbol: { hierarchicalDocumentSymbolSupport: true },
           callHierarchy: { dynamicRegistration: false },
+          rename: {
+            dynamicRegistration: false,
+            prepareSupport: true,
+            prepareSupportDefaultBehavior: 1,
+          },
         },
         window: { workDoneProgress: true },
-        workspace: { configuration: true, workspaceFolders: true },
+        workspace: {
+          configuration: true,
+          workspaceFolders: true,
+          // Write-mode (ADR 0011 addendum): advertise WorkspaceEdit support so the server returns
+          // a good rename edit. resourceOperations:[] honestly signals we do NOT apply file ops
+          // (we still defend on apply); normalizesLineEndings:false — we send bytes verbatim.
+          workspaceEdit: {
+            documentChanges: true,
+            resourceOperations: [],
+            normalizesLineEndings: false,
+          },
+        },
       },
       workspaceFolders: [{ uri: rootUri, name: 'root' }],
       initializationOptions: opts.initializationOptions,
@@ -369,6 +406,48 @@ export class LspClient {
       () => this.conn.sendRequest(DocumentSymbolRequest.method, { textDocument: { uri } }),
       (raw) => normalizeDocumentSymbols(raw as DocumentSymbol[] | SymbolInformation[] | null),
       (syms) => syms.length === 0,
+    )
+  }
+
+  /**
+   * `textDocument/prepareRename` — the cheap validate-first pre-flight (write-mode, ADR 0011
+   * addendum). Tri-state: `null` while indexing ⇒ `not_ready`; `null` while ready ⇒ `no_result`
+   * (the engine maps that to a structured "not renameable here" refusal); a non-null outcome ⇒
+   * `ok`. Only callable when {@link supportsPrepareRename} (the engine skips it otherwise).
+   */
+  async prepareRename(
+    uri: string,
+    position: { line: number; character: number },
+  ): Promise<NavResult<PrepareRenameOutcome | null>> {
+    if (!this.supportsPrepareRename) {
+      throw new LspUnsupportedError('server does not advertise prepareRename support')
+    }
+    return this.withRetry(
+      () => this.conn.sendRequest(PrepareRenameRequest.method, { textDocument: { uri }, position }),
+      (raw) => normalizePrepareRename(raw as RawPrepareRename | null),
+      (outcome) => outcome === null,
+    )
+  }
+
+  /**
+   * `textDocument/rename` — compute the cross-file `WorkspaceEdit` for renaming the symbol at
+   * `position` to `newName`. Capability-gated on `renameProvider`; normalized to the uniform
+   * `files`/`resourceOps` shape; tri-state (empty/`null` while indexing ⇒ `not_ready`). This
+   * computes only — applying the edit to disk is the gated engine's job (Slice F), never here.
+   */
+  async rename(
+    uri: string,
+    position: { line: number; character: number },
+    newName: string,
+  ): Promise<NavResult<NormalizedWorkspaceEdit>> {
+    if (!this.supports('renameProvider')) {
+      throw new LspUnsupportedError('server does not advertise rename support')
+    }
+    return this.withRetry(
+      () =>
+        this.conn.sendRequest(RenameRequest.method, { textDocument: { uri }, position, newName }),
+      (raw) => normalizeWorkspaceEdit(raw as RawWorkspaceEdit | null),
+      (we) => we.files.length === 0 && we.resourceOps.length === 0,
     )
   }
 

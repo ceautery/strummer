@@ -10,6 +10,7 @@ import {
   normalizeDocumentSymbols,
   normalizeHover,
   normalizeLocations,
+  normalizePrepareRename,
   normalizeWorkspaceEdit,
   type RawWorkspaceEdit,
   symbolKindName,
@@ -206,5 +207,28 @@ describe('normalizeWorkspaceEdit', () => {
     const edit = normalizeWorkspaceEdit(raw).files[0]?.edits[0]
     expect(edit?.needsConfirmation).toBe(true)
     expect(edit?.annotationLabel).toBe('Risky rename')
+  })
+})
+
+describe('normalizePrepareRename', () => {
+  it('returns null when the position is not renameable', () => {
+    expect(normalizePrepareRename(null)).toBeNull()
+    expect(normalizePrepareRename(undefined)).toBeNull()
+  })
+
+  it('normalizes the REAL bare Range (tsserver 5.3.0)', () => {
+    const range = { start: { line: 4, character: 13 }, end: { line: 4, character: 20 } }
+    expect(normalizePrepareRename(range)).toEqual({ range })
+  })
+
+  it('normalizes the {range, placeholder} form', () => {
+    expect(normalizePrepareRename({ range: RANGE, placeholder: 'Greeter' })).toEqual({
+      range: RANGE,
+      placeholder: 'Greeter',
+    })
+  })
+
+  it('normalizes the {defaultBehavior} form (renameable, server derives the range)', () => {
+    expect(normalizePrepareRename({ defaultBehavior: true })).toEqual({ defaultBehavior: true })
   })
 })

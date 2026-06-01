@@ -11,10 +11,13 @@ import {
   fakeServer,
   HOVER,
   INIT,
+  INIT_RENAME,
   INIT_UTF8,
   makePeerPair,
+  PREPARE_RENAME,
   PROGRESS_BEGIN,
   REFERENCES,
+  RENAME_CHANGES,
   TYPE_DEFINITION,
 } from './peer.js'
 
@@ -200,6 +203,91 @@ describe('LspClient navigation (tri-state + normalization over recorded payloads
     const r = await client.definition(INDEX_URI, POS)
     expect(calls).toBe(2)
     expect(r.status).toBe('ok')
+  })
+})
+
+describe('LspClient write-mode (rename / prepareRename)', () => {
+  it('advertises the rename + workspaceEdit client capabilities in the handshake', async () => {
+    let initParams: { capabilities?: Record<string, Record<string, unknown>> } | undefined
+    await connectedClient({
+      initialize: INIT_RENAME(),
+      onInitialize: (p) => {
+        initParams = p as typeof initParams
+      },
+    })
+    const td = initParams?.capabilities?.textDocument as Record<string, Record<string, unknown>>
+    expect(td?.rename?.prepareSupport).toBe(true)
+    const ws = initParams?.capabilities?.workspace as Record<string, Record<string, unknown>>
+    expect(ws?.workspaceEdit?.documentChanges).toBe(true)
+    expect(ws?.workspaceEdit?.resourceOperations).toEqual([])
+  })
+
+  it('detects the OBJECT-form renameProvider {prepareProvider:true} from the real capture', async () => {
+    const { client } = await connectedClient({ initialize: INIT_RENAME() })
+    expect(client.supports('renameProvider')).toBe(true)
+    expect(client.supportsPrepareRename).toBe(true)
+  })
+
+  it('prepareRename: normalizes the real bare Range to an ok renameable outcome', async () => {
+    const { client } = await connectedClient({
+      initialize: INIT_RENAME(),
+      onPrepareRename: () => PREPARE_RENAME(),
+    })
+    const r = await client.prepareRename(GREETER_URI, { line: 4, character: 14 })
+    expect(r.status).toBe('ok')
+    expect(r.result?.range).toEqual({
+      start: { line: 4, character: 13 },
+      end: { line: 4, character: 20 },
+    })
+  })
+
+  it('prepareRename: ready null ⇒ no_result (engine maps to a "not renameable here" refusal)', async () => {
+    const { client } = await connectedClient({
+      initialize: INIT_RENAME(),
+      onPrepareRename: () => null,
+      clientOptions: { timeoutMs: 1000, noRetry: true },
+    })
+    const r = await client.prepareRename(GREETER_URI, { line: 1, character: 0 })
+    expect(r.status).toBe('no_result')
+    expect(r.result).toBeNull()
+  })
+
+  it('prepareRename: throws when the server advertises only the bare renameProvider:true', async () => {
+    const { client } = await connectedClient() // base INIT: renameProvider true (no prepare)
+    expect(client.supports('renameProvider')).toBe(true)
+    expect(client.supportsPrepareRename).toBe(false)
+    await expect(client.prepareRename(GREETER_URI, POS)).rejects.toThrow(/prepareRename/i)
+  })
+
+  it('rename: normalizes the REAL multi-file `changes` map to ok', async () => {
+    const { client } = await connectedClient({
+      initialize: INIT_RENAME(),
+      onRename: () => RENAME_CHANGES(),
+    })
+    const r = await client.rename(GREETER_URI, { line: 4, character: 14 }, 'Greeter2')
+    expect(r.status).toBe('ok')
+    expect(r.result.files.map((f) => f.uri)).toEqual([
+      'file:///project/greeter.ts',
+      'file:///project/index.ts',
+    ])
+    expect(r.result.resourceOps).toEqual([])
+  })
+
+  it('rename: empty result while indexing ⇒ not_ready (never "cannot rename")', async () => {
+    const { client, server } = await connectedClient({ initialize: INIT_RENAME() })
+    server.onRequest('textDocument/rename', () => {
+      server.sendNotification('$/progress', PROGRESS_BEGIN())
+      return null
+    })
+    const r = await client.rename(GREETER_URI, { line: 4, character: 14 }, 'Greeter2')
+    expect(r.status).toBe('not_ready')
+  })
+
+  it('rename: throws when the server does not advertise renameProvider', async () => {
+    const init = INIT() as { capabilities: Record<string, unknown> }
+    init.capabilities.renameProvider = false
+    const { client } = await connectedClient({ initialize: init })
+    await expect(client.rename(GREETER_URI, POS, 'X')).rejects.toThrow(/rename/i)
   })
 })
 
