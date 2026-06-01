@@ -7,6 +7,7 @@ import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
 import {
   LanguageServerManager,
   LspQueryEngine,
+  LspRenameEngine,
   parseServerRegistry,
   type ServerRegistry,
 } from '@strummer/lsp'
@@ -16,6 +17,8 @@ import { createLspServer, type ToolchainDetector } from './lsp.js'
 export interface LspBinConfig {
   /** Enable the navigation tools (deny-by-default — they need a live, code-executing daemon). */
   allowRun: boolean
+  /** Enable `lsp_rename` to WRITE edits to disk (deny-by-default). Requires allowRun. */
+  allowWrite: boolean
   /** Project roots a server may be initialized against (load-bearing even with allowRun). */
   allowedRoots: string[]
   /** Per-request wall-clock cap (ms), or undefined for the manager default. */
@@ -82,6 +85,8 @@ const detectToolchain: ToolchainDetector = (projectRoot, language) => {
  * they are enabled only with the full gate — a truthy `STRUMMER_LSP_ALLOW_RUN`, a non-empty
  * `STRUMMER_LSP_PROJECT_ROOTS` allowlist, AND a non-empty `STRUMMER_LSP_SERVERS` registry:
  *   STRUMMER_LSP_ALLOW_RUN=1
+ *   STRUMMER_LSP_ALLOW_WRITE=1   # lets lsp_rename WRITE edits to disk; default off = dry-run only.
+ *                                # Requires STRUMMER_LSP_ALLOW_RUN (hard startup error otherwise).
  *   STRUMMER_LSP_PROJECT_ROOTS=/abs/project,/abs/other
  *   STRUMMER_LSP_SERVERS='{"typescript":{"command":"typescript-language-server","args":["--stdio"]}}'
  *   STRUMMER_LSP_TIMEOUT_MS=15000
@@ -98,6 +103,7 @@ export function buildLspServerFromEnv(
 
   const config: LspBinConfig = {
     allowRun: bool(env.STRUMMER_LSP_ALLOW_RUN),
+    allowWrite: bool(env.STRUMMER_LSP_ALLOW_WRITE),
     allowedRoots: csv(env.STRUMMER_LSP_PROJECT_ROOTS),
     timeoutMs: num(env.STRUMMER_LSP_TIMEOUT_MS),
     registry,
@@ -106,12 +112,19 @@ export function buildLspServerFromEnv(
     idleTtlMs: num(env.STRUMMER_LSP_IDLE_TTL_MS),
   }
 
+  // allowWrite implies allowRun — you cannot apply an edit without a live server computing it.
+  // Reject the contradictory combination LOUDLY at startup rather than silently ignoring it.
+  if (config.allowWrite && !config.allowRun) {
+    throw new Error('STRUMMER_LSP_ALLOW_WRITE requires STRUMMER_LSP_ALLOW_RUN')
+  }
+
   const artifacts =
     config.artifactDir !== undefined ? new ArtifactStore(config.artifactDir, 'lsp') : undefined
 
   // A registry is required to spawn anything; without one only lsp_languages (empty) is useful.
   let manager: LanguageServerManager | undefined
   let query: LspQueryEngine | undefined
+  let renameEngine: LspRenameEngine | undefined
   if (config.registry !== undefined) {
     manager = new LanguageServerManager({
       registry: config.registry,
@@ -126,9 +139,18 @@ export function buildLspServerFromEnv(
       allowRun: config.allowRun,
       allowedRoots: config.allowedRoots,
     })
+    renameEngine = new LspRenameEngine({
+      manager,
+      allowRun: config.allowRun,
+      allowedRoots: config.allowedRoots,
+      allowWrite: config.allowWrite,
+      // default stage-then-commit writer; LSP has no operator secret source (the only surfaced
+      // content is the renamed identifier token), so the engine's identity redactor is used.
+    })
   }
 
   const engine = query
+  const writeEngine = renameEngine
   const liveManager = manager
   const server = createLspServer({
     registry: config.registry,
@@ -137,6 +159,7 @@ export function buildLspServerFromEnv(
     artifacts,
     detectToolchain,
     ...(engine ? { query: (input) => engine.query(input) } : {}),
+    ...(writeEngine ? { rename: (input) => writeEngine.rename(input) } : {}),
     ...(liveManager ? { describeServers: () => liveManager.describe() } : {}),
   })
 

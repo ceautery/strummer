@@ -46,6 +46,7 @@ describe('buildLspServerFromEnv', () => {
       idleTtlMs: 600000,
     })
     expect(built.config.registry?.typescript?.command).toBe('typescript-language-server')
+    expect(built.config.allowWrite).toBe(false) // default off — dry-run preview only
     expect(built.manager).toBeDefined()
     expect(await toolNames(built)).toEqual([
       'lsp_call_hierarchy',
@@ -54,8 +55,30 @@ describe('buildLspServerFromEnv', () => {
       'lsp_find_references',
       'lsp_hover',
       'lsp_languages',
+      'lsp_rename', // wired whenever navigation is (dry-run by default)
       'lsp_type_definition',
     ])
+  })
+
+  it('parses STRUMMER_LSP_ALLOW_WRITE (still exposes lsp_rename — apply is the engine decision)', async () => {
+    const built = buildLspServerFromEnv({
+      STRUMMER_LSP_ALLOW_RUN: '1',
+      STRUMMER_LSP_ALLOW_WRITE: '1',
+      STRUMMER_LSP_PROJECT_ROOTS: '/abs/project',
+      STRUMMER_LSP_SERVERS: SERVERS,
+    })
+    expect(built.config.allowWrite).toBe(true)
+    expect(await toolNames(built)).toContain('lsp_rename')
+  })
+
+  it('HARD-ERRORS when allowWrite is set without allowRun (cannot write without a live server)', () => {
+    expect(() =>
+      buildLspServerFromEnv({
+        STRUMMER_LSP_ALLOW_WRITE: '1',
+        STRUMMER_LSP_PROJECT_ROOTS: '/abs/project',
+        STRUMMER_LSP_SERVERS: SERVERS,
+      }),
+    ).toThrow(/STRUMMER_LSP_ALLOW_WRITE requires STRUMMER_LSP_ALLOW_RUN/)
   })
 
   it('a registry without allowRun keeps navigation OFF (gate is paired)', async () => {

@@ -4,6 +4,8 @@ import type {
   LspQueryInput,
   LspQueryKind,
   LspQueryResult,
+  LspRenameInput,
+  LspRenameResult,
   ServerDescription,
   ServerRegistry,
 } from '@strummer/lsp'
@@ -35,6 +37,13 @@ export interface LspToolsOptions {
   allowedRoots?: string[]
   /** The gated query engine's entry (injected; `bin-lsp` wires the real `LspQueryEngine`). */
   query?: (input: LspQueryInput) => Promise<LspQueryResult>
+  /**
+   * The gated rename engine's entry (injected; `bin-lsp` wires the real `LspRenameEngine`).
+   * Present ⇒ `lsp_rename` registers (alongside navigation; both need `allowRun`). Whether a
+   * rename APPLIES to disk vs returns a dry-run preview is the engine's internal decision
+   * (the operator's `allowWrite`), never a tool input.
+   */
+  rename?: (input: LspRenameInput) => Promise<LspRenameResult>
   /** Live-server provenance for `lsp_languages` (injected; `bin-lsp` wires `manager.describe`). */
   describeServers?: () => ServerDescription[]
   /** Optional artifact store: enables by-handle large reference lists + the resource. */
@@ -53,7 +62,12 @@ line:column; \`lsp_document_symbols\` takes just a file (the outline, no positio
 answer with line:column mapped back to human coordinates. Positions are 1-based; columns count
 Unicode code points. A result \`status\` is tri-state: "ok", "not_ready" (the server is still
 indexing — retry shortly; NOT the same as no result), or "no_result". Navigation requires a live
-indexing daemon, so it is operator-gated and confined to allowlisted project roots.`
+indexing daemon, so it is operator-gated and confined to allowlisted project roots.
+
+\`lsp_rename\` (write-mode, present only when navigation is) renames a symbol across the project.
+It is DRY-RUN by default — it returns the proposed edit as a preview and writes nothing. The
+operator must separately enable apply; \`applied\` in the result tells you whether the edit was
+written to disk, and \`refused\` explains any non-apply. There is no input that turns writing on.`
 
 const HEAD = 50 // inline at most this many locations; the rest go by handle.
 
@@ -310,6 +324,78 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
         return { content: [text(structured)], structuredContent: structured }
       },
     )
+
+    // Write-mode (ADR 0011 addendum). Present whenever navigation is (rename needs a live server).
+    // DRY-RUN vs APPLY is the engine's internal decision (operator allowWrite) — NOT a tool input.
+    const rename = opts.rename
+    if (rename) {
+      server.registerTool(
+        'lsp_rename',
+        {
+          title: 'Rename a symbol (write)',
+          description:
+            'Rename the symbol at a 1-based line:column to `newName` across the project. DRY-RUN ' +
+            'by default: returns the proposed edit (per-file hunks, old→new) with NO disk writes. ' +
+            'The operator separately enables apply (allowWrite); when enabled the edit is written ' +
+            'to disk — single- or multi-file, atomically — and per-file SHA-256 digests are ' +
+            'returned. `applied` says which happened; `refused` explains any non-apply (not ' +
+            'renameable, resource ops, out-of-root, drift). Tri-state status. No tool input can ' +
+            'turn writing on.',
+          inputSchema: {
+            ...positionSchema,
+            newName: z.string().describe('the new identifier for the symbol'),
+          },
+        },
+        async (args) => {
+          const language = args.language as string
+          const projectRoot = args.projectRoot as string
+          const toolchain = opts.detectToolchain?.(projectRoot, language)
+          const result = await rename({
+            language,
+            projectRoot,
+            file: args.file as string,
+            line: args.line as number,
+            column: args.column as number,
+            newName: args.newName as string,
+            ...(toolchain ? { toolchain } : {}),
+          })
+          const head = {
+            status: result.status,
+            kind: result.kind,
+            applied: result.applied,
+            ...(result.refused ? { refused: result.refused } : {}),
+            newName: result.newName,
+            fileCount: result.fileCount,
+            totalEditCount: result.totalEditCount,
+            encoding: result.encoding,
+            ...(result.serverInfo ? { serverInfo: result.serverInfo } : {}),
+            ...(result.toolchain ? { toolchain: result.toolchain } : {}),
+            ...(result.versionWarning ? { versionWarning: result.versionWarning } : {}),
+            ...(result.resourceOps ? { resourceOps: result.resourceOps } : {}),
+            ...(result.digests ? { digests: result.digests } : {}),
+          }
+          let structured: Record<string, unknown> = { ...head, edits: result.edits }
+          // A large edit set is offloaded by handle (already redacted by the engine); the inline
+          // result keeps a capped per-file head. Applied edits store an `applied-edit` audit blob.
+          if (result.totalEditCount > HEAD && artifacts) {
+            const kind = result.applied ? 'applied-edit' : 'rename-preview'
+            const fullHandle = artifacts.put(
+              `${kind}-${seq++}`,
+              kind,
+              JSON.stringify(result, null, 2),
+              'application/json',
+            )
+            structured = {
+              ...head,
+              edits: result.edits.slice(0, HEAD),
+              truncated: true,
+              fullHandle,
+            }
+          }
+          return { content: [text(structured)], structuredContent: structured }
+        },
+      )
+    }
   }
 
   // Large reference lists are emitted by handle, served by one resource when a store is set.

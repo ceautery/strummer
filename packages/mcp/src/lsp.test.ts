@@ -7,6 +7,8 @@ import { ArtifactStore } from '@strummer/artifacts'
 import type {
   LspQueryInput,
   LspQueryResult,
+  LspRenameInput,
+  LspRenameResult,
   ServerDescription,
   ServerRegistry,
 } from '@strummer/lsp'
@@ -304,6 +306,11 @@ describe('lsp navigation tools', () => {
     expect(data.versionWarning).toMatch(/version/i)
   })
 
+  it('does NOT register lsp_rename unless a rename engine is wired', async () => {
+    const gated = await connect({ ...GATED, query: stubQuery(okDefinition).query })
+    expect((await gated.listTools()).tools.map((t) => t.name)).not.toContain('lsp_rename')
+  })
+
   it('stores a large reference list by handle and serves it via the resource', async () => {
     const many = Array.from({ length: 120 }, (_, i) => ({
       uri: `file:///project/src/f${i}.ts`,
@@ -328,5 +335,146 @@ describe('lsp navigation tools', () => {
     const full = await client.readResource({ uri: data.fullHandle as string })
     const served = firstJson<unknown[]>(full.contents)
     expect(served).toHaveLength(120)
+  })
+})
+
+interface RenameJson {
+  status?: string
+  kind?: string
+  applied?: boolean
+  refused?: string
+  newName?: string
+  fileCount?: number
+  totalEditCount?: number
+  edits?: Array<{
+    uri: string
+    file: string
+    editCount: number
+    hunks?: Array<{ oldText: string; newText: string }>
+  }>
+  digests?: Array<{ file: string }>
+  truncated?: boolean
+  fullHandle?: string
+}
+
+function stubRename(result: LspRenameResult): {
+  rename: (input: LspRenameInput) => Promise<LspRenameResult>
+  last: () => LspRenameInput | undefined
+} {
+  let last: LspRenameInput | undefined
+  return {
+    rename: async (input) => {
+      last = input
+      return result
+    },
+    last: () => last,
+  }
+}
+
+const previewResult: LspRenameResult = {
+  status: 'ok',
+  kind: 'rename',
+  applied: false,
+  newName: 'Greeter2',
+  fileCount: 1,
+  totalEditCount: 1,
+  encoding: 'utf-16',
+  serverInfo: { name: 'typescript-language-server', version: '5.3.0' },
+  edits: [
+    {
+      uri: 'file:///project/src/greeter.ts',
+      file: 'src/greeter.ts',
+      editCount: 1,
+      hunks: [
+        {
+          range: { start: { line: 5, column: 14 }, end: { line: 5, column: 21 } },
+          oldText: 'Greeter',
+          newText: 'Greeter2',
+        },
+      ],
+    },
+  ],
+}
+
+const RENAME_ARGS = { ...DEF_ARGS, newName: 'Greeter2' }
+
+describe('lsp_rename (write-mode surface)', () => {
+  it('registers only when a rename engine is wired (alongside navigation)', async () => {
+    const client = await connect({
+      ...GATED,
+      query: stubQuery(okDefinition).query,
+      rename: stubRename(previewResult).rename,
+    })
+    expect((await client.listTools()).tools.map((t) => t.name)).toContain('lsp_rename')
+  })
+
+  it('returns a dry-run preview (applied:false) with per-file hunks; has NO write input', async () => {
+    const stub = stubRename(previewResult)
+    const client = await connect({
+      ...GATED,
+      query: stubQuery(okDefinition).query,
+      rename: stub.rename,
+    })
+    const tool = (await client.listTools()).tools.find((t) => t.name === 'lsp_rename')
+    // The tool surface exposes no input that could turn writing on.
+    expect(Object.keys(tool?.inputSchema.properties ?? {})).not.toContain('write')
+    const res = await client.callTool({ name: 'lsp_rename', arguments: RENAME_ARGS })
+    const data = firstJson<RenameJson>(res.content)
+    expect(stub.last()?.newName).toBe('Greeter2')
+    expect(data.applied).toBe(false)
+    expect(data.fileCount).toBe(1)
+    expect(data.edits?.[0]?.hunks?.[0]).toMatchObject({ oldText: 'Greeter', newText: 'Greeter2' })
+  })
+
+  it('surfaces an applied result with digests', async () => {
+    const applied: LspRenameResult = {
+      ...previewResult,
+      applied: true,
+      digests: [{ file: 'src/greeter.ts', before: 'aaa', after: 'bbb' }],
+    }
+    const client = await connect({
+      ...GATED,
+      query: stubQuery(okDefinition).query,
+      rename: stubRename(applied).rename,
+    })
+    const res = await client.callTool({ name: 'lsp_rename', arguments: RENAME_ARGS })
+    const data = firstJson<RenameJson>(res.content)
+    expect(data.applied).toBe(true)
+    expect(data.digests?.[0]?.file).toBe('src/greeter.ts')
+  })
+
+  it('offloads a large edit set by handle (rename-preview) and serves it', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      uri: `file:///project/src/f${i}.ts`,
+      file: `src/f${i}.ts`,
+      editCount: 1,
+      hunks: [
+        {
+          range: { start: { line: 1, column: 1 }, end: { line: 1, column: 8 } },
+          oldText: 'Greeter',
+          newText: 'Greeter2',
+        },
+      ],
+    }))
+    const big: LspRenameResult = {
+      ...previewResult,
+      fileCount: 120,
+      totalEditCount: 120,
+      edits: many,
+    }
+    const artifacts = new ArtifactStore(tmp(), 'lsp')
+    const client = await connect({
+      ...GATED,
+      query: stubQuery(okDefinition).query,
+      rename: stubRename(big).rename,
+      artifacts,
+    })
+    const res = await client.callTool({ name: 'lsp_rename', arguments: RENAME_ARGS })
+    const data = firstJson<RenameJson>(res.content)
+    expect(data.truncated).toBe(true)
+    expect(data.fullHandle).toMatch(/^strummer:\/\/lsp\/rename-preview-/)
+    const full = await client.readResource({ uri: data.fullHandle as string })
+    const served = firstJson<LspRenameResult>(full.contents)
+    expect(served.edits).toHaveLength(120)
   })
 })
