@@ -33,8 +33,8 @@ Usage:
 API testing:
   strummer api list <dir>                               [--json]
   strummer api get <dir> <name>                         [--json]
-  strummer api run <dir> <name>                         [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--openapi <spec.json>] [--json]
-  strummer api run-collection <dir> <name…>             [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--stop-on-failure] [--json]
+  strummer api run <dir> <name>                         [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--openapi <spec.json>] [--json]
+  strummer api run-collection <dir> <name…>             [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--stop-on-failure] [--json]
   strummer api validate --graphql <schema> --query <q>  [--json]
 
 Browser testing (single-shot; the typed host is auto-allowed):

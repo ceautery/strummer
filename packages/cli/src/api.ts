@@ -4,8 +4,10 @@ import {
   ArtifactStore,
   type ContractResult,
   loadCollection,
+  resolveSecretStore,
   runRequest,
   runSequence,
+  type SecretStore,
   validateGraphqlOperation,
   validateOpenApiResponse,
 } from '@strummer/api'
@@ -147,8 +149,15 @@ const RUN_OPTIONS = {
   env: { type: 'string' },
   unsafe: { type: 'boolean' },
   'allow-host': { type: 'string', multiple: true },
+  keyring: { type: 'boolean' },
   json: { type: 'boolean' },
 } as const
+
+/** Secret store for a run: opt into the OS keyring (chained ahead of env) with
+ * `--keyring`, else the env default (`STRUMMER_SECRET_<NAME>`). */
+function secretsFor(keyring: boolean | undefined): SecretStore | undefined {
+  return keyring ? resolveSecretStore({ keyring: true }) : undefined
+}
 
 /** Read a stored response body by handle and JSON-parse it; fall back to raw. */
 function parseStoredBody(artifacts: ArtifactStore, handle: string): unknown {
@@ -191,6 +200,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     env: values.env,
     allowUnsafe: values.unsafe ?? false,
     allowedHosts: values['allow-host'],
+    secrets: secretsFor(values.keyring),
     artifacts,
   })
 
@@ -258,6 +268,7 @@ async function cmdRunCollection(args: string[], io: CliIO): Promise<number> {
     env: values.env,
     allowUnsafe: values.unsafe ?? false,
     allowedHosts: values['allow-host'],
+    secrets: secretsFor(values.keyring),
     stopOnFailure: values['stop-on-failure'] ?? false,
     artifacts,
   })

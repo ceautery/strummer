@@ -183,6 +183,21 @@ describe('cli api', () => {
     expect(c.out()).toContain('201')
   })
 
+  it('run --keyring resolves a secret (keyring chain falls back to env in CI)', async () => {
+    process.env.STRUMMER_SECRET_API_TOKEN = 'env-token-xyz'
+    try {
+      const c = capture()
+      const code = await run(
+        ['api', 'run', dir, 'secret-req', '--var', `baseUrl=${baseUrl}`, '--keyring'],
+        c.io,
+      )
+      expect(code).toBe(0)
+      expect(c.out()).toContain('200')
+    } finally {
+      delete process.env.STRUMMER_SECRET_API_TOKEN
+    }
+  })
+
   it('run --openapi validates the live response against a spec', async () => {
     const spec = join(dir, 'openapi.json')
     writeFileSync(
