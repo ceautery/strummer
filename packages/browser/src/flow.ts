@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { bruToJsonV2 } from '@usebruno/lang'
 import { parse as parseYaml } from 'yaml'
-import type { BrowserAssertionSpec } from './assertions.js'
+import type { BrowserAssertionResult, BrowserAssertionSpec } from './assertions.js'
+import type { PageDriver, StepResult, WouldRequest } from './driver.js'
 
 /**
  * Persisted, replayable browser **flows** — `.bru` + sidecar (ROADMAP Phase 3;
@@ -154,4 +155,146 @@ export function loadFlowCollection(dir: string): FlowCollection {
     flows.set(flow.name, flow)
   }
   return { dir, flows }
+}
+
+// ── Running a flow ────────────────────────────────────────────────────────────
+
+// `{{var}}` (no colon → not a secret ref) and `{{secret:NAME}}`.
+const VAR_REF = /\{\{\s*([^}\s:]+)\s*\}\}/g
+const SECRET_REF = /\{\{\s*secret:\s*([^}\s]+)\s*\}\}/g
+
+export interface RunFlowOptions {
+  /** Values for `{{var}}` interpolation (e.g. `baseUrl`). */
+  vars?: Record<string, unknown>
+  /** Resolve a `{{secret:NAME}}` to the operator secret (fail-closed on unknown).
+   * Used for input data (fill/select values, the navigate URL) — the driver's
+   * redactor scrubs the cleartext from every result. Omit to disable secret refs. */
+  resolveSecret?: (name: string) => string | undefined
+}
+
+export interface FlowStepResult {
+  action: string
+  /** False only when the step threw (gate deny, locator timeout, …); an assertion
+   * that simply did not hold is `ok:true` with `assertions[].pass=false`. */
+  ok: boolean
+  error?: string
+  /** True when the mutation ran in dry-run (gate not unlocked) — nothing executed. */
+  dryRun?: boolean
+  wouldRequest?: WouldRequest | null
+  /** Assertion outcomes (for an `assert` step). Observed values are redacted. */
+  assertions?: BrowserAssertionResult[]
+}
+
+export interface FlowResult {
+  name: string
+  /** True iff every step ran without error AND every assertion held. */
+  passed: boolean
+  steps: FlowStepResult[]
+}
+
+/** Interpolate `{{var}}` from `vars` (unknown names left intact). */
+function interpolateVars(s: string, vars: Record<string, unknown>): string {
+  return s.replace(VAR_REF, (m, name: string) => (name in vars ? String(vars[name]) : m))
+}
+
+/** Carry the gate's dry-run preview onto a step result, when present. */
+function dryRunFields(r: StepResult): Pick<FlowStepResult, 'dryRun' | 'wouldRequest'> {
+  return r.dryRun ? { dryRun: true, wouldRequest: r.wouldRequest ?? null } : {}
+}
+
+async function runStep(
+  driver: PageDriver,
+  step: FlowStep,
+  opts: RunFlowOptions,
+): Promise<FlowStepResult> {
+  const vars = opts.vars ?? {}
+  // Data fields (URL, fill/select values): interpolate vars THEN resolve secrets.
+  const resolveData = (s: string): string => {
+    const withVars = interpolateVars(s, vars)
+    return withVars.replace(SECRET_REF, (_m, name: string) => {
+      const v = opts.resolveSecret?.(name)
+      if (v === undefined)
+        throw new Error(`unknown secret "${name}" — not configured by the operator`)
+      return v
+    })
+  }
+
+  switch (step.action) {
+    case 'navigate':
+      return {
+        action: step.action,
+        ok: true,
+        ...dryRunFields(await driver.navigate(resolveData(step.url))),
+      }
+    case 'click':
+      return { action: step.action, ok: true, ...dryRunFields(await driver.clickAt(step.target)) }
+    case 'fill':
+      return {
+        action: step.action,
+        ok: true,
+        ...dryRunFields(await driver.fillAt(step.target, resolveData(step.value))),
+      }
+    case 'select': {
+      const values = Array.isArray(step.values)
+        ? step.values.map(resolveData)
+        : resolveData(step.values)
+      return {
+        action: step.action,
+        ok: true,
+        ...dryRunFields(await driver.selectAt(step.target, values)),
+      }
+    }
+    case 'press':
+      return {
+        action: step.action,
+        ok: true,
+        ...dryRunFields(await driver.pressAt(step.target ?? null, step.key)),
+      }
+    case 'wait_for':
+      await driver.waitFor({
+        role: step.target.role,
+        name: step.target.name,
+        nth: step.target.nth,
+        state: step.state,
+        timeout: step.timeout,
+      })
+      return { action: step.action, ok: true }
+    case 'assert': {
+      // Interpolate vars into string expected-values; do NOT resolve secrets here
+      // (a cleartext `expected` would surface unredacted — assert against vars).
+      const specs = step.assertions.map((a) =>
+        typeof a.value === 'string' ? { ...a, value: interpolateVars(a.value, vars) } : a,
+      )
+      return { action: step.action, ok: true, assertions: await driver.assert(specs) }
+    }
+  }
+}
+
+/**
+ * Replay a persisted flow against a live `PageDriver`. Steps run sequentially;
+ * `{{var}}`/`{{secret:NAME}}` are resolved per step. A step that throws (gate
+ * deny, locator timeout) stops the flow and is reported `ok:false`; an assertion
+ * that does not hold leaves the step `ok:true` but fails the overall flow. The
+ * driver's gate (dry-run vs execute) and redactor apply exactly as in a live
+ * session — so unlocking execution + an allowlisted host are the operator's call.
+ */
+export async function runFlow(
+  driver: PageDriver,
+  flow: BrowserFlow,
+  opts: RunFlowOptions = {},
+): Promise<FlowResult> {
+  const steps: FlowStepResult[] = []
+  let passed = true
+  for (const step of flow.steps) {
+    try {
+      const result = await runStep(driver, step, opts)
+      steps.push(result)
+      if (!result.ok || result.assertions?.some((a) => !a.pass)) passed = false
+    } catch (err) {
+      steps.push({ action: step.action, ok: false, error: (err as Error).message })
+      passed = false
+      break // sequential flow: later steps depend on this one having succeeded
+    }
+  }
+  return { name: flow.name, passed, steps }
 }

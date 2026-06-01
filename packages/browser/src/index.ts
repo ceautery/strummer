@@ -15,6 +15,7 @@ export {
   type ReplayResult,
   type ScreenshotOptions,
   type ScreenshotResult,
+  type SemanticTarget,
   type StepResult,
   type WaitForOptions,
   type WouldRequest,
@@ -22,9 +23,13 @@ export {
 export {
   type BrowserFlow,
   type FlowCollection,
+  type FlowResult,
   type FlowStep,
+  type FlowStepResult,
   loadFlow,
   loadFlowCollection,
+  type RunFlowOptions,
+  runFlow,
   type SemanticLocator,
   type WaitState,
 } from './flow.js'

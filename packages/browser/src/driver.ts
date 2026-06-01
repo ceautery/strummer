@@ -144,12 +144,22 @@ export interface ScreenshotResult {
   fullPage: boolean
 }
 
+/** A snapshot-independent element target: `getByRole(role,{name}).nth(nth)`. */
+export interface SemanticTarget {
+  role: string
+  name?: string
+  /** Index among elements sharing role+name. Default 0. */
+  nth?: number
+}
+
 export interface WaitForOptions {
   /** Wait for a ref from the current snapshot to reach `state`. */
   ref?: string
   /** Or wait for a role (optionally + accessible name) to reach `state`. */
   role?: string
   name?: string
+  /** Index among elements sharing role+name (with `role`). Default 0. */
+  nth?: number
   state?: WaitState
   timeout?: number
 }
@@ -275,6 +285,16 @@ export class PageDriver {
     return this.current?.text ?? ''
   }
 
+  /** Build a semantic locator `getByRole(role,{name}).nth(nth)` — the descriptor a
+   * ref resolves to, and the locator a persisted flow step targets directly. */
+  private locatorFor(role: string, name: string | undefined, nth: number): Locator {
+    const byRole =
+      name === undefined
+        ? this.page.getByRole(role as Role)
+        : this.page.getByRole(role as Role, { name, exact: this.opts.exact ?? true })
+    return byRole.nth(nth)
+  }
+
   private locator(ref: string): Locator {
     if (!this.current) {
       throw new Error('no snapshot yet — call navigate or snapshot before acting on a ref')
@@ -285,14 +305,7 @@ export class PageDriver {
         `unknown ref "${ref}" — refs are per-snapshot; capture a fresh snapshot and use its refs`,
       )
     }
-    const byRole =
-      desc.name === undefined
-        ? this.page.getByRole(desc.role as Role)
-        : this.page.getByRole(desc.role as Role, {
-            name: desc.name,
-            exact: this.opts.exact ?? true,
-          })
-    return byRole.nth(desc.nth)
+    return this.locatorFor(desc.role, desc.name, desc.nth)
   }
 
   private async capture(): Promise<Snapshot> {
@@ -438,6 +451,34 @@ export class PageDriver {
     )
   }
 
+  // ── Semantic-locator interactions (for replaying persisted flows) ───────────
+  // Drive by {role, name?, nth?} directly via getByRole — independent of any
+  // snapshot/ref, so a saved flow is stable across runs. Each reuses the same
+  // mutation gate (dry-run vs execute) as its ref-based sibling.
+
+  async clickAt(target: SemanticTarget): Promise<StepResult> {
+    const locator = this.locatorFor(target.role, target.name, target.nth ?? 0)
+    return this.interact('click', undefined, () => locator.click())
+  }
+
+  async fillAt(target: SemanticTarget, value: string): Promise<StepResult> {
+    const locator = this.locatorFor(target.role, target.name, target.nth ?? 0)
+    return this.interact('fill', undefined, () => locator.fill(value))
+  }
+
+  async selectAt(target: SemanticTarget, values: string | string[]): Promise<StepResult> {
+    const locator = this.locatorFor(target.role, target.name, target.nth ?? 0)
+    return this.interact('select', undefined, () => locator.selectOption(values))
+  }
+
+  async pressAt(target: SemanticTarget | null, key: string): Promise<StepResult> {
+    const locator =
+      target === null ? null : this.locatorFor(target.role, target.name, target.nth ?? 0)
+    return this.interact('press', undefined, () =>
+      locator === null ? this.page.keyboard.press(key) : locator.press(key),
+    )
+  }
+
   /**
    * Run a mutating interaction through the gate: execute it directly when no
    * gate is configured or the gate authorizes it; otherwise dry-run it (perform
@@ -517,13 +558,7 @@ export class PageDriver {
     if (options.ref !== undefined) {
       locator = this.locator(options.ref)
     } else if (options.role !== undefined) {
-      locator =
-        options.name === undefined
-          ? this.page.getByRole(options.role as Role)
-          : this.page.getByRole(options.role as Role, {
-              name: options.name,
-              exact: this.opts.exact ?? true,
-            })
+      locator = this.locatorFor(options.role, options.name, options.nth ?? 0)
     } else {
       throw new Error('waitFor requires a ref or a role')
     }
