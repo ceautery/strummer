@@ -512,10 +512,20 @@ inside it; a **per-(server,uri) mutex** + open-once/refcount docs + in-flight-aw
 installed version"); `vscode-jsonrpc` + `vscode-languageserver-protocol` as **explicit pins**
 (the playwright-core pattern, not a hand-roll); **MVP = `lsp_find_definition`/
 `lsp_find_references`/`lsp_hover`** (hover restored, call-hierarchy staged behind capability
-detection). **Next action: code ADR-0011 slice 1** — the pure `encoding.ts` + `normalize.ts`
-core (no spawn/network) over committed real-server-payload fixtures, TDD red→green. Then
-client.ts (handshake/tri-state vs the fake peer) → manager.ts + gated query.ts → MCP surface
-+ `strummer-lsp-mcp` bin. **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
+detection). **`@strummer/lsp` slice 1 is LANDED:** the pure `encoding.ts`
+(`toLspCharacter`/`fromLspCharacter` for utf-8/16/32 with non-BMP fixtures + cross-encoding
+round-trip; `resolvePositionEncoding` fail-loud-on-unsupported; `toLspPosition`/
+`fromLspPosition` with LF/CR/CRLF split + BOM strip) + `normalize.ts` (`normalizeLocations`
+Location-vs-LocationLink, `normalizeHover`, `normalizeDocumentSymbols` hierarchical-vs-flat,
+tri-state `decideStatus`) — no spawn/network, 31 tests, 605 TS + 45 Py green. **Next action:
+code ADR-0011 slice 2 — `client.ts`** (the LSP JSON-RPC client over an injected `serverSpawn`
+seam: initialize advertising `positionEncodings:["utf-16","utf-8"]` → read back the
+negotiated encoding; `initialized`; `didOpen` full-text once/refcounted/no didClose by
+default; capability-gated requests; deadlock-safe `null` replies to inbound server requests;
+tri-state readiness gated on `$/progress` inside the single operator deadline) tested against
+a **fake in-process JSON-RPC peer** (paired in-memory duplex streams à la vscode-jsonrpc's
+TestDuplex). This is where `vscode-jsonrpc` + `vscode-languageserver-protocol` get added as
+explicit pins. Then manager.ts + gated query.ts → MCP surface + `strummer-lsp-mcp` bin. **Phase-4 staged tails** (not blocking LSP): deps PyPI/RubyGems
 adapters; coverage `strummer coverage` CLI / `istanbul-lib-coverage` merging; flake Python
 (pytest-json) adapter; mutate Python (mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
 Phase 3

@@ -120,6 +120,11 @@ vision and `ARCHITECTURE.md` for the technical design.
   (no `@stryker-mutator` import) → mutationScore + survivors; gated diff-scoped `runMutation`
   spawning `stryker run` (injected runner, not a gate dep); `mutate_summarize`/`mutate_run`
   MCP surface),
+  `lsp` (Phase-4, IN PROGRESS — semantic code navigation via a live LSP subprocess; the
+  documented, fenced exception to ARCHITECTURE §1's no-live-RPC rule, design = ADR 0011.
+  Slice 1 landed: pure `encoding.ts` (the position-encoding correctness core, utf-8/16/32)
+  + `normalize.ts` (Location/LocationLink, hover, document-symbol shapes, tri-state). Staged:
+  client.ts/manager.ts/query.ts + `lsp_find_definition`/`_references`/`_hover` MCP surface),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).

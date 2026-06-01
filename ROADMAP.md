@@ -549,10 +549,12 @@ Two independent tracks, then the test-quality chain, then LSP last:
       **v1 reads-only**; green gate uses a **fake in-process JSON-RPC peer replaying
       recorded real-server payloads** (no real server in the gate — stricter than the
       other pillars).
-  - [ ] **Slice 1 — pure `encoding.ts` + `normalize.ts`.** `toLspCharacter` (utf-8/16/32,
-        non-BMP fixture tests — the #1 silent-wrong trap) + result normalizers (`Location`
-        vs `LocationLink`, `DocumentSymbol` vs `SymbolInformation`, tri-state
-        ok/not_ready/no_result). No spawn, no network.
+  - [x] **Slice 1 — pure `encoding.ts` + `normalize.ts`.** `toLspCharacter`/`fromLspCharacter`
+        (utf-8/16/32, non-BMP fixtures + a cross-encoding round-trip — the #1 silent-wrong
+        trap), `resolvePositionEncoding` (absent→utf-16, unsupported→throw),
+        `toLspPosition`/`fromLspPosition` (LF/CR/CRLF split, no doc normalization, BOM
+        strip) + result normalizers (`Location` vs `LocationLink`, `DocumentSymbol` vs
+        `SymbolInformation`, hover, tri-state `decideStatus`). No spawn, no network; 31 tests.
   - [ ] **Slice 2 — `client.ts`.** Handshake (initialize advertising
         `positionEncodings:["utf-16","utf-8"]` → read back the negotiated encoding;
         initialized; didOpen full-text once, refcounted, no didClose by default),
