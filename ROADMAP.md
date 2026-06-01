@@ -199,10 +199,14 @@ Staged below; aspirational items are scheduled, not cut.
       handle; MCP `browser_screenshot` operator-gated off by default
       (`STRUMMER_BROWSER_ALLOW_SCREENSHOTS`) — unredactable pixels, same posture as
       the trace.zip; the run-artifact resource serves `image/png` as a base64 blob.)_
-- [ ] **`browser_trace_query`** — wraps `npx playwright trace` subcommands
-      (`open`/`actions`/`action`/`snapshot`/`close`) + direct trace.zip JSON-lines
-      parser fallback. (Console/network/errors come from within actions/snapshot,
-      not dedicated subcommands.)
+- [x] **`browser_trace_query`** — `queryTrace` parses the trace.zip's `.trace`
+      JSON-lines **directly** (the chosen path over an `npx playwright trace`
+      subprocess: `open` is a GUI viewer and there are no console/network/errors
+      subcommands — those live inside the trace). Pairs `before`/`after` by `callId`
+      into an action timeline (api/timing/error/params) + console + errors +
+      browser/Playwright metadata; filters apiFilter/errorsOnly/limit/includeParams.
+      MCP `browser_trace_query` reads the stored (already-redacted) trace by runId —
+      no live session needed (query after close). Schema probed against the pin.
 - [x] **Browser assertions** — one assertion engine across pillars. Factored the
       operator core into **`@strummer/assert`** (`AssertionOp` + `applyOp`, extracted
       from `@strummer/api`, which now consumes it). `@strummer/browser` `assertions.ts`

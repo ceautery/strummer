@@ -42,3 +42,10 @@ export {
   type RefDescriptor,
   type Snapshot,
 } from './snapshot.js'
+export {
+  queryTrace,
+  type TraceAction,
+  type TraceConsoleEntry,
+  type TraceQueryOptions,
+  type TraceQueryResult,
+} from './trace.js'

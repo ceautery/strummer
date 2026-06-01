@@ -6,6 +6,7 @@ import {
   type BrowserGate,
   type BrowserManager,
   PageDriver,
+  queryTrace,
   RunRecorder,
 } from '@strummer/browser'
 import type { Page } from 'playwright-core'
@@ -726,6 +727,41 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         runId: session.runId,
         ...(runArtifacts ? { artifacts: runArtifacts } : {}),
       })
+    },
+  )
+
+  server.registerTool(
+    'browser_trace_query',
+    {
+      title: 'Query a run trace',
+      description:
+        'Parse a captured trace.zip (by runId; requires trace capture to have been enabled) into a ' +
+        'structured action timeline (API calls with timing + errors), console output, and an errors ' +
+        'list. No live session needed — query a trace after the session closed. The trace is already ' +
+        'redacted. Use apiFilter/errorsOnly/limit to narrow; includeParams adds (verbose) call params.',
+      inputSchema: {
+        runId: z.string().describe('the runId whose trace to query'),
+        apiFilter: z.string().optional().describe('keep only actions whose api contains this'),
+        errorsOnly: z.boolean().optional().describe('keep only actions that errored'),
+        limit: z.number().int().positive().optional().describe('cap the actions returned'),
+        includeParams: z.boolean().optional().describe('include each action’s params'),
+      },
+    },
+    async (args) => {
+      const handle = `strummer://browser/run/${args.runId}/trace`
+      const artifact = artifacts.get(handle)
+      if (!artifact) {
+        throw new Error(
+          `no trace for run ${args.runId} — was trace capture enabled (STRUMMER_BROWSER_CAPTURE_TRACE)?`,
+        )
+      }
+      const result = queryTrace(artifact.body, {
+        apiFilter: args.apiFilter,
+        errorsOnly: args.errorsOnly,
+        limit: args.limit,
+        includeParams: args.includeParams,
+      })
+      return reply({ ...result })
     },
   )
 

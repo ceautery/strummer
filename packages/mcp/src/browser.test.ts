@@ -69,6 +69,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     allowDialogs?: boolean
     downloadDir?: string
     uploadDir?: string
+    capture?: { trace?: boolean; console?: boolean; network?: boolean }
   }) {
     const gate = new BrowserGate({
       allowUnsafe: config.allowUnsafe,
@@ -97,6 +98,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       allowScreenshots: config.allowScreenshots,
       downloadDir: config.downloadDir,
       uploadDir: config.uploadDir,
+      capture: config.capture,
     })
     const [ct, st] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test', version: '0.0.0' })
@@ -157,6 +159,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_get_value',
       'browser_get_attribute',
       'browser_assert',
+      'browser_trace_query',
       'browser_audit_a11y',
       'browser_screenshot',
       'browser_downloads',
@@ -538,6 +541,38 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(valResult?.pass).toBe(true)
     expect(valResult?.actual).toBe('[redacted:pw]')
     expect(JSON.stringify(res)).not.toContain('hunter2-secret')
+    await client.close()
+  })
+
+  it('browser_trace_query parses a captured trace into an action timeline (after close)', async () => {
+    const { client } = await connect({ capture: { trace: true } })
+    const { sessionId, runId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+      runId: string
+    }
+    const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
+      .structuredContent as StepSC
+    await call(client, 'browser_get_text', {
+      sessionId,
+      ref: refByName(nav.snapshot, 'heading', 'Browser MCP'),
+    })
+    await call(client, 'browser_close_session', { sessionId }) // flushes the trace to the store
+
+    // querying needs no live session — it reads the stored (redacted) trace by runId
+    const res = (await call(client, 'browser_trace_query', { runId, apiFilter: 'goto' }))
+      .structuredContent as {
+      browserName?: string
+      actions: { api: string; durationMs?: number }[]
+      summary: { actionCount: number }
+    }
+    expect(res.browserName).toBe('chromium')
+    expect(res.actions.length).toBeGreaterThan(0)
+    expect(res.actions.every((a) => /goto/i.test(a.api))).toBe(true)
+
+    // a run without a trace gives an actionable error
+    const noTrace = await call(client, 'browser_trace_query', { runId: 'no-such-run' })
+    expect(noTrace.isError).toBe(true)
+    expect(JSON.stringify(noTrace.content)).toMatch(/no trace/i)
     await client.close()
   })
 

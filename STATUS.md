@@ -138,12 +138,22 @@ against in-process fixtures):
    to its timeout — so a condition that becomes true after an async update still
    passes. Observed string values are redacted; `pass` reflects the true (raw) value.
    MCP `browser_assert` tool (free read) returns `{pass, results}`.
+24. **`browser_trace_query` — trace.zip → action timeline.** `@strummer/browser`
+   `trace.ts`/`queryTrace(zip, opts)` parses a captured Playwright trace.zip's `.trace`
+   **JSONL directly** (no `npx playwright trace` subprocess — its `open` is a GUI
+   viewer and there are NO `console`/`network`/`errors` subcommands; those live inside
+   the trace). Pairs `before`/`after` events by `callId` into an **action timeline**
+   (`api` = `class.method`, timing, error, optional params) + console + an errors list
+   + `{playwrightVersion, browserName}`; filters `apiFilter`/`errorsOnly`/`limit`/
+   `includeParams`. MCP `browser_trace_query` resolves the stored (already-redacted)
+   trace by `runId` — **no live session needed** (query after close); errors actionably
+   when trace capture was off. Schema probed against the 1.60.0 pin.
 
-**259 TS + 45 Py tests green; committed to `main`.** **Next action:** pick from the
-remaining aspirational Phase-3 tail (ROADMAP: `browser_trace_query`, Lighthouse perf,
-network heavy/HAR, visual regression, `.bru` step persistence, multi-engine) or start
-**Phase 4** (cross-cutting verification: LSP bridge, impact-scoped test runner,
-mutation/flaky detection). See the detailed "Next action" section below + ROADMAP.
+**265 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+aspirational Phase-3 tail (ROADMAP: Lighthouse perf, network heavy/HAR, visual
+regression, `.bru` step persistence, multi-engine) or start **Phase 4** (cross-cutting
+verification: LSP bridge, impact-scoped test runner, mutation/flaky detection). See
+the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -457,9 +467,14 @@ from `@strummer/api`) + `@strummer/browser` `assertions.ts`/`PageDriver.assert` 
 + element sources, auto-wait poll, redacted actual) + MCP `browser_assert`. One
 assertion engine across pillars.
 
-**Next (later Phase 3):** the aspirational tail only — `browser_trace_query`,
-Lighthouse perf, network heavy/HAR, visual regression, `.bru` step persistence,
-multi-engine. None blocking. TDD red→green; `pnpm gate` 100% green before each commit.
+**`browser_trace_query`: DONE.** `queryTrace` parses a trace.zip's `.trace` JSONL
+into an action timeline (before/after by callId) + console + errors; MCP
+`browser_trace_query` reads the stored redacted trace by runId (no live session).
+Direct parser, no GUI subprocess. (`trace.ts`, real-chromium tested.)
+
+**Next (later Phase 3):** the aspirational tail only — Lighthouse perf, network
+heavy/HAR, visual regression, `.bru` step persistence, multi-engine. None blocking.
+TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

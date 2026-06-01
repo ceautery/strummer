@@ -70,6 +70,10 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   operator set (`equals`/`contains`/`matches`/`gt`/…). Each **auto-waits** to its
   timeout; observed values are redacted. Returns `{pass, results}`.
 - **`browser_audit_a11y`** — axe-core audit; compact summary + report by handle.
+- **`browser_trace_query`** — parse a captured trace.zip (by `runId`; needs trace
+  capture on) into an action timeline (API calls + timing + errors), console, and an
+  errors list. No live session needed — query after the session closed; the trace is
+  already redacted. `apiFilter`/`errorsOnly`/`limit`/`includeParams` narrow it.
 - **`browser_screenshot`** — operator-gated (off by default; pixels can't be
   redacted, like the trace.zip); captures a PNG to a `screenshot-s<n>` handle
   (summary only, never inlined) and does not invalidate refs.
