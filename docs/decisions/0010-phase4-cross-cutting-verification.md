@@ -122,3 +122,28 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
 - Relates to ADR 0004/0005 (api), ADR 0006–0009 (browser). The research +
   adversarial transcript is the workflow `phase4-design-research`; this ADR is its
   durable distillation.
+
+## Update — 2026-06-01: Stryker/Vitest-4 compat spike RESOLVED (mutation unblocked)
+
+The mutation-testing slot was gated on a spike (above): Stryker's `vitest-runner`
+historically advertised Vitest v1–3, while Strummer is pinned to Vitest 4.1.x. The spike
+is **resolved positively** — current `@stryker-mutator/vitest-runner` (9.x, e.g. 9.6.1)
+declares `peerDependencies: { vitest: ">=2.0.0", "@stryker-mutator/core": "<matching>" }`
+and the maintainers shipped explicit **Vitest 4 (and 4.1)** support, including a fix for
+the v4.1 vitest-runner mutant hitcount/coverage. So the **thin-wrap path is viable** and
+the command-runner output-scraper fallback is **not** needed (mutation effort stays L, not
+L→XL).
+
+Two design consequences this firms up:
+
+- **Stryker is NOT a gate dependency / not pinned into `@strummer/mutate`.** A real
+  mutation run mutates the source and re-runs the whole suite per mutant — slow and
+  inherently non-deterministic, so it fails the "no out-of-gate tier" determinism bar.
+  Mirroring flake/coverage, the live run is an **injected runner** (default spawns the
+  operator's locally-installed `stryker run` as a subprocess, like coverage/flake spawn
+  `vitest`) behind the paired `allowRun`+`allowedRoots` gate; the engine is unit-tested
+  with a fake runner — no real Stryker spawn in `pnpm gate`.
+- **The pure core is the first slice and is Stryker-version-independent.**
+  `summarizeMutation` reads the stable **mutation-testing-elements report schema**
+  (`schemaVersion`, `files[path].mutants[].status`) that Stryker emits as
+  `mutation-report.json`, so it carries no `@stryker-mutator/*` import at all.
