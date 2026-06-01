@@ -59,6 +59,8 @@ export interface BrowserBinConfig {
   secretNames: string[]
   /** Origin-scoped HTTP Basic auth, password-free (the password never lands here). */
   httpCredentials?: { username: string; origin?: string }
+  /** Whether browser_save_storage_state is enabled (password-equivalent capture). */
+  allowStorageState: boolean
 }
 
 export interface BuiltBrowserServer {
@@ -120,6 +122,7 @@ export async function buildBrowserServerFromEnv(
     .map((h) => h.trim())
     .filter(Boolean)
   const allowPrivate = bool(env.STRUMMER_BROWSER_ALLOW_PRIVATE)
+  const allowStorageState = bool(env.STRUMMER_BROWSER_ALLOW_STORAGE_STATE)
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -162,6 +165,7 @@ export async function buildBrowserServerFromEnv(
     artifacts: store,
     redact,
     resolveSecret,
+    allowStorageState,
     capture,
     maxNodes,
   })
@@ -182,6 +186,7 @@ export async function buildBrowserServerFromEnv(
     artifactsDir,
     launchArgs,
     secretNames,
+    allowStorageState,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

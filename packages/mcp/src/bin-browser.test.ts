@@ -83,4 +83,11 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     const b = await build({ STRUMMER_BROWSER_HTTP_USERNAME: 'admin' })
     expect(b.config.httpCredentials).toBeUndefined()
   })
+
+  it('gates storageState capture behind STRUMMER_BROWSER_ALLOW_STORAGE_STATE (default off)', async () => {
+    expect((await build({})).config.allowStorageState).toBe(false)
+    expect(
+      (await build({ STRUMMER_BROWSER_ALLOW_STORAGE_STATE: '1' })).config.allowStorageState,
+    ).toBe(true)
+  })
 })

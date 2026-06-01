@@ -22,6 +22,8 @@ const FIXTURE = `<!doctype html><html lang="en"><head><title>MCP</title></head><
   <button id="go">Submit</button>
   <button id="login">Login</button>
   <script>
+    document.cookie = 'sid=secret-cookie'
+    localStorage.setItem('token', 'secret-cookie')
     document.getElementById('go').addEventListener('click', () =>
       fetch('/submit?token=hunter2-secret', { method: 'POST', body: 'x=1' }).catch(() => {}))
     document.getElementById('login').addEventListener('click', () =>
@@ -58,6 +60,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     idleTtlMs?: number
     maxContexts?: number
     now?: () => number
+    allowStorageState?: boolean
   }) {
     const gate = new BrowserGate({
       allowUnsafe: config.allowUnsafe,
@@ -80,6 +83,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       artifacts: store,
       redact: (v) => redactor.redact(v),
       resolveSecret: (name) => secrets.get(name),
+      allowStorageState: config.allowStorageState,
     })
     const [ct, st] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test', version: '0.0.0' })
@@ -131,6 +135,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_get_value',
       'browser_get_attribute',
       'browser_audit_a11y',
+      'browser_save_storage_state',
       'browser_close_session',
     ]) {
       expect(names).toContain(t)
@@ -275,6 +280,38 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     })
     expect(res.isError).toBe(true)
     expect(JSON.stringify(res.content)).toMatch(/unknown secret/i)
+    await client.close()
+  })
+
+  it('saves storageState by handle (operator-gated), never inlining values; resource refuses it', async () => {
+    const { client } = await connect({ allowStorageState: true })
+    const { sessionId, runId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+      runId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+
+    const save = await call(client, 'browser_save_storage_state', { sessionId })
+    const sc = save.structuredContent as { handle: string; cookies: number; origins: number }
+    expect(sc.handle).toBe(`strummer://browser/run/${runId}/storage-state`)
+    expect(sc.cookies).toBeGreaterThanOrEqual(1)
+    expect(sc.origins).toBeGreaterThanOrEqual(1)
+    // the result carries only counts + a handle — never the cookie/localStorage values
+    expect(JSON.stringify(save)).not.toContain('secret-cookie')
+
+    // password-equivalent: the resource refuses to serve it to the agent (operator-path)
+    await expect(client.readResource({ uri: sc.handle })).rejects.toThrow(/operator-path/i)
+    await client.close()
+  })
+
+  it('refuses storageState capture when the operator has not enabled it', async () => {
+    const { client } = await connect({}) // allowStorageState defaults off
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const res = await call(client, 'browser_save_storage_state', { sessionId })
+    expect(res.isError).toBe(true)
+    expect(JSON.stringify(res.content)).toMatch(/not enabled/i)
     await client.close()
   })
 

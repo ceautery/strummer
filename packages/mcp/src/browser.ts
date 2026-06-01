@@ -43,6 +43,10 @@ export interface BrowserToolsOptions {
    * every output by the redactor — it never appears in a tool argument or an
    * agent-visible result. Unknown names fail closed. Omit to disable secret fills. */
   resolveSecret?: (name: string) => string | undefined
+  /** Allow `browser_save_storage_state` to capture the (password-equivalent)
+   * storageState to an operator-path artifact. Default false — agents cannot
+   * harvest session cookies/tokens unless the operator enables it. */
+  allowStorageState?: boolean
   /** Token cap on inlined snapshot text. */
   maxNodes?: number
   /** Exact accessible-name matching when resolving refs. Default true. */
@@ -98,6 +102,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     console: opts.capture?.console ?? true,
     network: opts.capture?.network ?? true,
   }
+  const allowStorageState = opts.allowStorageState ?? false
   const registry = new Map<string, BrowserSession>()
   const now = () => Date.now()
 
@@ -489,6 +494,42 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   )
 
   server.registerTool(
+    'browser_save_storage_state',
+    {
+      title: 'Save storage state',
+      description:
+        'Capture the session storageState (cookies + localStorage origins) to an OPERATOR-PATH ' +
+        'artifact, returned as a handle + counts only — never inlined and NOT served back through ' +
+        'the resource (password-equivalent). Requires operator enablement.',
+      inputSchema: { sessionId },
+      outputSchema: {
+        handle: z.string(),
+        cookies: z.number().int(),
+        origins: z.number().int(),
+      },
+    },
+    async (args) => {
+      if (!allowStorageState) {
+        throw new Error('storageState capture is not enabled by the operator')
+      }
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, async () => {
+        const state = await session.page.context().storageState()
+        // redact known secrets before write (the file is still operator-path); the agent
+        // only ever sees the handle + counts, never the cookie/token values.
+        const handle = artifacts.put(
+          session.runId,
+          'storage-state',
+          redact(JSON.stringify(state)),
+          'application/json',
+        )
+        return { handle, cookies: state.cookies.length, origins: state.origins.length }
+      })
+      return reply(result)
+    },
+  )
+
+  server.registerTool(
     'browser_close_session',
     {
       title: 'Close a browser session',
@@ -533,6 +574,13 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
       const runId = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId
       const kind = Array.isArray(variables.kind) ? variables.kind[0] : variables.kind
       const handle = `strummer://browser/run/${runId}/${kind}`
+      // storageState is password-equivalent: written for the operator, never served
+      // back to the agent (it would expose live session cookies/tokens).
+      if (kind === 'storage-state') {
+        throw new Error(
+          `${handle} is an operator-path artifact (password-equivalent) and is not served to the agent; read it from the artifacts directory`,
+        )
+      }
       const artifact = artifacts.get(handle)
       if (!artifact) {
         throw new Error(`No stored artifact for ${handle}`)
