@@ -40,6 +40,8 @@ export interface OsvAffected {
 
 export interface OsvAdvisory {
   id: string
+  /** RFC3339 UTC timestamp of the advisory's last modification (used as a snapshot-staleness proxy). */
+  modified?: string
   aliases?: string[]
   summary?: string
   details?: string

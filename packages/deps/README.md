@@ -53,8 +53,22 @@ matchVulnerabilities(lodashAdvisories, { ecosystem: 'npm', name: 'lodash' }, '4.
 // → [{ id: 'GHSA-…', severity: 'moderate', fixedIn: ['4.17.21'], … }]
 ```
 
-Later slices (staged in `ROADMAP.md`): loading advisories from the operator OSV
-snapshot (`STRUMMER_DEPS_OSV_DB_DIR`, fflate-unzipped `all.zip`, with a surfaced
-`snapshotDate`); `behindBy` freshness vs the version-pin policy; the
-`audit_dependency` / `audit_project` / `changelog_diff` MCP tools + a
-`strummer-deps-mcp` bin; and a Python/PyPI adapter.
+- **`loadOsvSnapshot(dir, ecosystem)`** — read an operator-provisioned on-disk OSV
+  snapshot (`<dir>/<ecosystem>/all.zip`, fflate-unzipped, one advisory JSON per
+  entry) into `{ ecosystem, advisories, snapshotDate }`. Advisories are sorted by id
+  and feed straight into `matchVulnerabilities`; `snapshotDate` (the newest advisory
+  `modified`) lets callers flag staleness. Fails loud if the ecosystem's snapshot is
+  absent — never a silent "zero vulnerabilities". Zero network.
+
+```ts
+import { loadOsvSnapshot, matchVulnerabilities } from '@strummer/deps'
+
+const { advisories, snapshotDate } = loadOsvSnapshot(process.env.STRUMMER_DEPS_OSV_DB_DIR!, 'npm')
+matchVulnerabilities(advisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15')
+```
+
+Later slices (staged in `ROADMAP.md`): `auditDependency` (compose detect-version +
+deprecation + vuln + freshness into one verdict); `behindBy` freshness vs the
+version-pin policy; CVSS-vector → bucket scoring; the `audit_dependency` /
+`audit_project` / `changelog_diff` MCP tools + a `strummer-deps-mcp` bin; the
+operator-gated network fetch of `all.zip`; and a Python/PyPI adapter.

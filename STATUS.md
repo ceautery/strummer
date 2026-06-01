@@ -24,7 +24,12 @@ SEMVER/ECOSYSTEM via `semver`, `fixed` exclusive vs `last_affected` inclusive,
 explicit `versions`, ecosystem+name filter; severity bucketed
 `critical|high|moderate|low|unknown`) over committed OSV-advisory fixtures.
 `semver ^7.8.1` added as the package's first explicit pinned dep (matches `core`).
-400 TS + 45 Py green.)_
+**Slice 3 landed:** `loadOsvSnapshot(dir, ecosystem)` — reads an operator on-disk OSV
+snapshot (`<dir>/<ecosystem>/all.zip`, fflate-unzipped, one advisory JSON per entry)
+→ `{ecosystem, advisories (sorted by id), snapshotDate (newest advisory `modified`)}`
+feeding `matchVulnerabilities`; fails loud on an absent ecosystem snapshot; zero
+network (real FS round-trip in tests). `fflate ^0.8.3` added as an explicit pinned
+dep (matches `browser`). 405 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -332,12 +337,15 @@ against in-process fixtures):
 now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
 keyring wiring, SSRF range-block + redirect re-check, contract reach, import).
 **Developer live-view was DROPPED** (ADR 0008, headless-only/LLM-first).)_
-**Next action:** Phase 4 is underway (ADR 0010). `@strummer/deps` slices 1–2
-(`auditDeprecation`, `matchVulnerabilities`) are landed. **Next deps slices:** load
-advisories from an operator-provisioned on-disk OSV snapshot
-(`STRUMMER_DEPS_OSV_DB_DIR`, fflate-unzip `all.zip`, network off by default, surface
-`snapshotDate`) feeding `matchVulnerabilities` → `behindBy` freshness vs the
-`resolveVersion` policy → the
+**Next action:** Phase 4 is underway (ADR 0010). `@strummer/deps` slices 1–3
+(`auditDeprecation`, `matchVulnerabilities`, `loadOsvSnapshot`) are landed. **Next
+deps slices:** `auditDependency` — compose `detectInstalledVersion` (from `core`) +
+`auditDeprecation` + `matchVulnerabilities` (over a `loadOsvSnapshot` result) +
+`behindBy` freshness (vs the `resolveVersion` policy) into one agent-facing verdict,
+surfacing `snapshotDate`. Then the `audit_dependency`/`audit_project`/`changelog_diff`
+MCP tools + `strummer-deps-mcp` bin (`STRUMMER_DEPS_OSV_DB_DIR`, network off by
+default; egress SSRF-pinned via `@strummer/safety` `resolveAndPin` for the
+changelog-fetch slice — **note:** `assertSsrfAllowed` does NOT exist). The
 shared **`@strummer/artifacts`** extraction (parameterized prefix, touches the browser
 pillar's gate, behavior-preserving) when the first handle-emitting slice lands → the
 `audit_dependency`/`audit_project`/`changelog_diff` MCP tools + `strummer-deps-mcp`

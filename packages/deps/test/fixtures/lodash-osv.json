@@ -1,6 +1,7 @@
 [
   {
     "id": "GHSA-jf85-cpcp-j695",
+    "modified": "2021-03-10T20:54:38Z",
     "aliases": ["CVE-2019-10744"],
     "summary": "Prototype pollution in lodash",
     "database_specific": { "severity": "HIGH" },
@@ -18,6 +19,7 @@
   },
   {
     "id": "GHSA-35jh-r3h4-6jhm",
+    "modified": "2022-06-14T01:00:00Z",
     "aliases": ["CVE-2021-23337"],
     "summary": "Command injection in lodash",
     "database_specific": { "severity": "MODERATE" },

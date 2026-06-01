@@ -154,6 +154,9 @@ importers:
 
   packages/deps:
     dependencies:
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       semver:
         specifier: ^7.8.1
         version: 7.8.1

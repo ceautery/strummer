@@ -14,3 +14,4 @@ export {
   type SeverityBucket,
   type VulnerabilityMatch,
 } from './osv.js'
+export { loadOsvSnapshot, type OsvSnapshot } from './snapshot.js'

@@ -384,10 +384,16 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `semver`, `last_affected` inclusive vs `fixed` exclusive, explicit `versions`,
         ecosystem+name filter; severity bucketed `critical|high|moderate|low|unknown`).
         Pure over committed OSV-advisory fixtures.
-  - [ ] Load advisories from the operator OSV snapshot (`STRUMMER_DEPS_OSV_DB_DIR`,
-        fflate unzip of `all.zip`); surface `snapshotDate` so "no known vulns" is
-        never treated as authoritative. CVSS-vector → bucket scoring (defer; slice 2
-        buckets the GHSA `database_specific.severity` string, CVSS vectors → `unknown`).
+  - [x] **Slice 3 — `loadOsvSnapshot`**: read an operator on-disk OSV snapshot
+        (`<dir>/<ecosystem>/all.zip`, fflate-unzipped, one advisory JSON per entry),
+        parse → `OsvAdvisory[]` (sorted by id) feeding `matchVulnerabilities`, surface
+        `snapshotDate` (newest advisory `modified`) so "no known vulns" is never
+        treated as authoritative; fail loud on an absent ecosystem snapshot. Real FS
+        round-trip in tests, zero network.
+  - [ ] CVSS-vector → bucket scoring (defer; slices 2–3 bucket the GHSA
+        `database_specific.severity` string, CVSS vectors → `unknown`).
+  - [ ] `auditDependency` — compose detect-installed-version + deprecation + vuln
+        match + freshness into one verdict (the agent-facing roll-up).
   - [ ] `behindBy` freshness vs the `resolveVersion` policy; `recommendedTarget`.
   - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
         SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice.
