@@ -63,6 +63,8 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
+  packages/artifacts: {}
+
   packages/assert: {}
 
   packages/browser:
@@ -70,6 +72,9 @@ importers:
       '@axe-core/playwright':
         specifier: 4.11.3
         version: 4.11.3(playwright-core@1.60.0)
+      '@strummer/artifacts':
+        specifier: workspace:*
+        version: link:../artifacts
       '@strummer/assert':
         specifier: workspace:*
         version: link:../assert
