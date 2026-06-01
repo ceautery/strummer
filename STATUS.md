@@ -10,9 +10,14 @@ SURFACE + HUMAN CLI COMPLETE.** _(Latest: **visual regression** (item 33) —
 `compareScreenshots` (pixelmatch) + `browser_visual_compare`, deterministic engine,
 committed baselines deferred; on top of the **container-hardening ADR** (item 32),
 **vision/coordinate caps** (item 31), and **video capture** (item 30). Remaining
-tail: **multi-engine** (firefox/webkit) only — **blocked in this dev container**
-(only chromium binaries; `playwright-core` is the thin core with no `install` CLI),
-needs the CI/Docker image. **Developer live-view was DROPPED — headless only**
+tail: **multi-engine** (firefox/webkit) only — and it is **NOT environment-blocked**
+(corrected 2026-06-01): `playwright-core` 1.60.0 *does* ship a working `install`/
+`install-deps` CLI, the CDN is reachable, and **both firefox + webkit were verified
+launching headless in this container** after `install-deps` (passwordless sudo +
+apt are available; the dev `docker/Dockerfile` now provisions all three engines).
+The remaining work is the **feature** — engine selection in `BrowserManager` +
+cross-engine determinism — not an infra blocker. **Developer live-view was DROPPED
+— headless only**
 (ADR 0008: LLM-first; the trace/HAR/console/video artifacts answer "what happened"
 better than watching pixels).)_ The agent surface AND the human `strummer browser`
 CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
@@ -289,9 +294,11 @@ contract-validation reach (external local-file `$ref` / 3.0 `nullable` shim /
 `operationName`-scoped GraphQL), and import (Postman/Insomnia/OpenAPI/HAR → `.bru`).
 See the Phase-2 block below. Phase 3 unchanged — except **developer live-view is
 now DROPPED** (ADR 0008, headless-only/LLM-first).)_ **Next action:** the only
-remaining Phase-3 tail is **multi-engine** (firefox/webkit; **blocked in this
-container** — only chromium is installed, so it needs the CI/Docker image's
-binaries) — or start **Phase 4** (cross-cutting verification: LSP bridge,
+remaining Phase-3 tail is **multi-engine** (firefox/webkit) — now known to be
+**runnable in this container** (firefox + webkit launched headless after
+`install-deps`; dev Dockerfile provisions all three), so it's a feature build
+(engine selection in `BrowserManager` + cross-engine determinism), not an infra
+blocker — or start **Phase 4** (cross-cutting verification: LSP bridge,
 impact-scoped test runner, mutation/flaky detection). The deferred `browser_run_flow`
 follow-up (item 29), **video capture** (item 30), **vision/coordinate caps** (item
 31), the **container-hardening ADR** (item 32, ADR 0007), and **visual regression**
@@ -666,10 +673,13 @@ error redaction. Deny-by-default via `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface
 now at parity with `strummer browser run`.
 
 **Next (later Phase 3):** the aspirational tail is now just **multi-engine**
-(firefox/webkit; **blocked in this dev container** — only chromium binaries are
-installed and `playwright-core` has no `install` CLI, so this needs the CI/Docker
-image's engines). **Developer live-view was DROPPED** (ADR 0008 — headless-only,
-LLM-first: trace/HAR/console/video answer "what happened" better than watching a
+(firefox/webkit). **Correction (2026-06-01): this is NOT environment-blocked** —
+`playwright-core` 1.60.0 ships a working `install`/`install-deps` CLI, the CDN is
+reachable, and both firefox + webkit were verified launching headless here after
+`install-deps` (passwordless sudo + apt; the dev `docker/Dockerfile` now bundles
+all three engines + their libs). It's a feature build (engine selection in
+`BrowserManager` + cross-engine determinism). **Developer live-view was DROPPED**
+(ADR 0008 — headless-only, LLM-first: trace/HAR/console/video answer "what happened" better than watching a
 render). Video capture (item 30), vision/coordinate caps (item
 31), the container-hardening ADR (item 32, ADR 0007), and visual regression (item 33,
 committed baselines deferred) are now **done**. None blocking. TDD red→green;
@@ -692,9 +702,9 @@ all green):
    deref, OpenAPI 3.0 `nullable` shim, `operationName`-scoped GraphQL. (Remote
    http `$ref` + non-schema `$ref` remain out of scope by design — SSRF.)
 
-Next: the blocked Phase-3 tail (multi-engine — needs the CI/Docker image;
-developer live-view was dropped, ADR 0008) or start **Phase 4** (cross-cutting
-verification) — see ROADMAP.
+Next: the Phase-3 tail (multi-engine — a feature build now that the engines are
+known to run in-container; developer live-view was dropped, ADR 0008) or start
+**Phase 4** (cross-cutting verification) — see ROADMAP.
 
 Deferred Pillar-1 polish — **all DONE**: non-Node version detection (Python/Ruby
 in `detectInstalledVersion`, wired into MCP/CLI); ingestion TOC-bleed + richer

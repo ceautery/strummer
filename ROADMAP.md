@@ -344,8 +344,14 @@ Staged below; aspirational items are scheduled, not cut.
       gated driver behind the per-session mutex — caller `{{var}}`s + operator-resolved
       `{{secret:NAME}}` (fail-closed), surface error redaction; deny-by-default via
       `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface at parity with `strummer browser run`.)_
-- [ ] **Multi-engine** (firefox/webkit) install + cross-engine determinism
-      (chromium-only for v1).
+- [ ] **Multi-engine** (firefox/webkit) — engine selection in `BrowserManager`
+      (operator-chosen `browserType`) + cross-engine determinism (chromium-only
+      default for v1). **Env is ready, not a blocker** (corrected 2026-06-01):
+      `playwright-core install [--with-deps] firefox webkit` works and both were
+      verified launching headless in the dev container; the dev `docker/Dockerfile`
+      now provisions all three engines + libs. When the feature lands, add
+      `firefox webkit` to the CI workflow's `playwright-core install` line too
+      (today CI installs chromium only).
 - [ ] *(aspirational, scheduled not cut)* optional `@playwright/mcp` embed via
       `createConnection()` behind a feature flag for parity testing; autonomous
       self-healing "act"/locator-cache behind a strong operator gate; cross-pillar
