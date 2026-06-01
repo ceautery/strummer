@@ -34,7 +34,7 @@ adapters). The **API-testing pillar's core is complete** too — `.bru` runner,
 secrets, deny-by-default mutation safety, captures/chaining, QuickJS scripts,
 OpenAPI/GraphQL contract validation, and both an MCP tool surface and a
 `strummer api …` CLI. The **browser/UI pillar (`@strummer/browser`, on
-`playwright-core`) now has a complete agent surface** — the engine (browser
+`playwright-core`) is feature-complete on both surfaces** — the engine (browser
 lifecycle manager, ARIA-snapshot capture + imperative step tools, deny-by-default
 action gate, two-tier SSRF defense sharing `@strummer/safety`, and an artifact
 pipeline of trace/console/network by handle), a session-oriented **MCP surface**
@@ -43,9 +43,16 @@ and the `strummer://browser/run/{runId}/{kind}` resource, the full **secret
 boundary** (`{{secret:NAME}}` fill, origin-scoped `httpCredentials`, `storageState`
 by handle, redaction across console/network/snapshot/reads/trace), and operator
 hardening (service-worker block, WebRTC-egress neutralization, session wall-clock +
-max-pages + max-contexts caps). Still to come: downloads/uploads/dialog/auth
-gating, a screenshot step tool, and a human `strummer browser` CLI. **The single
-source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
+max-pages + max-contexts caps). The complete **deny-by-default gating bundle**
+(downloads quarantine, uploads confined to an allowlist dir, dialog dismiss, auth via
+`httpCredentials`), an on-demand **screenshot** step tool, **browser assertions**
+(reusing a shared `@strummer/assert` operator core — one assertion engine across
+pillars — with auto-waiting), a **trace-query** tool (action timeline from a
+trace.zip), a **Lighthouse perf audit**, and a human **`strummer browser` CLI**
+(snapshot/audit/screenshot) have all landed. Remaining browser work is the
+aspirational tail (network heavy-mode/HAR, visual regression, `.bru` step
+persistence, multi-engine). **The single source of truth for "what phase are we on"
+is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
 
