@@ -106,8 +106,9 @@ vision and `ARCHITECTURE.md` for the technical design.
   extracted from `browser` per ADR 0010), `deps` (Phase-4 dependency/version
   intelligence: deprecation/vuln/freshness for the *installed* version; pure offline
   core + on-disk OSV snapshot + `audit_dependency`/`audit_project` MCP surface),
-  `coverage` (Phase-4 track A: pure `uncoveredNewLines` differ — covered/uncovered/
-  nonExecutable over an istanbul `FileCoverage`; the forgotten-assertion catch),
+  `coverage` (Phase-4 track A: the forgotten-assertion catch — `parseUnifiedDiff` +
+  `uncoveredNewLines` + `uncoveredInDiff` pure differs, plus gated impact-scoped
+  `runScoped`; `uncovered_in_diff`/`run_scoped` MCP surface),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).

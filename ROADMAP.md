@@ -478,10 +478,13 @@ Two independent tracks, then the test-quality chain, then LSP last:
         child-process boundary that avoids in-process Vitest-in-Vitest); the engine owns the
         gate/argv/collection/diff-wiring and is unit-tested with a fake runner (no real
         spawn in the gate).
-  - [ ] MCP surface + `strummer-coverage-mcp` bin — `uncovered_in_diff` (free, read-only)
-        + `run_scoped` (gated; bin reads `STRUMMER_COVERAGE_ALLOW_RUN` /
-        `_PROJECT_ROOTS` / `_TIMEOUT_MS`). Pin `istanbul-lib-coverage` if `CoverageMap`
-        merging/summaries are needed.
+  - [x] **MCP surface + `strummer-coverage-mcp` bin** — `uncovered_in_diff` (free,
+        read-only; diff + coverage inline or by path) + `run_scoped` (gated; registered only
+        when the operator set `allowRun` AND a non-empty root allowlist — deny-by-default).
+        Bin reads `STRUMMER_COVERAGE_ALLOW_RUN` / `_PROJECT_ROOTS` / `_TIMEOUT_MS` and wires
+        the live vitest subprocess runner. **The coverage pillar's agent surface is complete.**
+  - [ ] *(staged)* pin `istanbul-lib-coverage` if `CoverageMap` merging/summaries are needed;
+        a `strummer coverage` human CLI; Python (coverage.py) adapter.
 - [ ] **Flaky-test detection & quarantine** (`@strummer/flake`) — protects the
       deterministic green gate. Pure Wilson/binomial classifier over a run-history
       fixture first; quarantine **writes** are operator-gated (paired) with mandatory

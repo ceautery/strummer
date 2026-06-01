@@ -96,7 +96,11 @@ pure offline core of the forgotten-assertion catch is complete. **Slice 4 landed
 operator gate (`allowRun` + `allowedRoots` + timeout, `CoverageGateError`), with the
 `vitest` run an injected `TestRunner` (default spawns a subprocess — the child-process
 boundary that dodges Vitest-in-Vitest; engine unit-tested with a fake runner, no real spawn
-in the gate). 486 TS + 45 Py green.)_
+in the gate). **MCP surface landed:** `uncovered_in_diff` (free, read-only) + `run_scoped`
+(gated, registered only when the operator set `allowRun` + a non-empty root allowlist) in
+`packages/mcp/src/coverage.ts` + the `strummer-coverage-mcp` bin (`STRUMMER_COVERAGE_ALLOW_RUN`
+/ `_PROJECT_ROOTS` / `_TIMEOUT_MS`, wires the live vitest runner). **The coverage pillar's
+agent surface is complete.** 495 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -431,14 +435,16 @@ falls back to the CVSS vector's bucket when no qualitative GHSA string is presen
 ecosystems — `audit_project` is npm-only today; `detectInstalledVersion` already dispatches
 by ecosystem). **Track A `@strummer/coverage` is open** — slices 1–3 landed (`uncoveredNewLines` differ,
 `parseUnifiedDiff`, and the `uncoveredInDiff` integrator) — **the pure offline core of the
-forgotten-assertion catch is complete**, **and the live `runScoped` engine (slice 4) has
-landed** (gated, impact-scoped `vitest related` + coverage → `uncoveredInDiff`; injected
-child-process runner). Next coverage slice: the **MCP surface + `strummer-coverage-mcp`
-bin** — `uncovered_in_diff` (free, read-only) + `run_scoped` (the bin reads the paired
-gate env `STRUMMER_COVERAGE_ALLOW_RUN` / `_PROJECT_ROOTS` / `_TIMEOUT_MS` + wires
-`defaultVitestRunner`). In parallel, the
-`@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
-no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
+forgotten-assertion catch is complete**, **the live `runScoped` engine (slice 4)
+landed**, **and the MCP surface + `strummer-coverage-mcp` bin landed** — so **the
+`@strummer/coverage` pillar (engine + agent surface) is complete** (`uncovered_in_diff`
+free/read-only + gated `run_scoped`). **Next for deps/coverage:** the staged
+**Python/PyPI + RubyGems advisory adapters** (deps) and, optionally, a `strummer coverage`
+human CLI / `istanbul-lib-coverage` for `CoverageMap` merging. The test-quality chain is
+next — **`@strummer/flake`** (pure Wilson/binomial classifier over a run-history fixture
+first; quarantine writes operator-gated; its own private better-sqlite3 history DB per ADR
+0010) → `@strummer/mutate` (after a Stryker/Vitest-4 compat spike) → `@strummer/lsp` (last).
+Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
 (`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in). The
 deferred `browser_run_flow`
