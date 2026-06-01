@@ -222,9 +222,20 @@ Staged below; aspirational items are scheduled, not cut.
       LHR JSON+HTML by handle, redacted before write. MCP `browser_perf_audit` is
       standalone (own runId, no session) + allowlist-gated; assert shape/thresholds,
       never exact scores.
-- [ ] **Network heavy mode** — `recordHar content:'attach' .zip` (or
-      `tracing.startHar`) behind operator unlock; HAR replay/mocking via
-      `page.route` for offline determinism.
+- [x] **Network heavy mode** — HAR **capture**: `BrowserManager` `harDir` records
+      a full HAR (`content:'attach'`, `mode:'full'`) per context; on close
+      `finalizeHar` redacts every text entry (the `.har` JSON + persisted text
+      bodies, fflate) before surfacing, stores by `strummer://browser/run/<id>/har`
+      handle, returns a compact summary (entryCount/byStatus/byMethod), and removes
+      the raw staged file — driven by a new `BrowserManager.onClosed` hook (after
+      `context.close()`; mirror of `onReap`) so the explicit close, idle reaper, AND
+      shutdown all finalize (no unredacted HAR left on disk). HAR **replay**:
+      `PageDriver.replayFromHar` arms `page.routeFromHAR(notFound:'abort')` for
+      deterministic offline runs (unmatched requests aborted, zero egress). MCP
+      `browser_close_session` surfaces the HAR; `browser_replay_har` arms replay
+      (call before navigate). Both operator-gated (`STRUMMER_BROWSER_HAR_DIR` /
+      `STRUMMER_BROWSER_REPLAY_HAR_DIR`), deny-by-default; HAR is a heavy secret
+      surface so capture is off by default (registered-secret redaction only).
 - [x] **Downloads quarantine** dir + saveAs path validation; uploads confined to
       an operator upload-allowlist dir; download/upload as gated structured events.
       _(Downloads: `BrowserManager` `acceptDownloads:false` cancels by default;

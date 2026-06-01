@@ -8,9 +8,10 @@
 **Phase 3 — Browser/UI testing pillar: ENGINE + SAFETY + ARTIFACT PIPELINE + MCP
 SURFACE + HUMAN CLI COMPLETE.** The agent surface AND the human `strummer browser`
 CLI both ship over the engine; the full gating bundle (downloads/uploads/dialog/
-auth) is done. Remaining Phase 3 work is the aspirational tail (trace-query,
-browser assertions, Lighthouse perf, visual regression, `.bru` step persistence,
-multi-engine — all scheduled in ROADMAP, none blocking). Design locked by a 5-stream
+auth) is done, plus trace-query, browser assertions, Lighthouse perf, and now
+**network heavy mode (HAR capture + replay)**. Remaining Phase 3 work is the
+aspirational tail (visual regression, `.bru` step persistence, multi-engine — all
+scheduled in ROADMAP, none blocking). Design locked by a 5-stream
 research workflow w/ adversarial verification (`docs/research/2026-05-31-pillar3-
 browser-testing.md`); captured in **ADR 0006 (+ dated updates) + ARCHITECTURE §10
 + ROADMAP Phase 3**. A new pure-TS **`@strummer/browser`** built **thin on stable
@@ -161,11 +162,36 @@ against in-process fixtures):
    enabled"). Per ADR 0006 callers assert metric **shape/thresholds, never exact
    scores**. Feasibility + LHR shape probed against the pin.
 
-**269 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
-aspirational Phase-3 tail (ROADMAP: network heavy/HAR, visual regression, `.bru` step
-persistence, multi-engine) or start **Phase 4** (cross-cutting verification: LSP
-bridge, impact-scoped test runner, mutation/flaky detection). See the detailed "Next
-action" section below + ROADMAP.
+26. **Network heavy mode — HAR capture** (`a6ead53` + `c6a5303`). New
+   `@strummer/browser` `har.ts`: `finalizeHar` reads the HAR `.zip` Playwright
+   writes on context close, redacts every text entry (`.har` JSON + persisted text
+   bodies, via fflate) BEFORE surfacing, stores by
+   `strummer://browser/run/<id>/har` handle, returns a compact summary
+   (entryCount/byStatus/byMethod/byteSize), and removes the raw staged file.
+   `BrowserManager` gains operator `harDir` → `recordHar` (content:'attach',
+   mode:'full') at newContext, plus an **`onClosed`** hook firing AFTER
+   `context.close()` (HAR is only on disk post-close — opposite timing to the
+   recorder's `onReap`); shutdown fires it too. MCP surface: `onReap` now only
+   flushes the recorder, `onClosed` finalizes the HAR + does registry cleanup, so
+   the explicit close, idle reaper, and shutdown all finalize (no unredacted HAR
+   lingers); `browser_close_session` surfaces the `har` handle/summary. Bin:
+   `STRUMMER_BROWSER_HAR_DIR`. HAR is a heavy secret surface (registered-secret
+   redaction only) so capture is operator-gated **off** by default, like the trace.
+27. **Network heavy mode — HAR replay** (`ca88685`). `PageDriver.replayFromHar`
+   arms `page.routeFromHAR(notFound:'abort')` so a session is served from a recorded
+   HAR instead of the network — deterministic offline runs, zero egress (unmatched
+   requests aborted). **Deny-by-default**: requires an operator replay dir and the
+   HAR must resolve within it (reuses `uploadFiles`' path confinement). MCP
+   `browser_replay_har` (call before navigate). Bin:
+   `STRUMMER_BROWSER_REPLAY_HAR_DIR`. Real-chromium proof: record a HAR, shut the
+   server down, replay → page still loads from the HAR. **Network heavy mode is now
+   COMPLETE.**
+
+**286 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+aspirational Phase-3 tail (ROADMAP: visual regression — the flake-prone one,
+`.bru` step persistence, multi-engine) or start **Phase 4** (cross-cutting
+verification: LSP bridge, impact-scoped test runner, mutation/flaky detection).
+See the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -490,9 +516,17 @@ core web-vitals) inline, full LHR JSON+HTML by handle (redacted). MCP
 `browser_perf_audit` is standalone + allowlist-gated; bin binds the audit closure.
 (`perf.ts`, real-Lighthouse tested; assert shape not scores.)
 
-**Next (later Phase 3):** the aspirational tail only — network heavy/HAR, visual
-regression, `.bru` step persistence, multi-engine. None blocking. TDD red→green;
-`pnpm gate` 100% green before each commit.
+**Network heavy mode — HAR capture + replay: DONE** (`a6ead53`/`c6a5303`/`ca88685`).
+`har.ts` `finalizeHar` (redact-before-surface, store by handle, compact summary) +
+`BrowserManager` `harDir`/`onClosed` (after-close finalize on close/reap/shutdown);
+`PageDriver.replayFromHar` (`routeFromHAR` notFound:abort, offline determinism,
+operator replay-dir confinement). MCP `browser_close_session` surfaces the HAR,
+`browser_replay_har` arms replay. Bin: `STRUMMER_BROWSER_HAR_DIR` /
+`STRUMMER_BROWSER_REPLAY_HAR_DIR`. Operator-gated, deny-by-default.
+
+**Next (later Phase 3):** the aspirational tail only — visual regression (the
+flake-prone one; baselines in the pinned Docker image), `.bru` step persistence,
+multi-engine. None blocking. TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

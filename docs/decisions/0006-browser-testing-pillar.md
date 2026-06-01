@@ -207,8 +207,20 @@ only, by handle, scrubbed from traces.
 >   its text entries (JSONL `trace`/`network`/`stacks` + text resource snapshots
 >   `.html`/`.txt`/css/js), and re-zips; binary resources pass through (resource
 >   files are content-addressed but referenced by filename, so redaction is safe).
-> Scheduled, not blocking: HAR request/response bodies; `storageState`/`userDataDir`
-> **import** for operator login-reuse.
+> Same redaction applies to the **HAR** "network heavy mode" archive (update
+> 2026-06-01): `finalizeHar` reads the HAR `.zip` Playwright writes on context
+> close and scrubs every text entry (the `.har` JSON + persisted text bodies,
+> fflate) before it is stored by handle / surfaced. HAR carries full
+> headers/query/bodies (only *registered* secrets are redacted), so capture stays
+> operator-gated **off** by default (`STRUMMER_BROWSER_HAR_DIR`), like the trace.
+> HAR **replay** (`page.routeFromHAR`, notFound:'abort') gives deterministic
+> offline runs with zero egress, gated behind an operator replay dir
+> (`STRUMMER_BROWSER_REPLAY_HAR_DIR`). Mechanically, finalize hangs off a new
+> `BrowserManager.onClosed` hook (fires after `context.close()` — the mirror of
+> `onReap`, since the HAR only exists post-close), so the explicit close, the
+> idle reaper, and shutdown all finalize, never leaving an unredacted HAR on disk.
+> Scheduled, not blocking: `storageState`/`userDataDir` **import** for operator
+> login-reuse.
 
 ### 7. Lifecycle, container posture, capture-cost gating
 

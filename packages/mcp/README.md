@@ -89,11 +89,18 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   the bytes are never served. `waitMs` waits briefly for a download a click just started.
 - **`browser_save_storage_state`** — operator-gated; writes the password-equivalent
   storageState to an operator-path artifact (handle + counts only, never inlined).
+- **`browser_replay_har`** — "network heavy mode" replay: serve the session from a
+  recorded HAR instead of the network (`routeFromHAR`, unmatched requests aborted —
+  deterministic, zero egress). Call before navigating. Operator-gated + deny-by-default
+  (requires a replay dir; the HAR must resolve within it). **HAR capture** is the flip
+  side: with an operator `HAR_DIR` set, each session records a full HAR (bodies
+  attached) that `browser_close_session` finalizes — redacted, by `har` handle, with a
+  compact summary.
 - Resource **`strummer://browser/run/{runId}/{kind}`** — fetch a stored artifact
   (`snapshot-s<gen>` / `a11y-s<n>` / `screenshot-s<n>` / `trace` / `console` /
-  `network`) by handle; binary kinds (trace.zip, screenshot PNG) come back as a
-  base64 blob. The password-equivalent `storage-state` kind is **refused**
-  (operator-path only).
+  `network` / `har`) by handle; binary kinds (trace.zip, screenshot PNG, HAR .zip)
+  come back as a base64 blob. The password-equivalent `storage-state` kind is
+  **refused** (operator-path only).
 
 **Safety (all operator-set via `STRUMMER_BROWSER_*` env, never tool inputs):**
 navigation/mutation deny-by-default (`ALLOW_UNSAFE`, `ALLOWED_HOSTS`); a **mandatory**
@@ -102,7 +109,9 @@ service-workers blocked + WebRTC egress neutralized; JS dialogs dismissed by
 default (`ALLOW_DIALOGS` to accept; each recorded, redacted, on the step result);
 downloads cancelled unless an operator quarantine dir (`DOWNLOAD_DIR`) is set;
 uploads confined to an operator allowlist dir (`UPLOAD_DIR`, denied when unset);
-secret redaction across every artifact + the trace.zip; `{{secret:NAME}}` fill +
+HAR capture off unless an operator output dir (`HAR_DIR`) is set + HAR replay off
+unless a replay dir (`REPLAY_HAR_DIR`) is set, both deny-by-default; secret
+redaction across every artifact + the trace.zip + the HAR; `{{secret:NAME}}` fill +
 origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
 `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/
 `IDLE_TTL_MS`; trace capture + `storageState` capture (`ALLOW_STORAGE_STATE`) +

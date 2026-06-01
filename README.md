@@ -48,9 +48,10 @@ max-pages + max-contexts caps). The complete **deny-by-default gating bundle**
 `httpCredentials`), an on-demand **screenshot** step tool, **browser assertions**
 (reusing a shared `@strummer/assert` operator core — one assertion engine across
 pillars — with auto-waiting), a **trace-query** tool (action timeline from a
-trace.zip), a **Lighthouse perf audit**, and a human **`strummer browser` CLI**
-(snapshot/audit/screenshot) have all landed. Remaining browser work is the
-aspirational tail (network heavy-mode/HAR, visual regression, `.bru` step
+trace.zip), a **Lighthouse perf audit**, **network heavy mode** (HAR capture —
+redacted, by handle — and `routeFromHAR` replay for deterministic offline runs),
+and a human **`strummer browser` CLI** (snapshot/audit/screenshot) have all landed.
+Remaining browser work is the aspirational tail (visual regression, `.bru` step
 persistence, multi-engine). **The single source of truth for "what phase are we on"
 is [`STATUS.md`](./STATUS.md).**
 
