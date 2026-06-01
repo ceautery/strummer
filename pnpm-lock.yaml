@@ -112,6 +112,9 @@ importers:
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed
+      '@strummer/safety':
+        specifier: workspace:*
+        version: link:../safety
       playwright-core:
         specifier: 1.60.0
         version: 1.60.0

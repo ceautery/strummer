@@ -8,8 +8,12 @@ import {
   BrowserGate,
   BrowserManager,
   createSsrfProxy,
+  type FlowResult,
+  loadFlow,
   PageDriver,
+  runFlow,
 } from '@strummer/browser'
+import { Redactor } from '@strummer/safety'
 import { chromium, type Page } from 'playwright-core'
 import type { CliIO } from './index.js'
 
@@ -119,10 +123,133 @@ export async function runBrowser(args: string[], io: CliIO): Promise<number> {
       return cmdAudit(rest, io)
     case 'screenshot':
       return cmdScreenshot(rest, io)
+    case 'run':
+      return cmdRun(rest, io)
     default:
       io.err(`unknown browser subcommand: ${sub ?? '(none)'}\n`)
       return 1
   }
+}
+
+/** Parse repeatable `--var k=v` flags (split on the FIRST `=`) into a record. */
+function parseVars(raw: string[] | undefined): Record<string, unknown> {
+  const vars: Record<string, unknown> = {}
+  for (const item of raw ?? []) {
+    const eq = item.indexOf('=')
+    if (eq === -1) vars[item] = ''
+    else vars[item.slice(0, eq)] = item.slice(eq + 1)
+  }
+  return vars
+}
+
+/**
+ * Replay a persisted browser flow (`<flow>.bru` + sidecar) — `strummer browser
+ * run <flow.bru>`. Unlike the single-shot commands the flow drives its own
+ * navigations, so no URL is auto-allowed: the human allowlists target hosts with
+ * `--allow-host` and unlocks mutations with `--unsafe` (else they dry-run).
+ * `{{secret:NAME}}` resolves from `STRUMMER_BROWSER_SECRET_<NAME>` env (the human
+ * is the operator); a `Redactor` scrubs those values from every result. Exits
+ * non-zero when the flow fails (a step error or a failed assertion) — CI-usable.
+ */
+async function cmdRun(args: string[], io: CliIO): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      ...COMMON_OPTIONS,
+      unsafe: { type: 'boolean' },
+      var: { type: 'string', multiple: true },
+    },
+  })
+  const flowPath = positionals[0]
+  if (!flowPath) {
+    io.err('browser run needs <flow.bru>\n')
+    return 1
+  }
+
+  let flow: ReturnType<typeof loadFlow>
+  try {
+    flow = loadFlow(flowPath)
+  } catch (err) {
+    io.err(`${(err as Error).message}\n`)
+    return 1
+  }
+
+  // Operator secrets from env (STRUMMER_BROWSER_SECRET_<NAME>); register the
+  // values with a redactor so they never surface, expose them only by NAME.
+  const env = io.env ?? {}
+  const redactor = new Redactor()
+  const secrets = new Map<string, string>()
+  for (const [key, val] of Object.entries(env)) {
+    const m = /^STRUMMER_BROWSER_SECRET_(.+)$/.exec(key)
+    if (m?.[1] && val) {
+      redactor.register(m[1], val)
+      secrets.set(m[1], val)
+    }
+  }
+
+  const flags = flagsFrom(values)
+  const gate = new BrowserGate({
+    allowUnsafe: values.unsafe ?? false,
+    allowedHosts: flags.allowHost,
+  })
+  const proxy = await createSsrfProxy({ allowPrivate: flags.allowPrivate })
+  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-flow-')))
+  const manager = new BrowserManager({
+    gate,
+    launch: () =>
+      chromium.launch({
+        headless: !flags.headed,
+        proxy: { server: proxy.url },
+        args: [
+          '--proxy-bypass-list=<-loopback>',
+          '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+          ...(flags.noSandbox ? ['--no-sandbox'] : []),
+        ],
+      }),
+  })
+  try {
+    const context = await manager.createSession('cli')
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      runId: 'cli',
+      store,
+      gate,
+      redact: (v) => redactor.redact(v),
+    })
+    const result = await runFlow(driver, flow, {
+      vars: parseVars(values.var),
+      resolveSecret: (name) => secrets.get(name),
+    })
+    if (values.json) {
+      io.out(`${JSON.stringify(result, null, 2)}\n`)
+    } else {
+      printFlowResult(result, io)
+    }
+    return result.passed ? 0 : 1
+  } catch (err) {
+    io.err(`${(err as Error).message}\n`)
+    return 1
+  } finally {
+    await manager.shutdown()
+    await proxy.close()
+  }
+}
+
+function printFlowResult(result: FlowResult, io: CliIO): void {
+  io.out(`flow: ${result.name}\n`)
+  for (const step of result.steps) {
+    if (step.error) {
+      io.out(`  FAIL ${step.action} — ${step.error}\n`)
+    } else if (step.assertions) {
+      const passed = step.assertions.filter((a) => a.pass).length
+      const total = step.assertions.length
+      io.out(`  ${passed === total ? 'ok  ' : 'FAIL'} assert (${passed}/${total} passed)\n`)
+    } else {
+      io.out(`  ok   ${step.action}${step.dryRun ? ' (dry-run)' : ''}\n`)
+    }
+  }
+  io.out(`${result.passed ? 'PASS' : 'FAIL'}\n`)
 }
 
 async function cmdSnapshot(args: string[], io: CliIO): Promise<number> {

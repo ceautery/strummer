@@ -26,6 +26,7 @@
     "@strummer/browser": "workspace:*",
     "@strummer/core": "workspace:*",
     "@strummer/embed": "workspace:*",
+    "@strummer/safety": "workspace:*",
     "playwright-core": "1.60.0"
   },
   "devDependencies": {

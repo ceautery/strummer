@@ -1,0 +1,16 @@
+# Strummer browser flow — the replayable steps for login.bru.
+#
+# Steps key off SEMANTIC locators (role + accessible name + optional nth), never
+# the ephemeral per-snapshot refs, so the flow is stable across runs. `{{var}}`
+# is supplied at run time (`--var k=v`); `{{secret:NAME}}` resolves server-side
+# from `STRUMMER_BROWSER_SECRET_<NAME>` and is redacted from every result, so the
+# password is never echoed back.
+steps:
+  - navigate: "{{baseUrl}}/login"
+  - fill: { role: textbox, name: Username, value: "{{username}}" }
+  - fill: { role: textbox, name: Password, value: "{{secret:PASSWORD}}" }
+  - click: { role: button, name: Sign in }
+  - wait_for: { role: heading, name: Dashboard, state: visible }
+  - assert:
+      - { source: url, op: contains, value: /dashboard }
+      - { source: text, role: heading, name: Dashboard, op: contains, value: Dashboard }

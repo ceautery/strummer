@@ -1,8 +1,11 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadFlow, loadFlowCollection } from './flow.js'
+
+const here = dirname(fileURLToPath(import.meta.url))
 
 // A Bruno-openable .bru (meta only — the browser flow lives in the sidecar).
 const BRU = `meta {
@@ -115,5 +118,20 @@ describe('loadFlow / loadFlowCollection — .bru + sidecar persistence', () => {
     const coll = loadFlowCollection(dir)
     expect([...coll.flows.keys()].sort()).toEqual(['Checkout', 'Login'])
     expect(coll.dir).toBe(dir)
+  })
+})
+
+describe('bundled example flow (kept in sync with the parser)', () => {
+  it('loads examples/browser/login into the typed model', () => {
+    const flow = loadFlow(resolve(here, '../../../examples/browser/login/login.bru'))
+    expect(flow.name).toBe('Login')
+    expect(flow.steps.map((s) => s.action)).toEqual([
+      'navigate',
+      'fill',
+      'fill',
+      'click',
+      'wait_for',
+      'assert',
+    ])
   })
 })
