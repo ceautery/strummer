@@ -21,10 +21,11 @@ structured, token-efficient output. Humans drive the same core through a CLI.
 | **API testing** | Git-friendly request collections, environments, assertions, and an agent-drivable runner. | Postman, Insomnia, Bruno |
 | **Browser / UI testing** | Orchestrated Playwright flows with traces, screenshots, and console/network capture as agent-readable artifacts. | Playwright, Selenium, Cucumber |
 
-Planned cross-cutting verification tools (see [`ROADMAP.md`](./ROADMAP.md)):
-semantic code navigation via an LSP bridge, coverage-aware impact-scoped test
-runs, visual regression diffing, API contract/schema testing, traffic→test
-generation, mutation testing, and flaky-test detection.
+Cross-cutting verification tools (see [`ROADMAP.md`](./ROADMAP.md)): dependency/version
+intelligence, coverage-aware impact-scoped test runs, flaky-test detection & quarantine,
+and mutation testing have **shipped**; semantic code navigation via an LSP bridge is the
+last one, in progress. (Visual-regression diffing and API contract/schema testing already
+shipped inside the browser and API pillars.)
 
 ## Status
 
@@ -83,8 +84,26 @@ exercised (`parseUnifiedDiff` + `uncoveredNewLines` + `uncoveredInDiff`, with an
 non-executable third state), plus a gated, impact-scoped `runScoped` that runs only the
 tests a change touches (`vitest related`) with coverage. Agent surface: the
 `uncovered_in_diff` (read-only) + `run_scoped` (operator-gated) MCP tools +
-`strummer-coverage-mcp` bin. Next in the test-quality chain: flaky-test detection
-(`@strummer/flake`) → mutation testing → the LSP bridge.
+`strummer-coverage-mcp` bin.
+
+The **test-quality chain is complete through mutation**. **`@strummer/flake`**
+(flaky-test detection) is done — a pure Wilson/binomial classifier
+(`flaky`/`reliable`/`broken`/`insufficient-data` + a `flakeScore`), a private
+`better-sqlite3` run-history store, `vitest --reporter=json` ingestion, an
+operator-gated quarantine with mandatory expiry, a gated suite-repeat runner, and the
+`flake_status`/`flake_candidates`/`flake_release`/`flake_run`/`flake_quarantine` MCP
+surface + `strummer-flake-mcp` bin. **`@strummer/mutate`** (mutation testing) is done —
+a pure `summarizeMutation` over the mutation-testing-elements report schema (score +
+survivor list), a gated, diff-scoped `runMutation` spawning `stryker run`, and the
+`mutate_summarize`/`mutate_run` MCP surface + `strummer-mutate-mcp` bin (the
+Stryker/Vitest-4 compat blocker was resolved — [ADR 0010 update](./docs/decisions/0010-phase4-cross-cutting-verification.md)).
+
+The last pillar, **`@strummer/lsp`** (semantic code navigation — the documented,
+fenced exception to the no-live-RPC rule), is **in progress**: design locked in
+[ADR 0011](./docs/decisions/0011-lsp-bridge.md) (a research + 2-critic adversarial
+fan-out), with slice 1 — the pure position-encoding core (utf-8/16/32) and LSP-result
+normalizers — landed. The client/manager/query engine and the
+`lsp_find_definition`/`lsp_find_references`/`lsp_hover` MCP surface are next.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 

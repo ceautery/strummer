@@ -5,8 +5,11 @@
 
 ## Current phase
 
-**Phase 4 — Cross-cutting verification: UNDERWAY (design locked, first slice landed).**
-_(Design pass done via the `phase4-design-research` fan-out — 5 parallel research
+**Phase 4 — Cross-cutting verification: UNDERWAY (4 of 5 pillars complete; LSP — the last —
+in progress, slice 1 landed).** _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`,
+and `@strummer/mutate` are all COMPLETE (engine + agent surface); `@strummer/lsp` is the only
+remaining candidate — design locked in **ADR 0011**, slice 1 (pure encoding + normalize)
+landed. Design pass done via the `phase4-design-research` fan-out — 5 parallel research
 streams → synthesis → 3 adversarial critics → corrected synthesis; captured in **ADR
 0010**. Sequence (by leverage-per-effort): **`@strummer/deps` (dependency/version
 intelligence) first** ∥ `@strummer/coverage` (parallel track), then `@strummer/flake`
