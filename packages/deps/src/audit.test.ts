@@ -54,6 +54,9 @@ describe('auditDependency — composite installed-version verdict', () => {
       latest: '2.1.0',
       latestSameMajor: '1.2.0',
       isOutdated: true,
+      // 3 stable releases ahead (1.2.0/2.0.0/2.1.0; the 3.0.0 prerelease excluded);
+      // 1 major behind the latest; 2 minors behind within the 1.x line; no patch ahead of 1.0.x.
+      behindBy: { releases: 3, major: 1, minor: 2, patch: 0 },
     })
     expect(audit.recommendedTarget).toBe('1.2.0')
     // The advisory is fixed in 1.5.0, so every 1.x release stays vulnerable: the
@@ -80,6 +83,7 @@ describe('auditDependency — composite installed-version verdict', () => {
       latest: '2.1.0',
       latestSameMajor: '2.1.0',
       isOutdated: false,
+      behindBy: { releases: 0, major: 0, minor: 0, patch: 0 },
     })
     expect(audit.recommendedTarget).toBeUndefined()
     expect(audit.minimumSafeUpgrade).toBeUndefined() // nothing vulnerable ⇒ no security target
@@ -218,5 +222,37 @@ describe('auditDependency — composite installed-version verdict', () => {
     expect(audit.deprecated).toEqual({ isDeprecated: false })
     expect(audit.freshness.isOutdated).toBe(true)
     expect(audit.recommendedTarget).toBeUndefined()
+  })
+
+  it('behindBy counts patch releases within the installed major.minor line', () => {
+    const patches: Packument = {
+      name: 'p',
+      'dist-tags': { latest: '1.4.3' },
+      versions: {
+        '1.2.0': { version: '1.2.0' },
+        '1.2.1': { version: '1.2.1' },
+        '1.2.5': { version: '1.2.5' },
+        '1.4.3': { version: '1.4.3' },
+      },
+    }
+    const audit = auditDependency({
+      packageName: 'p',
+      ecosystem: 'npm',
+      installedVersion: '1.2.1',
+      packument: patches,
+    })
+    // newer stable: 1.2.5, 1.4.3 ⇒ 2; same major ⇒ 0 majors; latestSameMajor 1.4.3 ⇒ 2 minors;
+    // newest patch in the 1.2.x line is 1.2.5 ⇒ 4 patches behind.
+    expect(audit.freshness.behindBy).toEqual({ releases: 2, major: 0, minor: 2, patch: 4 })
+  })
+
+  it('behindBy is undefined for a non-semver installed version', () => {
+    const audit = auditDependency({
+      packageName: 'oldpkg',
+      ecosystem: 'npm',
+      installedVersion: 'not-a-version',
+      packument,
+    })
+    expect(audit.freshness.behindBy).toBeUndefined()
   })
 })

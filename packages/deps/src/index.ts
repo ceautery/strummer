@@ -1,6 +1,7 @@
 export {
   type AuditDependencyInput,
   auditDependency,
+  type BehindBy,
   type DependencyAudit,
   type FreshnessVerdict,
 } from './audit.js'

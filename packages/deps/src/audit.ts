@@ -19,6 +19,23 @@ import {
   type VulnerabilityMatch,
 } from './osv.js'
 
+/**
+ * How far behind the installed version is, broken down by semver component so a
+ * caller can judge upgrade *distance/risk* (a patch bump vs a major jump), not just
+ * the binary `isOutdated`. Each count is measured against the relevant reference
+ * release and floored at 0; `releases` is the absolute count of newer stable releases.
+ */
+export interface BehindBy {
+  /** Total stable releases newer than the installed version. */
+  releases: number
+  /** Major versions behind the latest stable (`latest.major - installed.major`). */
+  major: number
+  /** Minor versions behind within the installed major line (`latestSameMajor.minor - installed.minor`). */
+  minor: number
+  /** Patch releases behind within the installed `major.minor` line. */
+  patch: number
+}
+
 export interface FreshnessVerdict {
   installed: string
   /** The `dist-tags.latest` (or the newest stable release if that tag is absent). */
@@ -27,6 +44,8 @@ export interface FreshnessVerdict {
   latestSameMajor?: string
   /** True when a newer `latest` exists than the installed version. */
   isOutdated: boolean
+  /** Upgrade distance by semver component (`undefined` when `installed` is not valid semver). */
+  behindBy?: BehindBy
 }
 
 export interface DependencyAudit {
@@ -91,6 +110,37 @@ function maxVersion(versions: string[]): string | undefined {
   )
 }
 
+/** Upgrade distance by semver component; undefined when `installed` is not valid semver. */
+function computeBehindBy(
+  installed: string,
+  stable: string[],
+  latest: string | undefined,
+  latestSameMajor: string | undefined,
+): BehindBy | undefined {
+  if (semver.valid(installed) === null) return undefined
+  const releases = stable.filter((v) => semver.gt(v, installed)).length
+  const major =
+    latest !== undefined && semver.valid(latest) !== null
+      ? Math.max(0, semver.major(latest) - semver.major(installed))
+      : 0
+  const minor =
+    latestSameMajor !== undefined
+      ? Math.max(0, semver.minor(latestSameMajor) - semver.minor(installed))
+      : 0
+  // Newest patch within the installed major.minor line.
+  const latestSamePatchLine = maxVersion(
+    stable.filter(
+      (v) =>
+        semver.major(v) === semver.major(installed) && semver.minor(v) === semver.minor(installed),
+    ),
+  )
+  const patch =
+    latestSamePatchLine !== undefined
+      ? Math.max(0, semver.patch(latestSamePatchLine) - semver.patch(installed))
+      : 0
+  return { releases, major, minor, patch }
+}
+
 function computeFreshness(installed: string, packument: Packument): FreshnessVerdict {
   const stable = stableVersions(packument)
   const tagged = packument['dist-tags']?.latest
@@ -108,7 +158,9 @@ function computeFreshness(installed: string, packument: Packument): FreshnessVer
     semver.valid(latest) !== null &&
     semver.lt(installed, latest)
 
-  return { installed, latest, latestSameMajor, isOutdated }
+  const behindBy = computeBehindBy(installed, stable, latest, latestSameMajor)
+
+  return { installed, latest, latestSameMajor, isOutdated, behindBy }
 }
 
 /**
