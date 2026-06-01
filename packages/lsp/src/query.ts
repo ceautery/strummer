@@ -19,9 +19,9 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { CallDirection, CallHierarchyGroup, NavResult, ServerInfo } from './client.js'
+import { assertAllowed, confineFile, LspGateError } from './confine.js'
 import {
   fromLspPosition,
   type HumanPosition,
@@ -38,13 +38,9 @@ import type {
   QueryStatus,
 } from './normalize.js'
 
-/** Thrown when the paired operator gate denies a query (allowRun off, root/file out of bounds). */
-export class LspGateError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'LspGateError'
-  }
-}
+// The paired-gate + confinement guards now live in `confine.ts` (shared with the write engine);
+// re-exported here so existing importers (barrel, tests) are unaffected.
+export { LspGateError }
 
 /** Reads a file's text, or `undefined` if it cannot be read. */
 export type FileReader = (absolutePath: string) => string | undefined
@@ -178,8 +174,8 @@ export class LspQueryEngine {
   }
 
   async query(input: LspQueryInput): Promise<LspQueryResult> {
-    this.assertAllowed(input.projectRoot)
-    const absFile = this.confineFile(input.projectRoot, input.file)
+    assertAllowed(this.allowRun, this.allowedRoots, input.projectRoot)
+    const absFile = confineFile(input.projectRoot, input.file)
     const text = this.readFile(absFile)
     if (text === undefined) {
       throw new LspGateError(`cannot read file ${input.file} in ${input.projectRoot}`)
@@ -400,24 +396,5 @@ export class LspQueryEngine {
       start: fromLspPosition(text, range.start, encoding),
       end: fromLspPosition(text, range.end, encoding),
     }
-  }
-
-  private assertAllowed(projectRoot: string): void {
-    if (!this.allowRun) {
-      throw new LspGateError('LSP navigation is not enabled (the operator must set allowRun)')
-    }
-    const root = resolve(projectRoot)
-    if (!this.allowedRoots.map((r) => resolve(r)).includes(root)) {
-      throw new LspGateError(`project root ${projectRoot} is not in the operator allowlist`)
-    }
-  }
-
-  private confineFile(projectRoot: string, file: string): string {
-    const root = resolve(projectRoot)
-    const abs = resolve(root, file)
-    if (abs !== root && !abs.startsWith(root + sep)) {
-      throw new LspGateError(`file ${file} escapes the project root ${projectRoot}`)
-    }
-    return abs
   }
 }
