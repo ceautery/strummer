@@ -303,12 +303,15 @@ Staged below; aspirational items are scheduled, not cut.
       `browser_close_session`; the run-artifact resource serves `video/*` as a base64
       blob. Bin: `STRUMMER_BROWSER_VIDEO_DIR` (+ `_VIDEO_WIDTH`/`_HEIGHT` size cap; the
       session wall-clock cap bounds duration). Real-chromium tested (EBML/webm magic).
-- [ ] **Developer live-view** (observability, not the agent path) — primary:
-      headless + `--remote-debugging-port` so a developer can attach DevTools /
-      `chrome://inspect` to watch the live session with no extra infra; optional
-      operator-gated **headed profile** (Xvfb → x11vnc → noVNC) for in-browser
-      watching. Default remains headless; for *reviewing* a run, the trace viewer
-      + video are the deterministic, CI-friendly path.
+- ~~**Developer live-view**~~ — **DROPPED (2026-06-01), not deferred.** Strummer
+      is **LLM-first**: the high-value question is "navigate to the personnel page
+      and tell me what AJAX requests happen", and the trace timeline (`browser_trace_query`),
+      HAR capture, console/network artifacts, and video already answer that
+      *better* than a human watching pixels render. So we commit to **headless
+      only** and spend no effort on the Xvfb→x11vnc→noVNC headed profile or
+      `--remote-debugging-port` DevTools attach. (The CLI's single-shot `--headed`
+      launch flag stays as a trivial escape hatch where a display exists; it is not
+      a live-view feature.) See ADR 0008.
 - [x] **Visual regression** — `@strummer/browser` `visual.ts` `compareScreenshots`
       (pixelmatch 7.2.0 + pngjs 7.0.0): a **pure, deterministic** pixel diff —
       diff-pixel count/ratio, `maxDiffPixelRatio`/`maxDiffPixels` budget, pixel-rect

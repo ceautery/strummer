@@ -57,9 +57,12 @@ for canvas / non-AX-tree UI), **visual-regression diffing** (`browser_visual_com
 via pixelmatch, baseline by handle), a human **`strummer browser` CLI** (snapshot/
 audit/screenshot/run), and a **container-hardening ADR** (the deployment/kernel
 boundary, [ADR 0007](./docs/decisions/0007-container-hardening.md)) have all landed.
-Remaining browser work is the aspirational tail that needs the CI/Docker image
-(developer live-view, multi-engine firefox/webkit). **The single source of truth for
-"what phase are we on" is [`STATUS.md`](./STATUS.md).**
+Remaining browser work is just **multi-engine** (firefox/webkit), which needs the
+CI/Docker image. Strummer is **headless-only**: developer live-view was dropped in
+favor of LLM-first observability — the trace/HAR/console/video artifacts let the
+agent answer "what happened on this page" better than a human watching it render
+([ADR 0008](./docs/decisions/0008-headless-only-llm-first-observability.md)).
+**The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
 
