@@ -32,12 +32,21 @@ against in-process fixtures):
    **artifact-capture pipeline** `RunRecorder` (slice 8b): trace.zip / console /
    network by `strummer://browser/run/<id>/<kind>` handle with compact summaries;
    text channels redacted before write; per-channel enable flags.
+9. **Engine hardening for the MCP surface (Milestone A, slices A1–A6)** — surfaced
+   by a fan-out design+adversarial-review workflow (`browser-mcp-design`): snapshot
+   redaction seam (secrets reflected in the DOM no longer leak into the snapshot/
+   artifact), per-generation immutable artifact handles (no overwrite), bounded
+   diff output, dry-run popup-block + `crossOriginEgress` flag, no-snapshot vs
+   stale-ref error, `BrowserManager.onReap` flush hook.
 
-**184 TS + 45 Py tests green; all pushed to `main`.** **Next action:** build the
-**MCP + CLI surface** over the browser engine (mirror how `@strummer/api` exposed
-`strummer-api-mcp` + `strummer api …`) — assemble the server bin wiring manager +
-gate + proxy + `RunRecorder` capture into an operator-configured surface. See the
-detailed "Next action" section below + ROADMAP Phase 3.
+**194 TS + 45 Py tests green; all pushed to `main`.** **Next action:** build the
+agent-facing **MCP surface** over the browser engine (Milestone B; **no CLI** this
+pass per the design decision) — `registerBrowserTools`/`createBrowserServer` in
+`packages/mcp/src/browser.ts` (15 session-oriented tools, surface session registry,
+per-session mutex, reaper reconciliation, `strummer://browser/run/{runId}/{kind}`
+resource) tested offline against an injected fake launch; then Milestone C, the
+operator-configured `strummer-browser-mcp` bin. See the detailed "Next action"
+section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -260,14 +269,46 @@ redaction is the secret-boundary slice). Per-channel enable flags. Real-chromium
 tested against a fixture that logs a secret, fetches a secret-bearing URL, and
 throws. **184 TS + 45 Py green.** (9a0a810)
 
-**Next, per ROADMAP Phase 3:** the **MCP + CLI surface** over the browser engine
-— assemble the server bin (manager + gate + proxy + `RunRecorder` capture +
-`ArtifactStore`) into an operator-configured surface, mirroring `strummer-api-mcp`
-+ `strummer api …`; safety config operator-set (env on the bin), never an agent
-input. Then: `serviceWorkers:'block'` + WebRTC disable; downloads/uploads/dialog/
-auth gating; session wall-clock + max-pages; the secret-boundary slice (`{{secret:
-NAME}}` fill resolution + `httpCredentials` + `storageState`/trace-internal
-redaction). TDD red→green; `pnpm gate` 100% green before each commit.
+**Browser MCP surface — design locked by the `browser-mcp-design` fan-out**
+(3 design proposals → 2 adversarial critics → synthesis; ~407k tokens). Decisions:
+**MCP surface only this pass (no CLI)**; safety/operator-config-first spine (one
+operator `BrowserGate` threaded into the manager AND every driver; namespaced
+`STRUMMER_BROWSER_*` env, no fallback to the api bin's vars); handle-resource
+egress (one `strummer://browser/run/{runId}/{kind}` ResourceTemplate); explicit
+session-lifecycle tools with distinct mutating verbs. Plan staged into 3
+milestones:
+
+**Milestone A — engine hardening: DONE (slices A1–A6, pushed).** A1 snapshot
+redaction seam, A2 per-generation immutable handles, A3 bounded diff, A4 dry-run
+popup-block + `crossOriginEgress`, A5 no-snapshot vs stale-ref error, A6
+`BrowserManager.onReap` flush hook. (The critic's "dry-run aborts only the first
+request" was a verified misread — the route aborts every request; only the capture
+is first-only.)
+
+**Milestone B — MCP surface: NEXT.** `registerBrowserTools`/`createBrowserServer`
+in `packages/mcp/src/browser.ts`: process-lifetime singletons (one BrowserManager,
+one operator gate, one ArtifactStore, one Redactor) + a `Map<sessionId,
+BrowserSession>` with a per-session async mutex; 15 tools (`browser_open_session`/
+`list_sessions`/`navigate`/`snapshot`/`click`/`fill`/`fill_form`/`select`/`press`/
+`wait_for`/`get_text`/`get_value`/`get_attribute`/`audit_a11y`/`close_session`);
+server-minted UUID sessionId+runId (1:1, never agent input); reads redacted at the
+surface; reaper reconciliation via `manager.onReap` (flush recorder) + `hasSession`
+eviction; the two-variable resource template over the shared store. Tested OFFLINE
+against an injected fake launch (stub Browser/Context/Page with a deterministic
+`ariaSnapshot`). No tool input may flip a safety flag.
+
+**Milestone C — server bin.** `bin-browser.ts`: sole reader of `STRUMMER_BROWSER_*`
+env + sole constructor of the egress boundary; **mandatory** `createSsrfProxy`
+(no disable env) + Chromium launch with `--proxy-bypass-list=<-loopback>` (so
+loopback also traverses the pinning proxy — closes the documented bypass);
+`startReaper`; SIGINT/SIGTERM shutdown → `manager.shutdown()` then `proxy.close()`;
+`strummer-browser-mcp` bin + package.json deps/build inputs.
+
+**Then (later Phase 3):** `serviceWorkers:'block'` + WebRTC disable; the
+secret-boundary slice (`{{secret:NAME}}` fill resolution + `httpCredentials` +
+`storageState`/trace-internal redaction); downloads/uploads/dialog/auth gating;
+session wall-clock + max-pages; on-demand screenshot step tool. TDD red→green;
+`pnpm gate` 100% green before each commit.
 
 ---
 

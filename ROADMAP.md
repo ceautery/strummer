@@ -146,10 +146,19 @@ Staged below; aspirational items are scheduled, not cut.
 - [ ] **Secret boundary** — `{{secret:NAME}}` fill resolution + origin-scoped
       `httpCredentials`; redaction over console/network/HAR/trace/storageState
       before any write; `storageState` by handle only. _(Partial: console+network
-      text artifacts are redacted before write via the `RunRecorder` `redact`
-      hook — slice 8b; the dry-run preview redacts `url`+`postData` — slice 8a.
-      `{{secret:NAME}}` fill / `httpCredentials` / `storageState` / trace-internal
-      redaction still to come.)_
+      text artifacts redacted before write via the `RunRecorder` `redact` hook
+      (slice 8b); dry-run preview redacts `url`+`postData` (slice 8a); the
+      ARIA-snapshot text+stored tree are redacted via a `buildSnapshot` redact
+      seam (slice A1). `{{secret:NAME}}` fill / `httpCredentials` / `storageState`
+      / trace-internal redaction still to come.)_
+- [x] **Engine hardening for the MCP surface** (Milestone A, slices A1–A6) —
+      surfaced by the `browser-mcp-design` fan-out's adversarial review: snapshot
+      redaction seam (A1); per-generation immutable artifact handles `snapshot-s<gen>`
+      / `a11y-s<n>` so a returned handle never resolves to a later tree (A2);
+      bounded `diffSnapshots` output (A3); dry-run popup-block + `crossOriginEgress`
+      flag (A4); no-snapshot vs stale-ref error in `PageDriver` (A5);
+      `BrowserManager.onReap` flush hook so a reaped recording session writes its
+      artifacts before the context closes (A6).
 - [x] **Artifact capture pipeline** — `RunRecorder` (`recorder.ts`) captures a
       Playwright trace.zip (screenshots+snapshots+sources) + own console/network
       logs, all by `strummer://browser/run/<id>/<kind>` handle with structured
