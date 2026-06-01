@@ -1,3 +1,4 @@
+import type { FormData } from 'undici'
 import type { ApiRequest, RequestBody, SecretStore } from './model.js'
 import type { Redactor } from './secrets.js'
 import { interpolate } from './vars.js'
@@ -9,12 +10,17 @@ const RAW_CONTENT_TYPE: Record<string, string> = {
   text: 'text/plain',
   xml: 'application/xml',
   sparql: 'application/sparql-query',
-  graphql: 'application/json',
 }
 
 export interface PreparedBody {
-  contentType: string
-  content: string
+  /** Content-Type to set when the request carries none; `undefined` lets undici
+   * set it itself (e.g. multipart, which needs a generated boundary). */
+  contentType?: string
+  /** The payload handed to undici. */
+  content: string | Buffer | FormData
+  /** A redaction-safe textual rendering of the body for agent-facing output
+   * (binary/file content is summarized, never inlined). */
+  preview: string
 }
 
 /** A request prepared for the wire — these strings carry REAL secret values. */
@@ -35,6 +41,7 @@ export async function prepareRequest(
   scope: Record<string, unknown>,
   secrets: SecretStore,
   redactor: Redactor,
+  baseDir?: string,
 ): Promise<Prepared> {
   const texts = [request.url, ...request.headers.map((h) => h.value), ...bodyTexts(request.body)]
   const fillSecrets = await secretFiller(texts, secrets, redactor)
@@ -46,32 +53,63 @@ export async function prepareRequest(
     method: request.method,
     url: fill(request.url),
     headers,
-    body: materializeBody(request.body, fill),
+    body: await materializeBody(request.body, fill, baseDir),
   }
 }
 
 /** The interpolatable strings inside a body (for secret scanning). */
 function bodyTexts(body: RequestBody | undefined): string[] {
   if (!body) return []
+  if (body.type === 'graphql') {
+    const g = body.graphql
+    return g ? [g.query, ...(g.variables ? [g.variables] : [])] : []
+  }
   if (body.content !== undefined) return [body.content]
   return (body.params ?? []).map((p) => p.value)
 }
 
-function materializeBody(
+async function materializeBody(
   body: RequestBody | undefined,
   fill: (text: string) => string,
-): PreparedBody | undefined {
+  _baseDir?: string,
+): Promise<PreparedBody | undefined> {
   if (!body || body.type === 'none') return undefined
   if (body.type === 'form-urlencoded') {
     const params = new URLSearchParams()
     for (const p of body.params ?? []) params.append(p.name, fill(p.value))
-    return { contentType: 'application/x-www-form-urlencoded', content: params.toString() }
+    const content = params.toString()
+    return { contentType: 'application/x-www-form-urlencoded', content, preview: content }
+  }
+  if (body.type === 'graphql') {
+    const content = materializeGraphql(body.graphql, fill)
+    return { contentType: 'application/json', content, preview: content }
   }
   if (body.content !== undefined) {
-    return { contentType: RAW_CONTENT_TYPE[body.type] ?? 'text/plain', content: fill(body.content) }
+    const content = fill(body.content)
+    return { contentType: RAW_CONTENT_TYPE[body.type] ?? 'text/plain', content, preview: content }
   }
   // Unsupported body type (multipart-form, file, …) — nothing to send yet.
   return undefined
+}
+
+/** A GraphQL-over-HTTP envelope: `{query, variables}` as JSON. Variables (a JSON
+ * string in the `.bru`) are interpolated then parsed into an object; an empty or
+ * whitespace-only variables block is omitted. */
+function materializeGraphql(
+  graphql: { query: string; variables?: string } | undefined,
+  fill: (text: string) => string,
+): string {
+  const query = fill(graphql?.query ?? '')
+  const rawVars = graphql?.variables?.trim()
+  if (!rawVars) return JSON.stringify({ query })
+  const filled = fill(rawVars)
+  let variables: unknown
+  try {
+    variables = JSON.parse(filled)
+  } catch (e) {
+    throw new Error(`invalid graphql variables JSON: ${(e as Error).message}`)
+  }
+  return JSON.stringify({ query, variables })
 }
 
 async function secretFiller(

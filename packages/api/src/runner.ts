@@ -75,11 +75,13 @@ export async function runRequest(
     Object.assign(scope, pre.vars)
   }
 
-  const prepared = await prepareRequest(entry.request, scope, secrets, redactor)
+  const prepared = await prepareRequest(entry.request, scope, secrets, redactor, collection.dir)
 
   // Headers actually sent: add a default Content-Type for the body if unset.
+  // A body with no explicit contentType (multipart) is left for undici to set,
+  // since it must generate the boundary.
   const sendHeaders = { ...prepared.headers }
-  if (prepared.body && !hasHeader(sendHeaders, 'content-type')) {
+  if (prepared.body?.contentType && !hasHeader(sendHeaders, 'content-type')) {
     sendHeaders['Content-Type'] = prepared.body.contentType
   }
 
@@ -87,7 +89,7 @@ export async function runRequest(
     method: prepared.method,
     url: redactor.redact(prepared.url),
     headers: redactor.redactHeaders(sendHeaders),
-    body: prepared.body ? redactor.redact(prepared.body.content) : undefined,
+    body: prepared.body ? redactor.redact(prepared.body.preview) : undefined,
   }
 
   const gate = checkGate(prepared.method, hostOf(prepared.url), {

@@ -34,11 +34,36 @@ export interface CaptureSpec {
   name?: string
 }
 
-/** A request body. Raw types carry `content`; form-urlencoded carries `params`. */
+/** A multipart-form part: a `text` field or a `file` upload (by path). */
+export interface MultipartPart {
+  name: string
+  kind: 'text' | 'file'
+  /** Field value (text parts). */
+  value?: string
+  /** Source path(s) on disk (file parts; Bruno allows multiple). */
+  filePaths?: string[]
+  /** Explicit per-part content type (file parts), when set. */
+  contentType?: string
+}
+
+/** A raw file body — the file's bytes sent as the request body. */
+export interface FileBody {
+  filePath: string
+  contentType?: string
+}
+
+/**
+ * A request body. Raw types (`json`/`text`/`xml`/`sparql`) carry `content`;
+ * `form-urlencoded` carries `params`; `graphql` carries a query + variables;
+ * `multipart-form` carries `parts`; `file` carries a single `file`.
+ */
 export interface RequestBody {
   type: string
   content?: string
   params?: { name: string; value: string }[]
+  graphql?: { query: string; variables?: string }
+  parts?: MultipartPart[]
+  file?: FileBody
 }
 
 export interface ApiRequest {

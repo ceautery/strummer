@@ -154,6 +154,34 @@ describe('runRequest (offline, in-process server)', () => {
     expect(echoed).toContain('application/json')
   })
 
+  it('sends a graphql body as {query, variables} JSON with secrets resolved + redacted', async () => {
+    const token = 'gql-secret-789'
+    const artifacts = new ArtifactStore()
+    const result = await runRequest(loadCollection(FIXTURE), 'create-thing-graphql', {
+      vars: { baseUrl, thingName: 'widget', tag: 'blue' },
+      secrets: new StaticSecretStore({ API_TOKEN: token }),
+      allowUnsafe: true,
+      allowedHosts: ['127.0.0.1'],
+      artifacts,
+    })
+    expect(result.sent).toBe(true)
+    expect(result.response?.status).toBe(201)
+
+    // The agent-facing request shows the query + variables, with the secret redacted.
+    expect(result.request.body).toContain('addThing(name: \\"widget\\")')
+    expect(result.request.body).toContain('"tag":"blue"')
+    expect(result.request.body).toContain('[redacted:API_TOKEN]')
+    expect(result.request.body).not.toContain(token)
+
+    // The server echoed a JSON envelope: {"query": "...", "variables": {...}} as
+    // application/json, with the real secret on the wire but redacted in the artifact.
+    const echoed = JSON.parse(artifacts.get(result.response?.bodyHandle ?? '')?.body ?? '{}')
+    expect(echoed.contentType).toContain('application/json')
+    const sent = JSON.parse(echoed.received)
+    expect(sent.query).toContain('addThing(name: "widget")')
+    expect(sent.variables).toEqual({ token: '[redacted:API_TOKEN]', tag: 'blue' })
+  })
+
   it('runs a post-response script: tests + programmatic capture', async () => {
     const result = await runRequest(loadCollection(FIXTURE), 'script-demo', { vars: { baseUrl } })
     expect(result.response?.scriptTests).toEqual([

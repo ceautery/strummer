@@ -7,6 +7,7 @@ import type {
   AssertionSpec,
   CaptureSpec,
   Collection,
+  MultipartPart,
   RequestBody,
   RequestEntry,
 } from './model.js'
@@ -14,15 +15,36 @@ import type {
 // Collection/folder-level .bru files are settings, not requests.
 const NON_REQUEST = new Set(['collection.bru', 'folder.bru'])
 // Body types stored as a raw string under body.<key>.
-const RAW_BODY_TYPES = new Set(['json', 'text', 'xml', 'sparql', 'graphql'])
+const RAW_BODY_TYPES = new Set(['json', 'text', 'xml', 'sparql'])
+// `@usebruno/lang` discriminators (camelCase) → our canonical body-type names.
+const BODY_TYPE_ALIASES: Record<string, string> = {
+  formUrlEncoded: 'form-urlencoded',
+  multipartForm: 'multipart-form',
+}
+
+interface BruMultipartPart {
+  name: string
+  value: string | string[]
+  enabled?: boolean
+  type?: 'text' | 'file'
+  contentType?: string
+}
+
+interface BruFilePart {
+  filePath: string
+  contentType?: string
+  selected?: boolean
+}
 
 interface BruBody {
   json?: string
   text?: string
   xml?: string
   sparql?: string
-  graphql?: string
+  graphql?: { query?: string; variables?: string }
   formUrlEncoded?: { name: string; value: string; enabled?: boolean }[]
+  multipartForm?: BruMultipartPart[]
+  file?: BruFilePart[]
 }
 
 interface BruJson {
@@ -100,18 +122,53 @@ function toRequest(stem: string, parsed: BruJson): ApiRequest {
   }
 }
 
-function toBody(type: string | undefined, body: BruBody | undefined): RequestBody | undefined {
-  if (!type || type === 'none') return undefined
+function toBody(rawType: string | undefined, body: BruBody | undefined): RequestBody | undefined {
+  if (!rawType || rawType === 'none') return undefined
+  // Normalize the parser's camelCase discriminator to our canonical name.
+  const type = BODY_TYPE_ALIASES[rawType] ?? rawType
+
   if (type === 'form-urlencoded') {
     const params = (body?.formUrlEncoded ?? [])
       .filter((p) => p.enabled !== false)
       .map((p) => ({ name: p.name, value: p.value }))
     return { type, params }
   }
+  if (type === 'graphql') {
+    const gql = body?.graphql
+    return { type, graphql: { query: gql?.query ?? '', variables: gql?.variables } }
+  }
+  if (type === 'multipart-form') {
+    return { type, parts: toParts(body?.multipartForm ?? []) }
+  }
+  if (type === 'file') {
+    const selected = (body?.file ?? []).find((f) => f.selected !== false) ?? body?.file?.[0]
+    if (selected) {
+      return { type, file: { filePath: selected.filePath, contentType: selected.contentType } }
+    }
+    return { type }
+  }
   if (RAW_BODY_TYPES.has(type)) {
     const content = body?.[type as keyof BruBody]
     if (typeof content === 'string') return { type, content }
   }
-  // Recognized but not yet materialized (multipart-form, file, …).
+  // Recognized but with no payload to materialize.
   return { type }
+}
+
+function toParts(parts: BruMultipartPart[]): MultipartPart[] {
+  return parts
+    .filter((p) => p.enabled !== false)
+    .map((p) => {
+      if (p.type === 'file') {
+        const filePaths = Array.isArray(p.value) ? p.value : [p.value]
+        return {
+          name: p.name,
+          kind: 'file' as const,
+          filePaths,
+          contentType: p.contentType || undefined,
+        }
+      }
+      const value = Array.isArray(p.value) ? (p.value[0] ?? '') : p.value
+      return { name: p.name, kind: 'text' as const, value }
+    })
 }
