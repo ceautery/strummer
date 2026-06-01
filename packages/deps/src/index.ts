@@ -1,4 +1,10 @@
 export {
+  type AuditDependencyInput,
+  auditDependency,
+  type DependencyAudit,
+  type FreshnessVerdict,
+} from './audit.js'
+export {
   auditDeprecation,
   type DeprecationScope,
   type DeprecationVerdict,

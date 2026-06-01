@@ -392,8 +392,13 @@ Two independent tracks, then the test-quality chain, then LSP last:
         round-trip in tests, zero network.
   - [ ] CVSS-vector → bucket scoring (defer; slices 2–3 bucket the GHSA
         `database_specific.severity` string, CVSS vectors → `unknown`).
-  - [ ] `auditDependency` — compose detect-installed-version + deprecation + vuln
-        match + freshness into one verdict (the agent-facing roll-up).
+  - [x] **Slice 4 — `auditDependency`**: pure roll-up composing `auditDeprecation` +
+        `matchVulnerabilities` + freshness (latest / latestSameMajor / isOutdated via
+        `semver`, prereleases excluded) into one verdict — `worstSeverity`,
+        `recommendedTarget` (conservative newest-same-major), `snapshotDate`,
+        `hasFindings`. Inputs are gathered by the caller (still pure/offline).
+  - [ ] Vuln-aware "minimum safe upgrade" target (lowest version clearing all matched
+        advisories) — distinct from the conservative same-major `recommendedTarget`.
   - [ ] `behindBy` freshness vs the `resolveVersion` policy; `recommendedTarget`.
   - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
         SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice.

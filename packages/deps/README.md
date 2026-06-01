@@ -67,8 +67,27 @@ const { advisories, snapshotDate } = loadOsvSnapshot(process.env.STRUMMER_DEPS_O
 matchVulnerabilities(advisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15')
 ```
 
-Later slices (staged in `ROADMAP.md`): `auditDependency` (compose detect-version +
-deprecation + vuln + freshness into one verdict); `behindBy` freshness vs the
-version-pin policy; CVSS-vector → bucket scoring; the `audit_dependency` /
-`audit_project` / `changelog_diff` MCP tools + a `strummer-deps-mcp` bin; the
-operator-gated network fetch of `all.zip`; and a Python/PyPI adapter.
+- **`auditDependency(input)`** — the agent-facing roll-up. Composes
+  `auditDeprecation` + `matchVulnerabilities` + freshness into one compact verdict for
+  the *installed* version: `{ deprecated, vulnerabilities, worstSeverity, freshness
+  (latest / latestSameMajor / isOutdated), recommendedTarget (conservative
+  newest-same-major), snapshotDate, hasFindings }`. Pure — the caller gathers the
+  inputs (detect the installed version via `@strummer/core` `detectInstalledVersion`,
+  load advisories via `loadOsvSnapshot`, fetch the packument).
+
+```ts
+import { auditDependency } from '@strummer/deps'
+
+auditDependency({
+  packageName: 'oldpkg', ecosystem: 'npm', installedVersion: '1.0.0',
+  packument, advisories, snapshotDate,
+})
+// → { deprecated: { isDeprecated: true, … }, worstSeverity: 'high',
+//     freshness: { isOutdated: true, … }, recommendedTarget: '1.2.0', hasFindings: true, … }
+```
+
+Later slices (staged in `ROADMAP.md`): a vuln-aware "minimum safe upgrade" target; the
+`audit_dependency` / `audit_project` / `changelog_diff` MCP tools + a
+`strummer-deps-mcp` bin (wiring `detectInstalledVersion` + `loadOsvSnapshot` + the
+packument fetch); CVSS-vector → bucket scoring; the operator-gated network fetch of
+`all.zip`; and a Python/PyPI adapter.
