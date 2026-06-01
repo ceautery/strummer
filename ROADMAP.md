@@ -58,7 +58,7 @@ installed version Z" and get a precise, cited answer over MCP.
       headings (`useState(initialState)` → `useState`) as a fallback when a section
       has no source-index entry.
 
-## Phase 2 — API testing pillar  *(core complete; optional tail remains; design = ADR 0004 + 0005)*
+## Phase 2 — API testing pillar  *(COMPLETE — core + tail; design = ADR 0004 + 0005)*
 
 - [x] `@strummer/api` package + Bruno `.bru` format (via `@usebruno/lang`) +
       thin domain model; Strummer assertions/captures in `*.strummer.yml` sidecar.
@@ -67,7 +67,12 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] Secrets: `{{secret:NAME}}` + `SecretStore` (`@napi-rs/keyring`/env/static/
       chained), fail-closed, value-redaction (raw + base64/url encodings).
 - [x] Mutation safety gate: dry-run by default; send only with `allowUnsafe` +
-      host allowlist. (SSRF/redirect re-check still to add.)
+      host allowlist. **+ SSRF range-block on every request** (reuses
+      `@strummer/safety` `resolveAndPin`; metadata/link-local always refused,
+      loopback/private gated by `allowPrivate`, default permissive for local
+      testing — `STRUMMER_BLOCK_PRIVATE` / CLI `--block-private` to harden) **+
+      opt-in redirect following (`maxRedirects`) with per-hop re-check** (SSRF +
+      mutation allowlist + cross-origin credential-header strip).
 - [x] Request chaining via captures (`extractCaptures` + `runSequence`).
 - [x] Environment-file loading (`environments/<Env>.bru`, lowest precedence) +
       request **body** sending — the full matrix now materializes from a `.bru`:
@@ -92,9 +97,19 @@ installed version Z" and get a precise, cited answer over MCP.
       `validate_response` + `strummer://run/{id}/body` resource; `strummer-api-mcp`
       bin; safety operator-set, not agent-set) **+ CLI** (`strummer api list|get|
       run|run-collection|validate`). Built as a parallel fan-out, integrated green.
-- [ ] Import: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
-- [ ] Contract validation reach (scheduled, see ADR 0005): external/remote `$ref`
-      deref; OpenAPI 3.0 `nullable` shim; `operationName`-scoped GraphQL.
+- [x] **Keyring secret store wired** into both surfaces: CLI `--keyring`, MCP
+      `STRUMMER_KEYRING` (chains the OS keyring ahead of `STRUMMER_SECRET_<NAME>`).
+- [x] **Import**: Postman v2.1 / Insomnia v4 / OpenAPI 3.x / HAR → `.bru`
+      (`import.ts`, native — `@usebruno/converters` is unavailable offline, so the
+      importers normalize each source and serialize via `@usebruno/lang`
+      `jsonToBruV2`). CLI `strummer api import <format> <src> <dest>`. multipart/
+      file bodies + non-header auth deferred.
+- [x] **Contract validation reach** (ADR 0005): **external local-file `$ref`**
+      deref (JSON+YAML, incl. the file's own internal refs, cycle-guarded; remote
+      http refs stay out of scope — SSRF); **OpenAPI 3.0 `nullable` shim** →
+      3.1-style type union; **`operationName`-scoped GraphQL** drift. CLI `--openapi`
+      passes the spec dir as the deref base; `validate --operation`; MCP
+      `validate_response.operationName`.
 
 ## Phase 3 — Browser / UI testing pillar  *(engine + safety + artifact pipeline + MCP surface + human CLI complete; only the aspirational tail remains; design = ADR 0006 + ARCHITECTURE §10)*
 

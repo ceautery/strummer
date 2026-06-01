@@ -25,6 +25,14 @@ one `.bru` per request, `environments/<Env>.bru`). Map `.bru`-JSON into a thin
 internal model so a future format change is contained. Import Postman/Insomnia/
 OpenAPI via `@usebruno/converters`; HAR→`.bru` is our own small generator.
 
+> **Update (2026-06-01):** import shipped (`import.ts` + CLI `api import`), but
+> **natively, not via `@usebruno/converters`** — that package is unavailable in
+> the offline dev container, and writing the normalizers ourselves (one small
+> intermediate shape per source → `@usebruno/lang` `jsonToBruV2`) keeps the
+> dependency set lean and the output a real Bruno collection. Postman v2.1 /
+> Insomnia v4 / OpenAPI 3.x / HAR all supported; multipart/file bodies +
+> non-header auth deferred.
+
 ### 3. Strummer assertions/captures: **sidecar `*.strummer.yml`**
 
 Strummer's richer assertion sources (jsonpath, JSON-schema, responseTime) and

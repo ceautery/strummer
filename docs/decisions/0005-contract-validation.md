@@ -65,6 +65,27 @@ Documented deliberately; these are scheduled, not hidden:
 - **GraphQL** validation is operation-kind aware but not `operationName`-scoped
   for multi-operation documents.
 
+### Update (2026-06-01) — reach items lifted
+
+Three of the limitations above are now resolved (TDD, see
+`contract.ts`/`graphql.ts`). `@apidevtools/json-schema-ref-parser` was *not*
+needed (and is unavailable offline in the dev container); a small in-repo
+deref/shim is enough and keeps the "we own the small logic" stance:
+
+- **External local-file `$ref` deref.** `validateOpenApiResponse(..., {baseDir})`
+  inlines `./file.json#/Ptr` and `.yaml` refs, fully dereferencing the external
+  file's own internal + nested-external refs (cycle-guarded) before the
+  `$defs` rewrite. Main-document internal refs still flow through `$defs`.
+  **Still out of scope: remote (http/https) `$ref`s** — deliberately, to avoid an
+  SSRF vector in the validator — and non-schema `$ref`s.
+- **OpenAPI 3.0 `nullable` shim.** When `openapi` is `3.0.x`, `{type:'X',
+  nullable:true}` is rewritten to `{type:['X','null']}` (and the non-2020
+  `nullable` keyword dropped) so ajv no longer gives a false *failure* on an
+  explicit null. 3.1 docs are untouched.
+- **`operationName`-scoped GraphQL.** `validateGraphqlOperation(sdl, query,
+  {operationName})` scopes the root-type drift check to one operation of a
+  multi-operation document (and flags an absent name).
+
 ## Consequences
 
 - One validation engine (ajv 2020) serves both the `schema` assertion and

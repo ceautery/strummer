@@ -281,10 +281,12 @@ against in-process fixtures):
    the green gate stays deterministic: tested with in-memory PNGs + a real-chromium
    **self-captured** baseline (nothing committed to the repo).
 
-**332 TS + 45 Py tests green; committed to `main`.** _(Latest milestone is the
-**Pillar-2 request-body matrix** — graphql/multipart-form/file + the form-
-urlencoded discriminator fix; see the Phase-2 block below. Phase 3 is unchanged.)_
-**Next action:** remaining
+**375 TS + 45 Py tests green; committed to `main`.** _(Latest milestone: **Pillar 2
+is now fully COMPLETE** — the request-body matrix plus the whole optional tail:
+keyring CLI/MCP wiring, API-gate SSRF range-block + opt-in redirect re-check,
+contract-validation reach (external local-file `$ref` / 3.0 `nullable` shim /
+`operationName`-scoped GraphQL), and import (Postman/Insomnia/OpenAPI/HAR → `.bru`).
+See the Phase-2 block below. Phase 3 is unchanged.)_ **Next action:** remaining
 aspirational Phase-3 tail — **developer live-view** (the headed path needs Xvfb/VNC
 infra not in this container; the headless `--remote-debugging-port` path is finicky
 alongside playwright-core's own CDP) and **multi-engine** (firefox/webkit; **blocked
@@ -366,11 +368,24 @@ ingestion refinements, Dash docset adapter). Pillar 2 design is locked (ADR 0004
 - **127 TS + 45 Py tests** (1 skipped real-embed), all green. Contract validators
   adversarially verified; both API bins smoke-tested end-to-end.
 
-**Next (Pillar 2 tail):** keyring secret-store wiring into CLI/MCP (opt-in),
-SSRF/redirect re-checks, Postman/Insomnia/OpenAPI/HAR import. **Request body
-types are now COMPLETE** (graphql + multipart-form + file landed; the form-
-urlencoded discriminator regression fixed). Contract-validation scope notes
-(local `$ref`s only, 3.1-only, ajv `strict:false`) are in ADR 0005.
+**Pillar 2 tail: COMPLETE.** All previously-deferred items have landed:
+- **Keyring** secret store wired into both surfaces (CLI `--keyring`, MCP
+  `STRUMMER_KEYRING`; chains the OS keyring ahead of `STRUMMER_SECRET_<NAME>`).
+- **SSRF range-block** on every request (`assertSsrfAllowed` via `@strummer/safety`
+  `resolveAndPin`; metadata/link-local always refused, loopback/private gated by
+  `allowPrivate` — default permissive, `STRUMMER_BLOCK_PRIVATE` / `--block-private`
+  to harden) **+ opt-in redirect following** (`maxRedirects`) re-checking SSRF +
+  the mutation allowlist + stripping credential headers on a host change.
+- **Contract reach** (ADR 0005): external local-file `$ref` deref (JSON+YAML,
+  cycle-guarded; remote http stays out — SSRF), OpenAPI 3.0 `nullable` shim,
+  `operationName`-scoped GraphQL.
+- **Import**: Postman/Insomnia/OpenAPI/HAR → `.bru` (`import.ts`, native + CLI
+  `api import`). The only remaining body types are the request-body matrix, which
+  is also COMPLETE (graphql/multipart-form/file; form-urlencoded regression fixed).
+
+Remaining ADR-0005-documented out-of-scope (not blocking): remote (http) `$ref`
+deref; non-schema `$ref`s; ajv `strict:false`. Import defers multipart/file
+bodies + non-header auth.
 
 Decided (ADR 0004): new pure-TS **`@strummer/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
@@ -662,22 +677,23 @@ committed baselines deferred) are now **done**. None blocking. TDD red→green;
 
 ---
 
-Pillar 2 (`@strummer/api`) **engine + agent/human surfaces are complete**: the
-MCP tools (`strummer-api-mcp`) and CLI (`strummer api …`) both ship over the
-engine, fan-out built and integrated, all green. Remaining Pillar-2 tail (pick
-any; none blocking):
-1. Wire the **keyring** secret store into CLI/MCP (opt-in `--keyring` / env);
-   today both default to `EnvSecretStore` (`STRUMMER_SECRET_<NAME>`).
-2. **SSRF range-block + post-redirect re-check** in the safety gate (currently
-   method + host-allowlist only).
-3. ~~Remaining request **body types**: multipart-form, file, graphql.~~ **DONE**
-   (graphql/multipart-form/file all materialize from a `.bru`; form-urlencoded
-   discriminator regression fixed).
-4. **Import**: Postman/Insomnia/OpenAPI (`@usebruno/converters`); HAR→`.bru`.
-5. Contract-validation reach (ADR 0005): external/remote `$ref` deref; OpenAPI
-   3.0 `nullable` shim; `operationName`-scoped GraphQL.
+Pillar 2 (`@strummer/api`) is **COMPLETE — engine + agent/human surfaces + the
+full optional tail**. All five formerly-deferred tail items have landed (TDD,
+all green):
+1. ~~Keyring secret store into CLI/MCP~~ **DONE** (CLI `--keyring`, MCP
+   `STRUMMER_KEYRING`; `resolveSecretStore({keyring})` chains keyring → env).
+2. ~~SSRF range-block + post-redirect re-check~~ **DONE** (`assertSsrfAllowed`
+   on every request via `@strummer/safety`; opt-in `maxRedirects` with per-hop
+   SSRF + allowlist re-check + cross-origin credential strip).
+3. ~~Request **body types**: multipart-form, file, graphql~~ **DONE**.
+4. ~~Import: Postman/Insomnia/OpenAPI/HAR → `.bru`~~ **DONE** (`import.ts`,
+   native — converters unavailable offline — + CLI `api import`).
+5. ~~Contract-validation reach (ADR 0005)~~ **DONE**: external local-file `$ref`
+   deref, OpenAPI 3.0 `nullable` shim, `operationName`-scoped GraphQL. (Remote
+   http `$ref` + non-schema `$ref` remain out of scope by design — SSRF.)
 
-Or start **Phase 3 (browser/UI testing, Playwright over MCP)** — see ROADMAP.
+Next: the blocked Phase-3 tail (live-view, multi-engine — need the CI/Docker
+image) or start **Phase 4** (cross-cutting verification) — see ROADMAP.
 
 Deferred Pillar-1 polish — **all DONE**: non-Node version detection (Python/Ruby
 in `detectInstalledVersion`, wired into MCP/CLI); ingestion TOC-bleed + richer
