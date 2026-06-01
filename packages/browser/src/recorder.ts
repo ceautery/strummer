@@ -1,8 +1,29 @@
 import { readFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import type { ConsoleMessage, Page, Request, Response } from 'playwright-core'
 import type { ArtifactStore } from './artifacts.js'
+
+// Text entries in a Playwright trace.zip where a secret can land: the JSONL
+// metadata (`trace`/`network`/`stacks` — action params incl. fill values, the
+// network log's urls/headers/postData, stacks) AND the text resource snapshots
+// (the captured DOM `.html`, the `sources` `.txt`, plus css/js/json/xml). Binary
+// resources (screenshots `.jpeg`, `.dat`, fonts) are left untouched. Resource
+// files are content-addressed by sha, but the trace references them by that
+// filename (not by re-hashing), so redacting their bytes is safe — the viewer
+// still resolves by name and renders the scrubbed content.
+const TRACE_TEXT_ENTRY = /\.(trace|network|stacks|html|css|js|json|txt|xml)$/
+
+/** Unzip a trace.zip, redact its text entries, and re-zip. */
+function redactTraceZip(zip: Buffer, redact: (text: string) => string): Buffer {
+  const entries = unzipSync(new Uint8Array(zip))
+  const out: Record<string, Uint8Array> = {}
+  for (const [name, bytes] of Object.entries(entries)) {
+    out[name] = TRACE_TEXT_ENTRY.test(name) ? strToU8(redact(strFromU8(bytes))) : bytes
+  }
+  return Buffer.from(zipSync(out))
+}
 
 /**
  * Per-run artifact capture for the browser pillar (ADR 0006; ROADMAP Phase 3).
@@ -15,11 +36,13 @@ import type { ArtifactStore } from './artifacts.js'
  * with a compact structured summary — large/binary artifacts never get inlined
  * into a tool result.
  *
- * The text channels (console, network) are passed through the operator's
- * `redact` hook **before** being written to disk, so a registered secret never
- * lands in an artifact via a logged value or a query string. The trace is a zip
- * of binary resources; redacting its contents is the separate secret-boundary
- * slice (ROADMAP Phase 3) — for now operators gate trace capture itself.
+ * Every channel is passed through the operator's `redact` hook **before** being
+ * written to disk, so a registered secret never lands in an artifact via a logged
+ * value or a query string. For the trace.zip that means scrubbing its text
+ * entries — the JSONL metadata (action params, network log, stacks) and the text
+ * resource snapshots (captured DOM `.html`, `sources` `.txt`, css/js/json) —
+ * while binary resources (screenshots, fonts) pass through untouched. Trace
+ * capture also stays operator-gated (off by default).
  */
 
 /** A single captured console line (or uncaught page error). */
@@ -87,6 +110,7 @@ export interface RunRecorderOptions {
 
 export class RunRecorder {
   private readonly redact: (value: string) => string
+  private readonly hasRedact: boolean
   private readonly captureTrace: boolean
   private readonly captureConsole: boolean
   private readonly captureNetwork: boolean
@@ -100,6 +124,7 @@ export class RunRecorder {
     private readonly opts: RunRecorderOptions,
   ) {
     this.redact = opts.redact ?? ((v) => v)
+    this.hasRedact = opts.redact !== undefined
     this.captureTrace = opts.trace ?? true
     this.captureConsole = opts.console ?? true
     this.captureNetwork = opts.network ?? true
@@ -171,8 +196,11 @@ export class RunRecorder {
       // hand the bytes to the store (which owns the canonical layout) and clean up.
       const tmp = join(tmpdir(), `strummer-trace-${runId.replace(/[^\w.-]/g, '_')}.zip`)
       await this.page.context().tracing.stop({ path: tmp })
-      const buf = readFileSync(tmp)
+      let buf: Buffer = readFileSync(tmp)
       unlinkSync(tmp)
+      // Scrub registered secrets from the trace's text metadata before write (the
+      // only redaction the trace gets — Playwright does none).
+      if (this.hasRedact) buf = redactTraceZip(buf, this.redact)
       const handle = store.put(runId, 'trace', buf, 'application/zip')
       artifacts.trace = { handle, byteSize: buf.byteLength }
     }

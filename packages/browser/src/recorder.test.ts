@@ -98,6 +98,33 @@ describe('RunRecorder — artifact capture (real headless chromium)', () => {
     expect(artifacts.network?.byStatus['200']).toBeGreaterThanOrEqual(1)
   })
 
+  it('redacts secrets from the trace.zip metadata before write', async () => {
+    const page = await context.newPage()
+    const recorder = await RunRecorder.start(page, {
+      runId: 'run-trace',
+      store,
+      redact: (v) => redactor.redact(v),
+      trace: true,
+      console: false,
+      network: false,
+    })
+    // the fixture fetches /api/data?token=s3cr3t-value → the URL lands in the
+    // trace's network metadata; redaction must scrub it before the zip is stored
+    await page.goto(baseUrl, { waitUntil: 'networkidle' })
+    const artifacts = await recorder.stop()
+    await page.close()
+
+    const zip = store.get(artifacts.trace?.handle ?? '')?.body
+    expect(zip).toBeDefined()
+    const { unzipSync } = await import('fflate')
+    const entries = unzipSync(new Uint8Array(zip as Buffer))
+    const allText = Object.values(entries)
+      .map((b) => Buffer.from(b).toString('latin1'))
+      .join('\n')
+    expect(allText).not.toContain('s3cr3t-value') // the raw secret is gone from every entry
+    expect(allText).toContain('[redacted:token]') // …and was actually present + redacted
+  })
+
   it('omits disabled capture channels', async () => {
     const page = await context.newPage()
     const recorder = await RunRecorder.start(page, {
