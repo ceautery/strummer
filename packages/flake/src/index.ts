@@ -9,3 +9,8 @@ export {
   type WilsonInterval,
   wilsonInterval,
 } from './classify.js'
+export {
+  type HistoryQueryOptions,
+  HistoryStore,
+  type RecordedRun,
+} from './store.js'

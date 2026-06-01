@@ -17,5 +17,11 @@
   "scripts": {
     "build": "tsdown src/index.ts --dts",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
   }
 }
