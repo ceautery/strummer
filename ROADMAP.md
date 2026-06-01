@@ -275,8 +275,11 @@ Staged below; aspirational items are scheduled, not cut.
       (`clickAt`/`fillAt`/`selectAt`/`pressAt`) driving via `getByRole` directly +
       reusing the mutation gate. Surfaced by `strummer browser run <flow.bru>`
       (--var/--unsafe/--allow-host/--json, exit-nonzero on failure); example in
-      `examples/browser/login/`. (An MCP `browser_run_flow` tool is a scheduled
-      follow-up — the CLI is the primary surface for replayable/CI flows.)
+      `examples/browser/login/`. _(The MCP follow-up is **done**: `browser_list_flows`
+      + `browser_run_flow` replay a flow **by name** (no caller path) on a session's
+      gated driver behind the per-session mutex — caller `{{var}}`s + operator-resolved
+      `{{secret:NAME}}` (fail-closed), surface error redaction; deny-by-default via
+      `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface at parity with `strummer browser run`.)_
 - [ ] **Multi-engine** (firefox/webkit) install + cross-engine determinism
       (chromium-only for v1).
 - [ ] *(aspirational, scheduled not cut)* optional `@playwright/mcp` embed via

@@ -96,6 +96,13 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   side: with an operator `HAR_DIR` set, each session records a full HAR (bodies
   attached) that `browser_close_session` finalizes — redacted, by `har` handle, with a
   compact summary.
+- **`browser_list_flows`** / **`browser_run_flow`** — list the persisted `.bru`
+  flows the operator made available (by name + step count) and replay one (by name)
+  on a session. Steps drive through the SAME gate (navigation allowlist + dry-run-vs-
+  execute) and redactor as the live step tools; `{{var}}` values are caller-supplied
+  (non-secret), `{{secret:NAME}}` resolves server-side (fail-closed, never echoed).
+  Operator-gated + deny-by-default (requires a `FLOWS_DIR`; the flow is named, never a
+  caller-supplied path). The human-CLI counterpart is `strummer browser run`.
 - Resource **`strummer://browser/run/{runId}/{kind}`** — fetch a stored artifact
   (`snapshot-s<gen>` / `a11y-s<n>` / `screenshot-s<n>` / `trace` / `console` /
   `network` / `har`) by handle; binary kinds (trace.zip, screenshot PNG, HAR .zip)
@@ -110,7 +117,8 @@ default (`ALLOW_DIALOGS` to accept; each recorded, redacted, on the step result)
 downloads cancelled unless an operator quarantine dir (`DOWNLOAD_DIR`) is set;
 uploads confined to an operator allowlist dir (`UPLOAD_DIR`, denied when unset);
 HAR capture off unless an operator output dir (`HAR_DIR`) is set + HAR replay off
-unless a replay dir (`REPLAY_HAR_DIR`) is set, both deny-by-default; secret
+unless a replay dir (`REPLAY_HAR_DIR`) is set, both deny-by-default; persisted-flow
+replay off unless a flows dir (`FLOWS_DIR`) is set; secret
 redaction across every artifact + the trace.zip + the HAR; `{{secret:NAME}}` fill +
 origin-scoped `httpCredentials` (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps
 `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/

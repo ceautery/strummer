@@ -71,6 +71,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     uploadDir?: string
     harDir?: string
     replayDir?: string
+    flowsDir?: string
     capture?: { trace?: boolean; console?: boolean; network?: boolean }
     runPerfAudit?: Parameters<typeof createBrowserServer>[0]['runPerfAudit']
   }) {
@@ -104,6 +105,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       uploadDir: config.uploadDir,
       harDir: config.harDir,
       replayDir: config.replayDir,
+      flowsDir: config.flowsDir,
       capture: config.capture,
       runPerfAudit: config.runPerfAudit,
     })
@@ -173,6 +175,8 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_screenshot',
       'browser_downloads',
       'browser_save_storage_state',
+      'browser_list_flows',
+      'browser_run_flow',
       'browser_close_session',
     ]) {
       expect(names).toContain(t)
@@ -786,6 +790,91 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const after = await call(client, 'browser_get_text', { sessionId, ref: 'e1' })
     expect(after.isError).toBe(true)
     expect(JSON.stringify(after.content)).toMatch(/expired or was reaped/i)
+    await client.close()
+  })
+
+  // ── Persisted .bru flows (browser_list_flows / browser_run_flow) ────────────
+  // Write an operator flows dir holding one flow: navigate (a {{var}}), fill the
+  // "Secret" input with an operator {{secret:pw}}, then read it back via an assert.
+  function writeFlowsDir(): string {
+    const dir = mkdtempSync(join(baseDir, 'flows-'))
+    writeFileSync(join(dir, 'inspect.bru'), 'meta {\n  name: inspect\n  type: http\n}\n')
+    writeFileSync(
+      join(dir, 'inspect.strummer.yml'),
+      [
+        'steps:',
+        '  - navigate: "{{baseUrl}}"',
+        '  - fill: { role: textbox, name: Secret, value: "{{secret:pw}}" }',
+        '  - assert:',
+        '      - { source: value, role: textbox, name: Secret, op: exists }',
+      ].join('\n'),
+    )
+    return dir
+  }
+
+  it('runs a persisted flow on a session: vars + operator secret, result redacted', async () => {
+    const flowsDir = writeFlowsDir()
+    // allowUnsafe so the fill executes; 127.0.0.1 is allowlisted by default.
+    const { client } = await connect({ allowUnsafe: true, flowsDir })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const res = await call(client, 'browser_run_flow', {
+      sessionId,
+      flow: 'inspect',
+      vars: { baseUrl },
+    })
+    const sc = res.structuredContent as {
+      name: string
+      passed: boolean
+      steps: { action: string; ok: boolean; assertions?: { pass: boolean; actual: unknown }[] }[]
+    }
+    expect(sc.name).toBe('inspect')
+    expect(sc.passed).toBe(true)
+    expect(sc.steps.map((s) => s.action)).toEqual(['navigate', 'fill', 'assert'])
+    // the assert read the secret value back and it existed → pass on the TRUE value…
+    const assertStep = sc.steps.find((s) => s.action === 'assert')
+    expect(assertStep?.assertions?.[0]?.pass).toBe(true)
+    // …but the operator secret is redacted everywhere it surfaces, never echoed.
+    expect(JSON.stringify(res.content)).not.toContain('hunter2-secret')
+    expect(JSON.stringify(res.content)).toContain('[redacted:pw]')
+    await client.close()
+  })
+
+  it('browser_list_flows lists the operator flows (name + step count)', async () => {
+    const flowsDir = writeFlowsDir()
+    const { client } = await connect({ flowsDir })
+    const list = (await call(client, 'browser_list_flows')).structuredContent as {
+      flows: { name: string; steps: number }[]
+    }
+    expect(list.flows).toEqual([{ name: 'inspect', steps: 3 }])
+    await client.close()
+  })
+
+  it('errors on an unknown flow name, naming the available flows', async () => {
+    const flowsDir = writeFlowsDir()
+    const { client } = await connect({ flowsDir })
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const res = await call(client, 'browser_run_flow', { sessionId, flow: 'nope' })
+    expect(res.isError).toBe(true)
+    expect(JSON.stringify(res.content)).toMatch(/no flow.*nope/i)
+    expect(JSON.stringify(res.content)).toMatch(/inspect/) // lists what IS available
+    await client.close()
+  })
+
+  it('flow tools are deny-by-default: disabled when the operator set no flows dir', async () => {
+    const { client } = await connect({}) // no flowsDir
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    const run = await call(client, 'browser_run_flow', { sessionId, flow: 'inspect' })
+    expect(run.isError).toBe(true)
+    expect(JSON.stringify(run.content)).toMatch(/not enabled/i)
+    const list = await call(client, 'browser_list_flows')
+    expect(list.isError).toBe(true)
+    expect(JSON.stringify(list.content)).toMatch(/not enabled/i)
     await client.close()
   })
 

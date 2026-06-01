@@ -8,10 +8,12 @@ import {
   finalizeHar,
   type HarSummary,
   harPathFor,
+  loadFlowCollection,
   PageDriver,
   type PerfAuditResult,
   queryTrace,
   RunRecorder,
+  runFlow,
 } from '@strummer/browser'
 import type { Page } from 'playwright-core'
 import { z } from 'zod'
@@ -72,6 +74,11 @@ export interface BrowserToolsOptions {
    * HAR resolving to within it; unset ⇒ replay denied (deny-by-default). The source
    * archive dictates what the page sees, so it must be operator-trusted. */
   replayDir?: string
+  /** Operator persisted-flows dir. When set, `browser_list_flows`/`browser_run_flow`
+   * load `.bru` + sidecar flows from it (by name — never a caller-supplied path, so
+   * there is no traversal surface). Unset ⇒ the flow tools are disabled
+   * (deny-by-default). Flows replay through the same gate/redactor as live steps. */
+  flowsDir?: string
   /** Run a Lighthouse perf audit on a URL, keyed by a server-minted `runId`. The
    * bin binds the operator chromium path + proxied/hardened flags + store + redactor
    * here; absent ⇒ `browser_perf_audit` reports it is not enabled. */
@@ -116,6 +123,10 @@ returned by handle — read the \`strummer://browser/run/{runId}/{kind}\` resour
 
 For deterministic offline runs, \`browser_replay_har\` (operator-gated) serves the
 session from a recorded HAR instead of the network — call it BEFORE navigating.
+
+To replay a saved test, \`browser_list_flows\` shows the persisted \`.bru\` flows the
+operator made available and \`browser_run_flow\` replays one (by name) on a session
+— driving through the same gate/redactor as the step tools.
 
 Navigation/mutation are deny-by-default and gated by the OPERATOR (host allowlist +
 unsafe unlock); mutations are dry-run unless the operator unlocked them. That is
@@ -766,6 +777,77 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
         return { handle, cookies: state.cookies.length, origins: state.origins.length }
       })
       return reply(result)
+    },
+  )
+
+  server.registerTool(
+    'browser_list_flows',
+    {
+      title: 'List persisted flows',
+      description:
+        'List the persisted browser flows the operator has made available (name + step count). ' +
+        'Run one with browser_run_flow. Requires an operator flows dir (deny-by-default).',
+      inputSchema: {},
+      outputSchema: {
+        flows: z.array(z.object({ name: z.string(), steps: z.number().int() })),
+      },
+    },
+    async () => {
+      if (!opts.flowsDir) {
+        throw new Error('flow replay is not enabled by the operator (no flows dir configured)')
+      }
+      const collection = loadFlowCollection(opts.flowsDir)
+      const flows = [...collection.flows.values()].map((f) => ({
+        name: f.name,
+        steps: f.steps.length,
+      }))
+      return reply({ flows })
+    },
+  )
+
+  server.registerTool(
+    'browser_run_flow',
+    {
+      title: 'Run a persisted flow',
+      description:
+        'Replay a persisted .bru browser flow (by name, from the operator flows dir) on a session. ' +
+        'Steps run sequentially through the SAME operator gate (navigation allowlist + dry-run-vs-execute) ' +
+        'and redactor as live tool calls — so unlocking mutations is the operator’s call, not yours. ' +
+        'Pass non-secret {{var}} values via `vars`; {{secret:NAME}} placeholders resolve server-side from ' +
+        'the operator secret store (fail-closed on an unknown name) and never appear in the result. A step ' +
+        'that throws stops the flow; an assertion that does not hold fails the flow but lets it continue.',
+      inputSchema: {
+        sessionId,
+        flow: z.string().describe('name of a flow from browser_list_flows'),
+        vars: z
+          .record(z.string(), z.string())
+          .optional()
+          .describe('{{var}} interpolation values (non-secret; secrets are operator-resolved)'),
+      },
+    },
+    async (args) => {
+      if (!opts.flowsDir) {
+        throw new Error('flow replay is not enabled by the operator (no flows dir configured)')
+      }
+      const collection = loadFlowCollection(opts.flowsDir)
+      const flow = collection.flows.get(args.flow)
+      if (!flow) {
+        const available = [...collection.flows.keys()].join(', ') || '(none)'
+        throw new Error(
+          `no flow "${args.flow}" in the operator flows dir — available: ${available}`,
+        )
+      }
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () =>
+        runFlow(session.driver, flow, {
+          vars: args.vars,
+          resolveSecret: opts.resolveSecret,
+        }),
+      )
+      // The driver already redacts the values it surfaces (dry-run previews, assertion
+      // actuals). Step `error` strings are the one raw channel — redact them here too.
+      const steps = result.steps.map((s) => (s.error ? { ...s, error: redact(s.error) } : s))
+      return reply({ name: result.name, passed: result.passed, steps })
     },
   )
 

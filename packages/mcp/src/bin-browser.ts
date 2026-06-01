@@ -76,6 +76,8 @@ export interface BrowserBinConfig {
   harDir?: string
   /** Operator HAR-replay dir (replay denied when unset). */
   replayDir?: string
+  /** Operator persisted-flows dir (browser_list_flows/browser_run_flow denied when unset). */
+  flowsDir?: string
 }
 
 export interface BuiltBrowserServer {
@@ -153,6 +155,9 @@ export async function buildBrowserServerFromEnv(
   // HAR replay (offline determinism): deny-by-default. An operator replay dir is
   // the trust boundary — the source HAR dictates what the page is served.
   const replayDir = env.STRUMMER_BROWSER_REPLAY_HAR_DIR || undefined
+  // Persisted flows: deny-by-default. An operator flows dir holds the replayable
+  // .bru + sidecar flows browser_run_flow may run (by name, no caller path).
+  const flowsDir = env.STRUMMER_BROWSER_FLOWS_DIR || undefined
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -239,6 +244,7 @@ export async function buildBrowserServerFromEnv(
     uploadDir,
     harDir,
     replayDir,
+    flowsDir,
     runPerfAudit,
     capture,
     maxNodes,
@@ -269,6 +275,7 @@ export async function buildBrowserServerFromEnv(
     uploadDir,
     harDir,
     replayDir,
+    flowsDir,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

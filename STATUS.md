@@ -201,14 +201,24 @@ against in-process fixtures):
    reusing the same mutation gate; factored a shared `locatorFor()`; `waitFor` takes
    `nth`. Surfaced by **`strummer browser run <flow.bru>`** (`@strummer/cli`,
    --var/--unsafe/--allow-host/--json, exit-nonzero on failure, env-secret redaction)
-   + bundled `examples/browser/login/` with an offline guard test. (MCP
-   `browser_run_flow` tool is a scheduled follow-up — CLI is the primary flow surface.)
+   + bundled `examples/browser/login/` with an offline guard test.
 
-**300 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
+29. **MCP `browser_run_flow` + `browser_list_flows`** (the deferred flow follow-up,
+   so the agent surface reaches parity with `strummer browser run`). The agent passes
+   a flow **name** (resolved against `loadFlowCollection(flowsDir)` — a Map-key lookup,
+   so there is NO caller-supplied path / traversal surface) + non-secret `{{var}}`s;
+   the flow replays on the named session's gated `PageDriver` behind the per-session
+   mutex, so it composes with `browser_replay_har`/artifacts/close. `{{secret:NAME}}`
+   resolves from the operator secret store (fail-closed); the driver redacts surfaced
+   values and the surface additionally redacts step `error` strings. Deny-by-default:
+   no operator flows dir ⇒ both tools report "not enabled". Bin: `STRUMMER_BROWSER_
+   FLOWS_DIR`. (TDD, real-chromium against the in-process fixture.)
+
+**305 TS + 45 Py tests green; committed to `main`.** **Next action:** remaining
 aspirational Phase-3 tail (ROADMAP: visual regression — the flake-prone one;
 multi-engine) or start **Phase 4** (cross-cutting verification: LSP bridge,
-impact-scoped test runner, mutation/flaky detection). See the detailed "Next
-action" section below + ROADMAP.
+impact-scoped test runner, mutation/flaky detection). The deferred `browser_run_flow`
+follow-up is now done (item 29). See the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -545,7 +555,15 @@ operator replay-dir confinement). MCP `browser_close_session` surfaces the HAR,
 `flow.ts` (model + `loadFlow`/`loadFlowCollection` + `runFlow`); PageDriver
 `clickAt`/`fillAt`/`selectAt`/`pressAt` semantic-locator methods; `strummer browser
 run <flow.bru>`; `examples/browser/login/`. Steps key off semantic locators, not
-refs. MCP `browser_run_flow` tool noted as a follow-up.
+refs.
+
+**MCP `browser_run_flow` + `browser_list_flows`: DONE** (the deferred flow
+follow-up). Agent surface for persisted flows: `browser_list_flows` lists the
+operator's flows (name + step count); `browser_run_flow` replays one **by name**
+(no caller path) on a session's gated driver behind the per-session mutex, with
+caller `{{var}}`s + operator-resolved `{{secret:NAME}}` (fail-closed) + surface
+error redaction. Deny-by-default via `STRUMMER_BROWSER_FLOWS_DIR`. Agent surface
+now at parity with `strummer browser run`.
 
 **Next (later Phase 3):** the aspirational tail only — visual regression (the
 flake-prone one; baselines in the pinned Docker image), multi-engine. None

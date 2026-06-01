@@ -145,4 +145,10 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'strummer-replay-'))
     expect((await build({ STRUMMER_BROWSER_REPLAY_HAR_DIR: dir })).config.replayDir).toBe(dir)
   })
+
+  it('disables flows unless STRUMMER_BROWSER_FLOWS_DIR sets a flows dir', async () => {
+    expect((await build({})).config.flowsDir).toBeUndefined()
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-flows-'))
+    expect((await build({ STRUMMER_BROWSER_FLOWS_DIR: dir })).config.flowsDir).toBe(dir)
+  })
 })
