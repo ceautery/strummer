@@ -38,11 +38,13 @@ import {
   StreamMessageWriter,
 } from 'vscode-jsonrpc/node.js'
 import {
+  ApplyWorkspaceEditRequest,
   CallHierarchyIncomingCallsRequest,
   CallHierarchyOutgoingCallsRequest,
   CallHierarchyPrepareRequest,
   ConfigurationRequest,
   DefinitionRequest,
+  DidChangeTextDocumentNotification,
   DidOpenTextDocumentNotification,
   DocumentSymbolRequest,
   ExitNotification,
@@ -202,8 +204,12 @@ export class LspClient {
 
   /** Active indexing work-done-progress tokens — non-empty ⇒ the server is still indexing. */
   private readonly activeProgress = new Set<string | number>()
-  /** Open documents: uri → reference count (open-once, no didClose by default). */
-  private readonly open = new Map<string, number>()
+  /**
+   * Open documents (open-once, no `didClose` by default). `version` is the per-uri monotonic
+   * document version: seeded at 1 by `didOpen`, pre-incremented by each `applyEdited` `didChange`
+   * — versions MUST strictly increase or the server ignores the change and keeps stale text.
+   */
+  private readonly open = new Map<string, { refs: number; version: number }>()
 
   constructor(connection: MessageConnection, options: LspClientOptions) {
     this.conn = connection
@@ -321,6 +327,13 @@ export class LspClient {
     this.conn.onRequest(WorkDoneProgressCreateRequest.method, () => null)
     this.conn.onRequest(RegistrationRequest.method, () => null)
     this.conn.onRequest(UnregistrationRequest.method, () => null)
+    // Server-initiated `workspace/applyEdit` (e.g. a server that drives renames by asking the
+    // client to apply). Its result is an OBJECT (not null) — an unanswered id-bearing request
+    // deadlocks the shared server. Strummer applies rename edits itself, so we DECLINE.
+    this.conn.onRequest(ApplyWorkspaceEditRequest.method, () => ({
+      applied: false,
+      failureReason: 'strummer applies rename edits itself; server-initiated edits are declined',
+    }))
     this.conn.onNotification('$/progress', (p: ProgressParams) => {
       const kind = p?.value?.kind
       if (kind === 'begin') this.activeProgress.add(p.token)
@@ -328,25 +341,43 @@ export class LspClient {
     })
   }
 
-  /** Open a document full-text once; subsequent calls just bump the refcount (no resend). */
+  /** Open a document full-text once (version 1); subsequent calls just bump the refcount. */
   ensureOpen(uri: string, languageId: string, text: string): void {
-    const refs = this.open.get(uri)
-    if (refs !== undefined) {
-      this.open.set(uri, refs + 1)
+    const entry = this.open.get(uri)
+    if (entry !== undefined) {
+      entry.refs += 1
       return
     }
-    this.open.set(uri, 1)
+    this.open.set(uri, { refs: 1, version: 1 })
     this.conn.sendNotification(DidOpenTextDocumentNotification.method, {
       textDocument: { uri, languageId, version: 1, text },
     })
   }
 
-  /** Decrement a document's refcount. Does NOT `didClose` (close happens only on reap). */
+  /** Decrement a document's refcount (keeps the entry + version). Does NOT `didClose`. */
   releaseDoc(uri: string): void {
-    const refs = this.open.get(uri)
-    if (refs === undefined) return
-    if (refs <= 1) this.open.set(uri, 0)
-    else this.open.set(uri, refs - 1)
+    const entry = this.open.get(uri)
+    if (entry === undefined) return
+    entry.refs = Math.max(0, entry.refs - 1)
+  }
+
+  /**
+   * After Strummer writes `newText` to `uri` on disk (write-mode, ADR 0011 addendum), resync the
+   * server's in-memory buffer with a **full-text `didChange`** so a later navigation sees
+   * post-rename positions (we never `didClose`, so the server still holds the pre-rename text).
+   * The version is **pre-incremented** — it must be strictly greater than the last `didOpen`/
+   * `didChange` or the server ignores the change. No-op for a uri the server never opened (it
+   * re-reads fresh on the next `didOpen`). Full-text (no incremental ranges) — correctness over
+   * bytes, and it avoids re-introducing offset math on the server-bound path.
+   */
+  applyEdited(uri: string, newText: string): void {
+    const entry = this.open.get(uri)
+    if (entry === undefined) return
+    entry.version += 1
+    this.conn.sendNotification(DidChangeTextDocumentNotification.method, {
+      textDocument: { uri, version: entry.version },
+      contentChanges: [{ text: newText }],
+    })
   }
 
   async definition(

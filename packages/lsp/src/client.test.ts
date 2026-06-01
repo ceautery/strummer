@@ -338,6 +338,50 @@ describe('LspClient deadlock-safe inbound server requests', () => {
     expect(await server.sendRequest('window/workDoneProgress/create', { token: 't' })).toBeNull()
     expect(await server.sendRequest('client/registerCapability', { registrations: [] })).toBeNull()
   })
+
+  it('answers an inbound workspace/applyEdit with applied:false instead of deadlocking', async () => {
+    const { server } = await connectedClient({ initialize: INIT_RENAME() })
+    const res = (await server.sendRequest('workspace/applyEdit', { edit: { changes: {} } })) as {
+      applied: boolean
+    }
+    expect(res.applied).toBe(false)
+  })
+})
+
+describe('LspClient.applyEdited (post-write didChange doc-sync)', () => {
+  type DidChange = { textDocument: { version: number }; contentChanges: Array<{ text: string }> }
+
+  it('sends a full-text didChange with strictly-increasing versions after didOpen (v1)', async () => {
+    const changes: DidChange[] = []
+    const waiters: Array<() => void> = []
+    const { client, server } = await connectedClient({ initialize: INIT_RENAME() })
+    server.onNotification('textDocument/didChange', (p) => {
+      changes.push(p as DidChange)
+      waiters.shift()?.()
+    })
+    client.ensureOpen(INDEX_URI, 'typescript', 'const a = 1') // didOpen version 1
+    const c1 = new Promise<void>((r) => waiters.push(r))
+    const c2 = new Promise<void>((r) => waiters.push(r))
+    client.applyEdited(INDEX_URI, 'const a = 2')
+    client.applyEdited(INDEX_URI, 'const a = 3')
+    await Promise.all([c1, c2])
+    expect(changes.map((c) => c.textDocument.version)).toEqual([2, 3]) // strictly > didOpen's 1
+    expect(changes[1]?.contentChanges[0]?.text).toBe('const a = 3')
+  })
+
+  it('does NOT send didChange for a uri the server never opened', async () => {
+    const changes: unknown[] = []
+    const { client, server } = await connectedClient({
+      initialize: INIT_RENAME(),
+      onDefinition: () => null,
+      clientOptions: { timeoutMs: 1000, noRetry: true },
+    })
+    server.onNotification('textDocument/didChange', (p) => changes.push(p))
+    client.applyEdited('file:///project/never-opened.ts', 'x')
+    // A full client→server→client round-trip drains any (erroneous) didChange first.
+    await client.definition(INDEX_URI, POS)
+    expect(changes).toHaveLength(0)
+  })
 })
 
 describe('LspClient.shutdown', () => {
