@@ -86,8 +86,13 @@ auditDependency({
 //     freshness: { isOutdated: true, … }, recommendedTarget: '1.2.0', hasFindings: true, … }
 ```
 
-Later slices (staged in `ROADMAP.md`): a vuln-aware "minimum safe upgrade" target; the
-`audit_dependency` / `audit_project` / `changelog_diff` MCP tools + a
-`strummer-deps-mcp` bin (wiring `detectInstalledVersion` + `loadOsvSnapshot` + the
-packument fetch); CVSS-vector → bucket scoring; the operator-gated network fetch of
-`all.zip`; and a Python/PyPI adapter.
+Since shipped: the vuln-aware `minimumSafeUpgrade` target + `behindBy` freshness; CVSS-vector →
+bucket scoring; the `audit_dependency` / `audit_project` / `changelog_diff` MCP tools + the
+`strummer-deps-mcp` bin (wiring `detectInstalledVersion` + `loadOsvSnapshot` + an operator-gated,
+SSRF-pinned packument fetch); and **multi-ecosystem support (ADR 0012)** — a pluggable
+`VersionComparator` (npm=semver, PyPI=PEP 440 on `@renovatebot/pep440`, RubyGems=Gem on
+`@renovatebot/ruby-semver`) so OSV `ECOSYSTEM` ranges are evaluated with the ecosystem's own
+ordering, plus PyPI/RubyGems packument + manifest readers. Both `audit_dependency` and
+`audit_project` now cover npm, PyPI, and RubyGems.
+
+Staged in `ROADMAP.md`: `changelog_diff` for PyPI/RubyGems (npm-only today); a `strummer deps` CLI.

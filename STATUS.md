@@ -146,7 +146,10 @@ summarize; paired `allowRun`+`allowedRoots` gate + injected MutationRunner so no
 Stryker in the gate; diff-scoped via `mutateFiles`→`--mutate` + `--incremental`) + the
 `mutate_summarize`(free)/`mutate_run`(gated) MCP surface + `strummer-mutate-mcp` bin. With LSP
 slices 1–5 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts` + gated `query.ts` +
-MCP surface/bin) now also landed — Phase 4 is COMPLETE, **659 TS + 45 Py green**.)_
+MCP surface/bin) now also landed — Phase 4 pillars COMPLETE (at 659 TS). **Since then the
+non-blocking tails landed: the cross-pillar Python adapters (flake/coverage/deps/mutate) + the LSP
+capability-gated read tails — current count is 728 TS + 45 Py green; see the Next-action block for
+the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +

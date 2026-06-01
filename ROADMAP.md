@@ -362,7 +362,7 @@ Staged below; aspirational items are scheduled, not cut.
       verification tying browser network capture to the API pillar's contract
       validation.
 
-## Phase 4 — Cross-cutting verification tools  *(UNDERWAY — sequence locked by ADR 0010)*
+## Phase 4 — Cross-cutting verification tools  *(pillars COMPLETE — engine + agent surface; Python adapters (flake/coverage/deps/mutate) + LSP capability-gated read tails done; only non-blocking tails remain; sequence locked by ADR 0010)*
 
 Sequence decided by the `phase4-design-research` fan-out (5 research streams →
 synthesis → 3 adversarial critics → corrected synthesis); see **ADR 0010** for the
