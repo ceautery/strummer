@@ -109,4 +109,11 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
       (await build({ STRUMMER_BROWSER_ALLOW_STORAGE_STATE: '1' })).config.allowStorageState,
     ).toBe(true)
   })
+
+  it('gates screenshot capture behind STRUMMER_BROWSER_ALLOW_SCREENSHOTS (default off)', async () => {
+    expect((await build({})).config.allowScreenshots).toBe(false)
+    expect(
+      (await build({ STRUMMER_BROWSER_ALLOW_SCREENSHOTS: 'true' })).config.allowScreenshots,
+    ).toBe(true)
+  })
 })

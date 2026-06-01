@@ -4,6 +4,8 @@ export { type A11yAuditOptions, type A11yAuditResult, auditA11y } from './audit.
 export {
   PageDriver,
   type PageDriverOptions,
+  type ScreenshotOptions,
+  type ScreenshotResult,
   type StepResult,
   type WaitForOptions,
   type WouldRequest,

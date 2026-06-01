@@ -61,6 +61,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     maxContexts?: number
     now?: () => number
     allowStorageState?: boolean
+    allowScreenshots?: boolean
   }) {
     const gate = new BrowserGate({
       allowUnsafe: config.allowUnsafe,
@@ -84,6 +85,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       redact: (v) => redactor.redact(v),
       resolveSecret: (name) => secrets.get(name),
       allowStorageState: config.allowStorageState,
+      allowScreenshots: config.allowScreenshots,
     })
     const [ct, st] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test', version: '0.0.0' })
@@ -135,6 +137,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_get_value',
       'browser_get_attribute',
       'browser_audit_a11y',
+      'browser_screenshot',
       'browser_save_storage_state',
       'browser_close_session',
     ]) {
@@ -310,6 +313,48 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       sessionId: string
     }
     const res = await call(client, 'browser_save_storage_state', { sessionId })
+    expect(res.isError).toBe(true)
+    expect(JSON.stringify(res.content)).toMatch(/not enabled/i)
+    await client.close()
+  })
+
+  it('captures a screenshot by handle (operator-gated), served as a PNG blob', async () => {
+    const { client } = await connect({ allowScreenshots: true })
+    const { sessionId, runId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+      runId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+
+    const shot = await call(client, 'browser_screenshot', { sessionId })
+    const sc = shot.structuredContent as {
+      handle: string
+      byteSize: number
+      contentType: string
+      fullPage: boolean
+    }
+    expect(sc.handle).toBe(`strummer://browser/run/${runId}/screenshot-s1`)
+    expect(sc.contentType).toBe('image/png')
+    expect(sc.byteSize).toBeGreaterThan(0)
+
+    // served back as a base64 PNG blob (binary), not inlined text
+    const res = await client.readResource({ uri: sc.handle })
+    const content = res.contents[0] as { mimeType: string; blob?: string; text?: string }
+    expect(content.mimeType).toBe('image/png')
+    expect(content.text).toBeUndefined()
+    expect(Buffer.from(content.blob as string, 'base64').subarray(0, 4)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    )
+    await client.close()
+  })
+
+  it('refuses a screenshot when the operator has not enabled it', async () => {
+    const { client } = await connect({}) // allowScreenshots defaults off
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+    const res = await call(client, 'browser_screenshot', { sessionId })
     expect(res.isError).toBe(true)
     expect(JSON.stringify(res.content)).toMatch(/not enabled/i)
     await client.close()

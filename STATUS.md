@@ -81,11 +81,18 @@ against in-process fixtures):
    `BrowserManager` reaps a session past `maxSessionMs` (wall-clock, even when
    active) and closes pages opened beyond `maxPages` per context; bin-set via
    `STRUMMER_BROWSER_SESSION_MS`/`STRUMMER_BROWSER_MAX_PAGES`, default no cap.
+18. **On-demand screenshot step tool — operator-gated:** `PageDriver.screenshot()`
+   captures a PNG to the `ArtifactStore` under an immutable indexed handle
+   (`screenshot-s<n>`), returns a summary (handle/byteSize/contentType/fullPage),
+   never inlines the image, and does NOT re-snapshot (refs preserved). MCP
+   `browser_screenshot` is **off by default** (`allowScreenshots`) — a screenshot
+   is unredactable pixels, so it is gated like the trace.zip; the run-artifact
+   resource serves PNGs as a base64 blob (`image/png` → binary). Bin-wired via
+   `STRUMMER_BROWSER_ALLOW_SCREENSHOTS` (default off).
 
-**225 TS + 45 Py tests green; all pushed to `main`.** **Next action:** downloads/
-uploads/dialog/auth gating, an on-demand screenshot step tool, and (deferred) the
-human **`strummer browser` CLI**. See the detailed "Next action" section below +
-ROADMAP Phase 3.
+**230 TS + 45 Py tests green; committed to `main`.** **Next action:** downloads/
+uploads/dialog/auth gating, and (deferred) the human **`strummer browser` CLI**.
+See the detailed "Next action" section below + ROADMAP Phase 3.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -365,9 +372,16 @@ wall-clock + max-pages: DONE (`f0fc419`).** `maxSessionMs` reaps active-but-old
 sessions; `maxPages` closes excess pages per context; both operator-set, default
 no cap.
 
-**Next (later Phase 3):** downloads/uploads/dialog/auth gating; an on-demand
-screenshot step tool; and the deferred human **`strummer browser` CLI**. TDD
-red→green; `pnpm gate` 100% green before each commit.
+**On-demand screenshot step tool: DONE.** `PageDriver.screenshot()` → PNG to the
+`ArtifactStore` under an immutable `screenshot-s<n>` handle (summary only, never
+inlined; does NOT re-snapshot so refs survive); MCP `browser_screenshot` gated
+**off by default** (`allowScreenshots`) because a screenshot is unredactable pixels
+(same posture as the trace.zip); the resource serves PNGs as a base64 blob;
+bin-wired via `STRUMMER_BROWSER_ALLOW_SCREENSHOTS` (default off).
+
+**Next (later Phase 3):** downloads/uploads/dialog/auth gating; and the deferred
+human **`strummer browser` CLI**. TDD red→green; `pnpm gate` 100% green before
+each commit.
 
 ---
 

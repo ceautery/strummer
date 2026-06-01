@@ -54,6 +54,23 @@ export interface PageDriverOptions {
   redact?: (value: string) => string
 }
 
+export interface ScreenshotOptions {
+  /** Capture the full scrollable page rather than just the viewport. Default false. */
+  fullPage?: boolean
+}
+
+export interface ScreenshotResult {
+  action: 'screenshot'
+  /** `strummer://browser/run/<id>/screenshot-s<n>` — the PNG, by handle (when a
+   * store + runId are configured). The image is NEVER inlined into the result. */
+  handle?: string
+  /** PNG byte size. */
+  byteSize: number
+  contentType: 'image/png'
+  /** Whether the full scrollable page (vs. just the viewport) was captured. */
+  fullPage: boolean
+}
+
 export interface WaitForOptions {
   /** Wait for a ref from the current snapshot to reach `state`. */
   ref?: string
@@ -79,6 +96,7 @@ export interface WaitForOptions {
 export class PageDriver {
   private current: Snapshot | undefined
   private generation = 0
+  private screenshotIndex = 0
   private readonly gate: BrowserGate | undefined
   private readonly redact: (value: string) => string
 
@@ -150,6 +168,39 @@ export class PageDriver {
   /** Capture (or re-capture) the page snapshot without acting. */
   async snapshot(): Promise<StepResult> {
     return this.settle('snapshot')
+  }
+
+  /**
+   * Capture a PNG screenshot of the current page and store it by handle (never
+   * inlined). Unlike the ARIA snapshot this does NOT re-capture or bump the
+   * generation, so existing refs stay valid.
+   *
+   * Safety: a screenshot is **pixels** and cannot be redacted, so a secret
+   * rendered in the DOM would land in the image — exactly the property that
+   * keeps the trace.zip off by default. The MCP surface therefore gates this
+   * tool off by default (operator opt-in), mirroring the unredactable-binary
+   * posture; this engine method is the raw capability the surface gates.
+   */
+  async screenshot(options: ScreenshotOptions = {}): Promise<ScreenshotResult> {
+    const fullPage = options.fullPage ?? false
+    const buf = await this.page.screenshot({ fullPage })
+    this.screenshotIndex += 1
+    const handle =
+      this.opts.store && this.opts.runId !== undefined
+        ? this.opts.store.put(
+            this.opts.runId,
+            `screenshot-s${this.screenshotIndex}`,
+            buf,
+            'image/png',
+          )
+        : undefined
+    return {
+      action: 'screenshot',
+      ...(handle !== undefined ? { handle } : {}),
+      byteSize: buf.byteLength,
+      contentType: 'image/png',
+      fullPage,
+    }
   }
 
   async navigate(url: string): Promise<StepResult> {

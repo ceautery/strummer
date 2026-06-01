@@ -63,6 +63,8 @@ export interface BrowserBinConfig {
   httpCredentials?: { username: string; origin?: string }
   /** Whether browser_save_storage_state is enabled (password-equivalent capture). */
   allowStorageState: boolean
+  /** Whether browser_screenshot is enabled (unredactable PNG pixels). */
+  allowScreenshots: boolean
 }
 
 export interface BuiltBrowserServer {
@@ -125,6 +127,7 @@ export async function buildBrowserServerFromEnv(
     .filter(Boolean)
   const allowPrivate = bool(env.STRUMMER_BROWSER_ALLOW_PRIVATE)
   const allowStorageState = bool(env.STRUMMER_BROWSER_ALLOW_STORAGE_STATE)
+  const allowScreenshots = bool(env.STRUMMER_BROWSER_ALLOW_SCREENSHOTS)
   const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
   const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
   const capture = {
@@ -185,6 +188,7 @@ export async function buildBrowserServerFromEnv(
     redact,
     resolveSecret,
     allowStorageState,
+    allowScreenshots,
     capture,
     maxNodes,
   })
@@ -208,6 +212,7 @@ export async function buildBrowserServerFromEnv(
     launchArgs,
     secretNames,
     allowStorageState,
+    allowScreenshots,
     httpCredentials: httpCredentials
       ? {
           username: httpCredentials.username,

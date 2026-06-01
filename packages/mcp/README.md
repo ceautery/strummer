@@ -65,11 +65,16 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
 - **`browser_wait_for`** / **`browser_get_text`/`get_value`/`get_attribute`** —
   read-like; reads are redacted and don't invalidate refs.
 - **`browser_audit_a11y`** — axe-core audit; compact summary + report by handle.
+- **`browser_screenshot`** — operator-gated (off by default; pixels can't be
+  redacted, like the trace.zip); captures a PNG to a `screenshot-s<n>` handle
+  (summary only, never inlined) and does not invalidate refs.
 - **`browser_save_storage_state`** — operator-gated; writes the password-equivalent
   storageState to an operator-path artifact (handle + counts only, never inlined).
 - Resource **`strummer://browser/run/{runId}/{kind}`** — fetch a stored artifact
-  (`snapshot-s<gen>` / `a11y-s<n>` / `trace` / `console` / `network`) by handle.
-  The password-equivalent `storage-state` kind is **refused** (operator-path only).
+  (`snapshot-s<gen>` / `a11y-s<n>` / `screenshot-s<n>` / `trace` / `console` /
+  `network`) by handle; binary kinds (trace.zip, screenshot PNG) come back as a
+  base64 blob. The password-equivalent `storage-state` kind is **refused**
+  (operator-path only).
 
 **Safety (all operator-set via `STRUMMER_BROWSER_*` env, never tool inputs):**
 navigation/mutation deny-by-default (`ALLOW_UNSAFE`, `ALLOWED_HOSTS`); a **mandatory**
@@ -77,7 +82,8 @@ DNS-pinning SSRF proxy (loopback forced through it; `ALLOW_PRIVATE` opt-in);
 service-workers blocked + WebRTC egress neutralized; secret redaction across every
 artifact + the trace.zip; `{{secret:NAME}}` fill + origin-scoped `httpCredentials`
 (`HTTP_USERNAME/PASSWORD/ORIGIN`); caps `MAX_SESSIONS`/`SESSION_MS`/`MAX_PAGES`/
-`IDLE_TTL_MS`; trace capture + `storageState` capture off unless explicitly enabled.
+`IDLE_TTL_MS`; trace capture + `storageState` capture (`ALLOW_STORAGE_STATE`) +
+screenshot capture (`ALLOW_SCREENSHOTS`) all off unless explicitly enabled.
 
 ## Run
 

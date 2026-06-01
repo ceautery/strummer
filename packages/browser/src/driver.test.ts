@@ -1,7 +1,11 @@
+import { mkdtempSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { ArtifactStore } from './artifacts.js'
 import { PageDriver } from './driver.js'
 
 // Real-browser step sequences (navigate → act → re-snapshot, several times) run
@@ -136,5 +140,43 @@ describe('PageDriver — step tools (real headless chromium)', () => {
   it('get_text reads an element’s text content', async () => {
     const driver = await freshDriver()
     expect(await driver.getText(refFor(driver, 'heading', 'Steps'))).toContain('Steps')
+  })
+
+  it('screenshot captures a PNG by indexed handle and preserves refs', async () => {
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-shot-')))
+    const page = await context.newPage()
+    const driver = new PageDriver(page, { runId: 'shotrun', store })
+    await driver.navigate(baseUrl)
+    const nameRef = refFor(driver, 'textbox', 'Name')
+
+    const result = await driver.screenshot()
+    expect(result.action).toBe('screenshot')
+    expect(result.contentType).toBe('image/png')
+    expect(result.fullPage).toBe(false)
+    expect(result.byteSize).toBeGreaterThan(0)
+    expect(result.handle).toBe('strummer://browser/run/shotrun/screenshot-s1')
+
+    // the stored bytes are a real PNG (magic signature)
+    const stored = store.get(result.handle as string)
+    expect(stored?.contentType).toBe('image/png')
+    expect([...(stored?.body.subarray(0, 8) ?? [])]).toEqual([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ])
+
+    // a screenshot is NOT a re-snapshot: the ref still resolves
+    expect(driver.refs.has(nameRef)).toBe(true)
+
+    // a second screenshot gets a fresh, non-overwriting handle
+    const second = await driver.screenshot({ fullPage: true })
+    expect(second.handle).toBe('strummer://browser/run/shotrun/screenshot-s2')
+    expect(second.fullPage).toBe(true)
+  })
+
+  it('screenshot without a store returns a summary but no handle', async () => {
+    const driver = await freshDriver()
+    const result = await driver.screenshot()
+    expect(result.handle).toBeUndefined()
+    expect(result.byteSize).toBeGreaterThan(0)
+    expect(result.contentType).toBe('image/png')
   })
 })

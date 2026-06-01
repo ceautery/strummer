@@ -47,6 +47,10 @@ export interface BrowserToolsOptions {
    * storageState to an operator-path artifact. Default false — agents cannot
    * harvest session cookies/tokens unless the operator enables it. */
   allowStorageState?: boolean
+  /** Allow `browser_screenshot` to capture page PNGs. Default false — a screenshot
+   * is unredactable pixels (a secret rendered in the DOM would land in the image),
+   * so it is operator-gated like the trace.zip. */
+  allowScreenshots?: boolean
   /** Token cap on inlined snapshot text. */
   maxNodes?: number
   /** Exact accessible-name matching when resolving refs. Default true. */
@@ -77,9 +81,9 @@ the interaction tools. Refs are per-snapshot: any navigate/snapshot/mutation
 supersedes earlier refs, so use the freshest snapshot. Reads
 (\`browser_get_text\`/\`browser_get_value\`/\`browser_get_attribute\`) do NOT
 invalidate refs. Close with \`browser_close_session\` to release the context and
-collect artifact handles. Full snapshots, the a11y report, and trace/console/
-network logs are returned by handle — read the
-\`strummer://browser/run/{runId}/{kind}\` resource.
+collect artifact handles. Full snapshots, the a11y report, screenshots
+(\`browser_screenshot\`, operator-gated), and trace/console/network logs are
+returned by handle — read the \`strummer://browser/run/{runId}/{kind}\` resource.
 
 Navigation/mutation are deny-by-default and gated by the OPERATOR (host allowlist +
 unsafe unlock); mutations are dry-run unless the operator unlocked them. That is
@@ -103,6 +107,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     network: opts.capture?.network ?? true,
   }
   const allowStorageState = opts.allowStorageState ?? false
+  const allowScreenshots = opts.allowScreenshots ?? false
   const registry = new Map<string, BrowserSession>()
   const now = () => Date.now()
 
@@ -494,6 +499,40 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   )
 
   server.registerTool(
+    'browser_screenshot',
+    {
+      title: 'Screenshot',
+      description:
+        'Capture a PNG screenshot of the current page, stored by handle (never inlined). Returns a ' +
+        'summary; read the image via the strummer://browser/run/{runId}/screenshot-s<n> resource. ' +
+        'Requires operator enablement — a screenshot is pixels and cannot be redacted.',
+      inputSchema: {
+        sessionId,
+        fullPage: z
+          .boolean()
+          .optional()
+          .describe('capture the full scrollable page instead of just the viewport'),
+      },
+      outputSchema: {
+        handle: z.string(),
+        byteSize: z.number().int(),
+        contentType: z.literal('image/png'),
+        fullPage: z.boolean(),
+      },
+    },
+    async (args) => {
+      if (!allowScreenshots) {
+        throw new Error('screenshot capture is not enabled by the operator')
+      }
+      const session = requireSession(args.sessionId)
+      const result = await enqueue(session, () =>
+        session.driver.screenshot({ fullPage: args.fullPage }),
+      )
+      return reply({ ...result })
+    },
+  )
+
+  server.registerTool(
     'browser_save_storage_state',
     {
       title: 'Save storage state',
@@ -568,7 +607,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     {
       title: 'Browser run artifact',
       description:
-        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / trace / console / network), by handle',
+        'Full stored browser-run artifact (snapshot-s<gen> / a11y-s<n> / screenshot-s<n> / trace / console / network), by handle',
     },
     (uri, variables) => {
       const runId = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId
@@ -585,7 +624,10 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
       if (!artifact) {
         throw new Error(`No stored artifact for ${handle}`)
       }
-      const isBinary = artifact.contentType === 'application/zip'
+      // Binary artifacts (trace.zip, screenshot PNG) are returned as a base64 blob;
+      // text artifacts (snapshots, a11y/console/network JSON) as UTF-8 text.
+      const isBinary =
+        artifact.contentType === 'application/zip' || artifact.contentType.startsWith('image/')
       return {
         contents: [
           {

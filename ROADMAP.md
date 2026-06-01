@@ -183,9 +183,11 @@ Staged below; aspirational items are scheduled, not cut.
       Playwright trace.zip (screenshots+snapshots+sources) + own console/network
       logs, all by `strummer://browser/run/<id>/<kind>` handle with structured
       summaries (`byType`/`byStatus`/`failed`/`byteSize`); text channels redacted
-      before write; per-channel enable flags. _(Remaining: on-demand screenshot
-      capture as a step tool; the bin-level `STRUMMER_BROWSER_ARTIFACTS` operator
-      gate lands when the server bin is assembled.)_
+      before write; per-channel enable flags. _(On-demand screenshot capture now
+      ships as a step tool: `PageDriver.screenshot()` → PNG by `screenshot-s<n>`
+      handle; MCP `browser_screenshot` operator-gated off by default
+      (`STRUMMER_BROWSER_ALLOW_SCREENSHOTS`) — unredactable pixels, same posture as
+      the trace.zip; the run-artifact resource serves `image/png` as a base64 blob.)_
 - [ ] **`browser_trace_query`** — wraps `npx playwright trace` subcommands
       (`open`/`actions`/`action`/`snapshot`/`close`) + direct trace.zip JSON-lines
       parser fallback. (Console/network/errors come from within actions/snapshot,
