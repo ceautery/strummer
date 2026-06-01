@@ -401,9 +401,23 @@ Two independent tracks, then the test-quality chain, then LSP last:
         advisories) — distinct from the conservative same-major `recommendedTarget`.
   - [ ] `behindBy` freshness vs the `resolveVersion` policy; `recommendedTarget`.
   - [ ] `changelog_diff` by handle (injectable fetcher, operator-gated network,
-        SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice.
-  - [ ] MCP tools `audit_dependency`/`audit_project`/`changelog_diff` + `strummer-deps-mcp`
-        bin (namespaced `STRUMMER_DEPS_*`, network off by default).
+        SSRF-pinned via `@strummer/safety` `resolveAndPin`) — a separate later slice
+        (the first handle-emitting deps slice; lands with the shared `@strummer/artifacts`
+        extraction).
+  - [x] **Slice 5 — MCP surface** `audit_dependency` (single package) + `audit_project`
+        (compact npm-manifest roll-up; per-package error non-fatal) in
+        `packages/mcp/src/deps.ts` (`registerDepsTools`/`createDepsServer`). Detect the
+        INSTALLED version (`core.detectInstalledVersion`, ecosystem-mapped npm→node) →
+        injected packument fetch → operator OSV snapshot → pure `auditDependency`;
+        reports `osvSnapshotLoaded` so "no known vulns" is never authoritative absent a
+        snapshot. `strummer-deps-mcp` bin (`bin-deps.ts`) reads namespaced
+        `STRUMMER_DEPS_*` (`OSV_DB_DIR`, `ALLOW_NETWORK` off by default, `NPM_REGISTRY`,
+        `ALLOW_PRIVATE`) and is the sole builder of the SSRF-pinned (`resolveAndPin`,
+        private blocked by default) packument fetcher. Safety/network operator-set,
+        never agent inputs. (TDD: real OSV-snapshot zip + temp `node_modules` project +
+        injected fetcher.)
+  - [ ] `changelog_diff` MCP tool + by-handle full `audit_project` detail (await the
+        `@strummer/artifacts` extraction).
   - [ ] *(staged)* Python/PyPI + RubyGems advisory adapters.
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection

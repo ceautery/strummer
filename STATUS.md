@@ -34,8 +34,21 @@ agent-facing roll-up composing `auditDeprecation` + `matchVulnerabilities` + fre
 (latest / latestSameMajor / isOutdated via `semver`, prereleases excluded) into one
 verdict (`worstSeverity`, conservative newest-same-major `recommendedTarget`,
 `snapshotDate`, `hasFindings`); pure (caller gathers inputs). **The deps engine's pure
-core is complete** — next is the bin/MCP surface that wires the I/O. 409 TS + 45 Py
-green.)_
+core is complete.** **Slice 5 landed (agent surface):** `audit_dependency` (single
+package) + `audit_project` (compact npm-manifest roll-up; per-package error non-fatal)
+MCP tools in `packages/mcp/src/deps.ts` (`registerDepsTools`/`createDepsServer`) +
+`strummer-deps-mcp` bin (`bin-deps.ts`). The surface wires the I/O the pure core needs —
+detect the INSTALLED version (`core.detectInstalledVersion`, ecosystem-mapped npm→node) →
+an **injected** packument fetch (so the surface stays offline/deterministic in tests) →
+the operator OSV snapshot (`loadOsvSnapshot`) → pure `auditDependency`; reports
+`osvSnapshotLoaded` so "no known vulns" is never authoritative absent a snapshot, and
+fails clearly when the version can't be detected or network is off. The bin is the sole
+reader of namespaced `STRUMMER_DEPS_*` (`OSV_DB_DIR`, `ALLOW_NETWORK` **off by default**,
+`NPM_REGISTRY`, `ALLOW_PRIVATE`) and the sole builder of the **SSRF-pinned**
+(`@strummer/safety` `resolveAndPin`, private blocked by default) npm packument fetcher;
+safety/network are operator-set, never agent inputs. The first **handle-emitting** deps
+slice (`changelog_diff` + by-handle `audit_project` detail) is deferred to the shared
+`@strummer/artifacts` extraction. 422 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -343,24 +356,17 @@ against in-process fixtures):
 now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
 keyring wiring, SSRF range-block + redirect re-check, contract reach, import).
 **Developer live-view was DROPPED** (ADR 0008, headless-only/LLM-first).)_
-**Next action:** Phase 4 is underway (ADR 0010). `@strummer/deps` slices 1–4
-(`auditDeprecation`, `matchVulnerabilities`, `loadOsvSnapshot`, `auditDependency`) are
-landed — **the deps engine's pure core is complete.** **Next: the agent/human
-surface** — an `audit_dependency` (single package) + `audit_project` (scan a manifest
-roll-up, full detail by handle) MCP tool set in a new `packages/mcp/src/deps.ts`
-(`registerDepsTools`/`createDepsServer`) + a `strummer-deps-mcp` bin reading
-`STRUMMER_DEPS_*` (namespaced, no fallback): `STRUMMER_DEPS_OSV_DB_DIR` (snapshot dir),
-network off by default. The bin wires the I/O the pure core needs — `core`
-`detectInstalledVersion` (add `@strummer/core` dep then), `loadOsvSnapshot`, and the
-packument fetch (operator-gated, SSRF-pinned via `@strummer/safety` `resolveAndPin` —
-**note:** `assertSsrfAllowed` does NOT exist). Then `changelog_diff` by handle (needs
-the shared **`@strummer/artifacts`** extraction — first handle-emitting deps slice).
-The
-shared **`@strummer/artifacts`** extraction (parameterized prefix, touches the browser
-pillar's gate, behavior-preserving) when the first handle-emitting slice lands → the
-`audit_dependency`/`audit_project`/`changelog_diff` MCP tools + `strummer-deps-mcp`
-bin (egress SSRF-pinned via `@strummer/safety` `resolveAndPin` — **note:**
-`assertSsrfAllowed` does NOT exist, the research mis-cited it). In parallel, the
+**Next action:** Phase 4 is underway (ADR 0010). `@strummer/deps` slices 1–4 (pure core:
+`auditDeprecation`, `matchVulnerabilities`, `loadOsvSnapshot`, `auditDependency`) **and
+slice 5 (the agent surface)** are landed: `audit_dependency` + `audit_project` MCP tools
+(`packages/mcp/src/deps.ts`) + the `strummer-deps-mcp` bin (`bin-deps.ts`, namespaced
+`STRUMMER_DEPS_*`, network off by default, SSRF-pinned packument fetch via
+`@strummer/safety` `resolveAndPin` — **note:** `assertSsrfAllowed` does NOT exist on
+`safety`, only in the api package). **Next for deps: `changelog_diff` by handle** — this
+is the **first handle-emitting** deps slice, so do the shared **`@strummer/artifacts`**
+extraction (parameterized prefix, touches the browser pillar's gate,
+behavior-preserving) FIRST, then `changelog_diff` (injectable fetcher, operator-gated
+network, SSRF-pinned) + by-handle full `audit_project` detail. In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
