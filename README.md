@@ -50,11 +50,16 @@ max-pages + max-contexts caps). The complete **deny-by-default gating bundle**
 pillars — with auto-waiting), a **trace-query** tool (action timeline from a
 trace.zip), a **Lighthouse perf audit**, **network heavy mode** (HAR capture —
 redacted, by handle — and `routeFromHAR` replay for deterministic offline runs),
-**persisted `.bru` browser-step flows** (replayable, semantic-locator-keyed —
-`strummer browser run`), and a human **`strummer browser` CLI** (snapshot/audit/
-screenshot/run) have all landed. Remaining browser work is the aspirational tail
-(visual regression, multi-engine). **The single source of truth for "what phase
-are we on" is [`STATUS.md`](./STATUS.md).**
+**persisted `.bru` browser-step flows** (replayable, semantic-locator-keyed — over
+both `strummer browser run` and the MCP `browser_run_flow` tool), **video capture**
+(webm by handle), **vision/coordinate caps** (operator-gated coordinate click/move
+for canvas / non-AX-tree UI), **visual-regression diffing** (`browser_visual_compare`
+via pixelmatch, baseline by handle), a human **`strummer browser` CLI** (snapshot/
+audit/screenshot/run), and a **container-hardening ADR** (the deployment/kernel
+boundary, [ADR 0007](./docs/decisions/0007-container-hardening.md)) have all landed.
+Remaining browser work is the aspirational tail that needs the CI/Docker image
+(developer live-view, multi-engine firefox/webkit). **The single source of truth for
+"what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
 ## Architecture at a glance
 
