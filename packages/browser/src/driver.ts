@@ -30,6 +30,10 @@ export interface StepResult {
   dryRun?: boolean
   /** In dry-run, the first request the action would have fired (then aborted). */
   wouldRequest?: WouldRequest | null
+  /** In dry-run, true when `wouldRequest` targets a host NOT on the allowlist —
+   * the gate authorizes on the *document* host, so this surfaces a would-be
+   * egress to a different host for accurate operator review. */
+  crossOriginEgress?: boolean
 }
 
 export interface PageDriverOptions {
@@ -192,28 +196,49 @@ export class PageDriver {
     perform: () => Promise<unknown>,
   ): Promise<StepResult> {
     if (this.gate && this.gate.decideMutation(this.page.url()) === 'dry-run') {
-      const wouldRequest = await this.dryRun(perform)
-      return { ...(await this.settle(action, ref)), dryRun: true, wouldRequest }
+      const { wouldRequest, crossOriginEgress } = await this.dryRun(perform)
+      return {
+        ...(await this.settle(action, ref)),
+        dryRun: true,
+        wouldRequest,
+        ...(crossOriginEgress !== undefined ? { crossOriginEgress } : {}),
+      }
     }
     await perform()
     return this.settle(action, ref)
   }
 
-  /** Perform `action` while intercepting + aborting its first request, returning that request. */
-  private async dryRun(perform: () => Promise<unknown>): Promise<WouldRequest | null> {
+  /**
+   * Perform `action` while intercepting + aborting its requests (network
+   * suppressed), returning the first would-be request and whether it targets a
+   * non-allowlisted host. Popups (`window.open` spawns a page our route never
+   * sees) are closed for the duration, so a dry-run has no side effects.
+   */
+  private async dryRun(
+    perform: () => Promise<unknown>,
+  ): Promise<{ wouldRequest: WouldRequest | null; crossOriginEgress?: boolean }> {
     let captured: WouldRequest | null = null
+    let crossOriginEgress: boolean | undefined
     const handler = async (route: Route): Promise<void> => {
       if (!captured) {
         const req = route.request()
+        const rawUrl = req.url()
         const body = req.postData()
         captured = {
           method: req.method(),
-          url: this.redact(req.url()),
+          url: this.redact(rawUrl),
           ...(body ? { postData: this.redact(body) } : {}),
         }
+        // compute from the RAW url (redaction can mangle the host) before it surfaces
+        crossOriginEgress = this.gate ? !this.gate.isHostAllowed(rawUrl) : undefined
       }
       await route.abort()
     }
+    const context = this.page.context()
+    const onPopup = (popup: Page): void => {
+      void popup.close().catch(() => {})
+    }
+    context.on('page', onPopup)
     await this.page.route('**/*', handler)
     try {
       await perform()
@@ -221,9 +246,14 @@ export class PageDriver {
     } catch {
       // an aborted navigation/request can reject the action — expected in dry-run
     } finally {
-      await this.page.unroute('**/*', handler)
+      context.off('page', onPopup)
+      try {
+        await this.page.unroute('**/*', handler)
+      } catch {
+        // the page may be closing mid-dry-run — unroute can reject; safe to ignore
+      }
     }
-    return captured
+    return { wouldRequest: captured, crossOriginEgress }
   }
 
   async waitFor(options: WaitForOptions): Promise<StepResult> {

@@ -51,11 +51,17 @@ describe('BrowserGate × PageDriver (real headless chromium)', () => {
   const FIXTURE = `<!doctype html><html lang="en"><head><title>Gate</title></head><body>
     <button id="go">Submit</button>
     <button id="leak">Leak</button>
+    <button id="pop">Pop</button>
+    <button id="cross">Cross</button>
     <script>
       document.getElementById('go').addEventListener('click', () =>
         fetch('/submit', { method: 'POST', body: 'token=s3cr3t-value&n=1' }).catch(() => {}))
       document.getElementById('leak').addEventListener('click', () =>
         fetch('/q?token=s3cr3t-value', { method: 'GET' }).catch(() => {}))
+      document.getElementById('pop').addEventListener('click', () =>
+        window.open('/popup', '_blank'))
+      document.getElementById('cross').addEventListener('click', () =>
+        fetch('https://evil.test/x').catch(() => {}))
     </script>
   </body></html>`
 
@@ -136,6 +142,33 @@ describe('BrowserGate × PageDriver (real headless chromium)', () => {
     const get = await driver.click(buttonRef(driver, 'Leak'))
     expect(get.wouldRequest?.url).toContain('/q?token=[redacted:token]')
     expect(get.wouldRequest?.url).not.toContain('s3cr3t-value')
+  })
+
+  it('blocks popups (window.open) during a dry-run interaction', async () => {
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowUnsafe: false, allowedHosts: ['127.0.0.1'] }),
+    })
+    await driver.navigate(baseUrl)
+    const before = page.context().pages().length
+    await driver.click(buttonRef(driver, 'Pop'))
+    await new Promise((r) => setTimeout(r, 300))
+    expect(page.context().pages().length).toBe(before) // the popup was closed, not left open
+  })
+
+  it('flags crossOriginEgress when the dry-run would target a non-allowlisted host', async () => {
+    const page = await context.newPage()
+    const driver = new PageDriver(page, {
+      gate: new BrowserGate({ allowUnsafe: false, allowedHosts: ['127.0.0.1'] }),
+    })
+    await driver.navigate(baseUrl)
+    const cross = await driver.click(buttonRef(driver, 'Cross'))
+    expect(cross.dryRun).toBe(true)
+    expect(cross.wouldRequest?.url).toContain('evil.test')
+    expect(cross.crossOriginEgress).toBe(true)
+    // a same-origin (allowlisted) would-be request is NOT flagged cross-origin
+    const same = await driver.click(submitRef(driver))
+    expect(same.crossOriginEgress).toBe(false)
   })
 
   it('executes a mutation with allowUnsafe on an allowlisted host', async () => {
