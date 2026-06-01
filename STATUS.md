@@ -84,7 +84,9 @@ qualitative GHSA string is present, so a vector-only advisory is no longer `unkn
 classifies a diff's added lines against an istanbul `FileCoverage` as covered / uncovered /
 `nonExecutable` and surfaces the executable-but-unhit lines (the forgotten-assertion catch);
 the no-statement `nonExecutable` third state + a guard test address ADR 0010's documented
-correctness trap. 463 TS + 45 Py green.)_
+correctness trap. **Slice 2 landed:** `parseUnifiedDiff` extracts per-file new-side added
+lines from a unified diff (count-tracking hunk state machine; handles multi-file/prefix-less/
+new/deleted files) to feed the differ. 471 TS + 45 Py green.)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -417,12 +419,13 @@ CVSS-vector → bucket scoring is DONE** (pure `cvssV3BaseScore`; `matchVulnerab
 falls back to the CVSS vector's bucket when no qualitative GHSA string is present).
 **Next for deps:** the staged **Python/PyPI + RubyGems advisory adapters** (the non-npm
 ecosystems — `audit_project` is npm-only today; `detectInstalledVersion` already dispatches
-by ecosystem). **Track A `@strummer/coverage` is now open** — slice 1 (the pure
-`uncoveredNewLines` differ) landed; its next slices are **diff → new-line extraction** (feed
-the differ from a unified diff / git range), then the live **`runScoped`** child-process
-runner (single root vitest.config ⇒ no Vitest-in-Vitest; pin `istanbul-lib-coverage` when
-`CoverageMap` merging is needed) behind a paired deny-by-default operator gate, then its MCP
-surface. In parallel, the
+by ecosystem). **Track A `@strummer/coverage` is open** — slice 1 (`uncoveredNewLines` differ) + slice 2
+(`parseUnifiedDiff`, diff → new-side added lines) landed. Next coverage slices: a small
+**integrator** pairing the parsed diff with `coverage-final.json` (path normalization —
+diff repo-relative paths vs istanbul absolute keys), then the live **`runScoped`**
+child-process runner (single root vitest.config ⇒ no Vitest-in-Vitest; pin
+`istanbul-lib-coverage` when `CoverageMap` merging is needed) behind a paired
+deny-by-default operator gate, then its MCP surface. In parallel, the
 `@strummer/coverage` track can open with its pure `uncoveredNewLines` differ (the
 no-statement `nonExecutable` third state must be in slice 1 — see ADR 0010). Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket

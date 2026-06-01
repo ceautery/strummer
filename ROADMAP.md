@@ -459,8 +459,12 @@ Two independent tracks, then the test-quality chain, then LSP last:
         encoded explicitly with a guard test (ADR 0010's correctness trap: istanbul derives
         line coverage from `statementMap`, so a blank/brace line is in neither set). Line
         hits mirror istanbul's `getLineCoverage` (max over statements per start line). Pure.
-  - [ ] diff → new-line extraction (parse a unified diff / git range into per-file
-        added-line sets) to feed the differ.
+  - [x] **Slice 2 — `parseUnifiedDiff`.** Extracts, per file, the new-side line numbers a
+        change ADDED (to feed the differ). A count-tracking state machine (ends each hunk
+        when its `@@ -a,b +c,d @@` counts are consumed) distinguishes file headers from
+        removed/added lines whose content starts with `-`/`+`, and handles multi-hunk/
+        multi-file (incl. prefix-less, no `diff --git`), new/deleted files, and the
+        no-newline marker. Pure.
   - [ ] live `runScoped` — run only the tests a diff touches. Needs a **child-process**
         boundary (single root vitest.config → no Vitest-in-Vitest); pin `istanbul-lib-coverage`
         when `CoverageMap` merging/summaries are needed.
