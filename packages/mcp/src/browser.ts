@@ -506,6 +506,68 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   )
 
   server.registerTool(
+    'browser_assert',
+    {
+      title: 'Assert page conditions',
+      description:
+        'Evaluate declarative assertions against the live page (a free read; does not invalidate ' +
+        'refs). Each assertion AUTO-WAITS up to its timeout, so a condition that becomes true after ' +
+        'an async update still passes. Element sources (text/value/visible/count) target by ref or ' +
+        'role(+name); page sources are url/title/ariaSnapshot. Observed values are redacted.',
+      inputSchema: {
+        sessionId,
+        assertions: z
+          .array(
+            z.object({
+              source: z.enum(['url', 'title', 'ariaSnapshot', 'text', 'value', 'visible', 'count']),
+              op: z.enum([
+                'equals',
+                'notEquals',
+                'gt',
+                'gte',
+                'lt',
+                'lte',
+                'contains',
+                'notContains',
+                'matches',
+                'exists',
+                'notExists',
+              ]),
+              value: z.unknown().optional(),
+              ref: z.string().optional(),
+              role: z.string().optional(),
+              name: z.string().optional(),
+              timeout: z.number().int().positive().optional(),
+            }),
+          )
+          .describe('the assertions to evaluate (each auto-waits to its timeout)'),
+      },
+      outputSchema: {
+        pass: z.boolean(),
+        results: z.array(
+          z.object({
+            source: z.string(),
+            op: z.string(),
+            ref: z.string().optional(),
+            role: z.string().optional(),
+            name: z.string().optional(),
+            expected: z.unknown().optional(),
+            actual: z.unknown(),
+            pass: z.boolean(),
+          }),
+        ),
+      },
+    },
+    async (args) => {
+      const session = requireSession(args.sessionId)
+      const results = await enqueue(session, () =>
+        session.driver.assert(args.assertions as Parameters<PageDriver['assert']>[0]),
+      )
+      return reply({ pass: results.every((r) => r.pass), results })
+    },
+  )
+
+  server.registerTool(
     'browser_audit_a11y',
     {
       title: 'Accessibility audit',

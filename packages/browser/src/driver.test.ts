@@ -313,4 +313,57 @@ describe('PageDriver — step tools (real headless chromium)', () => {
       /not enabled/i,
     )
   })
+
+  it('assert: page-level + element sources via ref/role pass when the page matches', async () => {
+    const driver = await freshDriver()
+    await driver.fill(refFor(driver, 'textbox', 'Name'), 'Hello')
+    const results = await driver.assert([
+      { source: 'url', op: 'contains', value: '127.0.0.1' },
+      { source: 'title', op: 'equals', value: 'Steps' },
+      { source: 'value', ref: refFor(driver, 'textbox', 'Name'), op: 'equals', value: 'Hello' },
+      { source: 'visible', role: 'button', name: 'Add', op: 'equals', value: true },
+      { source: 'text', role: 'heading', name: 'Steps', op: 'contains', value: 'Steps' },
+      { source: 'count', role: 'button', op: 'gte', value: 3 },
+      { source: 'ariaSnapshot', op: 'contains', value: 'button "Add"' },
+    ])
+    expect(results.map((r) => r.pass)).toEqual([true, true, true, true, true, true, true])
+  })
+
+  it('assert: auto-waits for a late element to satisfy the condition', async () => {
+    const driver = await freshDriver()
+    await driver.click(refFor(driver, 'button', 'Later')) // adds role=status "Done" after 150ms
+    // assert immediately — the poll must wait for the element to appear
+    const [r] = await driver.assert([
+      { source: 'text', role: 'status', op: 'contains', value: 'Done', timeout: 5000 },
+    ])
+    expect(r?.pass).toBe(true)
+  })
+
+  it('assert: a failing assertion reports the (redacted) actual after the timeout', async () => {
+    const page = await context.newPage()
+    const driver = new PageDriver(page, { redact: (v) => v.replace('Steps', '[X]') })
+    await driver.navigate(baseUrl)
+    const [r] = await driver.assert([
+      { source: 'title', op: 'equals', value: 'Nope', timeout: 400 },
+    ])
+    expect(r?.pass).toBe(false)
+    expect(r?.actual).toBe('[X]') // 'Steps' redacted; expected stays as given
+    expect(r?.expected).toBe('Nope')
+  })
+
+  it('assert: a missing element yields a non-throwing false (not a hang)', async () => {
+    const driver = await freshDriver()
+    const [r] = await driver.assert([
+      {
+        source: 'visible',
+        role: 'button',
+        name: 'Nonexistent',
+        op: 'equals',
+        value: true,
+        timeout: 400,
+      },
+    ])
+    expect(r?.pass).toBe(false)
+    expect(r?.actual).toBe(false)
+  })
 })

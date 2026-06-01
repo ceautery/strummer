@@ -1,5 +1,11 @@
 /** Domain model for API requests, assertions, and run results. */
 
+// The operator vocabulary is shared across pillars (see @strummer/assert); the api
+// pillar re-exports it so existing `./model.js` importers are unaffected.
+import type { AssertionOp } from '@strummer/assert'
+
+export type { AssertionOp }
+
 export type AssertionSource =
   | 'status'
   | 'statusText'
@@ -8,19 +14,6 @@ export type AssertionSource =
   | 'jsonpath'
   | 'responseTime'
   | 'schema'
-
-export type AssertionOp =
-  | 'equals'
-  | 'notEquals'
-  | 'gt'
-  | 'gte'
-  | 'lt'
-  | 'lte'
-  | 'contains'
-  | 'notContains'
-  | 'matches'
-  | 'exists'
-  | 'notExists'
 
 /** A declarative assertion (from a `*.strummer.yml` sidecar). */
 export interface AssertionSpec {

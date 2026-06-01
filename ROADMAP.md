@@ -203,9 +203,13 @@ Staged below; aspirational items are scheduled, not cut.
       (`open`/`actions`/`action`/`snapshot`/`close`) + direct trace.zip JSON-lines
       parser fallback. (Console/network/errors come from within actions/snapshot,
       not dedicated subcommands.)
-- [ ] **Browser assertions** — reuse + extend the `@strummer/api` engine
-      (text/element-visible/value/url/ariaSnapshot) with auto-waiting; one
-      assertion engine across pillars.
+- [x] **Browser assertions** — one assertion engine across pillars. Factored the
+      operator core into **`@strummer/assert`** (`AssertionOp` + `applyOp`, extracted
+      from `@strummer/api`, which now consumes it). `@strummer/browser` `assertions.ts`
+      + `PageDriver.assert` evaluate `url`/`title`/`ariaSnapshot` (page) +
+      `text`/`value`/`visible`/`count` (element, by ref or role+name) with
+      **auto-waiting** (fast count-gated poll, not Playwright's default timeout);
+      observed values redacted. MCP `browser_assert` tool (free read).
 - [ ] **Perf-audit tool** — Lighthouse 13.3.0 node API over CDP; scores +
       core-metrics summary, full LHR JSON+HTML by handle; assert
       shape/thresholds, never exact scores.

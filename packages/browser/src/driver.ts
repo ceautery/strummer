@@ -2,6 +2,11 @@ import { stat } from 'node:fs/promises'
 import { basename, isAbsolute, join, resolve, sep } from 'node:path'
 import type { Dialog, Download, Locator, Page, Route } from 'playwright-core'
 import type { ArtifactStore } from './artifacts.js'
+import {
+  type BrowserAssertionResult,
+  type BrowserAssertionSpec,
+  evaluateBrowserAssertions,
+} from './assertions.js'
 import { type BrowserGate, GateError } from './gate.js'
 import { captureSnapshot, diffSnapshots, type RefDescriptor, type Snapshot } from './snapshot.js'
 
@@ -492,6 +497,25 @@ export class PageDriver {
     }
     await locator.first().waitFor(timeout === undefined ? { state } : { state, timeout })
     return this.settle('wait_for', options.ref)
+  }
+
+  /**
+   * Evaluate declarative assertions against the live page (a free read — no
+   * re-snapshot, refs preserved). Each assertion **auto-waits** up to its timeout,
+   * so a condition that only becomes true after an async update still passes. Uses
+   * the shared `@strummer/assert` operator vocabulary (one engine across pillars);
+   * observed string values are redacted before they surface.
+   */
+  async assert(specs: BrowserAssertionSpec[]): Promise<BrowserAssertionResult[]> {
+    return evaluateBrowserAssertions(
+      {
+        page: this.page,
+        locatorForRef: (ref) => this.locator(ref),
+        redact: this.redact,
+        now: () => Date.now(),
+      },
+      specs,
+    )
   }
 
   /** Read an element's text content (a free read — no re-snapshot). */

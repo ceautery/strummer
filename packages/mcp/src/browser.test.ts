@@ -156,6 +156,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       'browser_get_text',
       'browser_get_value',
       'browser_get_attribute',
+      'browser_assert',
       'browser_audit_a11y',
       'browser_screenshot',
       'browser_downloads',
@@ -500,6 +501,43 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(denied.isError).toBe(true)
     expect(JSON.stringify(denied.content)).toMatch(/not enabled/i)
     await noDir.client.close()
+    await client.close()
+  })
+
+  it('browser_assert evaluates page conditions; pass reflects the true value, actual is redacted', async () => {
+    const { client } = await connect({})
+    const { sessionId } = (await call(client, 'browser_open_session')).structuredContent as {
+      sessionId: string
+    }
+    await call(client, 'browser_navigate', { sessionId, url: baseUrl })
+    const res = (
+      await call(client, 'browser_assert', {
+        sessionId,
+        assertions: [
+          { source: 'title', op: 'equals', value: 'MCP' },
+          {
+            source: 'text',
+            role: 'heading',
+            name: 'Browser MCP',
+            op: 'contains',
+            value: 'Browser',
+          },
+          // the input is prefilled with a secret; assert it EXISTS without naming
+          // it — proving the server-read value is redacted in `actual`
+          { source: 'value', role: 'textbox', name: 'Name', op: 'exists' },
+          { source: 'count', role: 'button', op: 'gte', value: 3 },
+        ],
+      })
+    ).structuredContent as {
+      pass: boolean
+      results: { source: string; actual: unknown; pass: boolean }[]
+    }
+    expect(res.pass).toBe(true)
+    // the assertion passes on the TRUE (raw) value, but the reported actual is redacted
+    const valResult = res.results.find((r) => r.source === 'value')
+    expect(valResult?.pass).toBe(true)
+    expect(valResult?.actual).toBe('[redacted:pw]')
+    expect(JSON.stringify(res)).not.toContain('hunter2-secret')
     await client.close()
   })
 

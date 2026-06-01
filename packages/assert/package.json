@@ -1,5 +1,5 @@
 {
-  "name": "@strummer/browser",
+  "name": "@strummer/assert",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,13 +17,5 @@
   "scripts": {
     "build": "tsdown src/index.ts --dts",
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@axe-core/playwright": "4.11.3",
-    "@strummer/assert": "workspace:*",
-    "@strummer/safety": "workspace:*",
-    "axe-core": "4.11.4",
-    "fflate": "^0.8.3",
-    "playwright-core": "1.60.0"
   }
 }

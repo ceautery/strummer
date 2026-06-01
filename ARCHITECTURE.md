@@ -276,6 +276,9 @@ packages/browser/src/
 
 packages/safety/   # NEW shared module: SSRF range classifier (ipaddr.js) +
                    # secret-resolution/redaction boundary, used by api + browser
+packages/assert/   # NEW shared module: declarative-assertion operator core
+                   # (AssertionOp + applyOp), used by api + browser — one
+                   # assertion vocabulary across pillars
 ```
 
 - **Driving model — ARIA-snapshot-first.** The agent perceives the page as the

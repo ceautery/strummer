@@ -127,13 +127,23 @@ against in-process fixtures):
    host is auto-allowed (explicit operator intent) plus `--allow-host`; flags
    `--allow-private`/`--no-sandbox`/`--headed`/`--json`/`--out`/`--full-page`.
    `audit` exits 1 on a11y violations (CI-usable). Real-chromium CLI tests.
+23. **Browser assertions — one assertion engine across pillars.** Factored a shared
+   **`@strummer/assert`** package (the pillar-agnostic operator core: `AssertionOp` +
+   `applyOp`, moved out of `@strummer/api`, which now consumes it — behavior-preserving,
+   mirroring the `@strummer/safety` extraction). `@strummer/browser` `assertions.ts` +
+   `PageDriver.assert(specs)` evaluate declarative assertions against the live page:
+   sources `url`/`title`/`ariaSnapshot` (page) + `text`/`value`/`visible`/`count`
+   (element, by `ref` or `role`+`name`), each **auto-waiting** via a fast poll
+   (count-gated probes; the loop owns waiting, never Playwright's default timeout) up
+   to its timeout — so a condition that becomes true after an async update still
+   passes. Observed string values are redacted; `pass` reflects the true (raw) value.
+   MCP `browser_assert` tool (free read) returns `{pass, results}`.
 
-**249 TS + 45 Py tests green; committed to `main`.** **Next action:** Phase 3's core
-+ both surfaces are COMPLETE. Pick from the aspirational Phase-3 tail (ROADMAP:
-`browser_trace_query`, browser assertions reusing the api engine, Lighthouse perf,
-visual regression, `.bru` step persistence, multi-engine) or start **Phase 4**
-(cross-cutting verification: LSP bridge, impact-scoped test runner, mutation/flaky
-detection). See the detailed "Next action" section below + ROADMAP.
+**259 TS + 45 Py tests green; committed to `main`.** **Next action:** pick from the
+remaining aspirational Phase-3 tail (ROADMAP: `browser_trace_query`, Lighthouse perf,
+network heavy/HAR, visual regression, `.bru` step persistence, multi-engine) or start
+**Phase 4** (cross-cutting verification: LSP bridge, impact-scoped test runner,
+mutation/flaky detection). See the detailed "Next action" section below + ROADMAP.
 
 **Phase 2 — Web API testing pillar: core deliverables COMPLETE** (engine +
 contract validation + MCP tools + CLI all shipped & CI-gated; only optional tail
@@ -442,10 +452,14 @@ arbitrary local files. **The downloads/uploads/dialog/auth gating bundle is COMP
 over a gated manager + mandatory SSRF proxy; typed host auto-allowed; `audit` exits
 1 on violations. (`packages/cli/src/browser.ts`, real-chromium tested.)
 
-**Next (later Phase 3):** the aspirational tail only — `browser_trace_query`, browser
-assertions (reuse the api engine), Lighthouse perf, network heavy/HAR, visual
-regression, `.bru` step persistence, multi-engine. None blocking. TDD red→green;
-`pnpm gate` 100% green before each commit.
+**Browser assertions: DONE.** Shared **`@strummer/assert`** (operator core extracted
+from `@strummer/api`) + `@strummer/browser` `assertions.ts`/`PageDriver.assert` (page
++ element sources, auto-wait poll, redacted actual) + MCP `browser_assert`. One
+assertion engine across pillars.
+
+**Next (later Phase 3):** the aspirational tail only — `browser_trace_query`,
+Lighthouse perf, network heavy/HAR, visual regression, `.bru` step persistence,
+multi-engine. None blocking. TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 

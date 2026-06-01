@@ -64,6 +64,11 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   unlocked execution. `fill` resolves `{{secret:NAME}}` server-side (fail-closed).
 - **`browser_wait_for`** / **`browser_get_text`/`get_value`/`get_attribute`** —
   read-like; reads are redacted and don't invalidate refs.
+- **`browser_assert`** — evaluate declarative assertions against the live page
+  (a free read). Page sources `url`/`title`/`ariaSnapshot`; element sources
+  `text`/`value`/`visible`/`count` (by ref or role+name); the shared `@strummer/assert`
+  operator set (`equals`/`contains`/`matches`/`gt`/…). Each **auto-waits** to its
+  timeout; observed values are redacted. Returns `{pass, results}`.
 - **`browser_audit_a11y`** — axe-core audit; compact summary + report by handle.
 - **`browser_screenshot`** — operator-gated (off by default; pixels can't be
   redacted, like the trace.zip); captures a PNG to a `screenshot-s<n>` handle

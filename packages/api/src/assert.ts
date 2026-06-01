@@ -1,5 +1,6 @@
+import { applyOp } from '@strummer/assert'
 import { JSONPath } from 'jsonpath-plus'
-import type { AssertionOp, AssertionResult, AssertionSpec, CaptureSpec } from './model.js'
+import type { AssertionResult, AssertionSpec, CaptureSpec } from './model.js'
 import { validateSchema } from './schema.js'
 
 export interface ResponseContext {
@@ -85,37 +86,4 @@ export function extractCaptures(
     captured[spec.var] = valueFrom(spec.source, ctx, spec)
   }
   return captured
-}
-
-function applyOp(op: AssertionOp, actual: unknown, expected: unknown): boolean {
-  switch (op) {
-    case 'equals':
-      return deepEqual(actual, expected)
-    case 'notEquals':
-      return !deepEqual(actual, expected)
-    case 'exists':
-      return actual !== undefined && actual !== null
-    case 'notExists':
-      return actual === undefined || actual === null
-    case 'gt':
-      return Number(actual) > Number(expected)
-    case 'gte':
-      return Number(actual) >= Number(expected)
-    case 'lt':
-      return Number(actual) < Number(expected)
-    case 'lte':
-      return Number(actual) <= Number(expected)
-    case 'contains':
-      return String(actual).includes(String(expected))
-    case 'notContains':
-      return !String(actual).includes(String(expected))
-    case 'matches':
-      return new RegExp(String(expected)).test(String(actual))
-    default:
-      return false
-  }
-}
-
-function deepEqual(a: unknown, b: unknown): boolean {
-  return a === b || JSON.stringify(a) === JSON.stringify(b)
 }

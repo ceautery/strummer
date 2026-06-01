@@ -32,6 +32,9 @@ importers:
       '@napi-rs/keyring':
         specifier: ^1.3.0
         version: 1.3.0
+      '@strummer/assert':
+        specifier: workspace:*
+        version: link:../assert
       '@strummer/safety':
         specifier: workspace:*
         version: link:../safety
@@ -60,11 +63,16 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
+  packages/assert: {}
+
   packages/browser:
     dependencies:
       '@axe-core/playwright':
         specifier: 4.11.3
         version: 4.11.3(playwright-core@1.60.0)
+      '@strummer/assert':
+        specifier: workspace:*
+        version: link:../assert
       '@strummer/safety':
         specifier: workspace:*
         version: link:../safety
