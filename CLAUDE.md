@@ -150,8 +150,15 @@ vision and `ARCHITECTURE.md` for the technical design.
   `query`+`describeServers`) + `strummer-lsp-mcp` bin (`STRUMMER_LSP_*`; toolchain provenance via
   `core.detectInstalledVersion`). Capability-gated read tails DONE — `lsp_type_definition`/
   `lsp_document_symbols`/`lsp_call_hierarchy` (real `typescript-language-server` 5.3.0 payload
-  fixtures; gate still replays recorded payloads). Staged: write-mode (`rename`), `workspace/symbol`,
-  diagnostics, multi-root, full toolchain-mismatch heuristic, a `strummer lsp` CLI),
+  fixtures; gate still replays recorded payloads). Write-mode DONE (`lsp_rename`, ADR 0011 addendum,
+  slices A–G): dry-run by default + a SEPARATE `STRUMMER_LSP_ALLOW_WRITE` gate enforced to require
+  `allowRun`; pure `apply.ts` + `normalizeWorkspaceEdit`; realpath-hardened all-or-nothing
+  `confine.ts`; `client.rename`/`prepareRename` + write handshake caps; full-text `didChange`
+  doc-sync + inbound `applyEdit` deadlock guard; single- AND multi-file apply via
+  `manager.runWithUris` (sorted multi-URI lock) + stage-then-commit-all + staleness guards +
+  SHA-256 digests; the `lsp_rename` MCP tool (no `write` input). Staged: write-mode resource-ops +
+  multi-file conflict reconciliation, `workspace/symbol`, diagnostics, multi-root, full
+  toolchain-mismatch heuristic, a `strummer lsp` CLI),
   `mcp` (server), `cli` (terminal).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).

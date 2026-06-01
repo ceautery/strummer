@@ -109,9 +109,13 @@ mutex, in-flight-aware reaper) + operator-bound server registry, the gated `quer
 engine, and the `lsp_find_definition`/`lsp_find_references`/`lsp_hover` (gated as a group)
 + always-on `lsp_languages` MCP surface + `strummer-lsp-mcp` bin. The whole pillar is
 tested against a fake in-process JSON-RPC peer replaying recorded real-server payloads —
-no real language server runs in the green gate. Staged next: capability-gated
-`lsp_type_definition`/`_document_symbols`/`_call_hierarchy`, write-mode, and a `strummer
-lsp` CLI.
+no real language server runs in the green gate. The capability-gated read tails
+(`lsp_type_definition`/`_document_symbols`/`_call_hierarchy`) and **write-mode**
+(`lsp_rename` — dry-run by default, applies to disk only behind a separate
+`STRUMMER_LSP_ALLOW_WRITE` gate; single- and multi-file via a sorted multi-URI lock with
+stage-then-commit + staleness guards) have since landed (ADR 0011 addendum). Staged next:
+write-mode resource-ops + multi-file conflict reconciliation, `workspace/symbol`,
+diagnostics, multi-root, and a `strummer lsp` CLI.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
