@@ -34,3 +34,35 @@ unless you pass `--unsafe` (and the current host is allowlisted). The command
 exits non-zero if any step errors or any assertion fails — usable as a CI gate.
 Add `--json` for the full structured `FlowResult` (per-step, with redacted
 assertion values).
+
+## Running it over MCP (the agent surface)
+
+The same flow replays from the **`strummer-browser-mcp`** server via the
+`browser_run_flow` tool — parity with the CLI above. The operator points the
+server at a flows directory; the agent then runs a flow **by name** (never a
+path), so there is no traversal surface.
+
+```bash
+# Operator: enable flow replay + register the secret + allow the host. As with the
+# CLI, the agent never sees these values — only the NAMES are exposed.
+STRUMMER_BROWSER_FLOWS_DIR=examples/browser/login \
+STRUMMER_BROWSER_SECRET_PASSWORD=hunter2 \
+STRUMMER_BROWSER_ALLOWED_HOSTS=app.example.com \
+STRUMMER_BROWSER_ALLOW_UNSAFE=1 \
+  strummer-browser-mcp
+```
+
+The agent discovers and replays the flow on a session:
+
+1. `browser_list_flows` → `{ flows: [{ name: "Login", steps: 6 }] }`
+2. `browser_open_session` → a server-minted `sessionId`
+3. `browser_run_flow` with `{ sessionId, flow: "Login", vars: { baseUrl:
+   "https://app.example.com", username: "alice" } }` → the structured `FlowResult`
+   (`{ name, passed, steps[] }`), assertion values redacted.
+
+`{{var}}` values come from the `vars` argument; `{{secret:NAME}}` resolves
+server-side from `STRUMMER_BROWSER_SECRET_<NAME>` (fail-closed on an unknown name)
+and is never echoed back. Steps replay through the **same** operator gate as live
+tool calls — so mutations dry-run unless the operator set `STRUMMER_BROWSER_ALLOW_
+UNSAFE` and allowlisted the host. Both flow tools are **disabled** (report "not
+enabled") unless `STRUMMER_BROWSER_FLOWS_DIR` is set.
