@@ -43,6 +43,9 @@ venv/
 /docker/
 /docker-compose.yml
 
+# --- Claude Code (local config) ---
+.claude/
+
 # --- macOS ---
 .DS_Store
 
