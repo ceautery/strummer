@@ -42,6 +42,9 @@ export const PROGRESS_END = () => loadFixture('progress-end.json')
 export const INIT_RENAME = () => loadFixture('initialize-result-rename.json')
 export const PREPARE_RENAME = () => loadFixture('prepare-rename.json')
 export const RENAME_CHANGES = () => loadFixture('rename-changes.json')
+// rust-analyzer captures (write-mode resource ops). RA emits a real RenameFile on a module rename.
+export const INIT_RUST = () => loadFixture('initialize-result-rust.json')
+export const RENAME_RENAMEFILE = () => loadFixture('rename-renamefile.json')
 
 export interface PeerPair {
   client: MessageConnection

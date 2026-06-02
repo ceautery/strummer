@@ -342,11 +342,12 @@ export class LspClient {
           // (range present) rather than the uri-only `WorkspaceSymbol` form.
           symbol: { dynamicRegistration: false },
           // Write-mode (ADR 0011 addendum): advertise WorkspaceEdit support so the server returns
-          // a good rename edit. resourceOperations:[] honestly signals we do NOT apply file ops
-          // (we still defend on apply); normalizesLineEndings:false — we send bytes verbatim.
+          // a good rename edit. We DO apply file ops now, so advertise `resourceOperations` —
+          // some servers (rust-analyzer's module rename) REFUSE the rename otherwise, since the
+          // edit they'd produce needs a RenameFile. normalizesLineEndings:false — bytes verbatim.
           workspaceEdit: {
             documentChanges: true,
-            resourceOperations: [],
+            resourceOperations: ['create', 'rename', 'delete'],
             normalizesLineEndings: false,
           },
         },

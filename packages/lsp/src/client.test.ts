@@ -310,7 +310,9 @@ describe('LspClient write-mode (rename / prepareRename)', () => {
     expect(td?.rename?.prepareSupport).toBe(true)
     const ws = initParams?.capabilities?.workspace as Record<string, Record<string, unknown>>
     expect(ws?.workspaceEdit?.documentChanges).toBe(true)
-    expect(ws?.workspaceEdit?.resourceOperations).toEqual([])
+    // We DO apply resource ops now (CreateFile/RenameFile/DeleteFile) — advertise it so servers
+    // (e.g. rust-analyzer's module rename) actually emit them instead of refusing the rename.
+    expect(ws?.workspaceEdit?.resourceOperations).toEqual(['create', 'rename', 'delete'])
   })
 
   it('detects the OBJECT-form renameProvider {prepareProvider:true} from the real capture', async () => {

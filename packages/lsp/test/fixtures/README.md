@@ -93,6 +93,31 @@ client advertised the **new write capabilities** (`textDocument.rename.prepareSu
 rename expressed in the `documentChanges` form (`TextDocumentEdit[]` with `version` fields),
 used solely to exercise the normalizer's `documentChanges` branch — which the real server did
 not return here. It tests shape detection, not a guessed payload, so the carve-out (as with
-`initialize-result-utf8.json`) applies. The resource-op and `needsConfirmation`-annotation
-branches are exercised by inline hand-authored inputs in `normalize.test.ts` (they assert our
-policy, not a server payload shape).
+`initialize-result-utf8.json`) applies. The `needsConfirmation`-annotation branch is exercised by
+inline hand-authored inputs in `normalize.test.ts` (it asserts our policy, not a server shape).
+
+## Resource-op write-mode (`RenameFile`) captures — `rust-analyzer`
+
+tsserver does **not** emit file resource operations on an ordinary `textDocument/rename` (confirmed
+again after we flipped the client capability `workspace.workspaceEdit.resourceOperations` from `[]`
+to `['create','rename','delete']` — tsserver still returns the same `changes` map with no resource
+ops; the existing `rename-changes.json` stays valid). To exercise the real resource-op path we
+captured from **`rust-analyzer` 0.3.2921-standalone**, whose **module rename renames the backing
+file**. The capture project is a minimal no-cargo crate driven via a `rust-project.json`:
+`src/main.rs` = `mod greeter;` + `fn main(){ let _g = greeter::Greeter; }`, `src/greeter.rs` =
+`pub struct Greeter;`. Renaming the module `greeter` (main.rs line 0, char 4) → `welcome`:
+
+- `initialize-result-rust.json` — the genuine `initialize` result. rust-analyzer negotiates
+  **`positionEncoding: "utf-8"`** (so the resource-op path also exercises the utf-8 offset math),
+  reports `renameProvider: { "prepareProvider": true }`, and a real `serverInfo`
+  (`rust-analyzer` / `0.3.2921-standalone`).
+- `rename-renamefile.json` — the genuine `textDocument/rename` result, in **`documentChanges`**
+  form: a `TextDocumentEdit` on `main.rs` (the `mod` decl + the `greeter::` path, ×2) **followed by
+  a `RenameFile`** (`kind:"rename"`, `oldUri: src/greeter.rs` → `newUri: src/welcome.rs`, **no
+  `options`**). This is the real interleaved edits-plus-resource-op shape the apply engine executes.
+
+Readiness note (captured behavior, drove the `client.ts` readiness generalization): rust-analyzer
+returns a `ResponseError -32602 "No references found at position"` when `rename` is queried **before
+`cachePriming` ends** (and the rename is refused outright unless the client advertises
+`resourceOperations`, since the edit needs a `RenameFile`). The gate replays this via the fake peer;
+no real server runs in `pnpm gate`.
