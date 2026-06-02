@@ -156,9 +156,14 @@ vision and `ARCHITECTURE.md` for the technical design.
   `confine.ts`; `client.rename`/`prepareRename` + write handshake caps; full-text `didChange`
   doc-sync + inbound `applyEdit` deadlock guard; single- AND multi-file apply via
   `manager.runWithUris` (sorted multi-URI lock) + stage-then-commit-all + staleness guards +
-  SHA-256 digests; the `lsp_rename` MCP tool (no `write` input). Staged: write-mode resource-ops +
-  multi-file conflict reconciliation, `workspace/symbol`, diagnostics, multi-root, full
-  toolchain-mismatch heuristic, a `strummer lsp` CLI),
+  SHA-256 digests; the `lsp_rename` MCP tool (no `write` input). `workspace/symbol` DONE
+  (`lsp_workspace_symbols` — file-less project-wide search, optional anchor file for tsserver's
+  lazy project model). `diagnostics` DONE (`lsp_diagnostics` — PUSH model `publishDiagnostics`,
+  waits out indexing then returns the post-settle publish; empty = clean). Multi-ROOT DONE
+  (`workspaceRoots[]` / `--workspace-root`; server keyed by the sorted root group). `strummer lsp`
+  CLI DONE. Staged: write-mode resource-ops + multi-file conflict reconciliation, pull-diagnostics
+  (`textDocument/diagnostic`), dynamic `didChangeWorkspaceFolders` + write-mode multi-root, full
+  toolchain-mismatch heuristic),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write

@@ -118,8 +118,11 @@ no real language server runs in the green gate. The capability-gated read tails
 `STRUMMER_LSP_ALLOW_WRITE` gate; single- and multi-file via a sorted multi-URI lock with
 stage-then-commit + staleness guards) have since landed (ADR 0011 addendum), as has a human
 **`strummer lsp` CLI** (single-shot navigation + `rename`, the engine injectable so the gate
-never spawns a real server). Staged next: write-mode resource-ops + multi-file conflict
-reconciliation, `workspace/symbol`, diagnostics, multi-root.
+never spawns a real server). Since then **`workspace/symbol`** search (`lsp_workspace_symbols`),
+**`diagnostics`** (`lsp_diagnostics`, the push-model `publishDiagnostics`), and **multi-root**
+workspaces (`workspaceRoots[]` / `--workspace-root`, one server bound to many folders) have all
+landed. Staged next: write-mode resource-ops + multi-file conflict reconciliation, pull-diagnostics
+(`textDocument/diagnostic`), dynamic workspace-folder changes + write-mode multi-root.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
