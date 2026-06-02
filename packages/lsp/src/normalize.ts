@@ -319,6 +319,25 @@ export function normalizeDiagnostics(
   })
 }
 
+/** A `textDocument/diagnostic` PULL report (LSP 3.17): a full item set or an unchanged marker. */
+export interface RawDocumentDiagnosticReport {
+  kind?: 'full' | 'unchanged'
+  items?: Diagnostic[]
+}
+
+/**
+ * Diagnostics from a PULL-model `textDocument/diagnostic` report. A `full` report carries `items`;
+ * an `unchanged` report means "identical to the previousResultId" — Strummer's single-shot reads
+ * send no previousResultId, so a server should always answer `full`; we treat `unchanged`/absent
+ * defensively as no items. The items themselves are normalized by the shared `normalizeDiagnostics`
+ * (the report is just the pull envelope around the same `Diagnostic[]` the push model publishes).
+ */
+export function diagnosticsFromReport(
+  report: RawDocumentDiagnosticReport | null | undefined,
+): NormalizedDiagnostic[] {
+  return report?.kind === 'full' ? normalizeDiagnostics(report.items) : []
+}
+
 // --- Call hierarchy (ADR 0011 staged tail) -------------------------------------------------
 
 /** A raw `CallHierarchyItem` (prepareCallHierarchy result + the node inside incoming/outgoing). */

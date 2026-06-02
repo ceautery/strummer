@@ -6,6 +6,8 @@ import {
   CALL_HIERARCHY_OUTGOING,
   CALL_HIERARCHY_PREPARE,
   DEFINITION,
+  DIAGNOSTIC_PULL_CLEAN,
+  DIAGNOSTIC_PULL_FULL,
   DIAGNOSTICS,
   DOCUMENT_SYMBOLS,
   type FakeServerOptions,
@@ -13,6 +15,7 @@ import {
   HOVER,
   INIT,
   INIT_RENAME,
+  INIT_RUST,
   INIT_UTF8,
   makePeerPair,
   PREPARE_RENAME,
@@ -495,6 +498,95 @@ describe('LspClient.documentDiagnostics (push model)', () => {
     client.ensureOpen(DIAG_URI, 'typescript', 'const x = 1\n')
     const r = await client.documentDiagnostics(DIAG_URI)
     expect(r.status).toBe('not_ready')
+  })
+})
+
+describe('LspClient.documentDiagnostics (pull model — diagnosticProvider)', () => {
+  const DIAG_URI = 'file:///project/src/main.rs'
+
+  it('uses textDocument/diagnostic and echoes the provider identifier when one is advertised', async () => {
+    let seen: { textDocument?: { uri: string }; identifier?: string } | undefined
+    const { client } = await connectedClient({
+      initialize: INIT_RUST(), // advertises diagnosticProvider: { identifier: "rust-analyzer", ... }
+      onDiagnostic: (p) => {
+        seen = p as typeof seen
+        return DIAGNOSTIC_PULL_FULL()
+      },
+    })
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('ok')
+    expect(r.result).toHaveLength(1)
+    expect(r.result[0]).toMatchObject({ severityName: 'Error', code: 2322 })
+    // The PULL request carried the file uri + the advertised identifier (rust-analyzer requires it).
+    expect(seen?.textDocument?.uri).toBe(DIAG_URI)
+    expect(seen?.identifier).toBe('rust-analyzer')
+  })
+
+  it('treats an empty `full` report as ok (a clean file), NOT no_result', async () => {
+    const { client } = await connectedClient({
+      initialize: INIT_RUST(),
+      onDiagnostic: () => DIAGNOSTIC_PULL_CLEAN(),
+    })
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('ok')
+    expect(r.result).toEqual([])
+  })
+
+  it('treats an `unchanged` report as ok with no items (single-shot sends no previousResultId)', async () => {
+    const { client } = await connectedClient({
+      initialize: INIT_RUST(),
+      onDiagnostic: () => ({ kind: 'unchanged', resultId: 'rust-analyzer' }),
+    })
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('ok')
+    expect(r.result).toEqual([])
+  })
+
+  it('maps a soft "not ready" ResponseError to not_ready (does not fabricate a clean file)', async () => {
+    const { client } = await connectedClient({
+      initialize: INIT_RUST(),
+      onDiagnostic: () => {
+        throw new ResponseError(-32802, 'server cancelled (still indexing)')
+      },
+      clientOptions: { timeoutMs: 1000, noRetry: true },
+    })
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('not_ready')
+  })
+
+  it('not_ready when the project never settles (pull is gated on the same readiness)', async () => {
+    let t = 0
+    const { client } = await connectedClient({
+      initialize: INIT_RUST(),
+      progressOnOpen: [PROGRESS_BEGIN()], // begin, no end ⇒ indexing stays active
+      onDiagnostic: () => DIAGNOSTIC_PULL_CLEAN(),
+      clientOptions: {
+        timeoutMs: 1000,
+        now: () => t,
+        delay: async (ms: number) => {
+          t += ms
+        },
+      },
+    })
+    client.ensureOpen(DIAG_URI, 'rust', 'fn main() {}\n')
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('not_ready')
+  })
+
+  it('falls back to PUSH for a server with no diagnosticProvider (pull endpoint never called)', async () => {
+    let pulled = false
+    const { client } = await connectedClient({
+      // default INIT() advertises no diagnosticProvider ⇒ dispatch must use the push model.
+      diagnosticsOnOpen: { uri: DIAG_URI, diagnostics: [] },
+      onDiagnostic: () => {
+        pulled = true
+        return DIAGNOSTIC_PULL_FULL()
+      },
+    })
+    client.ensureOpen(DIAG_URI, 'typescript', 'const ok = 1\n')
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('ok')
+    expect(pulled).toBe(false)
   })
 })
 

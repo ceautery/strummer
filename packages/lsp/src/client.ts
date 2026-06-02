@@ -48,6 +48,7 @@ import {
   DidChangeTextDocumentNotification,
   DidCloseTextDocumentNotification,
   DidOpenTextDocumentNotification,
+  DocumentDiagnosticRequest,
   DocumentSymbolRequest,
   ExitNotification,
   HoverRequest,
@@ -70,6 +71,7 @@ import {
   type Diagnostic,
   type DocumentSymbol,
   decideStatus,
+  diagnosticsFromReport,
   type Hover,
   type Location,
   type LocationLink,
@@ -93,6 +95,7 @@ import {
   normalizeWorkspaceSymbols,
   type PrepareRenameOutcome,
   type QueryStatus,
+  type RawDocumentDiagnosticReport,
   type RawPrepareRename,
   type RawWorkspaceEdit,
   type SymbolInformation,
@@ -327,6 +330,10 @@ export class LspClient {
             versionSupport: true,
             codeDescriptionSupport: true,
           },
+          // Pull diagnostics (ADR 0011 staged tail): advertise client support so a server that
+          // prefers the pull model (e.g. rust-analyzer's `diagnosticProvider`) enables
+          // `textDocument/diagnostic`. `relatedDocumentSupport:false` — v1 reads one file's report.
+          diagnostic: { dynamicRegistration: false, relatedDocumentSupport: false },
           callHierarchy: { dynamicRegistration: false },
           rename: {
             dynamicRegistration: false,
@@ -594,6 +601,16 @@ export class LspClient {
    * deadline ⇒ `not_ready` (retry), the same honest-tri-state posture as the navigation reads.
    */
   async documentDiagnostics(uri: string): Promise<NavResult<NormalizedDiagnostic[]>> {
+    // Prefer the PULL model when the server advertises `diagnosticProvider` (a deterministic
+    // request/response, ideal for single-shot — no race on "did the publish already land?"). Fall
+    // back to the PUSH model otherwise (tsserver advertises no provider). Same result shape either
+    // way, so the query engine / surface are agnostic to which path ran.
+    if (this.supports('diagnosticProvider')) return this.pullDiagnostics(uri)
+    return this.pushDiagnostics(uri)
+  }
+
+  /** PUSH model — accumulate the server's `publishDiagnostics` for an open file (see {@link documentDiagnostics}). */
+  private async pushDiagnostics(uri: string): Promise<NavResult<NormalizedDiagnostic[]>> {
     const deadline = this.now() + this.timeoutMs
     while (true) {
       await this.awaitIndexingSettled(deadline)
@@ -609,6 +626,46 @@ export class LspClient {
         return this.wrap('not_ready', normalizeDiagnostics(cached?.items))
       }
       await Promise.race([this.nextDiagnostics(uri), this.delay(remaining)])
+    }
+  }
+
+  /**
+   * PULL model — `textDocument/diagnostic` (LSP 3.17), capability-gated on `diagnosticProvider`.
+   * A request/response (unlike push), so it is deterministic for a single-shot read. Echoes the
+   * provider's `identifier` when one was advertised (rust-analyzer requires it). Tri-state, with
+   * the diagnostics-specific twist that an EMPTY report is a legitimate `ok` (a clean file), NEVER
+   * `no_result` — so this does NOT reuse {@link withRetry} (whose empty ⇒ no_result is wrong here).
+   * Readiness: wait out the project-load `$/progress`; if the send (re)starts indexing, re-query the
+   * loaded project within the deadline; a soft "not ready" `ResponseError` backs off and retries
+   * inside the deadline. Still indexing at the deadline ⇒ `not_ready` (retry).
+   */
+  private async pullDiagnostics(uri: string): Promise<NavResult<NormalizedDiagnostic[]>> {
+    const provider = this._capabilities.diagnosticProvider as { identifier?: string } | undefined
+    const deadline = this.now() + this.timeoutMs
+    let attempt = 0
+    while (true) {
+      await this.awaitIndexingSettled(deadline)
+      if (this.indexing) return this.wrap('not_ready', []) // deadline hit still indexing
+      let report: RawDocumentDiagnosticReport | null = null
+      let softNotReady = false
+      try {
+        report = (await this.conn.sendRequest(DocumentDiagnosticRequest.method, {
+          textDocument: { uri },
+          ...(provider?.identifier ? { identifier: provider.identifier } : {}),
+        })) as RawDocumentDiagnosticReport | null
+      } catch (err) {
+        if (!(err instanceof ResponseError) || !SOFT_NOT_READY_CODES.has(err.code)) throw err
+        softNotReady = true
+      }
+      // The send itself may have kicked off the configured-project load — re-query once settled.
+      if (this.indexing && this.now() < deadline) continue
+      if (!softNotReady)
+        return this.wrap(this.indexing ? 'not_ready' : 'ok', diagnosticsFromReport(report))
+      // Soft error while settled: it isn't ready yet. Back off and retry inside the deadline.
+      attempt += 1
+      const backoff = Math.min(this.baseBackoffMs * 2 ** (attempt - 1), this.maxBackoffMs)
+      if (this.noRetry || this.now() + backoff > deadline) return this.wrap('not_ready', [])
+      await this.delay(backoff)
     }
   }
 

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   type Diagnostic,
   decideStatus,
+  diagnosticsFromReport,
   type Hover,
   type Location,
   type LocationLink,
@@ -211,6 +212,25 @@ describe('normalizeDiagnostics', () => {
     const [d] = normalizeDiagnostics([{ range: RANGE, message: 'bare' }])
     expect(d?.severity).toBeUndefined()
     expect(d?.severityName).toBeUndefined()
+  })
+})
+
+describe('diagnosticsFromReport (pull-model envelope)', () => {
+  it('unwraps a `full` report into normalized items', () => {
+    const out = diagnosticsFromReport({
+      kind: 'full',
+      items: [{ range: RANGE, message: 'boom', severity: 1, code: 2322 }],
+    })
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ severityName: 'Error', code: 2322 })
+  })
+  it('treats an empty `full` report as no items (a clean file)', () => {
+    expect(diagnosticsFromReport({ kind: 'full', items: [] })).toEqual([])
+  })
+  it('treats an `unchanged` report (and null) as no items', () => {
+    expect(diagnosticsFromReport({ kind: 'unchanged' })).toEqual([])
+    expect(diagnosticsFromReport(null)).toEqual([])
+    expect(diagnosticsFromReport(undefined)).toEqual([])
   })
 })
 

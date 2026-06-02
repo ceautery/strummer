@@ -34,6 +34,8 @@ export const HOVER = () => loadFixture('hover-markup.json')
 export const DOCUMENT_SYMBOLS = () => loadFixture('document-symbols-hierarchical.json')
 export const WORKSPACE_SYMBOLS = () => loadFixture('workspace-symbols.json')
 export const DIAGNOSTICS = () => loadFixture('diagnostics-publish.json')
+export const DIAGNOSTIC_PULL_CLEAN = () => loadFixture('diagnostic-pull-clean.json')
+export const DIAGNOSTIC_PULL_FULL = () => loadFixture('diagnostic-pull-full.json')
 export const CALL_HIERARCHY_PREPARE = () => loadFixture('call-hierarchy-prepare.json')
 export const CALL_HIERARCHY_INCOMING = () => loadFixture('call-hierarchy-incoming.json')
 export const CALL_HIERARCHY_OUTGOING = () => loadFixture('call-hierarchy-outgoing.json')
@@ -85,6 +87,8 @@ export interface FakeServerOptions {
   onOutgoingCalls?: (params: unknown) => unknown
   onPrepareRename?: (params: unknown) => unknown
   onRename?: (params: unknown) => unknown
+  /** PULL diagnostics: the `textDocument/diagnostic` reply (a DocumentDiagnosticReport). */
+  onDiagnostic?: (params: unknown) => unknown
   onShutdown?: () => void
   onDidOpen?: (params: unknown) => void
   onDidChange?: (params: unknown) => void
@@ -155,6 +159,10 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
     (params: unknown) => opts.onPrepareRename?.(params) ?? null,
   )
   server.onRequest('textDocument/rename', (params: unknown) => opts.onRename?.(params) ?? null)
+  server.onRequest(
+    'textDocument/diagnostic',
+    (params: unknown) => opts.onDiagnostic?.(params) ?? null,
+  )
   server.onRequest('shutdown', () => {
     opts.onShutdown?.()
     return null
