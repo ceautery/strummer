@@ -58,12 +58,28 @@ $S lsp call-hierarchy typescript greeter.ts 2 17 --project $P --allow-run
 # Type of the `greeter` value in index.ts (index.ts:3:7) → class Greeter:
 $S lsp type-definition typescript index.ts 3 7 --project $P --allow-run
 
-# Rename the Greeter class (greeter.ts:7:14). DRY-RUN by default — prints the
-# proposed per-file edits and writes nothing:
-$S lsp rename typescript greeter.ts 7 14 Welcomer --project $P --allow-run
-# Add --allow-write to actually write the edits to disk (across greeter.ts + index.ts):
-$S lsp rename typescript greeter.ts 7 14 Welcomer --project $P --allow-run --allow-write
+# Rename hello → greetWith (greeter.ts:2:17). DRY-RUN by default — prints the
+# proposed edits (the declaration + its call in greet) and writes nothing:
+$S lsp rename typescript greeter.ts 2 17 greetWith --project $P --allow-run
+# Add --allow-write to actually write the edits to disk, with per-file SHA-256 digests:
+$S lsp rename typescript greeter.ts 2 17 greetWith --project $P --allow-run --allow-write
 ```
+
+### A note on cold, single-shot resolution
+
+Each invocation opens **only the queried file** and asks the server once. `tsserver`
+answers an early request from a single-file *inferred* project before it has finished
+loading the `tsconfig.json` project, so a **cold** `references`/`rename` sees only the
+symbols in the opened file. `hello` lives entirely in `greeter.ts`, so renaming it
+rewrites both its uses; but renaming `Greeter` *from `greeter.ts`* rewrites only its
+declaration and misses the `index.ts` import/usage (run `references` from each side to
+see this — `Greeter` from `index.ts:3:21` finds the two `index.ts` sites, `Greeter` from
+`greeter.ts:7:14` finds only the declaration). `type-definition` still crosses files
+because that is forward module resolution (the server reads the imported file), not a
+project-wide reverse search. Project-wide cross-file rename depends on the full project
+being loaded — tracked as a staged LSP tail (project load / multi-root). For now, prefer
+single-file symbols (like `hello`) for `--allow-write`, and review the dry-run preview
+first.
 
 A result `status` is tri-state — `ok`, `no_result`, or `not_ready` (the server is still
 indexing; **retry**). Exit codes: `0` the query ran, `1` denied/refused/error, `2`
