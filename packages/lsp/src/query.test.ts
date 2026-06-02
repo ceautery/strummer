@@ -71,14 +71,18 @@ afterEach(() => {
   for (const t of trackers.splice(0)) t.disposeAll()
 })
 
-function makeEngine(opts: Parameters<typeof fakeSpawn>[0] = {}, allowRun = true): LspQueryEngine {
+function makeEngine(
+  opts: Parameters<typeof fakeSpawn>[0] = {},
+  allowRun = true,
+  allowedRoots: string[] = [ROOT],
+): LspQueryEngine {
   const tracker = fakeSpawn(opts)
   trackers.push(tracker)
   let t = 0
   const manager = new LanguageServerManager({
     registry: REGISTRY,
     serverSpawn: tracker.spawn,
-    allowedRoots: [ROOT],
+    allowedRoots,
     timeoutMs: 1000,
     noRetry: true,
     now: () => t,
@@ -86,7 +90,7 @@ function makeEngine(opts: Parameters<typeof fakeSpawn>[0] = {}, allowRun = true)
       t += ms
     },
   })
-  return new LspQueryEngine({ manager, allowRun, allowedRoots: [ROOT], readFile })
+  return new LspQueryEngine({ manager, allowRun, allowedRoots, readFile })
 }
 
 // Push diagnostics arrive as an async server notification (stream I/O), which a real timer loses
@@ -303,6 +307,37 @@ describe('LspQueryEngine workspaceSymbol (file-less, position-less)', () => {
   it('still gated: refuses when allowRun is off', async () => {
     const engine = makeEngine({ onWorkspaceSymbol: () => WORKSPACE_SYMBOLS() }, false)
     await expect(engine.query(WSYM_INPUT)).rejects.toBeInstanceOf(LspGateError)
+  })
+})
+
+describe('LspQueryEngine multi-root (workspaceRoots)', () => {
+  const ROOT_B = '/project-b'
+
+  it('binds the workspaceRoots group as workspace folders and queries the primary file', async () => {
+    let initParams: { workspaceFolders?: Array<{ uri: string }> } | undefined
+    const engine = makeEngine(
+      {
+        onInitialize: (p) => {
+          initParams = p as typeof initParams
+        },
+        onDefinition: () => DEFINITION(),
+      },
+      true,
+      [ROOT, ROOT_B],
+    )
+    const r = await engine.query({ ...DEF_INPUT, workspaceRoots: [ROOT_B] })
+    expect(r.status).toBe('ok')
+    expect(initParams?.workspaceFolders?.map((f) => f.uri).sort()).toEqual([
+      'file:///project',
+      'file:///project-b',
+    ])
+  })
+
+  it('refuses a workspaceRoot outside the allowlist (paired gate)', async () => {
+    const engine = makeEngine({ onDefinition: () => DEFINITION() }, true, [ROOT]) // ROOT_B not allowed
+    await expect(engine.query({ ...DEF_INPUT, workspaceRoots: [ROOT_B] })).rejects.toBeInstanceOf(
+      LspGateError,
+    )
   })
 })
 

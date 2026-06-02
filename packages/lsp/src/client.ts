@@ -282,7 +282,11 @@ export class LspClient {
    */
   async initialize(
     rootUri: string,
-    opts: { initializationOptions?: unknown } = {},
+    opts: {
+      initializationOptions?: unknown
+      /** Multi-root workspace folders. Defaults to the single `[{rootUri, 'root'}]` (ADR 0011 tail). */
+      workspaceFolders?: { uri: string; name: string }[]
+    } = {},
   ): Promise<InitializeSummary> {
     this.installInboundHandlers()
     if (!this.listening) {
@@ -335,7 +339,7 @@ export class LspClient {
           },
         },
       },
-      workspaceFolders: [{ uri: rootUri, name: 'root' }],
+      workspaceFolders: opts.workspaceFolders ?? [{ uri: rootUri, name: 'root' }],
       initializationOptions: opts.initializationOptions,
     })) as InitializeResult
 

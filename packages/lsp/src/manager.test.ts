@@ -112,6 +112,61 @@ describe('LanguageServerManager lifecycle', () => {
   })
 })
 
+describe('LanguageServerManager multi-root workspaces', () => {
+  const ROOT_B = '/project-b'
+  const INPUT_B = {
+    language: 'typescript',
+    projectRoot: ROOT_B,
+    uri: 'file:///project-b/src/lib.ts',
+    text: 'export const x = 1',
+  }
+
+  it('initializes one server with ALL group workspaceFolders and shares it across the roots', async () => {
+    let initParams: { workspaceFolders?: Array<{ uri: string }> } | undefined
+    const { spawn, spawns } = makeSpawn({
+      onInitialize: (p) => {
+        initParams = p as typeof initParams
+      },
+    })
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT, ROOT_B] })
+    // Query a file in ROOT, then a file in ROOT_B, both naming the SAME group → one shared server.
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'a')
+    await mgr.run({ ...INPUT_B, workspaceRoots: [ROOT] }, async () => 'b')
+    expect(spawns).toHaveLength(1)
+    expect(mgr.serverCount).toBe(1)
+    expect(initParams?.workspaceFolders?.map((f) => f.uri).sort()).toEqual([
+      pathToFileURL(ROOT).toString(),
+      pathToFileURL(ROOT_B).toString(),
+    ])
+  })
+
+  it('a single-root query stays a DISTINCT server from the multi-root group (keying)', async () => {
+    const { spawn, spawns } = makeSpawn()
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT, ROOT_B] })
+    await mgr.run(INPUT, async () => 'single') // group [ROOT]
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'multi') // group [ROOT, ROOT_B]
+    expect(spawns).toHaveLength(2)
+    expect(mgr.serverCount).toBe(2)
+  })
+
+  it('describe() reports the full root group for a multi-root server', async () => {
+    const { spawn } = makeSpawn()
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT, ROOT_B] })
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'x')
+    const desc = mgr.describe()[0]
+    expect(desc?.roots?.sort()).toEqual([ROOT, ROOT_B])
+  })
+
+  it('refuses a workspaceRoot outside the allowlist (never spawns)', async () => {
+    const { spawn, spawns } = makeSpawn()
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT] }) // ROOT_B NOT allowed
+    await expect(
+      mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'x'),
+    ).rejects.toBeInstanceOf(LspManagerError)
+    expect(spawns).toHaveLength(0)
+  })
+})
+
 describe('LanguageServerManager per-(server, uri) mutex', () => {
   it('serializes the open+query critical section for the same uri', async () => {
     const { spawn } = makeSpawn()

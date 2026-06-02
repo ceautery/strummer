@@ -69,6 +69,36 @@ describe('LspClient.initialize (handshake)', () => {
     expect(client.serverInfo).toEqual({ name: 'typescript-language-server', version: '5.3.0' })
   })
 
+  it('advertises a single root workspaceFolder by default (backwards compatible)', async () => {
+    let initParams: { workspaceFolders?: Array<{ uri: string; name: string }> } | undefined
+    const { client: cConn, server, dispose } = makePeerPair()
+    disposers.push(dispose)
+    fakeServer(server, { onInitialize: (p) => (initParams = p as typeof initParams) })
+    const client = new LspClient(cConn, { timeoutMs: 1000 })
+    await client.initialize('file:///project')
+    expect(initParams?.workspaceFolders).toEqual([{ uri: 'file:///project', name: 'root' }])
+  })
+
+  it('advertises MULTIPLE workspaceFolders when given (multi-root)', async () => {
+    let initParams: { rootUri?: string; workspaceFolders?: Array<{ uri: string }> } | undefined
+    const { client: cConn, server, dispose } = makePeerPair()
+    disposers.push(dispose)
+    fakeServer(server, { onInitialize: (p) => (initParams = p as typeof initParams) })
+    const client = new LspClient(cConn, { timeoutMs: 1000 })
+    await client.initialize('file:///project/a', {
+      workspaceFolders: [
+        { uri: 'file:///project/a', name: 'a' },
+        { uri: 'file:///project/b', name: 'b' },
+      ],
+    })
+    expect(initParams?.workspaceFolders?.map((f) => f.uri)).toEqual([
+      'file:///project/a',
+      'file:///project/b',
+    ])
+    // rootUri stays the primary (deprecated field; workspaceFolders is authoritative).
+    expect(initParams?.rootUri).toBe('file:///project/a')
+  })
+
   it('exposes the server capabilities', async () => {
     const { client } = await connectedClient()
     expect(client.supports('definitionProvider')).toBe(true)

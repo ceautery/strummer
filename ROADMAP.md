@@ -694,9 +694,20 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `'diagnostics'` query kind (file-based, position-less); the gated `lsp_diagnostics` MCP tool
         (large lists by handle) + `strummer lsp diagnostics <language> <file>` CLI. Verified live
         (clean file → 0; an introduced error → the 2322 error + a 6133 unused hint).
+  - [x] **Multi-root workspaces — `workspaceRoots[]` / `--workspace-root`.** One language server
+        bound to MULTIPLE `workspaceFolders` (a monorepo) so cross-root navigation resolves through
+        one server. Additive + opt-in (single-root behavior byte-identical). `client.initialize`
+        takes `workspaceFolders[]`; the manager keys a server by the sorted, de-duplicated root
+        GROUP (`assertRootAllowed`s every member before spawn; `describe()` reports `roots[]`); the
+        query engine threads `workspaceRoots[]` (each paired-gated, file confined to the primary
+        root); the MCP nav tools gained an optional `workspaceRoots` (nav-only — `lsp_rename`
+        excluded) and `strummer lsp` a repeatable `--workspace-root`. Verified live (real tsserver
+        accepts the multi-folder init; a query in a non-primary root is served; cross-root
+        definition resolves). Honest nuance: cross-root *references* depend on the server's indexing
+        model (eager indexers cover all folders; tsserver loads a folder's project lazily on open).
   - [ ] *(staged, not amputated)* pull-diagnostics (`textDocument/diagnostic`, for servers that
-        advertise `diagnosticProvider`), write-mode for resource ops + multi-file conflict
-        reconciliation, multi-**root** (the project-LOAD half is fixed),
+        advertise `diagnosticProvider`), dynamic `didChangeWorkspaceFolders` + write-mode multi-root,
+        write-mode for resource ops + multi-file conflict reconciliation,
         full toolchain-version resolution, Python adapter posture.
 
 ## Ongoing

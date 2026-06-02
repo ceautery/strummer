@@ -73,6 +73,23 @@ written to disk, and \`refused\` explains any non-apply. There is no input that 
 
 const HEAD = 50 // inline at most this many locations; the rest go by handle.
 
+/** Shared optional multi-root input field — additional allowlisted roots bound to the same server. */
+const workspaceRootsField = {
+  workspaceRoots: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'OPTIONAL additional project roots to bind as workspace folders on the same server ' +
+        '(multi-root, e.g. a monorepo) so cross-root navigation resolves; each must be ' +
+        'operator-allowlisted (an out-of-allowlist root is refused).',
+    ),
+}
+
+/** Pull the optional `workspaceRoots` off tool args (spread into the query input when present). */
+function wsRoots(args: Record<string, unknown>): { workspaceRoots?: string[] } {
+  return args.workspaceRoots ? { workspaceRoots: args.workspaceRoots as string[] } : {}
+}
+
 function text(value: unknown) {
   return { type: 'text' as const, text: JSON.stringify(value, null, 2) }
 }
@@ -130,6 +147,9 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
       line: z.number().int().describe('1-based line'),
       column: z.number().int().describe('1-based column (counts Unicode code points)'),
     }
+    // Read-navigation accepts multi-root; `lsp_rename` does NOT (write-path multi-root is staged —
+    // its confinement is single-root), so it keeps the plain positionSchema.
+    const navSchema = { ...positionSchema, ...workspaceRootsField }
 
     const runNavigation = async (kind: LspQueryKind, args: Record<string, unknown>) => {
       const language = args.language as string
@@ -142,6 +162,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
         line: args.line as number,
         column: args.column as number,
         kind,
+        ...wsRoots(args),
         ...(toolchain ? { toolchain } : {}),
       })
 
@@ -185,7 +206,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           'Resolve the definition of the symbol at a 1-based line:column. Operator-gated ' +
           '(requires a live indexing server) and confined to allowlisted project roots. ' +
           'Returns tri-state status + locations mapped back to human 1-based line:column.',
-        inputSchema: positionSchema,
+        inputSchema: navSchema,
       },
       (args) => runNavigation('definition', args),
     )
@@ -198,7 +219,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           'Resolve the TYPE definition of the symbol at a 1-based line:column (the declaration ' +
           "of the symbol's type — e.g. the class/interface a variable is an instance of, not " +
           'the variable). Operator-gated; tri-state status + locations in human 1-based line:column.',
-        inputSchema: positionSchema,
+        inputSchema: navSchema,
       },
       (args) => runNavigation('typeDefinition', args),
     )
@@ -211,7 +232,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           'Find all references to the symbol at a 1-based line:column. Operator-gated and ' +
           'confined to allowlisted project roots. A large list is capped inline; the full list ' +
           'is returned by handle when an artifact store is configured.',
-        inputSchema: positionSchema,
+        inputSchema: navSchema,
       },
       (args) => runNavigation('references', args),
     )
@@ -223,7 +244,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
         description:
           'Get the hover info (type/signature/docs) for the symbol at a 1-based line:column. ' +
           'Operator-gated and confined to allowlisted project roots.',
-        inputSchema: positionSchema,
+        inputSchema: navSchema,
       },
       (args) => runNavigation('hover', args),
     )
@@ -243,6 +264,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           file: z
             .string()
             .describe('the file to outline, relative to projectRoot (or absolute within it)'),
+          ...workspaceRootsField,
         },
       },
       async (args) => {
@@ -254,6 +276,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           projectRoot,
           file: args.file as string,
           kind: 'documentSymbols',
+          ...wsRoots(args),
           ...(toolchain ? { toolchain } : {}),
         })
         const symbols = result.symbols ?? []
@@ -300,6 +323,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           file: z
             .string()
             .describe('the file to diagnose, relative to projectRoot (or absolute within it)'),
+          ...workspaceRootsField,
         },
       },
       async (args) => {
@@ -311,6 +335,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           projectRoot,
           file: args.file as string,
           kind: 'diagnostics',
+          ...wsRoots(args),
           ...(toolchain ? { toolchain } : {}),
         })
         const diagnostics = result.diagnostics ?? []
@@ -362,6 +387,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
               'optional anchor file (relative to projectRoot) to open so the project loads; ' +
                 'required for typescript-language-server, unused by eager indexers',
             ),
+          ...workspaceRootsField,
         },
       },
       async (args) => {
@@ -374,6 +400,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           query: args.query as string,
           ...(args.file !== undefined ? { file: args.file as string } : {}),
           kind: 'workspaceSymbol',
+          ...wsRoots(args),
           ...(toolchain ? { toolchain } : {}),
         })
         const symbols = result.workspaceSymbols ?? []
@@ -412,7 +439,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           'ranges in human 1-based line:column. Operator-gated; tri-state status. Overloaded ' +
           'symbols yield multiple groups (all kept). A large result goes by handle when a store is set.',
         inputSchema: {
-          ...positionSchema,
+          ...navSchema,
           direction: z
             .enum(['incoming', 'outgoing'])
             .optional()
@@ -431,6 +458,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           column: args.column as number,
           kind: 'callHierarchy',
           direction: (args.direction as 'incoming' | 'outgoing') ?? 'incoming',
+          ...wsRoots(args),
           ...(toolchain ? { toolchain } : {}),
         })
         const groups = result.callHierarchy ?? []

@@ -379,6 +379,26 @@ describe('lsp navigation tools', () => {
     expect(data.diagnostics?.[0]?.code).toBe(2322)
   })
 
+  it('passes workspaceRoots through for multi-root navigation', async () => {
+    const stub = stubQuery(okDefinition)
+    const client = await connect({ ...GATED, query: stub.query })
+    await client.callTool({
+      name: 'lsp_find_definition',
+      arguments: { ...DEF_ARGS, workspaceRoots: ['/project', '/project-b'] },
+    })
+    expect(stub.last()?.workspaceRoots).toEqual(['/project', '/project-b'])
+  })
+
+  it('lsp_rename does NOT expose a workspaceRoots input (write-path multi-root is staged)', async () => {
+    const client = await connect({
+      ...GATED,
+      query: stubQuery(okDefinition).query,
+      rename: stubRename(previewResult).rename,
+    })
+    const tool = (await client.listTools()).tools.find((t) => t.name === 'lsp_rename')
+    expect(Object.keys(tool?.inputSchema.properties ?? {})).not.toContain('workspaceRoots')
+  })
+
   it('passes through detected toolchain provenance', async () => {
     const stub = stubQuery(okDefinition)
     const client = await connect({

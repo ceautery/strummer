@@ -86,7 +86,16 @@ project while still loading the `tsconfig.json` project; the engine detects the 
 indexing and re-queries the loaded project, so you get the full set. The trade-off is
 latency: a **cold** query pauses briefly (a few hundred ms) while the server indexes. If
 indexing exceeds the per-request timeout the result `status` is `not_ready` (retry); raise
-it with `--timeout-ms`. (Multi-*root* workspaces remain a staged LSP tail.)
+it with `--timeout-ms`.
+
+**Multi-root** workspaces are supported: pass `--workspace-root <path>` (repeatable) to bind
+extra roots as workspace folders on the *same* server (a monorepo of packages), e.g.
+`--project packages/a --workspace-root packages/b`. Each root must be authorized (passing it
+is the authorization). Cross-root **definition** resolves through the one server; note that
+cross-root **references** depend on the server's indexing model — eager indexers (gopls,
+rust-analyzer) cover all folders, while `tsserver` loads a folder's project lazily on file
+open, so its reference search only spans roots whose files have been touched. Write-mode
+(`rename`) stays single-root for now (a staged tail).
 
 A result `status` is tri-state — `ok`, `no_result`, or `not_ready` (the server was still
 indexing past the deadline; **retry** or raise `--timeout-ms`). Exit codes: `0` the query

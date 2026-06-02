@@ -241,6 +241,7 @@ strummer lsp references typescript src/app.ts 42 8 --project . --allow-run
 strummer lsp symbols typescript src/app.ts --project . --allow-run
 strummer lsp workspace-symbols typescript MyClass src/app.ts --project . --allow-run      # project-wide search; trailing file anchors the project (tsserver needs it)
 strummer lsp diagnostics typescript src/app.ts --project . --allow-run                     # errors/warnings (push model; empty = clean; exit 2 = still indexing)
+strummer lsp definition typescript packages/a/src/x.ts 4 14 --project packages/a --workspace-root packages/b --allow-run  # multi-root: bind both packages on one server
 strummer lsp rename typescript src/app.ts 42 8 newName --project . --allow-run            # dry-run preview
 strummer lsp rename typescript src/app.ts 42 8 newName --project . --allow-run --allow-write  # writes to disk
 ```

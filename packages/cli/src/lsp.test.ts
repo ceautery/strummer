@@ -93,6 +93,34 @@ describe('strummer lsp CLI', () => {
     expect(seen?.projectRoot).toMatch(/proj$/)
   })
 
+  it('passes repeatable --workspace-root through as resolved workspaceRoots (multi-root)', async () => {
+    let seen: LspQueryInput | undefined
+    const c = capture()
+    await runLsp(
+      [
+        'definition',
+        'typescript',
+        'src/a.ts',
+        '3',
+        '5',
+        '--project',
+        '/proj',
+        '--workspace-root',
+        '/proj-b',
+        '--workspace-root',
+        '/proj-c',
+      ],
+      c.io,
+      {
+        query: async (input) => {
+          seen = input
+          return definitionResult
+        },
+      },
+    )
+    expect(seen?.workspaceRoots).toEqual([resolve('/proj-b'), resolve('/proj-c')])
+  })
+
   it('hover prints the hover value', async () => {
     const c = capture()
     const code = await runLsp(

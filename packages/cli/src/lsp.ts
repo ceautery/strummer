@@ -78,6 +78,9 @@ export async function runLsp(args: string[], io: CliIO, deps: LspDeps = {}): Pro
 
 const GATE_OPTIONS = {
   project: { type: 'string' },
+  // Additional roots bound as workspace folders on the SAME server (multi-root). Repeatable.
+  // The human is the operator, so passing a root authorizes it (it joins the allowlist).
+  'workspace-root': { type: 'string', multiple: true },
   servers: { type: 'string' },
   'allow-run': { type: 'boolean' },
   'allow-write': { type: 'boolean' },
@@ -97,6 +100,8 @@ interface Engines {
   describeServers: DescribeFn
   shutdown: () => Promise<void>
   projectRoot: string
+  /** Resolved additional multi-root workspace folders (from `--workspace-root`). */
+  workspaceRoots: string[]
 }
 
 /**
@@ -107,6 +112,7 @@ interface Engines {
  */
 function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps): Engines | null {
   const projectRoot = resolve((values.project as string) ?? process.cwd())
+  const workspaceRoots = ((values['workspace-root'] as string[]) ?? []).map((r) => resolve(r))
   if (deps.query || deps.rename || deps.describeServers) {
     return {
       query: deps.query ?? (async () => fail('query')),
@@ -114,6 +120,7 @@ function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps):
       describeServers: deps.describeServers ?? (() => []),
       shutdown: async () => {},
       projectRoot,
+      workspaceRoots,
     }
   }
   const raw = (values.servers as string) ?? io.env?.STRUMMER_LSP_SERVERS
@@ -128,7 +135,7 @@ function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps):
     io.err(`invalid --servers registry: ${(e as Error).message}\n`)
     return null
   }
-  const allowedRoots = [projectRoot]
+  const allowedRoots = [projectRoot, ...workspaceRoots]
   const manager = new LanguageServerManager({
     registry,
     allowedRoots,
@@ -151,6 +158,7 @@ function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps):
     describeServers: () => manager.describe(),
     shutdown: () => manager.shutdown(),
     projectRoot,
+    workspaceRoots,
   }
 }
 
@@ -243,6 +251,7 @@ async function cmdQuery(
       projectRoot: engines.projectRoot,
       file,
       kind,
+      ...(engines.workspaceRoots.length ? { workspaceRoots: engines.workspaceRoots } : {}),
       ...(positionLess ? {} : { line: Number(lineRaw), column: Number(colRaw) }),
       ...(kind === 'callHierarchy'
         ? { direction: (values.direction as 'incoming' | 'outgoing') ?? 'incoming' }
@@ -321,6 +330,7 @@ async function cmdWorkspaceSymbols(args: string[], io: CliIO, deps: LspDeps): Pr
       projectRoot: engines.projectRoot,
       kind: 'workspaceSymbol',
       query,
+      ...(engines.workspaceRoots.length ? { workspaceRoots: engines.workspaceRoots } : {}),
       ...(anchorFile !== undefined ? { file: anchorFile } : {}),
     })
 

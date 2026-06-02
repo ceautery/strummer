@@ -90,6 +90,12 @@ export interface LspQueryInput {
   /** Project root — must be in `allowedRoots`; pinned to the server's `rootUri`. */
   projectRoot: string
   /**
+   * Additional allowlisted roots bound as workspace folders on the SAME server (multi-root, ADR
+   * 0011 tail) — so cross-root navigation resolves through one server. Each must be in
+   * `allowedRoots`. The queried `file` still lives under the primary `projectRoot`.
+   */
+  workspaceRoots?: string[]
+  /**
    * The file to query, relative to `projectRoot` (or absolute within it). Required for every kind
    * EXCEPT `workspaceSymbol`, which searches the whole indexed project and needs no open file.
    */
@@ -212,6 +218,10 @@ export class LspQueryEngine {
 
   async query(input: LspQueryInput): Promise<LspQueryResult> {
     assertAllowed(this.allowRun, this.allowedRoots, input.projectRoot)
+    // Every additional multi-root folder is gated the same way as the primary root.
+    for (const root of input.workspaceRoots ?? []) {
+      assertAllowed(this.allowRun, this.allowedRoots, root)
+    }
 
     // workspace/symbol is file-less + position-less: it searches the whole indexed project, so it
     // takes a `query` string and opens no document (the manager acquires/initializes the server,
@@ -243,7 +253,13 @@ export class LspQueryEngine {
       | NavResult<NormalizedDiagnostic[]>
       | NavResult<CallHierarchyGroup[]>
     const nav = await this.manager.run<Nav>(
-      { language: input.language, projectRoot: input.projectRoot, uri, text },
+      {
+        language: input.language,
+        projectRoot: input.projectRoot,
+        uri,
+        text,
+        ...(input.workspaceRoots ? { workspaceRoots: input.workspaceRoots } : {}),
+      },
       (client): Promise<Nav> => {
         switch (input.kind) {
           case 'documentSymbols':
@@ -311,7 +327,12 @@ export class LspQueryEngine {
       )
     } else {
       nav = await this.manager.runWithUris<NavResult<NormalizedWorkspaceSymbol[]>>(
-        { language: input.language, projectRoot: input.projectRoot, uris: [] },
+        {
+          language: input.language,
+          projectRoot: input.projectRoot,
+          uris: [],
+          ...(input.workspaceRoots ? { workspaceRoots: input.workspaceRoots } : {}),
+        },
         (client) => client.workspaceSymbols(query),
       )
     }

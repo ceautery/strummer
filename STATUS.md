@@ -156,8 +156,11 @@ MCP tool + `strummer lsp workspace-symbols` CLI + the gated query path; an optio
 opens a document so a tsserver-style project loads, a bug caught running the greeter live), and now
 the **LSP `diagnostics` tail** (push-model errors/warnings for a file — `lsp_diagnostics` MCP tool +
 `strummer lsp diagnostics` CLI; the server PUSHES `publishDiagnostics` after analysis, so the client
-waits out indexing then returns the post-settle publish; empty = clean, not_ready = retry) — current
-count is 876 TS + 45 Py green; see the Next-action block for the detail.**)_
+waits out indexing then returns the post-settle publish; empty = clean, not_ready = retry), and now
+the **LSP multi-ROOT tail** (one server bound to multiple `workspaceFolders` via an additive,
+opt-in `workspaceRoots[]` / `--workspace-root`; the manager keys a server by the sorted root group,
+single-root behavior byte-identical) — current count is 887 TS + 45 Py green; see the Next-action
+block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -761,16 +764,37 @@ determinism: push diagnostics arrive as async stream I/O, which the instant inje
 race ahead of, so the "ok" paths use a real timer (publish lands in ~1ms) while `not_ready` stays on
 the clock. Verified live: a clean file → 0 diagnostics; an introduced type error → the 2322 error +
 a 6133 unused-var hint (both severities + human-mapped ranges).
-**Remaining non-blocking tails:** LSP pull-diagnostics (`textDocument/diagnostic`, for servers that
-advertise `diagnosticProvider`), **multi-ROOT** (the project-LOAD half is fixed), write-mode for
-resource ops + multi-file conflict reconciliation, full toolchain-mismatch heuristic; mutate
-cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems.
+**LSP multi-ROOT DONE, 887 TS + 45 Py green (ADR 0011 staged tail):** one language server bound to
+MULTIPLE `workspaceFolders` (a monorepo of packages) so cross-root navigation resolves through one
+server. **Additive + opt-in** so single-root behavior is byte-identical. Slices, all TDD:
+`client.initialize` accepts `workspaceFolders[]` (default the single `[{rootUri,'root'}]`); the
+**manager keys a server by the sorted, de-duplicated root GROUP** (`(language, NUL-joined roots)` —
+a single-root key is the lone root, unchanged; `A+[B]` and `B+[A]` share one server; `A` alone stays
+distinct), `assertRootAllowed`s EVERY group root before any spawn, inits all as `workspaceFolders`
+(rootUri = first sorted root), and `describe()` reports `roots[]` for a multi-root server; the query
+engine threads `LspQueryInput.workspaceRoots[]` (each paired-gated) and confines the queried file to
+the primary `projectRoot`; the MCP nav tools gained an optional `workspaceRoots` input (a nav-only
+`navSchema` — `lsp_rename` deliberately does NOT expose it, write-path multi-root is staged and its
+confinement is single-root) and `strummer lsp` gained a repeatable `--workspace-root` (the human is
+the operator, so passing a root authorizes it → joins the allowlist). **Verified live against real
+tsserver:** the multi-folder `initialize` is accepted, a query confined to a non-primary root is
+served by the multi-root server, and cross-root **definition** (b→a) resolves. **Honest nuance
+(found live):** cross-root **references** depend on the server's indexing model — eager indexers
+(gopls/rust-analyzer) cover all folders, but tsserver loads a folder's project lazily on file open,
+so its reference search only spans roots whose files have been touched (documented in the greeter
+README). **Remaining non-blocking tails:** LSP pull-diagnostics (`textDocument/diagnostic`, for
+servers that advertise `diagnosticProvider`), dynamic `didChangeWorkspaceFolders` + write-mode
+multi-root, write-mode for resource ops + multi-file conflict reconciliation, full
+toolchain-mismatch heuristic; mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for
+PyPI/RubyGems.
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); `workspace/symbol` search
 (DONE — `lsp_workspace_symbols` + CLI, optional anchor file); `diagnostics` (DONE — push-model
-`lsp_diagnostics` + CLI; pull-diagnostics `textDocument/diagnostic` still staged); then
-multi-root, the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
+`lsp_diagnostics` + CLI; pull-diagnostics `textDocument/diagnostic` still staged); multi-ROOT
+(DONE — `workspaceRoots[]` / `--workspace-root`, server keyed by the sorted root group; dynamic
+`didChangeWorkspaceFolders` + write-mode multi-root still staged); then
+the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
 write-mode resource-ops + multi-file conflict reconciliation, and a Python adapter posture. **Other
 Phase-4 staged tails:** `istanbul-lib-coverage` `CoverageMap` merging; a Python `run_scoped` (pytest
 --cov) sibling; mutate cosmic-ray adapter + gated `runMutmut` spawner. (The deps PyPI/RubyGems
