@@ -507,6 +507,123 @@ describe('LspRenameEngine — resource operations (CreateFile/RenameFile/DeleteF
   })
 })
 
+describe('LspRenameEngine — resource-op options (safe-subset ignoreIf*)', () => {
+  // Build a documentChanges result whose paths are relative to the queried uri's directory.
+  const docChanges =
+    (build: (dir: string) => unknown[]) =>
+    (params: unknown): unknown => {
+      const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+      const dir = uri.slice(0, uri.lastIndexOf('/'))
+      return { documentChanges: build(dir) }
+    }
+  const engineFor = (root: string, manager: LanguageServerManager, writer: RenameWriter) =>
+    new LspRenameEngine({ manager, allowRun: true, allowedRoots: [root], allowWrite: true, writer })
+
+  it('A1: create + ignoreIfExists SKIPS (not refuses) when the target already exists', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/index.ts`, options: { ignoreIfExists: true } },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.status).toBe('ok')
+    expect(r.applied).toBe(false)
+    expect(r.refused).toBeUndefined() // skipped silently, NOT refused
+  })
+
+  it('A2: create on an existing target with NO option is refused (no write)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [{ kind: 'create', uri: `${dir}/index.ts` }]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/cannot create .*already exists/i)
+  })
+
+  it('A3: rename + ignoreIfExists SKIPS when the target already exists (old stays)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          kind: 'rename',
+          oldUri: `${dir}/index.ts`,
+          newUri: `${dir}/greeter.ts`,
+          options: { ignoreIfExists: true },
+        },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toBeUndefined()
+    expect(existsSync(join(root, 'index.ts'))).toBe(true) // untouched
+  })
+
+  it('A4: rename onto an existing target with NO option is refused', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/greeter.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/cannot rename to .*already exists/i)
+  })
+
+  it('A5: delete + ignoreIfNotExists SKIPS when the file is missing', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'delete', uri: `${dir}/nope.ts`, options: { ignoreIfNotExists: true } },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toBeUndefined()
+  })
+
+  it('A6: delete of a missing file with NO option is refused', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [{ kind: 'delete', uri: `${dir}/nope.ts` }]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/cannot delete .*does not exist/i)
+  })
+
+  it('A7: create + overwrite is STILL refused (destructive option, staged in v1)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/new.ts`, options: { overwrite: true } },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/options.*unsupported in v1/i)
+  })
+
+  it('A8: delete + recursive is STILL refused (destructive option, staged in v1)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'delete', uri: `${dir}/index.ts`, options: { recursive: true } },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/options.*unsupported in v1/i)
+  })
+
+  it('A9: create + ignoreIfExists PROCEEDS when the target does NOT exist (no-op option)', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/fresh.ts`, options: { ignoreIfExists: true } },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(writeOps(ops).map((w) => w.absPath)).toEqual([join(root, 'fresh.ts')])
+    expect(writeOps(ops)[0]?.newText).toBe('')
+  })
+})
+
 describe('LspRenameEngine — prepareRename validation', () => {
   it('refuses (no write) when prepareRename says the position is not renameable', async () => {
     const { root, manager } = setup({ onRename: multiFileEdit, onPrepareRename: () => null })

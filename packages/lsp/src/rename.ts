@@ -149,14 +149,14 @@ export const defaultRenameWriter: RenameWriter = {
   },
 }
 
-function hasNonDefaultOptions(o?: ResourceOpOptions): boolean {
-  return (
-    o !== undefined &&
-    (o.overwrite === true ||
-      o.ignoreIfExists === true ||
-      o.ignoreIfNotExists === true ||
-      o.recursive === true)
-  )
+/**
+ * The DESTRUCTIVE resource-op options that stay refused in v1 (`overwrite` replaces an existing
+ * file's content; `recursive` enables directory deletes). The CONDITIONAL options
+ * `ignoreIfExists`/`ignoreIfNotExists` are NOT refused — they are honored as safe no-ops (never more
+ * destructive than the default), handled inline in the per-op replay.
+ */
+function hasRefusedOptions(o?: ResourceOpOptions): boolean {
+  return o !== undefined && (o.overwrite === true || o.recursive === true)
 }
 
 function isRegularFile(abs: string): boolean {
@@ -394,11 +394,10 @@ export class LspRenameEngine {
       }
     }
     for (const op of ops) {
-      if (op.type !== 'edit' && hasNonDefaultOptions(op.options)) {
+      if (op.type !== 'edit' && hasRefusedOptions(op.options)) {
         return {
           applied: false,
-          refused:
-            'resource-op options (overwrite/ignoreIfExists/recursive) are unsupported in v1 (refused)',
+          refused: 'resource-op options (overwrite/recursive) are unsupported in v1 (refused)',
         }
       }
       if (op.type === 'edit' && renameEndpoints.has(op.uri)) {
@@ -435,6 +434,7 @@ export class LspRenameEngine {
         for (const op of ops) {
           if (op.type === 'create') {
             if (readDisk(op.uri) !== undefined) {
+              if (op.options?.ignoreIfExists === true) continue // safe no-op: leave the file as-is
               return { applied: false, refused: `cannot create ${rel(op.uri)}: it already exists` }
             }
             proj.set(op.uri, '')
@@ -442,6 +442,7 @@ export class LspRenameEngine {
           } else if (op.type === 'delete') {
             const cur = readDisk(op.uri)
             if (cur === undefined) {
+              if (op.options?.ignoreIfNotExists === true) continue // safe no-op: nothing to delete
               return { applied: false, refused: `cannot delete ${rel(op.uri)}: it does not exist` }
             }
             if (!isRegularFile(abs.get(op.uri) as string)) {
@@ -461,6 +462,7 @@ export class LspRenameEngine {
               }
             }
             if (readDisk(op.newUri) !== undefined) {
+              if (op.options?.ignoreIfExists === true) continue // safe no-op: skip; old stays
               return {
                 applied: false,
                 refused: `cannot rename to ${rel(op.newUri)}: it already exists`,
