@@ -76,6 +76,16 @@ $S lsp rename typescript greeter.ts 7 14 Welcomer --project $P --allow-run
 $S lsp rename typescript greeter.ts 7 14 Welcomer --project $P --allow-run --allow-write
 ```
 
+`rename` also applies **file resource operations** (`CreateFile`/`RenameFile`/`DeleteFile`) when the
+server's edit includes them — e.g. renaming a module whose name matches its file renames the file on
+disk, interleaved with the text edits, atomically (a mid-commit fault is reported as `partial` — no
+rollback, reconcile via VCS). `typescript-language-server` does **not** emit resource ops on an
+ordinary symbol rename, so this is exercised against servers that do (e.g. **rust-analyzer**, whose
+`mod greeter;`→`welcome` rename renames `greeter.rs`→`welcome.rs`); the gate replays a recorded
+rust-analyzer payload (no server is bundled). v1 cuts (refused): resource-op options
+(overwrite/recursive), directory/recursive delete, and editing a file that is also renamed in the
+same edit.
+
 ### Cross-file results & the indexing wait
 
 Each invocation opens **only the queried file**, but cross-file answers are still correct:

@@ -565,3 +565,71 @@ engine now accepts the same `workspaceRoots`, so a cross-root rename in a monore
 - **Still staged:** dynamic `didChangeWorkspaceFolders` (adding/removing folders at runtime), and
   write-mode resource ops + multi-file conflict reconciliation (§10.2). Multi-root only widens the
   set of *roots* an edit may land in; it does not change the resource-op refuse cut.
+
+---
+
+## Addendum (2026-06-02) — resource-op write-mode + a readiness generalization
+
+`lsp_rename` now APPLIES file resource operations (`CreateFile`/`RenameFile`/`DeleteFile`) instead
+of refusing them — un-staging the §10.2 tail. Designed by the same fan-out-then-adversarial pass
+(an adversarial critic produced findings B1–B12; the corrections are folded in below). The human
+chose **"provision rust-analyzer first"** to keep ADR-0011's verify-live discipline intact.
+
+### Provisioning + verify-live (the deciding constraint)
+
+tsserver does NOT emit resource ops on an ordinary `textDocument/rename` (re-confirmed after the
+capability flip below). So the only way to exercise — and live-verify — the apply path here is a
+server whose rename produces a real `RenameFile`: **rust-analyzer**, whose **module rename renames
+the backing file** (`mod greeter;` → renames `greeter.rs`). We provisioned the standalone
+`rust-analyzer` 0.3.2921 binary (no cargo — a hand-written `rust-project.json` builds the module
+graph) and verified the full path live: a `mod greeter;`→`welcome` rename edited `main.rs` AND
+renamed `greeter.rs`→`welcome.rs` on disk, with per-file digests. rust-analyzer is local/untracked
+(the dev harness is gitignored); the gate stays fixture-only, so CI is unaffected.
+
+### Readiness generalization (prerequisite, surfaced BY the live check)
+
+The live check immediately paid off: queried mid-index, rust-analyzer returns a `ResponseError
+-32602 "No references found"` where tsserver returns an EMPTY result. `withRetry` had no `catch`,
+so it escaped as a hard failure — our readiness model was tsserver-shaped. Fix: `withRetry` catches
+a recognized *soft* `ResponseError` (the spec's `-32801`/`-32802`/`-32800` retry/cancel codes +
+`-32602`) and routes it through the SAME tri-state path as an empty result — indexing ⇒ `not_ready`
+(retry within the operator deadline), settled ⇒ `no_result` (terminal, no spin; never `ok`). Any
+other error propagates unchanged. (Also: rust-analyzer refuses a module rename outright unless the
+client advertises `workspaceEdit.resourceOperations` — so we flipped it from `[]` to
+`['create','rename','delete']`; tsserver's ordinary rename is unchanged by the flip.)
+
+### Apply design (the corrected contract)
+
+- **Ordered operations, not buckets** (B1). `normalizeWorkspaceEdit` gains `operations:
+  NormalizedOp[]` (discriminated `edit|create|rename|delete`, carrying per-op `options`) in
+  `documentChanges` order — the apply authority. `{files,resourceOps}` stay for preview/back-compat.
+- **Lock the URI union** (B2). The apply locks every touched URI (edit ∪ create ∪ rename old&new ∪
+  delete) via `manager.runWithUris` — the renamed/created file is no longer unlocked. A not-yet-
+  existing `newUri` locks fine (the lock keys by URI string).
+- **Group confinement of every URI, both rename endpoints independently, realpath-hardened** (B6),
+  all-or-nothing **before any I/O** — one out-of-group / non-`file://` URI aborts the whole batch.
+- **Op-type-aware Phase 1 with a virtual content map** (B3): CreateFile seeds `''`, an `edit` folds
+  into the projected content via `applyTextEdits`; the hash/old-identifier staleness guard is
+  **scoped to edits on pre-existing files** (a created file has no on-disk old identifier).
+- **Stage-then-commit, terminal partial** (B5/B9): the writer seam is now `PhysicalOp[]`
+  (`write|rename|delete`) — writes stage to temps (+fsync) first, then ALL ops execute in order
+  (write = atomic rename of its temp; rename/delete = fs primitive). Resource ops are irreversible
+  and unstageable, so a mid-execute fault is **terminal** — `partial:true` names what landed
+  (project-relative); there is no rollback (reconcile via VCS). Not idempotent — no auto-retry.
+- **Doc-sync migration** (B4 — the highest-risk corner): `client.didFileRename(old,new)` does
+  `didClose(old)` + `didOpen(new)` carrying the refcount + languageId (a fresh document → version
+  restarts at 1); `didFileDelete` closes+evicts. Both run inside the held lock, so a `RenameFile`
+  of an open file can't leave a silently-stale buffer keyed to a non-existent path in the shared
+  daemon. (Strummer opens only the queried file, so the common case is a no-op — but the primitive
+  is correct for the general case.)
+- **Preview/audit hygiene** (B8): resource-op paths are surfaced PROJECT-RELATIVE (never an absolute
+  URI / home-dir leak); an endpoint outside every root shows `(out of project root)`.
+
+### v1 scope cuts (staged, not amputated — per the critic's cut list)
+
+Default-semantics Create/Rename/Delete of a **single regular file** only. **Refused** (structured,
+early): any resource op carrying non-default `options` (overwrite/ignoreIfExists/recursive); a
+`DeleteFile` of a directory / non-regular file (no recursive delete — least reversible); and
+**editing a file that is also renamed in the same batch** (the one cross-op interaction; neither
+real shape — RA's pure-rename, a Move-to-file's create+edit — needs it). Resource-op `options`,
+recursive delete, edit-on-renamed-file, and full conflict reconciliation remain staged.

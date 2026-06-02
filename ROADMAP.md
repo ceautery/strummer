@@ -716,10 +716,28 @@ Two independent tracks, then the test-quality chain, then LSP last:
         before spawn. Exposed on the `lsp_rename` MCP tool + `strummer lsp rename --workspace-root`.
         Verified live (tsserver 5.3.0: a cross-root `Greeter`→`Welcomer` rename applied to disk in BOTH
         roots with per-file digests).
+  - [x] **Write-mode resource operations — `CreateFile`/`RenameFile`/`DeleteFile` (ADR-0011 addendum
+        2026-06-02).** `lsp_rename` now APPLIES file ops interleaved with text edits (in
+        `documentChanges` order), e.g. a module rename that renames its backing file. Designed via an
+        adversarial critic pass (B1–B12): `normalizeWorkspaceEdit` gains an ordered `operations` list;
+        the apply locks the UNION of every touched URI, confines every URI (both rename endpoints) to
+        the root group, replays ops over a virtual content map (CreateFile seeds `''`; the staleness
+        guard is scoped to pre-existing files), and stage-then-commits a `PhysicalOp` plan
+        (write/rename/delete) — a mid-commit fault is terminal (`partial`, no rollback; reconcile via
+        VCS). `client.didFileRename`/`didFileDelete` migrate the open-doc map so a `RenameFile` of an
+        open file can't desync the shared server. v1 cuts (staged): non-default resource-op options,
+        recursive/dir delete, editing a file also renamed in the same batch. Prerequisite that fell out
+        of the live check: the **readiness model now handles servers that signal not-ready via an
+        ERROR** (rust-analyzer's `-32602` mid-index) — `withRetry` routes a soft `ResponseError` through
+        the tri-state (indexing ⇒ `not_ready`, settled ⇒ `no_result`). The client advertises
+        `workspaceEdit.resourceOperations` (else rust-analyzer refuses a module rename). **Provisioned
+        rust-analyzer 0.3.2921** (local/untracked; gate stays fixture-only) and verified live: a
+        `mod greeter;`→`welcome` rename edited `main.rs` AND renamed `greeter.rs`→`welcome.rs` on disk.
   - [ ] *(staged, not amputated)* pull-diagnostics (`textDocument/diagnostic`, for servers that
-        advertise `diagnosticProvider`), dynamic `didChangeWorkspaceFolders` (+ its write-mode
-        interaction), write-mode for resource ops (`CreateFile`/`RenameFile`/`DeleteFile`) + multi-file
-        conflict reconciliation, full toolchain-version resolution, Python adapter posture.
+        advertise `diagnosticProvider` — note rust-analyzer DOES, captured in its init fixture), dynamic
+        `didChangeWorkspaceFolders` (+ its write-mode interaction), resource-op **options** +
+        recursive/dir delete + editing-a-renamed-file + multi-file conflict reconciliation, full
+        toolchain-version resolution, Python adapter posture.
 
 ## Ongoing
 

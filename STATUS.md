@@ -164,8 +164,17 @@ accepts the same `workspaceRoots`: a cross-root rename in a monorepo applies, wi
 confined to the allowlisted root GROUP — primary ∪ workspaceRoots — realpath-hardened, all-or-nothing
 via `confineEditedUriToRoots`; `workspaceRoots` threads into BOTH the compute and apply phases so
 they key the SAME group-server; verified live on tsserver 5.3.0 — a cross-root `Greeter`→`Welcomer`
-rename applied to disk in both roots) — current count is 895 TS + 45 Py green; see the Next-action
-block for the detail.**)_
+rename applied to disk in both roots), and now the **LSP resource-op write-mode tail** (`lsp_rename`
+APPLIES `CreateFile`/`RenameFile`/`DeleteFile` interleaved with text edits — e.g. a module rename that
+renames its backing file: ordered `operations` normalize, URI-union lock, group confinement of both
+rename endpoints, a virtual-content-map Phase 1, a stage-then-commit `PhysicalOp` plan with terminal
+`partial` on a mid-commit fault, and `didFileRename`/`didFileDelete` open-map migration; v1 cuts
+non-default options / recursive delete / editing-a-renamed-file). It came with a **readiness
+generalization** (servers that signal not-ready via an ERROR — rust-analyzer's `-32602` mid-index —
+now route through the tri-state, not a hard failure) and **provisioning rust-analyzer 0.3.2921**
+(local/untracked; gate stays fixture-only) to verify live: a `mod greeter;`→`welcome` rename edited
+`main.rs` AND renamed `greeter.rs`→`welcome.rs` on disk — current count is 910 TS + 45 Py green; see
+the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -968,19 +977,23 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 ## Next action
 
 > **CURRENT (2026-06-02).** Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
-> and the Python adapters + LSP capability-gated reads + LSP write-mode (`lsp_rename`) + the LSP
-> tails (cold-load fix, `workspace/symbol`, push-`diagnostics`, multi-root nav) all landed. **Latest:
-> LSP write-mode multi-root** — `lsp_rename` accepts `workspaceRoots` so a cross-root monorepo rename
-> applies; edited files confine to the allowlisted root GROUP (`confineEditedUriToRoots`), threaded
-> into both compute + apply phases; verified live on tsserver 5.3.0. **895 TS + 45 Py green, Biome
-> zero-warning, pushed.** No required work remains. **Remaining staged (non-blocking) LSP tails:**
-> pull-diagnostics (`textDocument/diagnostic`, for servers advertising `diagnosticProvider`); dynamic
-> `didChangeWorkspaceFolders` (+ its write-mode interaction); write-mode **resource ops**
-> (`CreateFile`/`RenameFile`/`DeleteFile` — currently refused on apply; tsserver doesn't emit them on
-> ordinary renames, so a different server is needed to verify live) + multi-file conflict
-> reconciliation; full toolchain-mismatch heuristic. Other Phase-4 tails: `deps` changelog_diff for
-> PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open Phase 5 (needs a design-pass/ADR first).
-> The detailed historical slice log follows.
+> and the Python adapters + LSP capability-gated reads + LSP write-mode (`lsp_rename`, incl. multi-root
+> AND resource ops) + the LSP tails (cold-load fix, `workspace/symbol`, push-`diagnostics`, multi-root
+> nav) all landed. **Latest: LSP resource-op write-mode** — `lsp_rename` applies
+> `CreateFile`/`RenameFile`/`DeleteFile` interleaved with text edits (ordered `operations`, URI-union
+> lock, group confinement of both rename endpoints, virtual-content-map Phase 1, stage-then-commit
+> `PhysicalOp` plan with terminal `partial`, `didFileRename`/`didFileDelete` open-map migration; v1
+> cuts: non-default options / recursive delete / editing-a-renamed-file). Came with a **readiness
+> generalization** (a soft `ResponseError` like rust-analyzer's `-32602` mid-index now routes through
+> the tri-state, not a hard failure) and **provisioned rust-analyzer 0.3.2921** (local/untracked; gate
+> stays fixture-only) to verify live (a `mod greeter;`→`welcome` rename renamed `greeter.rs`→`welcome.rs`
+> on disk). **910 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> staged (non-blocking) LSP tails:** pull-diagnostics (`textDocument/diagnostic` — rust-analyzer DOES
+> advertise `diagnosticProvider`, captured in its init fixture, so this is now live-verifiable); dynamic
+> `didChangeWorkspaceFolders`; resource-op **options** + recursive/dir delete + editing-a-renamed-file +
+> multi-file conflict reconciliation; full toolchain-mismatch heuristic. Other Phase-4 tails: `deps`
+> changelog_diff for PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open Phase 5 (needs a
+> design-pass/ADR first). The detailed historical slice log follows.
 
 **Phase 3, Slice 1 (a11y-audit summarizer): DONE & committed** (`@strummer/browser`
 scaffolded; `ArtifactStore`/`summarizeA11y`/`auditA11y`, TDD against an offline
