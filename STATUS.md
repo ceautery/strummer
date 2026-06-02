@@ -159,7 +159,12 @@ the **LSP `diagnostics` tail** (push-model errors/warnings for a file — `lsp_d
 waits out indexing then returns the post-settle publish; empty = clean, not_ready = retry), and now
 the **LSP multi-ROOT tail** (one server bound to multiple `workspaceFolders` via an additive,
 opt-in `workspaceRoots[]` / `--workspace-root`; the manager keys a server by the sorted root group,
-single-root behavior byte-identical) — current count is 887 TS + 45 Py green; see the Next-action
+single-root behavior byte-identical), and now the **LSP write-mode multi-root tail** (`lsp_rename`
+accepts the same `workspaceRoots`: a cross-root rename in a monorepo applies, with every edited URI
+confined to the allowlisted root GROUP — primary ∪ workspaceRoots — realpath-hardened, all-or-nothing
+via `confineEditedUriToRoots`; `workspaceRoots` threads into BOTH the compute and apply phases so
+they key the SAME group-server; verified live on tsserver 5.3.0 — a cross-root `Greeter`→`Welcomer`
+rename applied to disk in both roots) — current count is 895 TS + 45 Py green; see the Next-action
 block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
@@ -961,6 +966,21 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
   embed), all green. **Pillar 1 (docs/idioms) is functionally complete.**
 
 ## Next action
+
+> **CURRENT (2026-06-02).** Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
+> and the Python adapters + LSP capability-gated reads + LSP write-mode (`lsp_rename`) + the LSP
+> tails (cold-load fix, `workspace/symbol`, push-`diagnostics`, multi-root nav) all landed. **Latest:
+> LSP write-mode multi-root** — `lsp_rename` accepts `workspaceRoots` so a cross-root monorepo rename
+> applies; edited files confine to the allowlisted root GROUP (`confineEditedUriToRoots`), threaded
+> into both compute + apply phases; verified live on tsserver 5.3.0. **895 TS + 45 Py green, Biome
+> zero-warning, pushed.** No required work remains. **Remaining staged (non-blocking) LSP tails:**
+> pull-diagnostics (`textDocument/diagnostic`, for servers advertising `diagnosticProvider`); dynamic
+> `didChangeWorkspaceFolders` (+ its write-mode interaction); write-mode **resource ops**
+> (`CreateFile`/`RenameFile`/`DeleteFile` — currently refused on apply; tsserver doesn't emit them on
+> ordinary renames, so a different server is needed to verify live) + multi-file conflict
+> reconciliation; full toolchain-mismatch heuristic. Other Phase-4 tails: `deps` changelog_diff for
+> PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open Phase 5 (needs a design-pass/ADR first).
+> The detailed historical slice log follows.
 
 **Phase 3, Slice 1 (a11y-audit summarizer): DONE & committed** (`@strummer/browser`
 scaffolded; `ArtifactStore`/`summarizeA11y`/`auditA11y`, TDD against an offline

@@ -95,7 +95,9 @@ is the authorization). Cross-root **definition** resolves through the one server
 cross-root **references** depend on the server's indexing model — eager indexers (gopls,
 rust-analyzer) cover all folders, while `tsserver` loads a folder's project lazily on file
 open, so its reference search only spans roots whose files have been touched. Write-mode
-(`rename`) stays single-root for now (a staged tail).
+(`rename`) is **multi-root too**: pass the same `--workspace-root`, and an edit landing in any
+authorized root is written (edits confine to the root *group*, not just `--project`); an edit
+escaping every authorized root aborts the whole apply before any byte is written.
 
 A result `status` is tri-state — `ok`, `no_result`, or `not_ready` (the server was still
 indexing past the deadline; **retry** or raise `--timeout-ms`). Exit codes: `0` the query

@@ -538,3 +538,30 @@ client.applyEdited(uri, newText): void  // if uri is in the open map: send didCh
 2. **Resource-op v1-cut, pending the fixture.** If the captured `rename-documentchanges.json` shows tsserver 5.3.0 emitting resource ops on ordinary renames despite `resourceOperations: []`, "refuse-on-resource-op" becomes the common path, not the edge — decide then whether to keep the refuse cut or pull resource-op apply into v1.
 3. **Audit fidelity.** Per-file pre/post SHA-256 digests (v1) vs also persisting a full unified diff under a separate `applied-edit-diff` handle kind. Digests are cheaper and leak less; a diff is more useful for an operator review trail.
 4. **Staleness strictness.** Confirm hard-refuse-on-drift + re-query is acceptable for rapidly-changing files (it will force occasional re-queries) rather than any apply-against-current-disk path (which this contract rejects as unsafe).
+
+---
+
+## Addendum (2026-06-02) — write-mode multi-root (`lsp_rename` `workspaceRoots[]`)
+
+A follow-on to the nav multi-root tail (`workspaceRoots[]` / `--workspace-root`): the write
+engine now accepts the same `workspaceRoots`, so a cross-root rename in a monorepo applies.
+
+- **The one new safety decision: edited files confine to the root GROUP, not the primary root.**
+  The single-root write path (§4) confined every edited URI to `projectRoot`. A multi-root rename
+  legitimately edits files in any bound workspace folder, so a new `confineEditedUriToRoots(roots[],
+  uri)` accepts a URI that realpath-confines to **any** allowlisted group root and refuses only when
+  it escapes **every** root (a non-`file://` scheme is still refused up front). The all-or-nothing,
+  confine-before-any-I/O ordering (§4) and the realpath hardening (per-root) are unchanged — an edit
+  outside the whole group aborts the batch before any byte is read or written.
+- **`workspaceRoots` threads into BOTH phases.** Compute (`manager.run`) and apply
+  (`manager.runWithUris`) must pass the same `workspaceRoots` so they key the **same** group-server
+  (`serverKey(language, sorted group)`); otherwise the post-write `didChange` doc-sync would reach a
+  different server than the one the document was opened on. Each `workspaceRoots` member is
+  paired-gated (`assertAllowed`) before any spawn, mirroring the read engine.
+- **Surface:** `lsp_rename` gains the optional `workspaceRoots` input (no longer nav-only); the CLI
+  reuses the repeatable `--workspace-root`. Dry-run-default and the separate `allowWrite` gate are
+  unchanged. Verified live against `typescript-language-server` 5.3.0 (a cross-root
+  `Greeter`→`Welcomer` rename applied to disk in both roots with per-file digests).
+- **Still staged:** dynamic `didChangeWorkspaceFolders` (adding/removing folders at runtime), and
+  write-mode resource ops + multi-file conflict reconciliation (§10.2). Multi-root only widens the
+  set of *roots* an edit may land in; it does not change the resource-op refuse cut.

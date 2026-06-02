@@ -705,10 +705,21 @@ Two independent tracks, then the test-quality chain, then LSP last:
         accepts the multi-folder init; a query in a non-primary root is served; cross-root
         definition resolves). Honest nuance: cross-root *references* depend on the server's indexing
         model (eager indexers cover all folders; tsserver loads a folder's project lazily on open).
+  - [x] **Write-mode multi-root — `lsp_rename` `workspaceRoots[]`.** A cross-root rename in a
+        monorepo now applies. The manager already plumbed `workspaceRoots` through `run`/`runWithUris`;
+        the new safety work is confining every edited URI to the allowlisted root GROUP (primary ∪
+        `workspaceRoots`), realpath-hardened, all-or-nothing (`confineEditedUriToRoots`) — so a
+        legitimate edit in a secondary authorized root is written, but one escaping every root aborts
+        the whole apply before any byte is touched. `workspaceRoots` is threaded into BOTH the compute
+        (`manager.run`) and apply (`manager.runWithUris`) phases so they key the SAME group-server (the
+        post-write `didChange` must reach the server the doc was opened on); each member is paired-gated
+        before spawn. Exposed on the `lsp_rename` MCP tool + `strummer lsp rename --workspace-root`.
+        Verified live (tsserver 5.3.0: a cross-root `Greeter`→`Welcomer` rename applied to disk in BOTH
+        roots with per-file digests).
   - [ ] *(staged, not amputated)* pull-diagnostics (`textDocument/diagnostic`, for servers that
-        advertise `diagnosticProvider`), dynamic `didChangeWorkspaceFolders` + write-mode multi-root,
-        write-mode for resource ops + multi-file conflict reconciliation,
-        full toolchain-version resolution, Python adapter posture.
+        advertise `diagnosticProvider`), dynamic `didChangeWorkspaceFolders` (+ its write-mode
+        interaction), write-mode for resource ops (`CreateFile`/`RenameFile`/`DeleteFile`) + multi-file
+        conflict reconciliation, full toolchain-version resolution, Python adapter posture.
 
 ## Ongoing
 
