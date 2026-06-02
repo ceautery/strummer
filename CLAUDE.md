@@ -158,11 +158,15 @@ vision and `ARCHITECTURE.md` for the technical design.
   `manager.runWithUris` (sorted multi-URI lock) + stage-then-commit-all + staleness guards +
   SHA-256 digests; the `lsp_rename` MCP tool (no `write` input). `workspace/symbol` DONE
   (`lsp_workspace_symbols` — file-less project-wide search, optional anchor file for tsserver's
-  lazy project model). `diagnostics` DONE (`lsp_diagnostics` — PUSH model `publishDiagnostics`,
-  waits out indexing then returns the post-settle publish; empty = clean). Multi-ROOT DONE
-  (`workspaceRoots[]` / `--workspace-root`; server keyed by the sorted root group). `strummer lsp`
-  CLI DONE. Staged: write-mode resource-ops + multi-file conflict reconciliation, pull-diagnostics
-  (`textDocument/diagnostic`), dynamic `didChangeWorkspaceFolders` + write-mode multi-root, full
+  lazy project model). `diagnostics` DONE (`lsp_diagnostics`) — `documentDiagnostics` dispatches by
+  capability: PULL (`textDocument/diagnostic` request) when the server advertises `diagnosticProvider`
+  (rust-analyzer), else PUSH (`publishDiagnostics`, tsserver); empty `full` report = clean = ok.
+  Multi-ROOT DONE (`workspaceRoots[]` / `--workspace-root`; server keyed by the sorted root group).
+  Write-mode resource-ops DONE (`lsp_rename` applies Create/Rename/DeleteFile incl. cross-root),
+  plus the resource-op SAFE-SUBSET v1 cuts (`ignoreIfExists`/`ignoreIfNotExists` no-ops + editing a
+  file also renamed/deleted in one batch via a per-file `Fate` VFS; conflicting batches REFUSED).
+  `strummer lsp` CLI DONE. Staged: dynamic `didChangeWorkspaceFolders` (+ write-mode multi-root), the
+  DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete (refused by design), full
   toolchain-mismatch heuristic),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,

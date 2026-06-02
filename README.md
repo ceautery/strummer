@@ -119,15 +119,18 @@ no real language server runs in the green gate. The capability-gated read tails
 stage-then-commit + staleness guards) have since landed (ADR 0011 addendum), as has a human
 **`strummer lsp` CLI** (single-shot navigation + `rename`, the engine injectable so the gate
 never spawns a real server). Since then **`workspace/symbol`** search (`lsp_workspace_symbols`),
-**`diagnostics`** (`lsp_diagnostics`, the push-model `publishDiagnostics`), **multi-root**
+**`diagnostics`** (`lsp_diagnostics` — `documentDiagnostics` dispatches by capability: the PULL
+model `textDocument/diagnostic` for servers advertising `diagnosticProvider` (rust-analyzer), else
+the PUSH model `publishDiagnostics` (tsserver)), **multi-root**
 workspaces (`workspaceRoots[]` / `--workspace-root`, one server bound to many folders — including
-write-mode rename), and **resource-operation write-mode** (`lsp_rename` applies
+write-mode rename), **resource-operation write-mode** (`lsp_rename` applies
 `CreateFile`/`RenameFile`/`DeleteFile` interleaved with text edits — e.g. a module rename that
-renames its backing file — verified live against rust-analyzer) have all landed. The resource-op
+renames its backing file — verified live against rust-analyzer), and its **safe-subset v1 cuts**
+(`ignoreIfExists`/`ignoreIfNotExists` as no-ops + editing a file also renamed/deleted in one batch,
+via a per-file `Fate` projection; conflicting batches refused) have all landed. The resource-op
 work also generalized the readiness model to servers that signal not-ready via an error. Staged
-next: pull-diagnostics (`textDocument/diagnostic`), dynamic workspace-folder changes, the
-resource-op v1 cuts (options / recursive delete / editing-a-renamed-file) + multi-file conflict
-reconciliation.
+next: dynamic workspace-folder changes (`didChangeWorkspaceFolders`), the destructive resource-op
+options (`overwrite`) + recursive/dir delete (refused by design), and the full toolchain heuristic.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
