@@ -464,6 +464,11 @@ Two independent tracks, then the test-quality chain, then LSP last:
         PEP 503-normalized) and `rubyManifestNames` (Gemfile.lock `DEPENDENCIES` block, else
         Gemfile `gem` lines); the surface dispatches the reader by ecosystem and the npm-only
         gate is lifted. `audit_project` now rolls up npm, PyPI, and RubyGems.
+  - [x] **`strummer deps` human CLI** — `audit`/`audit-project`/`changelog`; exits 1 on a
+        security/deprecation finding. The pure ecosystem-dispatch helpers (`comparatorFor`/
+        `matchName`/`dependencyNames` + `OsvEcosystem`) were lifted out of the MCP surface into
+        `@strummer/deps` `ecosystem.ts` (one source of truth, shared by the surface + CLI;
+        behavior-preserving). The CLI builds its own SSRF-pinned fetcher from `resolveAndPin`.
 - [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A, building.*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
       (the forgotten-assertion catch — the genuinely novel win under our TDD gate).
@@ -504,8 +509,10 @@ Two independent tracks, then the test-quality chain, then LSP last:
         line, excluded omitted → `nonExecutable`). The differ (`uncoveredInDiff`/
         `uncoveredNewLines`) is unchanged (ecosystem-agnostic). `uncovered_in_diff` gained a
         `coverageFormat: istanbul|coveragepy` discriminator so the Python path is agent-reachable.
+  - [x] **`strummer coverage` human CLI** — `uncovered-in-diff` (istanbul|coveragepy) +
+        gated `run-scoped`; exits 1 when a new line is uncovered.
   - [ ] *(staged)* pin `istanbul-lib-coverage` if `CoverageMap` merging/summaries are needed;
-        a `strummer coverage` human CLI; a Python `run_scoped` (pytest --cov argv) sibling.
+        a Python `run_scoped` (pytest --cov argv) sibling.
 - [x] **Flaky-test detection & quarantine** (`@strummer/flake`) — **COMPLETE (engine +
       agent surface).** Protects the deterministic green gate. Pure Wilson/binomial
       classifier over a run-history fixture first; quarantine **writes** operator-gated
@@ -548,7 +555,8 @@ Two independent tracks, then the test-quality chain, then LSP last:
         dropped). Store/classifier/quarantine unchanged (test-id-opaque). `HistoryStore.
         ingestPytestReport` + a new always-on, format-discriminated **`flake_ingest`** MCP tool
         (vitest|pytest, no spawn — the suite already ran; the only way to feed pytest history).
-  - [ ] *(staged)* an optional `strummer flake` human CLI.
+  - [x] **`strummer flake` human CLI** — always-on `status`/`candidates`/`ingest`/`release`;
+        gated `run` + `quarantine` (the two paired gates as straight-through flags).
 - [x] **Mutation testing** (`@strummer/mutate`) — **COMPLETE (engine + agent surface).**
       Are the tests meaningful? **Stryker/Vitest-4 compat spike resolved** (ADR 0010 update
       2026-06-01: vitest-runner 9.x declares `vitest >=2.0.0` + ships Vitest 4/4.1 support —
@@ -569,7 +577,8 @@ Two independent tracks, then the test-quality chain, then LSP last:
         timeout/suspicious/skipped → mutation-testing-elements `MutantStatus`, never overstating the
         score) into a `MutationReport`, so `summarizeMutation` is reused unchanged. `mutate_summarize`
         gained a `format: stryker|mutmut` discriminator (mutmut input = the results text, no spawn).
-  - [ ] *(staged)* a cosmic-ray adapter; a gated `runMutmut` spawner; a `strummer mutate` human CLI.
+  - [x] **`strummer mutate` human CLI** — `summarize` (stryker|mutmut) + gated `run`.
+  - [ ] *(staged)* a cosmic-ray adapter; a gated `runMutmut` spawner.
 - [x] **LSP bridge** (`@strummer/lsp`) — semantic code navigation. **COMPLETE (engine +
       agent surface), slices 1–5.** Highest *raw*
       leverage but **last**: the documented exception to ARCHITECTURE §1's no-live-RPC

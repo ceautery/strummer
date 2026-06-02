@@ -159,7 +159,11 @@ vision and `ARCHITECTURE.md` for the technical design.
   SHA-256 digests; the `lsp_rename` MCP tool (no `write` input). Staged: write-mode resource-ops +
   multi-file conflict reconciliation, `workspace/symbol`, diagnostics, multi-root, full
   toolchain-mismatch heuristic, a `strummer lsp` CLI),
-  `mcp` (server), `cli` (terminal).
+  `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
+  `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`,
+  each a thin human wrapper over its engine; the human is the operator, so run/write
+  gates are straight-through flags (`--allow-run` etc.) and runners/fetchers are
+  injectable so the suite never spawns/fetches — ADR 0010 no-real-spawn-in-gate).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
 - `examples/` — runnable sample collections (e.g. `examples/api/jsonplaceholder`,

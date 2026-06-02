@@ -148,8 +148,9 @@ Stryker in the gate; diff-scoped via `mutateFiles`→`--mutate` + `--incremental
 slices 1–5 (encoding/normalize + `client.ts` + `registry.ts`/`manager.ts` + gated `query.ts` +
 MCP surface/bin) now also landed — Phase 4 pillars COMPLETE (at 659 TS). **Since then the
 non-blocking tails landed: the cross-pillar Python adapters (flake/coverage/deps/mutate), the LSP
-capability-gated read tails, and **LSP write-mode (`lsp_rename`, ADR 0011 addendum slices A–G:
-dry-run-default + a separate `allowWrite` gate)** — current count is 797 TS + 45 Py green; see the
+capability-gated read tails, **LSP write-mode (`lsp_rename`, ADR 0011 addendum slices A–G:
+dry-run-default + a separate `allowWrite` gate)**, and **the four human verification CLIs
+(`strummer mutate`/`coverage`/`flake`/`deps`)** — current count is 827 TS + 45 Py green; see the
 Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
@@ -682,17 +683,35 @@ old-identifier staleness guard, stage-then-commit-all) · **G** the `lsp_rename`
 input — apply is the engine's internal decision; large edit sets by handle) + bin wiring. Fixtures
 captured from real `typescript-language-server` 5.3.0 (out-of-gate; gate replays recorded payloads, NO
 real server). Independent golden-file byte assertion (not `applyTextEdits` output) guards the writer.
+**HUMAN VERIFICATION CLIs DONE, 827 TS + 45 Py green:** the four Phase-4 pillars now have a
+`strummer <pillar>` subcommand in `@strummer/cli`, each a thin human wrapper over its engine
+mirroring the `api`/`browser` CLI pattern (the human IS the operator, so run/write gates are
+straight-through flags like `api`'s `--unsafe`, the typed root/host is auto-allowed, and the
+engine runner/fetcher is **injectable** so the suite never spawns/fetches — ADR 0010
+no-real-spawn-in-gate): **`mutate`** (`summarize` stryker|mutmut + gated `run`); **`coverage`**
+(`uncovered-in-diff` istanbul|coveragepy + gated `run-scoped`; exit 1 when a new line is uncovered);
+**`flake`** (always-on `status`/`candidates`/`ingest`/`release` over `--db`; gated `run` +
+`quarantine`, the two paired gates as flags); **`deps`** (`audit`/`audit-project`/`changelog`; exit
+1 on a security/deprecation finding; reports `osvSnapshotLoaded`). The deps CLI forced a
+**behavior-preserving refactor**: the pure ecosystem-dispatch helpers (`comparatorFor`/`matchName`/
+`dependencyNames` + `OsvEcosystem`/`OSV_ECOSYSTEMS`) were lifted out of `packages/mcp/src/deps.ts`
+into a new `@strummer/deps` `ecosystem.ts` (one source of truth, shared by the MCP surface + the
+CLI; the surface rewires to import them, guarded by the 90-test deps+mcp suite); the CLI builds its
+own SSRF-pinned packument/changelog fetcher from `@strummer/safety` `resolveAndPin` (the established
+per-surface pattern; private registries gated by `--allow-private`). 29 new CLI tests across four
+files.
 **Remaining non-blocking tails:** LSP `workspace/symbol`, `diagnostics`, multi-root, write-mode for
 resource ops + multi-file conflict reconciliation, full toolchain-mismatch heuristic, a `strummer lsp`
-CLI; deps cosmic-ray/`runMutmut` spawner; the human CLIs (`strummer deps|coverage|flake|mutate`).
+CLI; deps cosmic-ray/`runMutmut` spawner.
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); then `workspace/symbol`,
 `diagnostics`, multi-root, the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
 write-mode resource-ops + multi-file conflict reconciliation, and a Python adapter posture; a
-human `strummer lsp` CLI mirroring the surface. **Other Phase-4 staged tails:** deps PyPI/RubyGems
-adapters; coverage `strummer coverage` CLI / `istanbul-lib-coverage` merging; flake Python
-(pytest-json) adapter; mutate Python (mutmut/cosmic-ray) adapter + a `strummer mutate` CLI.
+human `strummer lsp` CLI mirroring the surface. **Other Phase-4 staged tails:** `istanbul-lib-coverage`
+`CoverageMap` merging; a Python `run_scoped` (pytest --cov) sibling; mutate cosmic-ray adapter +
+gated `runMutmut` spawner. (The deps PyPI/RubyGems adapters, the flake pytest + coverage.py adapters,
+the mutate mutmut adapter, AND the four human verification CLIs are now DONE.)
 Phase 3
 has no remaining required tail — only the explicitly-aspirational bucket
 (`@playwright/mcp` embed, autonomous self-healing, cross-pillar contract tie-in). The

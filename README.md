@@ -76,8 +76,11 @@ matching (incl. CVSS-vector severity scoring), on-disk OSV-snapshot loading, fre
 (`behindBy`), a vuln-aware `minimumSafeUpgrade` target, and a composed `auditDependency`
 verdict for the version *actually installed*. Its **agent surface has shipped** — the
 `audit_dependency`/`audit_project`/`changelog_diff` MCP tools (artifacts by handle over
-the shared `@strummer/artifacts`) + the `strummer-deps-mcp` bin. A human `strummer deps`
-CLI and the Python/PyPI + RubyGems advisory adapters are next.
+the shared `@strummer/artifacts`) + the `strummer-deps-mcp` bin — plus the Python/PyPI +
+RubyGems advisory adapters (`audit_dependency` + `audit_project` across all three
+ecosystems) and a human **`strummer deps` CLI** (`audit`/`audit-project`/`changelog`). All
+four Phase-4 verification pillars now also ship a human `strummer <pillar>` CLI
+(`mutate`/`coverage`/`flake`/`deps`), each a thin wrapper over its engine.
 
 The parallel track, **`@strummer/coverage`**, is also complete — the "forgotten
 assertion" catch: given a diff it reports the lines a change *added* that no test

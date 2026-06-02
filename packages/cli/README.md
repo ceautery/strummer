@@ -200,6 +200,45 @@ strummer browser run        <flow.bru> [--var k=v]… [--unsafe] [--allow-host <
 
 ---
 
+## Verification (Phase-4 pillars)
+
+Thin human wrappers over the cross-cutting verification engines. You are the
+operator, so the run/write gates are straight-through flags (`--allow-run`,
+`--allow-quarantine`) — a denied run never spawns. `audit`/`uncovered-in-diff`
+exit non-zero on a finding, so they double as CI gates.
+
+```bash
+# Mutation testing — view a report, or run Stryker (gated):
+strummer mutate summarize reports/mutation/mutation.json
+strummer mutate summarize results.txt --format mutmut
+strummer mutate run . --allow-run --file src/changed.ts --incremental
+
+# Coverage — the forgotten-assertion catch (exit 1 when a new line is uncovered):
+strummer coverage uncovered-in-diff --diff changes.diff --coverage coverage-final.json --project-root .
+strummer coverage run-scoped . --changed-file src/changed.ts --diff changes.diff --allow-run
+
+# Flaky-test detection over a run-history DB (--db / STRUMMER_FLAKE_DB):
+strummer flake ingest report.json --db flake.db --format vitest
+strummer flake status --db flake.db
+strummer flake candidates --db flake.db
+strummer flake run . --db flake.db --repeat 10 --allow-run
+strummer flake quarantine 'src/x.test.ts > flaky case' --db flake.db \
+    --reason 'intermittent timeout' --expires-at 2026-07-01T00:00:00Z \
+    --allow-quarantine --max-expiry-ms 2592000000
+
+# Dependency intelligence for the INSTALLED version (exit 1 on a finding):
+strummer deps audit . lodash --osv-db /var/lib/strummer/osv
+strummer deps audit-project . --osv-db /var/lib/strummer/osv
+strummer deps changelog lodash --project . --to 4.17.21
+```
+
+`audit`/`audit-project` report `osvSnapshotLoaded` — without an operator OSV
+snapshot, "no known vulnerabilities" is unknown, not clean. The deps CLI fetches
+package metadata behind the same DNS-pinning SSRF pre-flight the bins use (private
+registries gated by `--allow-private`).
+
+---
+
 ## Docs search
 
 ```bash
