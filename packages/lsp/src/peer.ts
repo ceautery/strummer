@@ -45,6 +45,9 @@ export const RENAME_CHANGES = () => loadFixture('rename-changes.json')
 // rust-analyzer captures (write-mode resource ops). RA emits a real RenameFile on a module rename.
 export const INIT_RUST = () => loadFixture('initialize-result-rust.json')
 export const RENAME_RENAMEFILE = () => loadFixture('rename-renamefile.json')
+// RA module rename where the module file self-references its crate path: edits main.rs AND the
+// module file, THEN renames the module file (the editing-a-renamed-file safe-subset case).
+export const RENAME_EDIT_RENAMEFILE = () => loadFixture('rename-edit-renamefile.json')
 
 export interface PeerPair {
   client: MessageConnection

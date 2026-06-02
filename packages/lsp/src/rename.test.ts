@@ -13,7 +13,13 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LspGateError } from './confine.js'
 import { LanguageServerManager } from './manager.js'
-import { type FakeServerOptions, fakeSpawn, INIT_RENAME } from './peer.js'
+import {
+  type FakeServerOptions,
+  fakeSpawn,
+  INIT_RENAME,
+  INIT_RUST,
+  RENAME_EDIT_RENAMEFILE,
+} from './peer.js'
 import {
   defaultRenameWriter,
   LspRenameEngine,
@@ -1108,5 +1114,95 @@ describe('LspRenameEngine — multi-root (workspaceRoots)', () => {
         workspaceRoots: ['/not/allowlisted'],
       }),
     ).rejects.toThrow(LspGateError)
+  })
+})
+
+// The REAL rust-analyzer 0.3.2921 editing-a-renamed-file payload (captured out-of-gate; see
+// test/fixtures/README.md) replayed through the APPLY engine: a module rename whose module file
+// self-references its crate path (`crate::greeter::`). RA edits main.rs AND greeter.rs, then renames
+// greeter.rs→welcome.rs — so greeter.rs is edited AND renamed in one batch (the old code refused it).
+const RUST_MAIN = `mod greeter;
+
+fn main() {
+    let _g = greeter::make();
+}
+`
+const RUST_GREETER = `pub struct Greeter;
+
+pub fn make() -> crate::greeter::Greeter {
+    Greeter
+}
+`
+// Independent golden: the moved file must carry the EDITED self-reference (crate::welcome::).
+const RUST_WELCOME = RUST_GREETER.replace('crate::greeter::', 'crate::welcome::')
+
+describe('LspRenameEngine — real rust-analyzer payload (editing-a-renamed-file)', () => {
+  it('applies the captured RA module-rename: edits main.rs AND moves greeter.rs→welcome.rs with edited content', async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-rename-rust-')))
+    mkdirSync(join(root, 'src'))
+    writeFileSync(join(root, 'src', 'main.rs'), RUST_MAIN)
+    writeFileSync(join(root, 'src', 'greeter.rs'), RUST_GREETER)
+    const rootUri = pathToFileURL(root).toString()
+    // Replay the captured fixture, rebasing its `/project` paths onto this temp root.
+    const onRename = () =>
+      JSON.parse(JSON.stringify(RENAME_EDIT_RENAMEFILE()).replaceAll('file:///project', rootUri))
+    const tracker = fakeSpawn({
+      initialize: INIT_RUST(),
+      onRename,
+      // RA advertises prepareProvider; the module id `greeter` sits at main.rs line 0, char 4–11.
+      onPrepareRename: () => ({
+        start: { line: 0, character: 4 },
+        end: { line: 0, character: 11 },
+      }),
+    })
+    disposers.push(tracker.disposeAll)
+    const manager = new LanguageServerManager({
+      registry: { rust: { command: 'x', args: [] } },
+      allowedRoots: [root],
+      timeoutMs: 1000,
+      serverSpawn: tracker.spawn,
+      noRetry: true,
+      delay: async () => {},
+    })
+    disposers.push(() => {
+      void manager.shutdown()
+    })
+    const { writer, ops } = capturingWriter()
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer,
+    })
+    const r = await engine.rename({
+      language: 'rust',
+      projectRoot: root,
+      file: 'src/main.rs',
+      line: 1, // human 1-based → LSP line 0 (the `mod greeter;` declaration)
+      column: 5, // human 1-based → LSP char 4 (the `greeter` module id)
+      newName: 'welcome',
+    })
+    expect(r.status).toBe('ok')
+    expect(r.applied).toBe(true)
+    expect(r.partial).toBeUndefined()
+    const byPath = new Map(writeOps(ops).map((w) => [w.absPath, w.newText]))
+    // main.rs rewritten; the MOVED file carries the edited self-reference (crate::welcome::).
+    expect(byPath.get(join(root, 'src', 'main.rs'))).toBe(
+      RUST_MAIN.replaceAll('greeter', 'welcome'),
+    )
+    expect(byPath.get(join(root, 'src', 'welcome.rs'))).toBe(RUST_WELCOME)
+    // greeter.rs is renamed (not separately written) and the audit collapses to one combined row.
+    const renameOp = ops.find(
+      (o): o is Extract<PhysicalOp, { kind: 'rename' }> => o.kind === 'rename',
+    )
+    expect(renameOp).toMatchObject({
+      fromAbs: join(root, 'src', 'greeter.rs'),
+      toAbs: join(root, 'src', 'welcome.rs'),
+    })
+    expect(r.digests?.map((d) => d.file)).toEqual([
+      'src/main.rs',
+      'src/greeter.rs → src/welcome.rs',
+    ])
   })
 })

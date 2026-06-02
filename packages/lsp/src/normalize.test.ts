@@ -258,6 +258,25 @@ describe('normalizeWorkspaceEdit', () => {
     ])
   })
 
+  it('preserves edit-then-rename of the SAME file (REAL rust-analyzer editing-a-renamed-file)', () => {
+    // A module rename whose module file self-references its crate path: rust-analyzer edits BOTH
+    // main.rs AND the module file (fixing `crate::greeter::`), THEN renames the module file.
+    const out = normalizeWorkspaceEdit(fixture<RawWorkspaceEdit>('rename-edit-renamefile.json'))
+    expect(out.operations.map((o) => o.type)).toEqual(['edit', 'edit', 'rename'])
+    // greeter.rs is edited (op 1) and is ALSO the rename source (op 2) — the safe-subset case the
+    // apply engine now composes (the moved welcome.rs must carry the edited content).
+    expect(out.operations[1]).toMatchObject({ type: 'edit', uri: 'file:///project/src/greeter.rs' })
+    expect(out.operations[2]).toMatchObject({
+      type: 'rename',
+      oldUri: 'file:///project/src/greeter.rs',
+      newUri: 'file:///project/src/welcome.rs',
+    })
+    expect(out.files.map((f) => f.uri)).toEqual([
+      'file:///project/src/main.rs',
+      'file:///project/src/greeter.rs',
+    ])
+  })
+
   it('preserves Move-to-file ordering: create → edit-new → delete-old', () => {
     const raw: RawWorkspaceEdit = {
       documentChanges: [

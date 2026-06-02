@@ -115,6 +115,16 @@ file**. The capture project is a minimal no-cargo crate driven via a `rust-proje
   form: a `TextDocumentEdit` on `main.rs` (the `mod` decl + the `greeter::` path, ×2) **followed by
   a `RenameFile`** (`kind:"rename"`, `oldUri: src/greeter.rs` → `newUri: src/welcome.rs`, **no
   `options`**). This is the real interleaved edits-plus-resource-op shape the apply engine executes.
+- `rename-edit-renamefile.json` — the genuine `textDocument/rename` result for the
+  **editing-a-renamed-file** safe-subset case. A variant capture project gives the module file a
+  self-reference to its own crate path (`src/greeter.rs` = `pub struct Greeter;` +
+  `pub fn make() -> crate::greeter::Greeter { Greeter }`). Renaming the module `greeter`→`welcome`
+  edits `main.rs` (×2) **and** `greeter.rs` (×1, fixing the `crate::greeter::` self-reference)
+  **then** `RenameFile`s `greeter.rs`→`welcome.rs` — so the module file is **edited AND renamed in
+  one batch** (`documentChanges` order: edit main, edit greeter, rename greeter→welcome). Replayed
+  through both the normalizer (`normalize.test.ts`) and the **apply engine** (`rename.test.ts`,
+  rebasing `/project` onto a temp root) to prove the moved `welcome.rs` carries the edited
+  `crate::welcome::` content. This is the batch the pre-safe-subset apply engine hard-refused.
 
 Readiness note (captured behavior, drove the `client.ts` readiness generalization): rust-analyzer
 returns a `ResponseError -32602 "No references found at position"` when `rename` is queried **before

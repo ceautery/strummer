@@ -1,0 +1,64 @@
+{
+  "documentChanges": [
+    {
+      "textDocument": {
+        "uri": "file:///project/src/main.rs",
+        "version": 1
+      },
+      "edits": [
+        {
+          "range": {
+            "start": {
+              "line": 0,
+              "character": 4
+            },
+            "end": {
+              "line": 0,
+              "character": 11
+            }
+          },
+          "newText": "welcome"
+        },
+        {
+          "range": {
+            "start": {
+              "line": 3,
+              "character": 13
+            },
+            "end": {
+              "line": 3,
+              "character": 20
+            }
+          },
+          "newText": "welcome"
+        }
+      ]
+    },
+    {
+      "textDocument": {
+        "uri": "file:///project/src/greeter.rs",
+        "version": null
+      },
+      "edits": [
+        {
+          "range": {
+            "start": {
+              "line": 2,
+              "character": 24
+            },
+            "end": {
+              "line": 2,
+              "character": 31
+            }
+          },
+          "newText": "welcome"
+        }
+      ]
+    },
+    {
+      "kind": "rename",
+      "oldUri": "file:///project/src/greeter.rs",
+      "newUri": "file:///project/src/welcome.rs"
+    }
+  ]
+}
