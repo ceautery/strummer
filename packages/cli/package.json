@@ -29,6 +29,7 @@
     "@strummer/deps": "workspace:*",
     "@strummer/embed": "workspace:*",
     "@strummer/flake": "workspace:*",
+    "@strummer/lsp": "workspace:*",
     "@strummer/mutate": "workspace:*",
     "@strummer/safety": "workspace:*",
     "playwright-core": "1.60.0"

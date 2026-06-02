@@ -15,6 +15,7 @@ import { runBrowser } from './browser.js'
 import { runCoverage } from './coverage.js'
 import { runDeps } from './deps.js'
 import { runFlake } from './flake.js'
+import { runLsp } from './lsp.js'
 import { runMutate } from './mutate.js'
 
 /** Output sinks and dependencies injected into `run` (so it is testable). */
@@ -69,6 +70,14 @@ Dependency/version intelligence (for the INSTALLED version; exit 1 on a finding)
   strummer deps audit-project <project>     [--ecosystem <e>] [--skip-dev] [--osv-db <dir>] [--registry <url>] [--allow-private] [--json]
   strummer deps changelog <package>         (--from <v> | --project <dir>) [--to <v>] [--ecosystem <e>] [--registry <url>] [--json]
 
+Semantic code navigation (LSP; single-shot; --servers <json> or STRUMMER_LSP_SERVERS binds the server registry):
+  strummer lsp languages                                          [--servers <json>] [--json]
+  strummer lsp definition|type-definition|references|hover <lang> <file> <line> <col>  --project <dir> --allow-run [--servers <json>] [--timeout-ms <n>] [--json]
+  strummer lsp symbols <lang> <file>                              --project <dir> --allow-run [--servers <json>] [--json]
+  strummer lsp call-hierarchy <lang> <file> <line> <col>          --project <dir> --allow-run [--direction incoming|outgoing] [--json]
+  strummer lsp rename <lang> <file> <line> <col> <newName>        --project <dir> --allow-run [--allow-write] [--json]  (dry-run unless --allow-write)
+  (exit 2 = server still indexing, retry)
+
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)
 `
@@ -96,6 +105,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return runFlake(rest, io)
     case 'deps':
       return runDeps(rest, io)
+    case 'lsp':
+      return runLsp(rest, io)
     case 'help':
     case '--help':
     case '-h':
