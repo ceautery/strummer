@@ -7,6 +7,7 @@ import {
   assertAllowed,
   confineEditedUri,
   confineEditedUris,
+  confineEditedUriToRoots,
   confineFile,
   LspGateError,
 } from './confine.js'
@@ -80,5 +81,46 @@ describe('confineEditedUris (all-or-nothing)', () => {
     expect(() =>
       confineEditedUris('/project', ['file:///project/a.ts', 'file:///etc/passwd']),
     ).toThrow(LspGateError)
+  })
+})
+
+describe('confineEditedUriToRoots (multi-root group, write path)', () => {
+  // A monorepo: two sibling package roots, both allowlisted. A rename can legitimately edit a
+  // file in EITHER root, so the edited URI is confined to the GROUP, not just the primary root.
+  let pkgA: string
+  let pkgB: string
+  let outside: string
+  beforeAll(() => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-confine-group-')))
+    pkgA = join(base, 'pkg-a')
+    pkgB = join(base, 'pkg-b')
+    outside = join(base, 'outside')
+    for (const d of [pkgA, pkgB, outside]) mkdirSync(d, { recursive: true })
+  })
+
+  it('accepts a file in the primary root', () => {
+    const f = join(pkgA, 'a.ts')
+    writeFileSync(f, 'x')
+    expect(confineEditedUriToRoots([pkgA, pkgB], pathToFileURL(f).toString())).toBe(f)
+  })
+
+  it('accepts a file in a SECONDARY allowlisted root', () => {
+    const f = join(pkgB, 'b.ts')
+    writeFileSync(f, 'x')
+    expect(confineEditedUriToRoots([pkgA, pkgB], pathToFileURL(f).toString())).toBe(f)
+  })
+
+  it('refuses a file outside EVERY root in the group', () => {
+    const f = join(outside, 'evil.ts')
+    writeFileSync(f, 'x')
+    expect(() => confineEditedUriToRoots([pkgA, pkgB], pathToFileURL(f).toString())).toThrow(
+      LspGateError,
+    )
+  })
+
+  it('refuses a non-file:// scheme regardless of roots', () => {
+    expect(() => confineEditedUriToRoots([pkgA, pkgB], 'jdt://contents/Foo.class')).toThrow(
+      /not a file/i,
+    )
   })
 })

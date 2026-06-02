@@ -1,6 +1,7 @@
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LspGateError } from './confine.js'
 import { LanguageServerManager } from './manager.js'
@@ -331,5 +332,152 @@ describe('LspRenameEngine — prepareRename validation', () => {
     expect(r.status).toBe('no_result')
     expect(r.applied).toBe(false)
     expect(r.refused).toMatch(/not valid at this position/i)
+  })
+})
+
+// A monorepo: the symbol is declared in pkg-a and consumed from pkg-b. A cross-root rename edits
+// files in BOTH allowlisted roots, so the edited URIs must confine to the GROUP, not just the
+// primary projectRoot. pkg-b's index.ts is byte-for-byte INDEX_TS except it imports across roots.
+const PKGB_INDEX_TS = INDEX_TS.replace("'./greeter'", "'../pkg-a/greeter'")
+const PKGB_INDEX2_TS = INDEX2_TS.replace("'./greeter'", "'../pkg-a/greeter'")
+
+function setupMonorepo(): { pkgA: string; pkgB: string; manager: LanguageServerManager } {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-rename-mono-')))
+  const pkgA = join(base, 'pkg-a')
+  const pkgB = join(base, 'pkg-b')
+  mkdirSync(pkgA)
+  mkdirSync(pkgB)
+  writeFileSync(join(pkgA, 'greeter.ts'), GREETER_TS)
+  writeFileSync(join(pkgB, 'index.ts'), PKGB_INDEX_TS)
+  // The rename of `Greeter` (queried in pkg-a) edits pkg-a/greeter.ts AND pkg-b/index.ts.
+  const onRename = () => ({
+    changes: {
+      [pathToFileURL(join(pkgA, 'greeter.ts')).toString()]: [
+        { newText: 'Greeter2', range: DECL_RANGE },
+      ],
+      [pathToFileURL(join(pkgB, 'index.ts')).toString()]: [
+        { newText: 'Greeter2', range: IMPORT_RANGE },
+        { newText: 'Greeter2', range: USAGE_RANGE },
+      ],
+    },
+  })
+  const tracker = fakeSpawn({
+    initialize: INIT_RENAME(),
+    onRename,
+    onPrepareRename: () => DECL_RANGE,
+  })
+  disposers.push(tracker.disposeAll)
+  const manager = new LanguageServerManager({
+    registry: { typescript: { command: 'x', args: [] } },
+    allowedRoots: [pkgA, pkgB],
+    timeoutMs: 1000,
+    serverSpawn: tracker.spawn,
+    noRetry: true,
+    delay: async () => {},
+  })
+  disposers.push(() => {
+    void manager.shutdown()
+  })
+  return { pkgA, pkgB, manager }
+}
+
+describe('LspRenameEngine — multi-root (workspaceRoots)', () => {
+  it('applies a cross-root rename across both allowlisted roots', async () => {
+    const { pkgA, pkgB, manager } = setupMonorepo()
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [pkgA, pkgB],
+      allowWrite: true,
+    })
+    const r = await engine.rename({
+      language: 'typescript',
+      projectRoot: pkgA,
+      file: 'greeter.ts',
+      line: 5,
+      column: 14,
+      newName: 'Greeter2',
+      workspaceRoots: [pkgB],
+    })
+    expect(r.status).toBe('ok')
+    expect(r.applied).toBe(true)
+    expect(r.fileCount).toBe(2)
+    // The edit in the SECONDARY root landed on disk (group confinement let it through).
+    expect(readFileSync(join(pkgA, 'greeter.ts'), 'utf8')).toBe(GREETER2_TS)
+    expect(readFileSync(join(pkgB, 'index.ts'), 'utf8')).toBe(PKGB_INDEX2_TS)
+  })
+
+  it('refuses to apply when an edit escapes EVERY allowlisted root', async () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-rename-mono-')))
+    const pkgA = join(base, 'pkg-a')
+    const pkgB = join(base, 'pkg-b')
+    mkdirSync(pkgA)
+    mkdirSync(pkgB)
+    writeFileSync(join(pkgA, 'greeter.ts'), GREETER_TS)
+    const tracker = fakeSpawn({
+      initialize: INIT_RENAME(),
+      onPrepareRename: () => DECL_RANGE,
+      onRename: () => ({
+        changes: {
+          [pathToFileURL(join(pkgA, 'greeter.ts')).toString()]: [
+            { newText: 'Greeter2', range: DECL_RANGE },
+          ],
+          // Outside pkg-a AND pkg-b — must abort the whole batch before any write.
+          'file:///etc/evil.ts': [{ newText: 'Greeter2', range: DECL_RANGE }],
+        },
+      }),
+    })
+    disposers.push(tracker.disposeAll)
+    const manager = new LanguageServerManager({
+      registry: { typescript: { command: 'x', args: [] } },
+      allowedRoots: [pkgA, pkgB],
+      timeoutMs: 1000,
+      serverSpawn: tracker.spawn,
+      noRetry: true,
+      delay: async () => {},
+    })
+    disposers.push(() => {
+      void manager.shutdown()
+    })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [pkgA, pkgB],
+      allowWrite: true,
+      writer: THROWING_WRITER, // confine-all aborts before any write
+    })
+    const r = await engine.rename({
+      language: 'typescript',
+      projectRoot: pkgA,
+      file: 'greeter.ts',
+      line: 5,
+      column: 14,
+      newName: 'Greeter2',
+      workspaceRoots: [pkgB],
+    })
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/outside the project root|escapes every/i)
+  })
+
+  it('refuses a workspaceRoot outside the operator allowlist (never spawns)', async () => {
+    const { pkgA, manager } = setupMonorepo()
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [pkgA], // pkg-b NOT allowlisted here
+      allowWrite: true,
+      writer: THROWING_WRITER,
+    })
+    await expect(
+      engine.rename({
+        language: 'typescript',
+        projectRoot: pkgA,
+        file: 'greeter.ts',
+        line: 5,
+        column: 14,
+        newName: 'Greeter2',
+        workspaceRoots: ['/not/allowlisted'],
+      }),
+    ).rejects.toThrow(LspGateError)
   })
 })

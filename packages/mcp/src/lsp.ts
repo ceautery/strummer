@@ -80,8 +80,8 @@ const workspaceRootsField = {
     .optional()
     .describe(
       'OPTIONAL additional project roots to bind as workspace folders on the same server ' +
-        '(multi-root, e.g. a monorepo) so cross-root navigation resolves; each must be ' +
-        'operator-allowlisted (an out-of-allowlist root is refused).',
+        '(multi-root, e.g. a monorepo) so cross-root navigation and rename resolve; each must ' +
+        'be operator-allowlisted (an out-of-allowlist root is refused).',
     ),
 }
 
@@ -147,8 +147,8 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
       line: z.number().int().describe('1-based line'),
       column: z.number().int().describe('1-based column (counts Unicode code points)'),
     }
-    // Read-navigation accepts multi-root; `lsp_rename` does NOT (write-path multi-root is staged —
-    // its confinement is single-root), so it keeps the plain positionSchema.
+    // Read-navigation AND write-mode rename accept multi-root: edits confine to the allowlisted
+    // root GROUP (primary ∪ workspaceRoots), so a cross-root rename in a monorepo applies.
     const navSchema = { ...positionSchema, ...workspaceRootsField }
 
     const runNavigation = async (kind: LspQueryKind, args: Record<string, unknown>) => {
@@ -494,6 +494,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
           inputSchema: {
             ...positionSchema,
             newName: z.string().describe('the new identifier for the symbol'),
+            ...workspaceRootsField,
           },
         },
         async (args) => {
@@ -507,6 +508,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             line: args.line as number,
             column: args.column as number,
             newName: args.newName as string,
+            ...wsRoots(args),
             ...(toolchain ? { toolchain } : {}),
           })
           const head = {

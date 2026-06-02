@@ -389,14 +389,20 @@ describe('lsp navigation tools', () => {
     expect(stub.last()?.workspaceRoots).toEqual(['/project', '/project-b'])
   })
 
-  it('lsp_rename does NOT expose a workspaceRoots input (write-path multi-root is staged)', async () => {
+  it('lsp_rename exposes workspaceRoots and forwards it (write-mode multi-root)', async () => {
+    const stub = stubRename(previewResult)
     const client = await connect({
       ...GATED,
       query: stubQuery(okDefinition).query,
-      rename: stubRename(previewResult).rename,
+      rename: stub.rename,
     })
     const tool = (await client.listTools()).tools.find((t) => t.name === 'lsp_rename')
-    expect(Object.keys(tool?.inputSchema.properties ?? {})).not.toContain('workspaceRoots')
+    expect(Object.keys(tool?.inputSchema.properties ?? {})).toContain('workspaceRoots')
+    await client.callTool({
+      name: 'lsp_rename',
+      arguments: { ...RENAME_ARGS, workspaceRoots: ['/project', '/project-b'] },
+    })
+    expect(stub.last()?.workspaceRoots).toEqual(['/project', '/project-b'])
   })
 
   it('passes through detected toolchain provenance', async () => {

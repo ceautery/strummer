@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { LspQueryInput, LspQueryResult, LspRenameResult } from '@strummer/lsp'
+import type { LspQueryInput, LspQueryResult, LspRenameInput, LspRenameResult } from '@strummer/lsp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from './index.js'
 import { runLsp } from './lsp.js'
@@ -328,6 +328,42 @@ describe('strummer lsp CLI', () => {
     expect(code).toBe(0)
     expect(c.out()).toMatch(/dry-run|not applied/i)
     expect(c.out()).toMatch(/foo.*renamed|renamed/)
+  })
+
+  it('rename threads --workspace-root through as resolved workspaceRoots (multi-root)', async () => {
+    let seen: LspRenameInput | undefined
+    const c = capture()
+    await runLsp(
+      [
+        'rename',
+        'typescript',
+        'src/a.ts',
+        '1',
+        '7',
+        'renamed',
+        '--project',
+        '/proj',
+        '--workspace-root',
+        '/proj-b',
+      ],
+      c.io,
+      {
+        rename: async (input) => {
+          seen = input
+          return {
+            status: 'ok',
+            kind: 'rename',
+            applied: false,
+            newName: 'renamed',
+            fileCount: 0,
+            totalEditCount: 0,
+            encoding: 'utf-16',
+            edits: [],
+          }
+        },
+      },
+    )
+    expect(seen?.workspaceRoots).toEqual([resolve('/proj-b')])
   })
 
   it('rename surfaces a refusal as exit 1', async () => {

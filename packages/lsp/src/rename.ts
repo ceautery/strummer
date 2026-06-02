@@ -32,7 +32,7 @@ import { relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { applyTextEdits, isPlausibleRenameName } from './apply.js'
 import type { NavResult, ServerInfo } from './client.js'
-import { assertAllowed, confineEditedUri, confineFile, LspGateError } from './confine.js'
+import { assertAllowed, confineEditedUriToRoots, confineFile, LspGateError } from './confine.js'
 import {
   fromLspPosition,
   lspPositionToOffset,
@@ -136,6 +136,12 @@ export interface LspRenameInput {
   column: number
   /** The new identifier. Validated by isPlausibleRenameName before reaching the server. */
   newName: string
+  /**
+   * Additional allowlisted roots bound as workspace folders on the SAME server (multi-root). A
+   * cross-root rename may edit files in any of these; each must be in `allowedRoots`, and edited
+   * files confine to the GROUP (`projectRoot` ∪ `workspaceRoots`), not just the primary root.
+   */
+  workspaceRoots?: string[]
   /** Optional toolchain provenance to echo. */
   toolchain?: { name: string; version: string | null }
 }
@@ -222,6 +228,10 @@ export class LspRenameEngine {
 
   async rename(input: LspRenameInput): Promise<LspRenameResult> {
     assertAllowed(this.allowRun, this.allowedRoots, input.projectRoot)
+    // Every additional workspace root must also be allowlisted (refused before any spawn).
+    for (const root of input.workspaceRoots ?? []) {
+      assertAllowed(this.allowRun, this.allowedRoots, root)
+    }
     const queriedAbs = confineFile(input.projectRoot, input.file)
     const text = this.readFile(queriedAbs)
     if (text === undefined) {
@@ -233,7 +243,13 @@ export class LspRenameEngine {
     const queriedUri = pathToFileURL(queriedAbs).toString()
 
     const run = await this.manager.run<RunOutcome>(
-      { language: input.language, projectRoot: input.projectRoot, uri: queriedUri, text },
+      {
+        language: input.language,
+        projectRoot: input.projectRoot,
+        uri: queriedUri,
+        text,
+        ...(input.workspaceRoots ? { workspaceRoots: input.workspaceRoots } : {}),
+      },
       async (client): Promise<RunOutcome> => {
         const pos = toLspPosition(text, input.line, input.column, client.encoding)
         const empty: NormalizedWorkspaceEdit = { files: [], resourceOps: [] }
@@ -287,12 +303,15 @@ export class LspRenameEngine {
     }
     if (edit.files.length === 0) return { applied: false }
 
-    // Confine-all before any I/O — one out-of-root URI refuses the WHOLE batch.
+    // Confine-all before any I/O — one out-of-root URI refuses the WHOLE batch. Edited files
+    // confine to the GROUP (primary root ∪ workspaceRoots), so a cross-root rename in a monorepo
+    // applies, but an edit escaping every allowlisted root still aborts before any write.
+    const group = [input.projectRoot, ...(input.workspaceRoots ?? [])]
     const targets: Array<{ uri: string; abs: string; edits: NormalizedFileEdit[] }> = []
     for (const f of edit.files) {
       let abs: string
       try {
-        abs = confineEditedUri(input.projectRoot, f.uri)
+        abs = confineEditedUriToRoots(group, f.uri)
       } catch {
         return {
           applied: false,
@@ -303,7 +322,12 @@ export class LspRenameEngine {
     }
 
     return this.manager.runWithUris(
-      { language: input.language, projectRoot: input.projectRoot, uris: targets.map((t) => t.uri) },
+      {
+        language: input.language,
+        projectRoot: input.projectRoot,
+        uris: targets.map((t) => t.uri),
+        ...(input.workspaceRoots ? { workspaceRoots: input.workspaceRoots } : {}),
+      },
       async (client): Promise<ApplyOutcome> => {
         // Phase 1 (no writes): read every target, enforce the staleness guards, build new content.
         const plan: Array<{ abs: string; uri: string; before: string; after: string }> = []
@@ -371,8 +395,9 @@ export class LspRenameEngine {
   ): LspRenameResult {
     const { edit, encoding, serverInfo } = run
     const totalEditCount = edit.files.reduce((n, f) => n + f.edits.length, 0)
+    const group = [input.projectRoot, ...(input.workspaceRoots ?? [])]
     const edits = edit.files.map((f) =>
-      this.previewFile(f, input.projectRoot, queriedUri, queriedText, encoding),
+      this.previewFile(f, group, queriedUri, queriedText, encoding),
     )
     const versionWarning =
       serverInfo === undefined
@@ -398,16 +423,17 @@ export class LspRenameEngine {
 
   private previewFile(
     f: { uri: string; edits: NormalizedFileEdit[] },
-    projectRoot: string,
+    group: string[],
     queriedUri: string,
     queriedText: string,
     encoding: PositionEncoding,
   ): RenamePreviewFile {
     let abs: string | undefined
     try {
-      abs = confineEditedUri(projectRoot, f.uri)
+      // Confine to the GROUP — a cross-root edit in an allowlisted workspace folder is in-root.
+      abs = confineEditedUriToRoots(group, f.uri)
     } catch {
-      // Out of root: surface path + count ONLY, never read/surface its bytes (disclosure guard).
+      // Out of every root: surface path + count ONLY, never read/surface its bytes (disclosure guard).
       return {
         uri: f.uri,
         file: '(out of project root)',
@@ -418,7 +444,7 @@ export class LspRenameEngine {
     const text = f.uri === queriedUri ? queriedText : this.readFile(abs)
     const out: RenamePreviewFile = {
       uri: f.uri,
-      file: relative(projectRoot, abs),
+      file: relative(group[0] ?? '', abs),
       editCount: f.edits.length,
     }
     if (text !== undefined) out.hunks = f.edits.map((e) => this.hunk(text, e, encoding))

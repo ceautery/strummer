@@ -107,6 +107,32 @@ export function confineEditedUri(projectRoot: string, uri: string): string {
 }
 
 /**
+ * Like {@link confineEditedUri}, but confines to a GROUP of allowlisted roots (the multi-root
+ * write path): a `WorkspaceEdit` for a monorepo legitimately edits files in any bound workspace
+ * folder, so the edited URI is accepted when it realpath-confines to ANY root in the group, and
+ * refused only when it escapes EVERY root. Refuses a non-`file://` scheme once, up front (it can
+ * never confine to any root). Returns the absolute filesystem path.
+ */
+export function confineEditedUriToRoots(roots: string[], uri: string): string {
+  let abs: string
+  try {
+    abs = fileURLToPath(uri)
+  } catch {
+    throw new LspGateError(`edited document ${uri} is not a file:// URI (refused for write)`)
+  }
+  for (const root of roots) {
+    try {
+      return confineFile(root, abs, { resolveSymlinks: true })
+    } catch {
+      // Not under this root; try the next. Refused below only if it escapes them all.
+    }
+  }
+  throw new LspGateError(
+    `edited document ${uri} escapes every allowlisted root (refused for write)`,
+  )
+}
+
+/**
  * Confine EVERY edited URI to the project root, all-or-nothing — one out-of-root / `..` /
  * symlink-escape / non-`file://` URI throws before any target file is read. Returns a map from
  * each URI to its confined absolute path.

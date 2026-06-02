@@ -407,6 +407,7 @@ async function cmdRename(args: string[], io: CliIO, deps: LspDeps): Promise<numb
       line: Number(lineRaw),
       column: Number(colRaw),
       newName,
+      ...(engines.workspaceRoots.length ? { workspaceRoots: engines.workspaceRoots } : {}),
     })
 
     if (values.json) {
