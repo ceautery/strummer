@@ -694,6 +694,18 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `'diagnostics'` query kind (file-based, position-less); the gated `lsp_diagnostics` MCP tool
         (large lists by handle) + `strummer lsp diagnostics <language> <file>` CLI. Verified live
         (clean file → 0; an introduced error → the 2322 error + a 6133 unused hint).
+  - [x] **Pull diagnostics — `textDocument/diagnostic` (PULL model).** `documentDiagnostics(uri)`
+        now dispatches by capability: PULL (a `textDocument/diagnostic` request) when the server
+        advertises `diagnosticProvider` (rust-analyzer), else the existing PUSH model (tsserver
+        advertises none). Pull is a deterministic request/response — better for single-shot than
+        waiting on an async publish. Capability-gated `client.pullDiagnostics` echoes the provider
+        `identifier` (RA requires it), tri-state with the diagnostics rule that an empty `full` report
+        is `ok` (clean, never no_result), and maps a soft `ContentModified`-class error to
+        backoff-retry → not_ready; `normalize.diagnosticsFromReport` unwraps the full/unchanged
+        envelope over the shared `normalizeDiagnostics`. Same result shape as push, so the query
+        engine / MCP / CLI are unchanged. Real captured RA `full` report fixtures; fake-peer
+        `onDiagnostic`. Verified live against rust-analyzer 0.3.2921 (`strummer lsp diagnostics rust`
+        → ok/0 — and since RA does not push in the no-cargo config, `ok` proves the pull path ran).
   - [x] **Multi-root workspaces — `workspaceRoots[]` / `--workspace-root`.** One language server
         bound to MULTIPLE `workspaceFolders` (a monorepo) so cross-root navigation resolves through
         one server. Additive + opt-in (single-root behavior byte-identical). `client.initialize`
@@ -754,8 +766,7 @@ Two independent tracks, then the test-quality chain, then LSP last:
         cross-file edits + the `RenameFile`, and the editing-a-renamed-file case (a `crate::greeter::`
         self-reference) applied with the moved file carrying the edited content (the batch the old
         code refused).
-  - [ ] *(staged, not amputated)* pull-diagnostics (`textDocument/diagnostic`, for servers that
-        advertise `diagnosticProvider` — note rust-analyzer DOES, captured in its init fixture), dynamic
+  - [ ] *(staged, not amputated)* dynamic
         `didChangeWorkspaceFolders` (+ its write-mode interaction), the DESTRUCTIVE resource-op options
         (`overwrite`) + recursive/dir delete (kept refused by design), full toolchain-version
         resolution, Python adapter posture.

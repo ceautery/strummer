@@ -185,7 +185,9 @@ from what ACTUALLY landed (pristine on a partial commit) and migrates the open b
 rename landed; genuinely conflicting batches are REFUSED not reconciled (rename cycle, two-into-one,
 edit-of-renamed-away-path, delete-of-a-rename/create-target = a data-loss guard). Designed via the
 `lsp-resource-op-safe-cuts-design` fan-out (2 proposals → synthesis → 3 adversarial critics, five
-holes folded in) + a recall-biased review fan-out — **current count is 935 TS + 45 Py green**; see
+holes folded in) + a recall-biased review fan-out. Then **LSP PULL-diagnostics**
+(`textDocument/diagnostic`, dispatched by `diagnosticProvider`; live-verified vs rust-analyzer) —
+**current count is 946 TS + 45 Py green**; see
 the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
@@ -990,8 +992,16 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 
 > **CURRENT (2026-06-02).** Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
 > and the Python adapters + LSP capability-gated reads + LSP write-mode (`lsp_rename`, incl. multi-root
-> AND resource ops) + the LSP tails (cold-load fix, `workspace/symbol`, push-`diagnostics`, multi-root
-> nav) all landed. **Latest: LSP resource-op SAFE-SUBSET v1 cuts** (operator chose the safe subset).
+> AND resource ops) + the LSP tails (cold-load fix, `workspace/symbol`, push- AND pull-`diagnostics`,
+> multi-root nav, resource-op safe-subset cuts) all landed. **Latest: LSP PULL-diagnostics**
+> (`textDocument/diagnostic`) — `documentDiagnostics(uri)` dispatches by capability: PULL (a
+> deterministic request/response) when the server advertises `diagnosticProvider` (rust-analyzer),
+> else the existing PUSH model (tsserver). Capability-gated `client.pullDiagnostics` echoes the
+> provider `identifier`, tri-state with the diagnostics rule that an empty `full` report is `ok`
+> (clean), maps a soft `ContentModified`-class error to backoff-retry → not_ready; same result shape
+> as push so the query/MCP/CLI surface is unchanged. Verified live vs rust-analyzer 0.3.2921
+> (`strummer lsp diagnostics rust` → ok/0 — and since RA does not push in the no-cargo config, `ok`
+> proves the pull path ran). **Prior: LSP resource-op SAFE-SUBSET v1 cuts** (operator chose the safe subset).
 > Two slices, TDD: (A) `ignoreIfExists`/`ignoreIfNotExists` are now conditional NO-OPS (not blanket-
 > refused — `hasNonDefaultOptions`→`hasRefusedOptions`, only `overwrite`/recursive stay refused); (B)
 > editing a file that is ALSO renamed/deleted in the same batch now APPLIES — `applyEdit`'s replay was
@@ -1009,9 +1019,8 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > `welcome`) applied cross-file edits + the `RenameFile` to disk, AND the editing-a-renamed-file case
 > (a `crate::greeter::` self-reference in the module file) applied with the moved `welcome.rs` carrying
 > the EDITED content — the exact batch the old code refused (repro + the 30s-deadline gotcha in
-> [[strummer-lsp-rust-analyzer]]). **935 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
-> staged (non-blocking) LSP tails:** pull-diagnostics (`textDocument/diagnostic` — rust-analyzer DOES
-> advertise `diagnosticProvider`, captured in its init fixture, so this is now live-verifiable); dynamic
+> [[strummer-lsp-rust-analyzer]]). **946 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> staged (non-blocking) LSP tails:** dynamic
 > `didChangeWorkspaceFolders`; the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete
 > (kept refused by design); full toolchain-mismatch heuristic. Other Phase-4 tails: `deps`
 > changelog_diff for PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open Phase 5 (needs a
