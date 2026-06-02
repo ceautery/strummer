@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -6,7 +13,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { LspGateError } from './confine.js'
 import { LanguageServerManager } from './manager.js'
 import { type FakeServerOptions, fakeSpawn, INIT_RENAME } from './peer.js'
-import { type FileWrite, LspRenameEngine, type RenameWriter } from './rename.js'
+import {
+  defaultRenameWriter,
+  LspRenameEngine,
+  type PhysicalOp,
+  type RenameWriter,
+} from './rename.js'
 
 // The real capture project's files (see test/fixtures/README.md). `Greeter` is declared on
 // line 5 (1-based), column 14, and used in index.ts.
@@ -44,6 +56,40 @@ const THROWING_WRITER: RenameWriter = {
     throw new Error('writer must not be called')
   },
 }
+
+/** A writer that records the physical ops it's asked to commit (and reports them all completed). */
+function capturingWriter(): { writer: RenameWriter; ops: PhysicalOp[] } {
+  const ops: PhysicalOp[] = []
+  return {
+    ops,
+    writer: {
+      commit: (o) => {
+        ops.push(...o)
+        return { completed: o, partial: false }
+      },
+    },
+  }
+}
+const writeOps = (ops: PhysicalOp[]) =>
+  ops.filter((o): o is Extract<PhysicalOp, { kind: 'write' }> => o.kind === 'write')
+
+describe('defaultRenameWriter (real physical commit on disk)', () => {
+  it('stages writes, then executes write (mkdir -p) / rename / delete in order', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-writer-')))
+    writeFileSync(join(dir, 'old.ts'), 'old')
+    writeFileSync(join(dir, 'del.ts'), 'bye')
+    const res = defaultRenameWriter.commit([
+      { kind: 'write', absPath: join(dir, 'sub', 'created.ts'), newText: 'created' }, // new dir
+      { kind: 'rename', fromAbs: join(dir, 'old.ts'), toAbs: join(dir, 'renamed.ts') },
+      { kind: 'delete', absPath: join(dir, 'del.ts') },
+    ])
+    expect(res.partial).toBe(false)
+    expect(readFileSync(join(dir, 'sub', 'created.ts'), 'utf8')).toBe('created')
+    expect(readFileSync(join(dir, 'renamed.ts'), 'utf8')).toBe('old')
+    expect(existsSync(join(dir, 'old.ts'))).toBe(false)
+    expect(existsSync(join(dir, 'del.ts'))).toBe(false)
+  })
+})
 
 const disposers: Array<() => void> = []
 afterEach(() => {
@@ -169,13 +215,7 @@ describe('LspRenameEngine — dry-run preview (allowWrite off)', () => {
 
 describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
   it('writes the rename to disk via the writer + records pre/post digests', async () => {
-    const writes: FileWrite[] = []
-    const writer: RenameWriter = {
-      commit: (w) => {
-        writes.push(...w)
-        return { written: w.map((x) => x.absPath) }
-      },
-    }
+    const { writer, ops } = capturingWriter()
     const { root, manager } = setup({
       onRename: (params) => {
         const uri = (params as { textDocument: { uri: string } }).textDocument.uri
@@ -192,6 +232,7 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
     const r = await engine.rename(renameInput(root))
     expect(r.status).toBe('ok')
     expect(r.applied).toBe(true)
+    const writes = writeOps(ops)
     expect(writes).toHaveLength(1)
     expect(writes[0]?.absPath).toBe(join(root, 'greeter.ts'))
     expect(writes[0]?.newText).toBe(GREETER2_TS) // byte-matches the independent golden
@@ -200,13 +241,7 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
   })
 
   it('applies a MULTI-FILE rename atomically across all edited files (Slice F′)', async () => {
-    const writes: FileWrite[] = []
-    const writer: RenameWriter = {
-      commit: (w) => {
-        writes.push(...w)
-        return { written: w.map((x) => x.absPath) }
-      },
-    }
+    const { writer, ops } = capturingWriter()
     const { root, manager } = setup({ onRename: multiFileEdit })
     const engine = new LspRenameEngine({
       manager,
@@ -220,7 +255,7 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
     expect(r.applied).toBe(true)
     expect(r.fileCount).toBe(2)
     // BOTH files staged in one commit (stage-then-commit-all), byte-matching the goldens.
-    const byPath = new Map(writes.map((w) => [w.absPath, w.newText]))
+    const byPath = new Map(writeOps(ops).map((w) => [w.absPath, w.newText]))
     expect(byPath.get(join(root, 'greeter.ts'))).toBe(GREETER2_TS)
     expect(byPath.get(join(root, 'index.ts'))).toBe(INDEX2_TS)
     expect(r.digests?.map((d) => d.file).sort()).toEqual(['greeter.ts', 'index.ts'])
@@ -289,7 +324,7 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
     expect(r.edits[0]?.hunks).toBeUndefined() // bytes never surfaced
   })
 
-  it('REFUSES to apply when the edit carries resource operations', async () => {
+  it('REFUSES (v1 cut) editing a file that is ALSO renamed in the same edit', async () => {
     const { root, manager } = setup({
       onRename: (params) => {
         const uri = (params as { textDocument: { uri: string } }).textDocument.uri
@@ -309,12 +344,166 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
       allowRun: true,
       allowedRoots: [root],
       allowWrite: true,
+      writer: THROWING_WRITER, // refused EARLY, before any I/O
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/editing a file that is also renamed/i)
+    expect(r.resourceOps?.[0]?.kind).toBe('rename')
+  })
+})
+
+describe('LspRenameEngine — resource operations (CreateFile/RenameFile/DeleteFile)', () => {
+  // Mirrors the REAL rust-analyzer module rename: edits on the queried file + a RenameFile of the
+  // backing file. Renaming `greeter` in greeter.ts edits greeter.ts AND renames index.ts → moved.ts.
+  const renameWithFileRename = (params: unknown): unknown => {
+    const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+    const dir = uri.slice(0, uri.lastIndexOf('/'))
+    return {
+      documentChanges: [
+        {
+          textDocument: { uri: `${dir}/greeter.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: DECL_RANGE }],
+        },
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+      ],
+    }
+  }
+
+  it('APPLIES a RenameFile: edits the queried file AND renames the backing file on disk', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({ onRename: renameWithFileRename })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer,
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.status).toBe('ok')
+    expect(r.applied).toBe(true)
+    // The text edit to greeter.ts is a `write`; the RenameFile is a `rename` physical op.
+    expect(writeOps(ops).map((w) => w.absPath)).toEqual([join(root, 'greeter.ts')])
+    const renameOp = ops.find((o) => o.kind === 'rename') as Extract<PhysicalOp, { kind: 'rename' }>
+    expect(renameOp?.fromAbs).toBe(join(root, 'index.ts'))
+    expect(renameOp?.toAbs).toBe(join(root, 'moved.ts'))
+    // The audit records both the content write and the move (project-relative).
+    expect(r.digests?.map((d) => d.file)).toEqual(['greeter.ts', 'index.ts → moved.ts'])
+    // The preview surfaces the resource op project-relative (never an absolute URI).
+    expect(r.resourceOps).toEqual([{ kind: 'rename', uris: ['index.ts', 'moved.ts'] }])
+  })
+
+  it('APPLIES a Move-to-file (CreateFile → edit-new → DeleteFile)', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: (params) => {
+        const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+        const dir = uri.slice(0, uri.lastIndexOf('/'))
+        return {
+          documentChanges: [
+            { kind: 'create', uri: `${dir}/new.ts` },
+            {
+              textDocument: { uri: `${dir}/new.ts`, version: 1 },
+              edits: [
+                {
+                  newText: 'export const moved = 1\n',
+                  range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+                },
+              ],
+            },
+            { kind: 'delete', uri: `${dir}/index.ts` },
+          ],
+        }
+      },
+    })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer,
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    // CreateFile+edit folds into ONE write of the new file with the inserted content.
+    const w = writeOps(ops)
+    expect(w.map((x) => x.absPath)).toEqual([join(root, 'new.ts')])
+    expect(w[0]?.newText).toBe('export const moved = 1\n')
+    expect(ops.some((o) => o.kind === 'delete' && o.absPath === join(root, 'index.ts'))).toBe(true)
+  })
+
+  it('REFUSES a resource op carrying non-default options (overwrite/recursive — staged in v1)', async () => {
+    const { root, manager } = setup({
+      onRename: (params) => {
+        const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+        const dir = uri.slice(0, uri.lastIndexOf('/'))
+        return {
+          documentChanges: [
+            {
+              kind: 'rename',
+              oldUri: `${dir}/index.ts`,
+              newUri: `${dir}/moved.ts`,
+              options: { overwrite: true },
+            },
+          ],
+        }
+      },
+    })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
       writer: THROWING_WRITER,
     })
     const r = await engine.rename(renameInput(root))
     expect(r.applied).toBe(false)
-    expect(r.refused).toMatch(/resource operations/i)
-    expect(r.resourceOps?.[0]?.kind).toBe('rename')
+    expect(r.refused).toMatch(/options.*unsupported in v1/i)
+  })
+
+  it('REFUSES to apply when a resource-op endpoint escapes every allowlisted root (zero writes)', async () => {
+    const { root, manager } = setup({
+      onRename: (params) => {
+        const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+        const dir = uri.slice(0, uri.lastIndexOf('/'))
+        return {
+          documentChanges: [
+            { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: 'file:///etc/evil.ts' },
+          ],
+        }
+      },
+    })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer: THROWING_WRITER,
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/outside the project root/i)
+  })
+
+  it('reports partial:true (terminal, no rollback) when a later physical op faults mid-commit', async () => {
+    // A writer that commits the first op then faults — mimics an irreversible mid-batch failure.
+    const partialWriter: RenameWriter = {
+      commit: (o) => ({ completed: o.slice(0, 1), partial: true, error: 'EIO on rename' }),
+    }
+    const { root, manager } = setup({ onRename: renameWithFileRename })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer: partialWriter,
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(r.partial).toBe(true)
+    expect(r.partialError).toMatch(/EIO/)
+    expect(r.digests).toHaveLength(1) // only the op that landed is audited
   })
 })
 

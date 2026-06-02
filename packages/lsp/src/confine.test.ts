@@ -123,4 +123,22 @@ describe('confineEditedUriToRoots (multi-root group, write path)', () => {
       /not a file/i,
     )
   })
+
+  // Resource ops (CreateFile/RenameFile newUri) name files that do NOT exist yet — confinement must
+  // realpath the nearest existing ancestor and still accept/refuse correctly.
+  it('accepts a NOT-YET-EXISTING create/rename target inside a group root', () => {
+    const target = join(pkgB, 'sub', 'created.ts') // neither file nor parent dir exists yet
+    expect(confineEditedUriToRoots([pkgA, pkgB], pathToFileURL(target).toString())).toBe(target)
+  })
+
+  it('refuses a not-yet-existing target whose PARENT is a symlink escaping every root', () => {
+    // A symlinked dir inside pkg-a pointing OUTSIDE the group: a new file "under" it would land
+    // out-of-root. realpath-of-nearest-ancestor must catch this (TOCTOU/symlink-escape guard).
+    const link = join(pkgA, 'linkdir')
+    symlinkSync(outside, link)
+    const target = join(link, 'created.ts')
+    expect(() => confineEditedUriToRoots([pkgA, pkgB], pathToFileURL(target).toString())).toThrow(
+      LspGateError,
+    )
+  })
 })

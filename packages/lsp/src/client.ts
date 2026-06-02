@@ -46,6 +46,7 @@ import {
   ConfigurationRequest,
   DefinitionRequest,
   DidChangeTextDocumentNotification,
+  DidCloseTextDocumentNotification,
   DidOpenTextDocumentNotification,
   DocumentSymbolRequest,
   ExitNotification,
@@ -231,7 +232,7 @@ export class LspClient {
    * document version: seeded at 1 by `didOpen`, pre-incremented by each `applyEdited` `didChange`
    * — versions MUST strictly increase or the server ignores the change and keeps stale text.
    */
-  private readonly open = new Map<string, { refs: number; version: number }>()
+  private readonly open = new Map<string, { refs: number; version: number; languageId: string }>()
 
   /**
    * Pushed diagnostics per uri (the PUSH model — `textDocument/publishDiagnostics` is a server
@@ -437,7 +438,7 @@ export class LspClient {
       entry.refs += 1
       return
     }
-    this.open.set(uri, { refs: 1, version: 1 })
+    this.open.set(uri, { refs: 1, version: 1, languageId })
     // A fresh open triggers the server's first diagnostics publish for this uri; mark it pending so
     // `documentDiagnostics` waits for that publish rather than trusting a stale/absent cache.
     this.awaitingDiagnostics.add(uri)
@@ -469,6 +470,45 @@ export class LspClient {
     this.conn.sendNotification(DidChangeTextDocumentNotification.method, {
       textDocument: { uri, version: entry.version },
       contentChanges: [{ text: newText }],
+    })
+  }
+
+  /**
+   * A file moved on disk (resource-op `RenameFile`). The open-once/no-`didClose` invariant keys the
+   * server buffer by `oldUri`, which now names a non-existent path — a later query would be silently
+   * wrong (the worst failure class). MIGRATE the open entry: `didClose(oldUri)` + `didOpen(newUri)`
+   * with the moved text, carrying the refcount and the languageId to the new key. NO-OP if `oldUri`
+   * was never opened (Strummer opens only the queried file, so the renamed file is usually closed).
+   * Run inside the held multi-URI lock so no concurrent query races the key migration.
+   */
+  didFileRename(oldUri: string, newUri: string, newText: string): void {
+    const entry = this.open.get(oldUri)
+    if (entry === undefined) return
+    this.open.delete(oldUri)
+    this.diagnostics.delete(oldUri)
+    this.awaitingDiagnostics.delete(oldUri)
+    this.conn.sendNotification(DidCloseTextDocumentNotification.method, {
+      textDocument: { uri: oldUri },
+    })
+    // Reopen under the new uri (a fresh document → version restarts at 1), carrying the refcount.
+    this.open.set(newUri, { refs: entry.refs, version: 1, languageId: entry.languageId })
+    this.awaitingDiagnostics.add(newUri)
+    this.conn.sendNotification(DidOpenTextDocumentNotification.method, {
+      textDocument: { uri: newUri, languageId: entry.languageId, version: 1, text: newText },
+    })
+  }
+
+  /**
+   * A file was deleted on disk (resource-op `DeleteFile`). `didClose` + evict the open entry so the
+   * server stops tracking a buffer for a path that no longer exists. NO-OP if it was never opened.
+   */
+  didFileDelete(uri: string): void {
+    if (this.open.get(uri) === undefined) return
+    this.open.delete(uri)
+    this.diagnostics.delete(uri)
+    this.awaitingDiagnostics.delete(uri)
+    this.conn.sendNotification(DidCloseTextDocumentNotification.method, {
+      textDocument: { uri },
     })
   }
 

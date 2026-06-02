@@ -102,12 +102,13 @@ export {
   type ServerRegistryEntry,
 } from './registry.js'
 export {
+  type CommitResult,
   defaultRenameWriter,
-  type FileWrite,
   LspRenameEngine,
   type LspRenameEngineOptions,
   type LspRenameInput,
   type LspRenameResult,
+  type PhysicalOp,
   type RenameDigest,
   type RenamePreviewEdit,
   type RenamePreviewFile,

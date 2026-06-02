@@ -7,9 +7,11 @@
  *
  * Apply is a separate phase from compute (it may need more locks than the compute phase held).
  * Single- AND multi-file edits apply, the latter under the manager's multi-URI lock (sorted,
- * deadlock-free) held across the whole stage→commit→`didChange` window. Every edited file is
- * confined to the root (realpath, all-or-nothing) BEFORE any I/O; resource operations
- * (Create/Rename/DeleteFile) are surfaced in the preview and refused on apply.
+ * deadlock-free) held across the whole stage→commit→`didChange` window. Every touched file is
+ * confined to the root group (realpath, all-or-nothing) BEFORE any I/O. Resource operations
+ * (CreateFile/RenameFile/DeleteFile) APPLY in `documentChanges` order interleaved with text edits
+ * (default semantics, single regular file; non-default options + dir/recursive delete + editing a
+ * renamed file are the staged v1 cuts, refused); a mid-commit fault is terminal (`partial`).
  *
  * The adversarial corrections baked in here: oldText is sliced with absolute offsets (never
  * reconstructed from line:col); apply is staleness-guarded (the queried file vs its compute hash;
@@ -22,13 +24,15 @@ import { createHash } from 'node:crypto'
 import {
   closeSync,
   fsyncSync,
+  mkdirSync,
   openSync,
   readFileSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { relative } from 'node:path'
+import { dirname, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { applyTextEdits, isPlausibleRenameName } from './apply.js'
 import type { NavResult, ServerInfo } from './client.js'
@@ -46,6 +50,7 @@ import type {
   NormalizedResourceOp,
   NormalizedWorkspaceEdit,
   QueryStatus,
+  ResourceOpOptions,
 } from './normalize.js'
 import type { HumanRange } from './query.js'
 
@@ -60,55 +65,106 @@ const defaultReadFile: FileReader = (p) => {
   }
 }
 
-/** One file to write during an apply commit. */
-export interface FileWrite {
-  absPath: string
-  newText: string
+/**
+ * One physical filesystem action in an apply commit. A `write` creates-or-overwrites a file's
+ * content (the fold of a CreateFile + its edits, or an edit to a pre-existing file); `rename`/
+ * `delete` are the resource-op file moves/removals (`RenameFile`/`DeleteFile`).
+ */
+export type PhysicalOp =
+  | { kind: 'write'; absPath: string; newText: string }
+  | { kind: 'rename'; fromAbs: string; toAbs: string }
+  | { kind: 'delete'; absPath: string }
+
+export interface CommitResult {
+  /** The ops that completed, in order. */
+  completed: PhysicalOp[]
+  /** True ⇒ an op faulted mid-execute; `completed` is the TERMINAL landed set (rename/delete are
+   * irreversible — there is no rollback; reconcile via VCS). */
+  partial: boolean
+  error?: string
 }
 
 /**
  * The write seam (injected; tests substitute a fake so the gate never touches disk). The default
- * is **stage-then-commit-all**: write every target to a sibling temp file (+ fsync), and only
- * once ALL temps are written, atomically rename each into place. The temp-stage phase fails
- * before any target file is touched; the rename burst is the only (documented) inconsistency
- * window. Returns the files actually committed.
+ * **stages every `write` to a sibling temp (+ fsync) first** (no target touched until all temps
+ * exist — the strength the pure-text rename relies on), then executes every op IN ORDER: a `write`
+ * commits via atomic rename of its temp, a `rename`/`delete` runs the fs primitive. Resource ops
+ * are irreversible and cannot be staged, so a fault during the execute phase is terminal —
+ * `partial: true` names exactly what landed.
  */
 export interface RenameWriter {
-  commit(writes: FileWrite[]): { written: string[] }
+  commit(ops: PhysicalOp[]): CommitResult
 }
 
 let tempCounter = 0
 
 export const defaultRenameWriter: RenameWriter = {
-  commit(writes) {
-    const staged: Array<{ tmp: string; target: string }> = []
+  commit(ops) {
+    // Phase A — stage every `write` to a sibling temp (+fsync); mkdir -p a CreateFile's new dir.
+    const temps = new Map<string, string>()
     try {
-      for (const w of writes) {
+      for (const op of ops) {
+        if (op.kind !== 'write') continue
+        mkdirSync(dirname(op.absPath), { recursive: true })
         tempCounter += 1
-        const tmp = `${w.absPath}.strummer-rename-${process.pid}-${tempCounter}`
-        writeFileSync(tmp, w.newText, 'utf8')
+        const tmp = `${op.absPath}.strummer-rename-${process.pid}-${tempCounter}`
+        writeFileSync(tmp, op.newText, 'utf8')
         const fd = openSync(tmp, 'r+')
         fsyncSync(fd)
         closeSync(fd)
-        staged.push({ tmp, target: w.absPath })
+        temps.set(op.absPath, tmp)
       }
     } catch (err) {
-      for (const s of staged) {
+      for (const tmp of temps.values()) {
         try {
-          unlinkSync(s.tmp)
+          unlinkSync(tmp)
         } catch {
-          // best-effort cleanup; nothing was renamed yet so no target is corrupt.
+          // best-effort cleanup; nothing was committed yet so no target is corrupt.
         }
       }
       throw err
     }
-    const written: string[] = []
-    for (const s of staged) {
-      renameSync(s.tmp, s.target)
-      written.push(s.target)
+    // Phase B — execute in order. A fault here is terminal (rename/delete are irreversible).
+    const completed: PhysicalOp[] = []
+    try {
+      for (const op of ops) {
+        if (op.kind === 'write') renameSync(temps.get(op.absPath) as string, op.absPath)
+        else if (op.kind === 'rename') renameSync(op.fromAbs, op.toAbs)
+        else unlinkSync(op.absPath)
+        completed.push(op)
+      }
+    } catch (err) {
+      for (const [abs, tmp] of temps) {
+        if (!completed.some((c) => c.kind === 'write' && c.absPath === abs)) {
+          try {
+            unlinkSync(tmp)
+          } catch {
+            // best-effort: an uncommitted temp.
+          }
+        }
+      }
+      return { completed, partial: true, error: (err as Error).message }
     }
-    return { written }
+    return { completed, partial: false }
   },
+}
+
+function hasNonDefaultOptions(o?: ResourceOpOptions): boolean {
+  return (
+    o !== undefined &&
+    (o.overwrite === true ||
+      o.ignoreIfExists === true ||
+      o.ignoreIfNotExists === true ||
+      o.recursive === true)
+  )
+}
+
+function isRegularFile(abs: string): boolean {
+  try {
+    return statSync(abs).isFile()
+  } catch {
+    return false
+  }
 }
 
 export interface LspRenameEngineOptions {
@@ -184,6 +240,10 @@ export interface LspRenameResult {
   resourceOps?: NormalizedResourceOp[]
   /** Per-file pre/post SHA-256 digests — the apply audit (only when applied). */
   digests?: RenameDigest[]
+  /** True ⇒ an irreversible resource op faulted mid-commit; `digests` names what landed (no
+   * rollback — reconcile via VCS). */
+  partial?: boolean
+  partialError?: string
   serverInfo?: ServerInfo
   toolchain?: { name: string; version: string | null }
   encoding: PositionEncoding
@@ -196,6 +256,8 @@ interface ApplyOutcome {
   applied: boolean
   refused?: string
   digests?: RenameDigest[]
+  partial?: boolean
+  partialError?: string
 }
 
 interface RunOutcome {
@@ -286,10 +348,13 @@ export class LspRenameEngine {
   }
 
   /**
-   * Decide + execute the apply (single- OR multi-file). Confine EVERY edited URI all-or-nothing
-   * BEFORE any I/O; then, under the multi-URI lock, read each target, hard-refuse on drift (the
-   * queried file vs its compute text; every edit site vs the old identifier), build new content
-   * via the pure apply core, stage-then-commit all, and `didChange`-resync any open file.
+   * Decide + execute the apply, consuming the ordered `operations` (text edits interleaved with
+   * CreateFile/RenameFile/DeleteFile). Confine EVERY touched URI (edit + create + rename old&new +
+   * delete) to the root group all-or-nothing BEFORE any I/O; refuse the v1 cuts early (non-default
+   * resource-op options; editing a file also renamed in the same batch). Then, under the multi-URI
+   * lock over ALL touched URIs, replay the ops over a virtual content map (no writes) with the
+   * staleness guards, build a physical plan, stage-then-commit it, and resync any open buffer
+   * (`didChange` for an edited file, `didClose`+`didOpen` migration for a renamed/deleted one).
    */
   private async applyEdit(
     edit: NormalizedWorkspaceEdit,
@@ -298,70 +363,137 @@ export class LspRenameEngine {
     text: string,
     encoding: PositionEncoding,
   ): Promise<ApplyOutcome> {
-    if (edit.resourceOps.length > 0) {
-      return { applied: false, refused: 'resource operations are not applied in v1 (refused)' }
-    }
-    if (edit.files.length === 0) return { applied: false }
-
-    // Confine-all before any I/O — one out-of-root URI refuses the WHOLE batch. Edited files
-    // confine to the GROUP (primary root ∪ workspaceRoots), so a cross-root rename in a monorepo
-    // applies, but an edit escaping every allowlisted root still aborts before any write.
+    const ops = edit.operations
+    if (ops.length === 0) return { applied: false }
     const group = [input.projectRoot, ...(input.workspaceRoots ?? [])]
-    const targets: Array<{ uri: string; abs: string; edits: NormalizedFileEdit[] }> = []
-    for (const f of edit.files) {
-      let abs: string
-      try {
-        abs = confineEditedUriToRoots(group, f.uri)
-      } catch {
-        return {
-          applied: false,
-          refused: 'an edited file is outside the project root; previewed only',
+    const abs = new Map<string, string>()
+    const rel = (uri: string) => relative(input.projectRoot, abs.get(uri) as string)
+
+    // (a) Confine EVERY touched URI to the group, all-or-nothing, BEFORE any I/O.
+    for (const op of ops) {
+      const uris = op.type === 'rename' ? [op.oldUri, op.newUri] : [op.uri]
+      for (const u of uris) {
+        if (abs.has(u)) continue
+        try {
+          abs.set(u, confineEditedUriToRoots(group, u))
+        } catch {
+          return {
+            applied: false,
+            refused: 'an edited file is outside the project root; previewed only',
+          }
         }
       }
-      targets.push({ uri: f.uri, abs, edits: f.edits })
+    }
+
+    // (b) Refuse the staged v1 cuts EARLY (before any I/O).
+    const renameEndpoints = new Set<string>()
+    for (const op of ops) {
+      if (op.type === 'rename') {
+        renameEndpoints.add(op.oldUri)
+        renameEndpoints.add(op.newUri)
+      }
+    }
+    for (const op of ops) {
+      if (op.type !== 'edit' && hasNonDefaultOptions(op.options)) {
+        return {
+          applied: false,
+          refused:
+            'resource-op options (overwrite/ignoreIfExists/recursive) are unsupported in v1 (refused)',
+        }
+      }
+      if (op.type === 'edit' && renameEndpoints.has(op.uri)) {
+        return {
+          applied: false,
+          refused:
+            'editing a file that is also renamed in the same edit is unsupported in v1 (refused)',
+        }
+      }
     }
 
     return this.manager.runWithUris(
       {
         language: input.language,
         projectRoot: input.projectRoot,
-        uris: targets.map((t) => t.uri),
+        uris: [...abs.keys()],
         ...(input.workspaceRoots ? { workspaceRoots: input.workspaceRoots } : {}),
       },
       async (client): Promise<ApplyOutcome> => {
-        // Phase 1 (no writes): read every target, enforce the staleness guards, build new content.
-        const plan: Array<{ abs: string; uri: string; before: string; after: string }> = []
-        let expectedOld: string | undefined
-        for (const t of targets) {
-          const current = this.readFile(t.abs)
-          if (current === undefined) {
-            return {
-              applied: false,
-              refused: `cannot read edited file ${relative(input.projectRoot, t.abs)}`,
-            }
-          }
-          if (t.uri === queriedUri && sha256(current) !== sha256(text)) {
-            return {
-              applied: false,
-              refused: 'the file changed on disk since the rename was computed; re-query and retry',
-            }
-          }
-          if (t.uri === queriedUri && t.edits[0]) {
-            expectedOld = sliceByOffsets(current, t.edits[0].range, encoding)
-          }
-          plan.push({
-            abs: t.abs,
-            uri: t.uri,
-            before: current,
-            after: applyTextEdits(current, t.edits, encoding),
-          })
+        // PHASE 1 (no writes): replay ops over a virtual content map, enforce the staleness guards.
+        const proj = new Map<string, string>() // uri -> projected final content
+        const created = new Set<string>()
+        const diskCache = new Map<string, string | undefined>()
+        const readDisk = (u: string): string | undefined => {
+          if (!diskCache.has(u)) diskCache.set(u, this.readFile(abs.get(u) as string))
+          return diskCache.get(u)
         }
-        // Every edit site must currently hold the SAME old identifier the rename targeted — a
-        // strong, conservative staleness guard for the non-queried files (no compute baseline).
+        const contentOf = (u: string): string | undefined =>
+          proj.has(u) ? proj.get(u) : readDisk(u)
+        const renamePairs: Array<{ oldUri: string; newUri: string; content: string }> = []
+        const deletes: Array<{ uri: string; content: string }> = []
+        let expectedOld: string | undefined
+
+        for (const op of ops) {
+          if (op.type === 'create') {
+            if (readDisk(op.uri) !== undefined) {
+              return { applied: false, refused: `cannot create ${rel(op.uri)}: it already exists` }
+            }
+            proj.set(op.uri, '')
+            created.add(op.uri)
+          } else if (op.type === 'delete') {
+            const cur = readDisk(op.uri)
+            if (cur === undefined) {
+              return { applied: false, refused: `cannot delete ${rel(op.uri)}: it does not exist` }
+            }
+            if (!isRegularFile(abs.get(op.uri) as string)) {
+              return {
+                applied: false,
+                refused: `cannot delete ${rel(op.uri)}: not a regular file (recursive/directory delete unsupported in v1)`,
+              }
+            }
+            deletes.push({ uri: op.uri, content: cur })
+            proj.delete(op.uri)
+          } else if (op.type === 'rename') {
+            const cur = readDisk(op.oldUri)
+            if (cur === undefined) {
+              return {
+                applied: false,
+                refused: `cannot rename ${rel(op.oldUri)}: it does not exist`,
+              }
+            }
+            if (readDisk(op.newUri) !== undefined) {
+              return {
+                applied: false,
+                refused: `cannot rename to ${rel(op.newUri)}: it already exists`,
+              }
+            }
+            renamePairs.push({ oldUri: op.oldUri, newUri: op.newUri, content: cur })
+          } else {
+            const baseText = contentOf(op.uri)
+            if (baseText === undefined) {
+              return { applied: false, refused: `cannot read edited file ${rel(op.uri)}` }
+            }
+            if (op.uri === queriedUri && sha256(baseText) !== sha256(text)) {
+              return {
+                applied: false,
+                refused:
+                  'the file changed on disk since the rename was computed; re-query and retry',
+              }
+            }
+            if (op.uri === queriedUri && op.edits[0]) {
+              expectedOld = sliceByOffsets(baseText, op.edits[0].range, encoding)
+            }
+            proj.set(op.uri, applyTextEdits(baseText, op.edits, encoding))
+          }
+        }
+
+        // Old-identifier staleness guard for PRE-EXISTING edited files (skip created files — they
+        // have no on-disk old identifier to match).
         if (expectedOld !== undefined) {
-          for (const t of targets) {
-            const cur = plan.find((p) => p.uri === t.uri)?.before as string
-            for (const e of t.edits) {
+          for (const op of ops) {
+            if (op.type !== 'edit' || created.has(op.uri)) continue
+            const cur = readDisk(op.uri)
+            if (cur === undefined) continue
+            for (const e of op.edits) {
               if (sliceByOffsets(cur, e.range, encoding) !== expectedOld) {
                 return {
                   applied: false,
@@ -372,16 +504,60 @@ export class LspRenameEngine {
           }
         }
 
-        // Phase 2: stage-then-commit all, then resync open buffers.
-        this.writer.commit(plan.map((p) => ({ absPath: p.abs, newText: p.after })))
-        for (const p of plan) client.applyEdited(p.uri, p.after) // no-op for a non-open file
+        // Build the physical plan + the audit digests in lockstep (content writes, then renames,
+        // then deletes — disjoint given the edit-on-renamed-file cut, so phase order is correct).
+        const physical: PhysicalOp[] = []
+        const digests: RenameDigest[] = []
+        for (const [uri, after] of proj) {
+          physical.push({ kind: 'write', absPath: abs.get(uri) as string, newText: after })
+          digests.push({
+            file: rel(uri),
+            before: sha256(readDisk(uri) ?? ''),
+            after: sha256(after),
+          })
+        }
+        for (const r of renamePairs) {
+          physical.push({
+            kind: 'rename',
+            fromAbs: abs.get(r.oldUri) as string,
+            toAbs: abs.get(r.newUri) as string,
+          })
+          digests.push({
+            file: `${rel(r.oldUri)} → ${rel(r.newUri)}`,
+            before: sha256(r.content),
+            after: sha256(r.content),
+          })
+        }
+        for (const d of deletes) {
+          physical.push({ kind: 'delete', absPath: abs.get(d.uri) as string })
+          digests.push({ file: `${rel(d.uri)} (deleted)`, before: sha256(d.content), after: '' })
+        }
+        if (physical.length === 0) return { applied: false }
+
+        // PHASE 2: stage-then-commit, then resync the server's open buffers for what landed.
+        const res = this.writer.commit(physical)
+        const landed = new Set(res.completed)
+        const didWrite = (uri: string) =>
+          res.completed.some((o) => o.kind === 'write' && o.absPath === abs.get(uri))
+        for (const [uri, after] of proj) if (didWrite(uri)) client.applyEdited(uri, after)
+        for (const r of renamePairs) {
+          if (res.completed.some((o) => o.kind === 'rename' && o.toAbs === abs.get(r.newUri))) {
+            client.didFileRename(r.oldUri, r.newUri, r.content)
+          }
+        }
+        for (const d of deletes) {
+          if (res.completed.some((o) => o.kind === 'delete' && o.absPath === abs.get(d.uri))) {
+            client.didFileDelete(d.uri)
+          }
+        }
+
+        const outDigests = res.partial
+          ? digests.filter((_, i) => landed.has(physical[i] as PhysicalOp))
+          : digests
         return {
           applied: true,
-          digests: plan.map((p) => ({
-            file: relative(input.projectRoot, p.abs),
-            before: sha256(p.before),
-            after: sha256(p.after),
-          })),
+          digests: outDigests,
+          ...(res.partial ? { partial: true, partialError: res.error } : {}),
         }
       },
     )
@@ -403,6 +579,16 @@ export class LspRenameEngine {
       serverInfo === undefined
         ? 'the language server did not report its version (serverInfo); the rename cannot be attributed to a specific server version'
         : undefined
+    // Resource-op paths are surfaced PROJECT-RELATIVE (never an absolute URI — no home-dir/secret
+    // leakage); a URI outside every allowlisted root shows `(out of project root)`, never its path.
+    const relUri = (uri: string): string => {
+      try {
+        return relative(input.projectRoot, confineEditedUriToRoots(group, uri))
+      } catch {
+        return '(out of project root)'
+      }
+    }
+    const resourceOps = edit.resourceOps.map((op) => ({ kind: op.kind, uris: op.uris.map(relUri) }))
     return {
       status: run.status,
       kind: 'rename',
@@ -412,8 +598,10 @@ export class LspRenameEngine {
       fileCount: edit.files.length,
       totalEditCount,
       edits,
-      ...(edit.resourceOps.length > 0 ? { resourceOps: edit.resourceOps } : {}),
+      ...(resourceOps.length > 0 ? { resourceOps } : {}),
       ...(run.apply.digests ? { digests: run.apply.digests } : {}),
+      ...(run.apply.partial ? { partial: true } : {}),
+      ...(run.apply.partialError ? { partialError: run.apply.partialError } : {}),
       ...(serverInfo ? { serverInfo } : {}),
       ...(input.toolchain ? { toolchain: input.toolchain } : {}),
       encoding,

@@ -487,10 +487,12 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             'Rename the symbol at a 1-based line:column to `newName` across the project. DRY-RUN ' +
             'by default: returns the proposed edit (per-file hunks, old→new) with NO disk writes. ' +
             'The operator separately enables apply (allowWrite); when enabled the edit is written ' +
-            'to disk — single- or multi-file, atomically — and per-file SHA-256 digests are ' +
-            'returned. `applied` says which happened; `refused` explains any non-apply (not ' +
-            'renameable, resource ops, out-of-root, drift). Tri-state status. No tool input can ' +
-            'turn writing on.',
+            'to disk — single- or multi-file, atomically, INCLUDING file create/rename/delete ' +
+            '(e.g. a module rename that renames its backing file) — and per-file SHA-256 digests ' +
+            'are returned. `applied` says which happened; `refused` explains any non-apply (not ' +
+            'renameable, out-of-root, drift, an unsupported v1 cut); `partial` flags a terminal ' +
+            'mid-commit fault (reconcile via VCS). Tri-state status. No tool input can turn ' +
+            'writing on.',
           inputSchema: {
             ...positionSchema,
             newName: z.string().describe('the new identifier for the symbol'),
@@ -525,6 +527,8 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             ...(result.versionWarning ? { versionWarning: result.versionWarning } : {}),
             ...(result.resourceOps ? { resourceOps: result.resourceOps } : {}),
             ...(result.digests ? { digests: result.digests } : {}),
+            ...(result.partial ? { partial: true } : {}),
+            ...(result.partialError ? { partialError: result.partialError } : {}),
           }
           let structured: Record<string, unknown> = { ...head, edits: result.edits }
           // A large edit set is offloaded by handle (already redacted by the engine); the inline

@@ -448,7 +448,14 @@ function printRename(io: CliIO, r: LspRenameResult): void {
       io.out(`    ${rangeStr(h.range)}  ${h.oldText} → ${h.newText}\n`)
     }
   }
+  for (const op of r.resourceOps ?? []) {
+    io.out(`  ${op.kind} file: ${op.uris.join(' → ')}\n`)
+  }
+  if (r.partial)
+    io.err(`warning: PARTIAL apply (no rollback — reconcile via VCS): ${r.partialError ?? ''}\n`)
   for (const d of r.digests ?? []) {
-    io.out(`  digest ${d.file}: ${d.before.slice(0, 12)} → ${d.after.slice(0, 12)}\n`)
+    io.out(
+      `  digest ${d.file}: ${d.before.slice(0, 12)} → ${d.after.slice(0, 12) || '(deleted)'}\n`,
+    )
   }
 }
