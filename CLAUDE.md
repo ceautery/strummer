@@ -160,10 +160,12 @@ vision and `ARCHITECTURE.md` for the technical design.
   multi-file conflict reconciliation, `workspace/symbol`, diagnostics, multi-root, full
   toolchain-mismatch heuristic, a `strummer lsp` CLI),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
-  `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`,
+  `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write
-  gates are straight-through flags (`--allow-run` etc.) and runners/fetchers are
-  injectable so the suite never spawns/fetches — ADR 0010 no-real-spawn-in-gate).
+  gates are straight-through flags (`--allow-run`/`--allow-write` etc.) and
+  runners/fetchers/LSP-servers are injectable so the suite never spawns/fetches —
+  ADR 0010/0011 no-real-spawn-in-gate; `lsp` builds the real manager/engine from
+  flags and shuts it down per single-shot invocation).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
 - `examples/` — runnable sample collections (e.g. `examples/api/jsonplaceholder`,

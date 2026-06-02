@@ -657,9 +657,15 @@ Two independent tracks, then the test-quality chain, then LSP last:
         internal decision) + bin wiring. Real-server fixtures captured out-of-gate (gate replays
         recorded payloads, no real server). The capture flipped a design assumption: tsserver 5.3.0
         returns the legacy `changes` map (not `documentChanges`) and no resource ops on a rename.
+  - [x] **`strummer lsp` human CLI** — single-shot `languages`/`definition`/`type-definition`/
+        `references`/`hover`/`symbols`/`call-hierarchy` + write-mode `rename` (dry-run unless
+        `--allow-write`). The human is the operator (`--allow-run`/`--allow-write` straight-through;
+        `--servers` binds the registry, `--project` is the allowlist); the engine is injectable so
+        the gate never spawns a real server, and production builds the real manager/engine per
+        invocation and shuts it down. Exit 2 = `not_ready` (retry).
   - [ ] *(staged, not amputated)* write-mode for resource ops + multi-file conflict reconciliation,
         `workspace/symbol` search, `diagnostics`, multi-root, full toolchain-version resolution,
-        Python adapter posture, a `strummer lsp` CLI.
+        Python adapter posture.
 
 ## Ongoing
 

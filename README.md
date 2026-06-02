@@ -116,9 +116,10 @@ no real language server runs in the green gate. The capability-gated read tails
 (`lsp_type_definition`/`_document_symbols`/`_call_hierarchy`) and **write-mode**
 (`lsp_rename` — dry-run by default, applies to disk only behind a separate
 `STRUMMER_LSP_ALLOW_WRITE` gate; single- and multi-file via a sorted multi-URI lock with
-stage-then-commit + staleness guards) have since landed (ADR 0011 addendum). Staged next:
-write-mode resource-ops + multi-file conflict reconciliation, `workspace/symbol`,
-diagnostics, multi-root, and a `strummer lsp` CLI.
+stage-then-commit + staleness guards) have since landed (ADR 0011 addendum), as has a human
+**`strummer lsp` CLI** (single-shot navigation + `rename`, the engine injectable so the gate
+never spawns a real server). Staged next: write-mode resource-ops + multi-file conflict
+reconciliation, `workspace/symbol`, diagnostics, multi-root.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 

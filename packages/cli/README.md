@@ -230,7 +230,23 @@ strummer flake quarantine 'src/x.test.ts > flaky case' --db flake.db \
 strummer deps audit . lodash --osv-db /var/lib/strummer/osv
 strummer deps audit-project . --osv-db /var/lib/strummer/osv
 strummer deps changelog lodash --project . --to 4.17.21
+
+# Semantic code navigation via a real Language Server (single-shot; gated).
+# --servers (or STRUMMER_LSP_SERVERS) binds the operator language→server registry;
+# navigation needs --allow-run, rename writes only with --allow-write (else dry-run):
+export STRUMMER_LSP_SERVERS='{"typescript":{"command":"typescript-language-server","args":["--stdio"]}}'
+strummer lsp languages
+strummer lsp definition typescript src/app.ts 42 8 --project . --allow-run
+strummer lsp references typescript src/app.ts 42 8 --project . --allow-run
+strummer lsp symbols typescript src/app.ts --project . --allow-run
+strummer lsp rename typescript src/app.ts 42 8 newName --project . --allow-run            # dry-run preview
+strummer lsp rename typescript src/app.ts 42 8 newName --project . --allow-run --allow-write  # writes to disk
 ```
+
+`lsp` exit codes: `0` the query ran, `1` denied/refused/error, `2` the server is
+still indexing (retry). A result `status` is tri-state (`ok`/`not_ready`/`no_result`);
+`rename` is dry-run unless `--allow-write`, and `applied` in the result says whether
+the edit was written.
 
 `audit`/`audit-project` report `osvSnapshotLoaded` — without an operator OSV
 snapshot, "no known vulnerabilities" is unknown, not clean. The deps CLI fetches
