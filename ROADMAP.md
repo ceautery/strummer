@@ -733,11 +733,29 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `workspaceEdit.resourceOperations` (else rust-analyzer refuses a module rename). **Provisioned
         rust-analyzer 0.3.2921** (local/untracked; gate stays fixture-only) and verified live: a
         `mod greeter;`→`welcome` rename edited `main.rs` AND renamed `greeter.rs`→`welcome.rs` on disk.
+  - [x] **Resource-op SAFE-SUBSET v1 cuts — `ignoreIf*` + edit composed with rename/delete.** Closes
+        the non-destructive cuts (operator chose the safe subset; `overwrite`/recursive-delete stay
+        staged). `ignoreIfExists` (create/rename) + `ignoreIfNotExists` (delete) are now conditional
+        NO-OPS (never more destructive than the default), not blanket-refused (`hasNonDefaultOptions`
+        → `hasRefusedOptions`, overwrite/recursive only). Editing a file that is ALSO renamed/deleted
+        in the same batch now APPLIES: `applyEdit`'s replay was rewritten onto a per-file `Fate` VFS
+        keyed by the ORIGINAL uri so content flows THROUGH a rename — rename(A→B)+edit(B) (import
+        fix-up in a moved file) and edit(A)+rename(A→B) both write the edited content to the final
+        path in documentChanges order; net-no-op batches (create+delete) drop out. The physical plan
+        is one ordered write/rename/delete list with a shared digest index per op (edited-AND-renamed
+        = rename+write sharing ONE audit row); resync derives its bytes from what ACTUALLY landed
+        (pristine on a partial commit) and migrates the open buffer only when the physical rename
+        landed. Genuinely ambiguous/conflicting batches are REFUSED, not silently reconciled: a rename
+        cycle, two renames into one target, editing a renamed-away path, and **deleting a path that is
+        also a rename/create target** (a data-loss guard). Designed via the
+        `lsp-resource-op-safe-cuts-design` fan-out (2 proposals → synthesis → 3 adversarial critics,
+        five holes folded in) + a recall-biased review fan-out. Fixture-only gate (no real server);
+        TDD A1-A9 + B1-B20.
   - [ ] *(staged, not amputated)* pull-diagnostics (`textDocument/diagnostic`, for servers that
         advertise `diagnosticProvider` — note rust-analyzer DOES, captured in its init fixture), dynamic
-        `didChangeWorkspaceFolders` (+ its write-mode interaction), resource-op **options** +
-        recursive/dir delete + editing-a-renamed-file + multi-file conflict reconciliation, full
-        toolchain-version resolution, Python adapter posture.
+        `didChangeWorkspaceFolders` (+ its write-mode interaction), the DESTRUCTIVE resource-op options
+        (`overwrite`) + recursive/dir delete (kept refused by design), full toolchain-version
+        resolution, Python adapter posture.
 
 ## Ongoing
 

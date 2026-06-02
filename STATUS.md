@@ -173,7 +173,19 @@ non-default options / recursive delete / editing-a-renamed-file). It came with a
 generalization** (servers that signal not-ready via an ERROR — rust-analyzer's `-32602` mid-index —
 now route through the tri-state, not a hard failure) and **provisioning rust-analyzer 0.3.2921**
 (local/untracked; gate stays fixture-only) to verify live: a `mod greeter;`→`welcome` rename edited
-`main.rs` AND renamed `greeter.rs`→`welcome.rs` on disk — current count is 910 TS + 45 Py green; see
+`main.rs` AND renamed `greeter.rs`→`welcome.rs` on disk, and now the **LSP resource-op SAFE-SUBSET v1
+cuts** (operator chose the safe subset): `ignoreIfExists`/`ignoreIfNotExists` are now conditional
+NO-OPS (not blanket-refused — `hasNonDefaultOptions`→`hasRefusedOptions`, only `overwrite`/recursive
+stay refused), AND editing a file that is ALSO renamed/deleted in the same batch now APPLIES —
+`applyEdit`'s replay was rewritten onto a per-file `Fate` VFS keyed by the ORIGINAL uri so content
+flows THROUGH a rename (rename(A→B)+edit(B) import fix-up, and edit(A)+rename(A→B), both write the
+edited content to the final path in documentChanges order; create+delete net-no-ops drop out). One
+ordered write/rename/delete physical plan with a shared digest index per op; resync derives bytes
+from what ACTUALLY landed (pristine on a partial commit) and migrates the open buffer only when the
+rename landed; genuinely conflicting batches are REFUSED not reconciled (rename cycle, two-into-one,
+edit-of-renamed-away-path, delete-of-a-rename/create-target = a data-loss guard). Designed via the
+`lsp-resource-op-safe-cuts-design` fan-out (2 proposals → synthesis → 3 adversarial critics, five
+holes folded in) + a recall-biased review fan-out — **current count is 935 TS + 45 Py green**; see
 the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
@@ -979,19 +991,25 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > **CURRENT (2026-06-02).** Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
 > and the Python adapters + LSP capability-gated reads + LSP write-mode (`lsp_rename`, incl. multi-root
 > AND resource ops) + the LSP tails (cold-load fix, `workspace/symbol`, push-`diagnostics`, multi-root
-> nav) all landed. **Latest: LSP resource-op write-mode** — `lsp_rename` applies
-> `CreateFile`/`RenameFile`/`DeleteFile` interleaved with text edits (ordered `operations`, URI-union
-> lock, group confinement of both rename endpoints, virtual-content-map Phase 1, stage-then-commit
-> `PhysicalOp` plan with terminal `partial`, `didFileRename`/`didFileDelete` open-map migration; v1
-> cuts: non-default options / recursive delete / editing-a-renamed-file). Came with a **readiness
-> generalization** (a soft `ResponseError` like rust-analyzer's `-32602` mid-index now routes through
-> the tri-state, not a hard failure) and **provisioned rust-analyzer 0.3.2921** (local/untracked; gate
-> stays fixture-only) to verify live (a `mod greeter;`→`welcome` rename renamed `greeter.rs`→`welcome.rs`
-> on disk). **910 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> nav) all landed. **Latest: LSP resource-op SAFE-SUBSET v1 cuts** (operator chose the safe subset).
+> Two slices, TDD: (A) `ignoreIfExists`/`ignoreIfNotExists` are now conditional NO-OPS (not blanket-
+> refused — `hasNonDefaultOptions`→`hasRefusedOptions`, only `overwrite`/recursive stay refused); (B)
+> editing a file that is ALSO renamed/deleted in the same batch now APPLIES — `applyEdit`'s replay was
+> rewritten onto a per-file `Fate` VFS keyed by the ORIGINAL uri so content flows THROUGH a rename
+> (rename(A→B)+edit(B) import fix-up, and edit(A)+rename(A→B), both write the edited content to the
+> final path in documentChanges order; create+delete net-no-ops drop out). One ordered
+> write/rename/delete physical plan with a shared digest index per op (edited-AND-renamed = rename+write
+> sharing ONE audit row); resync derives bytes from what ACTUALLY landed (pristine on a partial commit)
+> and migrates the open buffer only when the rename landed; genuinely conflicting batches are REFUSED
+> not reconciled (rename cycle, two-into-one, edit-of-renamed-away-path, delete-of-a-rename/create-target
+> = a data-loss guard). Designed via the `lsp-resource-op-safe-cuts-design` fan-out (2 proposals →
+> synthesis → 3 adversarial critics, five holes folded in) + a recall-biased review fan-out (trimmed a
+> migrate-on-write-without-rename resync branch + an O(n²) order scan). Fixture-only gate (no real
+> server). **935 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
 > staged (non-blocking) LSP tails:** pull-diagnostics (`textDocument/diagnostic` — rust-analyzer DOES
 > advertise `diagnosticProvider`, captured in its init fixture, so this is now live-verifiable); dynamic
-> `didChangeWorkspaceFolders`; resource-op **options** + recursive/dir delete + editing-a-renamed-file +
-> multi-file conflict reconciliation; full toolchain-mismatch heuristic. Other Phase-4 tails: `deps`
+> `didChangeWorkspaceFolders`; the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete
+> (kept refused by design); full toolchain-mismatch heuristic. Other Phase-4 tails: `deps`
 > changelog_diff for PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open Phase 5 (needs a
 > design-pass/ADR first). The detailed historical slice log follows.
 
