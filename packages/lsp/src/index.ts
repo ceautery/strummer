@@ -50,6 +50,7 @@ export {
   type NormalizedResourceOp,
   type NormalizedSymbol,
   type NormalizedWorkspaceEdit,
+  type NormalizedWorkspaceSymbol,
   normalizeCallHierarchyItem,
   normalizeCallHierarchyItems,
   normalizeDocumentSymbols,
@@ -59,6 +60,7 @@ export {
   normalizeOutgoingCalls,
   normalizePrepareRename,
   normalizeWorkspaceEdit,
+  normalizeWorkspaceSymbols,
   type PrepareRenameOutcome,
   type QueryStatus,
   type RawPrepareRename,
@@ -68,6 +70,7 @@ export {
   type RawWorkspaceEdit,
   type SymbolInformation,
   symbolKindName,
+  type WorkspaceSymbol,
 } from './normalize.js'
 export {
   type FileReader,
@@ -83,6 +86,7 @@ export {
   type ResultCallItem,
   type ResultLocation,
   type ResultSymbol,
+  type ResultWorkspaceSymbol,
 } from './query.js'
 export {
   LspRegistryError,

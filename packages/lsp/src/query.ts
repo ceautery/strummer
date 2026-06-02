@@ -35,6 +35,7 @@ import type {
   NormalizedHover,
   NormalizedLocation,
   NormalizedSymbol,
+  NormalizedWorkspaceSymbol,
   QueryStatus,
 } from './normalize.js'
 
@@ -69,6 +70,7 @@ export type LspQueryKind =
   | 'references'
   | 'hover'
   | 'documentSymbols'
+  | 'workspaceSymbol'
   | 'callHierarchy'
 
 /** The position-based kinds — those that require a `line`/`column`. */
@@ -85,13 +87,18 @@ export interface LspQueryInput {
   language: string
   /** Project root — must be in `allowedRoots`; pinned to the server's `rootUri`. */
   projectRoot: string
-  /** The file to query, relative to `projectRoot` (or absolute within it). */
-  file: string
+  /**
+   * The file to query, relative to `projectRoot` (or absolute within it). Required for every kind
+   * EXCEPT `workspaceSymbol`, which searches the whole indexed project and needs no open file.
+   */
+  file?: string
   /** 1-based human line — required for the position-based kinds, ignored for `documentSymbols`. */
   line?: number
   /** 1-based human column (code points) — required for the position-based kinds. */
   column?: number
   kind: LspQueryKind
+  /** The search string — required for (and only used by) `workspaceSymbol`. */
+  query?: string
   /** Call-hierarchy direction (callers vs callees); defaults to `incoming`. */
   direction?: CallDirection
   /** Optional toolchain provenance to echo (the surface computes via `detectInstalledVersion`). */
@@ -124,6 +131,20 @@ export interface ResultSymbol {
   children?: ResultSymbol[]
 }
 
+/** A workspace symbol with its range (if any) mapped to human 1-based coords. */
+export interface ResultWorkspaceSymbol {
+  name: string
+  kind: number
+  kindName: string
+  uri: string
+  /** The declaring container (class/namespace), when the server reported one. */
+  container?: string
+  /** Absent when the server returned a uri-only `WorkspaceSymbol` (no range without resolve). */
+  range?: HumanRange
+  /** True when a range was present AND its target file was readable (encoding-faithful map). */
+  mapped: boolean
+}
+
 /** A call-hierarchy item with its ranges mapped to human 1-based coords. */
 export interface ResultCallItem {
   name: string
@@ -153,6 +174,7 @@ export interface LspQueryResult {
   locations?: ResultLocation[]
   hover?: { value: string; range?: HumanRange }
   symbols?: ResultSymbol[]
+  workspaceSymbols?: ResultWorkspaceSymbol[]
   callHierarchy?: ResultCallGroup[]
   serverInfo?: ServerInfo
   toolchain?: { name: string; version: string | null }
@@ -175,6 +197,17 @@ export class LspQueryEngine {
 
   async query(input: LspQueryInput): Promise<LspQueryResult> {
     assertAllowed(this.allowRun, this.allowedRoots, input.projectRoot)
+
+    // workspace/symbol is file-less + position-less: it searches the whole indexed project, so it
+    // takes a `query` string and opens no document (the manager acquires/initializes the server,
+    // which loads the project; `runWithUris([])` holds no per-uri lock).
+    if (input.kind === 'workspaceSymbol') {
+      return this.queryWorkspaceSymbol(input)
+    }
+
+    if (input.file === undefined) {
+      throw new LspGateError(`the ${input.kind} query requires a file`)
+    }
     const absFile = confineFile(input.projectRoot, input.file)
     const text = this.readFile(absFile)
     if (text === undefined) {
@@ -217,6 +250,10 @@ export class LspQueryEngine {
                 return client.hover(uri, pos)
               case 'callHierarchy':
                 return client.callHierarchy(uri, pos, input.direction ?? 'incoming')
+              default:
+                // `workspaceSymbol` is file-less and handled by an early return in `query()`;
+                // it never reaches this position-based dispatch.
+                throw new LspGateError(`unsupported position-based query kind: ${input.kind}`)
             }
           }
         }
@@ -224,6 +261,65 @@ export class LspQueryEngine {
     )
 
     return this.shape(input, nav, uri, text)
+  }
+
+  /**
+   * Run the project-wide `workspace/symbol` search and shape its cross-file result.
+   *
+   * `workspace/symbol` takes no position, but a real server still needs a *project* to search.
+   * Some servers — notably `typescript-language-server` — only build a project once a document is
+   * open, and answer `workspace/symbol` with a "No Project" error otherwise (caught running the
+   * greeter example live, the cold-load lesson again). So the agent may pass an OPTIONAL anchor
+   * `file`: when present we open it (establishing the project) before searching; when absent we
+   * search with no document open, which works for eager indexers (gopls, rust-analyzer) that load
+   * the project at `initialize`.
+   */
+  private async queryWorkspaceSymbol(input: LspQueryInput): Promise<LspQueryResult> {
+    if (input.query === undefined) {
+      throw new LspGateError('the workspaceSymbol query requires a `query` string')
+    }
+    const query = input.query
+    let nav: NavResult<NormalizedWorkspaceSymbol[]>
+    if (input.file !== undefined) {
+      const absFile = confineFile(input.projectRoot, input.file)
+      const text = this.readFile(absFile)
+      if (text === undefined) {
+        throw new LspGateError(`cannot read anchor file ${input.file} in ${input.projectRoot}`)
+      }
+      const uri = pathToFileURL(absFile).toString()
+      nav = await this.manager.run<NavResult<NormalizedWorkspaceSymbol[]>>(
+        { language: input.language, projectRoot: input.projectRoot, uri, text },
+        (client) => client.workspaceSymbols(query),
+      )
+    } else {
+      nav = await this.manager.runWithUris<NavResult<NormalizedWorkspaceSymbol[]>>(
+        { language: input.language, projectRoot: input.projectRoot, uris: [] },
+        (client) => client.workspaceSymbols(query),
+      )
+    }
+    const base = this.baseResult(input, nav)
+    const cache = new Map<string, string | undefined>()
+    return {
+      ...base,
+      workspaceSymbols: nav.result.map((s) => this.mapWorkspaceSymbol(s, nav.encoding, cache)),
+    }
+  }
+
+  /** The shared provenance/status envelope every result carries (status + encoding + provenance). */
+  private baseResult(input: LspQueryInput, nav: NavResult<unknown>): LspQueryResult {
+    const { encoding, serverInfo } = nav
+    const versionWarning =
+      serverInfo === undefined
+        ? 'the language server did not report its version (serverInfo); the answer cannot be attributed to a specific server version'
+        : undefined
+    return {
+      status: nav.status,
+      kind: input.kind,
+      encoding,
+      ...(serverInfo ? { serverInfo } : {}),
+      ...(input.toolchain ? { toolchain: input.toolchain } : {}),
+      ...(versionWarning ? { versionWarning } : {}),
+    }
   }
 
   private shape(
@@ -236,20 +332,8 @@ export class LspQueryEngine {
     queriedUri: string,
     queriedText: string,
   ): LspQueryResult {
-    const { encoding, serverInfo } = nav
-    const versionWarning =
-      serverInfo === undefined
-        ? 'the language server did not report its version (serverInfo); the answer cannot be attributed to a specific server version'
-        : undefined
-
-    const base: LspQueryResult = {
-      status: nav.status,
-      kind: input.kind,
-      encoding,
-      ...(serverInfo ? { serverInfo } : {}),
-      ...(input.toolchain ? { toolchain: input.toolchain } : {}),
-      ...(versionWarning ? { versionWarning } : {}),
-    }
+    const { encoding } = nav
+    const base = this.baseResult(input, nav)
 
     if (input.kind === 'hover') {
       const hover = (nav as NavResult<NormalizedHover | null>).result
@@ -323,6 +407,28 @@ export class LspQueryEngine {
     if (s.container !== undefined) out.container = s.container
     if (s.children && s.children.length > 0) {
       out.children = s.children.map((c) => this.mapSymbol(c, text, encoding))
+    }
+    return out
+  }
+
+  /** Map a workspace symbol to human coords, reading its OWN target file (cross-file, read-only). */
+  private mapWorkspaceSymbol(
+    s: NormalizedWorkspaceSymbol,
+    encoding: PositionEncoding,
+    cache: Map<string, string | undefined>,
+  ): ResultWorkspaceSymbol {
+    const out: ResultWorkspaceSymbol = {
+      name: s.name,
+      kind: s.kind,
+      kindName: s.kindName,
+      uri: s.uri,
+      mapped: false,
+    }
+    if (s.container !== undefined) out.container = s.container
+    if (s.range !== undefined) {
+      const text = this.textForUri(s.uri, cache)
+      out.range = this.mapRange(text, s.range, encoding)
+      out.mapped = text !== undefined
     }
     return out
   }

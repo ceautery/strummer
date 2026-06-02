@@ -32,6 +32,7 @@ export const TYPE_DEFINITION = () => loadFixture('type-definition-locations.json
 export const REFERENCES = () => loadFixture('references-locations.json')
 export const HOVER = () => loadFixture('hover-markup.json')
 export const DOCUMENT_SYMBOLS = () => loadFixture('document-symbols-hierarchical.json')
+export const WORKSPACE_SYMBOLS = () => loadFixture('workspace-symbols.json')
 export const CALL_HIERARCHY_PREPARE = () => loadFixture('call-hierarchy-prepare.json')
 export const CALL_HIERARCHY_INCOMING = () => loadFixture('call-hierarchy-incoming.json')
 export const CALL_HIERARCHY_OUTGOING = () => loadFixture('call-hierarchy-outgoing.json')
@@ -70,6 +71,7 @@ export interface FakeServerOptions {
   onReferences?: (params: unknown) => unknown
   onHover?: (params: unknown) => unknown
   onDocumentSymbol?: (params: unknown) => unknown
+  onWorkspaceSymbol?: (params: unknown) => unknown
   onPrepareCallHierarchy?: (params: unknown) => unknown
   onIncomingCalls?: (params: unknown) => unknown
   onOutgoingCalls?: (params: unknown) => unknown
@@ -107,6 +109,10 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
   server.onRequest(
     'textDocument/documentSymbol',
     (params: unknown) => opts.onDocumentSymbol?.(params) ?? null,
+  )
+  server.onRequest(
+    'workspace/symbol',
+    (params: unknown) => opts.onWorkspaceSymbol?.(params) ?? null,
   )
   server.onRequest(
     'textDocument/prepareCallHierarchy',

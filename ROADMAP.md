@@ -673,8 +673,18 @@ Two independent tracks, then the test-quality chain, then LSP last:
         "return `not_ready` fast" for "wait for the correct answer within the deadline". Verified
         live (cold `Greeter` references/rename now return the full cross-file set). New fake-peer
         test replays the captured timeline; no real server in the gate (ADR 0011).
+  - [x] **`workspace/symbol` search — `lsp_workspace_symbols`.** Project-wide symbol search by name
+        (the first file-less, position-less navigation). Pure `normalizeWorkspaceSymbols` (flat
+        `SymbolInformation[]` + the uri-only LSP 3.17 `WorkspaceSymbol` shape — range omitted, never
+        crashes) over a recorded real `typescript-language-server` 5.3.0 payload; capability-gated
+        `client.workspaceSymbols` (tri-state; advertises the `workspace.symbol` client cap, no
+        `resolveSupport`); a `'workspaceSymbol'` query kind (file-less via `runWithUris([])`,
+        cross-file ranges mapped per target file); the gated `lsp_workspace_symbols` MCP tool (large
+        lists by handle) + `strummer lsp workspace-symbols <language> <query> [anchorFile]` CLI.
+        An OPTIONAL anchor `file` opens a document so a tsserver-style project loads (a "No Project"
+        bug caught running the greeter live; eager indexers don't need it). Verified live.
   - [ ] *(staged, not amputated)* write-mode for resource ops + multi-file conflict reconciliation,
-        `workspace/symbol` search, `diagnostics`, multi-**root** (the project-LOAD half is fixed),
+        `diagnostics`, multi-**root** (the project-LOAD half is fixed),
         full toolchain-version resolution, Python adapter posture.
 
 ## Ongoing

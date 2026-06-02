@@ -138,6 +138,70 @@ describe('strummer lsp CLI', () => {
     expect(c.out()).toMatch(/Function/)
   })
 
+  it('workspace-symbols (no file/position) searches by name and prints matches', async () => {
+    let seen: LspQueryInput | undefined
+    const c = capture()
+    const code = await runLsp(
+      ['workspace-symbols', 'typescript', 'Greeter', '--project', '/proj'],
+      c.io,
+      {
+        query: async (input) => {
+          seen = input
+          return {
+            status: 'ok',
+            kind: 'workspaceSymbol',
+            encoding: 'utf-16',
+            workspaceSymbols: [
+              {
+                name: 'Greeter',
+                kind: 5,
+                kindName: 'Class',
+                uri: 'file:///proj/greeter.ts',
+                range: { start: { line: 7, column: 1 }, end: { line: 13, column: 2 } },
+                mapped: true,
+              },
+            ],
+          }
+        },
+      },
+    )
+    expect(code).toBe(0)
+    expect(seen?.kind).toBe('workspaceSymbol')
+    expect(seen?.query).toBe('Greeter')
+    expect(seen?.file).toBeUndefined()
+    expect(seen?.line).toBeUndefined()
+    expect(c.out()).toMatch(/Greeter/)
+    expect(c.out()).toMatch(/Class/)
+    expect(c.out()).toMatch(/greeter\.ts/)
+  })
+
+  it('workspace-symbols passes an optional anchor file through to the engine', async () => {
+    let seen: LspQueryInput | undefined
+    const c = capture()
+    const code = await runLsp(
+      ['workspace-symbols', 'typescript', 'Greeter', 'index.ts', '--project', '/proj'],
+      c.io,
+      {
+        query: async (input) => {
+          seen = input
+          return { status: 'ok', kind: 'workspaceSymbol', encoding: 'utf-16', workspaceSymbols: [] }
+        },
+      },
+    )
+    expect(code).toBe(0)
+    expect(seen?.query).toBe('Greeter')
+    expect(seen?.file).toBe('index.ts')
+  })
+
+  it('workspace-symbols needs <language> <query>', async () => {
+    const c = capture()
+    const code = await runLsp(['workspace-symbols', 'typescript', '--project', '/proj'], c.io, {
+      query: async () => definitionResult,
+    })
+    expect(code).toBe(1)
+    expect(c.err()).toMatch(/workspace-symbols/)
+  })
+
   it('not_ready status exits 2 (transient — retry)', async () => {
     const c = capture()
     const code = await runLsp(

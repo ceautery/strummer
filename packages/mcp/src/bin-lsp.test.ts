@@ -57,6 +57,7 @@ describe('buildLspServerFromEnv', () => {
       'lsp_languages',
       'lsp_rename', // wired whenever navigation is (dry-run by default)
       'lsp_type_definition',
+      'lsp_workspace_symbols',
     ])
   })
 

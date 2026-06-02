@@ -52,6 +52,11 @@ $S lsp hover typescript greeter.ts 7 14 --project $P --allow-run
 # The file outline (no position):
 $S lsp symbols typescript greeter.ts --project $P --allow-run
 
+# Search the WHOLE project for a symbol by name (no position). The trailing file is an
+# ANCHOR: typescript-language-server only builds a project once a file is open, so pass any
+# project file (eager indexers like gopls/rust-analyzer don't need it):
+$S lsp workspace-symbols typescript Greeter greeter.ts --project $P --allow-run
+
 # Who calls hello? (incoming edge: Greeter.greet → hello)
 $S lsp call-hierarchy typescript greeter.ts 2 17 --project $P --allow-run
 

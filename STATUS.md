@@ -150,8 +150,11 @@ MCP surface/bin) now also landed — Phase 4 pillars COMPLETE (at 659 TS). **Sin
 non-blocking tails landed: the cross-pillar Python adapters (flake/coverage/deps/mutate), the LSP
 capability-gated read tails, **LSP write-mode (`lsp_rename`, ADR 0011 addendum slices A–G:
 dry-run-default + a separate `allowWrite` gate)**, and **the five human verification CLIs
-(`strummer mutate`/`coverage`/`flake`/`deps`/`lsp`), plus the LSP cold-project-load fix — current count is 842 TS + 45 Py green; see
-the Next-action block for the detail.**)_
+(`strummer mutate`/`coverage`/`flake`/`deps`/`lsp`), the LSP cold-project-load fix, and now the
+**LSP `workspace/symbol` search tail** (project-wide symbol search by name — `lsp_workspace_symbols`
+MCP tool + `strummer lsp workspace-symbols` CLI + the gated query path; an optional anchor `file`
+opens a document so a tsserver-style project loads, a bug caught running the greeter live) — current
+count is 861 TS + 45 Py green; see the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -720,12 +723,30 @@ fast" for "wait for the correct answer within the deadline" (bounded). Applies t
 paths (definition/references/hover/symbols/prepareRename/rename). Verified live: cold
 `references`/`rename` on `Greeter` now return the full cross-file set (3 locs / 3 edits across 2
 files). The example README + the `strummer-lsp-cold-single-shot` memory updated to reflect the fix.
-**Remaining non-blocking tails:** LSP `workspace/symbol`, `diagnostics`, **multi-ROOT** (the
-project-LOAD half is now fixed), write-mode for resource ops + multi-file conflict reconciliation,
-full toolchain-mismatch heuristic; deps cosmic-ray/`runMutmut` spawner.
+**LSP `workspace/symbol` SEARCH DONE, 861 TS + 45 Py green (ADR 0011 staged tail):** project-wide
+symbol search by name — the first file-less, position-less navigation. Slices, all TDD: pure
+`normalizeWorkspaceSymbols` (flat `SymbolInformation[]` with `location.range` AND the uri-only LSP
+3.17 `WorkspaceSymbol` shape — range omitted, never crashes) over a **recorded real
+`typescript-language-server` 5.3.0** `workspace/symbol` payload (`workspace-symbols.json`, captured
+out-of-gate against the greeter; provenance in the fixtures README); `client.workspaceSymbols(query)`
+(capability-gated on `workspaceSymbolProvider`, tri-state via `withRetry` so a still-indexing empty
+is `not_ready`; advertises the `workspace.symbol` client cap, NO `resolveSupport` so the server
+returns full ranges); a new `'workspaceSymbol'` `LspQueryKind` (file-less path via
+`manager.runWithUris([])`, cross-file ranges mapped per target file); `manager` reports the
+`workspaceSymbol` capability in `describe()`; the gated `lsp_workspace_symbols` MCP tool (navigation
+group; large lists by handle) + `strummer lsp workspace-symbols <language> <query> [anchorFile]` CLI.
+**Live run caught a real bug (the cold-load lesson again):** tsserver only builds a project once a
+file is open, so a file-less `workspace/symbol` errors "No Project" — fixed by an OPTIONAL anchor
+`file` that the engine opens first to establish the project (eager indexers gopls/rust-analyzer
+don't need it). Verified live: `Greeter` returns the const + class with correctly mapped human
+ranges; file-less surfaces the honest "No Project" error. Greeter + CLI READMEs document the anchor.
+**Remaining non-blocking tails:** LSP `diagnostics`, **multi-ROOT** (the project-LOAD half is fixed),
+write-mode for resource ops + multi-file conflict reconciliation, full toolchain-mismatch heuristic;
+mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems.
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
-`lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); then `workspace/symbol`,
+`lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); `workspace/symbol` search
+(DONE — `lsp_workspace_symbols` + CLI, optional anchor file); then
 `diagnostics`, multi-root, the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
 write-mode resource-ops + multi-file conflict reconciliation, and a Python adapter posture. **Other
 Phase-4 staged tails:** `istanbul-lib-coverage` `CoverageMap` merging; a Python `run_scoped` (pytest

@@ -58,8 +58,9 @@ bound a server for, plus — once a server is running — its advertised capabil
 
 \`lsp_find_definition\`, \`lsp_type_definition\`, \`lsp_find_references\`, and \`lsp_hover\` (present
 only when the operator enabled navigation) take a language + project root + file + 1-based
-line:column; \`lsp_document_symbols\` takes just a file (the outline, no position). All return the
-answer with line:column mapped back to human coordinates. Positions are 1-based; columns count
+line:column; \`lsp_document_symbols\` takes just a file (the outline, no position); and
+\`lsp_workspace_symbols\` takes just a query string (a project-wide symbol search by name — no file,
+no position). All return the answer with line:column mapped back to human coordinates. Positions are 1-based; columns count
 Unicode code points. A result \`status\` is tri-state: "ok", "not_ready" (the server is still
 indexing — retry shortly; NOT the same as no result), or "no_result". Navigation requires a live
 indexing daemon, so it is operator-gated and confined to allowlisted project roots.
@@ -272,6 +273,69 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             ...envelope(result),
             symbolCount: symbols.length,
             symbols: symbols.slice(0, HEAD),
+            truncated: true,
+            fullHandle,
+          }
+        }
+        return { content: [text(structured)], structuredContent: structured }
+      },
+    )
+
+    server.registerTool(
+      'lsp_workspace_symbols',
+      {
+        title: 'Workspace symbol search',
+        description:
+          'Search the WHOLE project for symbols by name (classes/functions/methods/…). Takes a ' +
+          'query string and NO position. Returns each match with its uri + range in human 1-based ' +
+          'line:column. Operator-gated and confined to allowlisted project roots. A large result ' +
+          'is capped inline; the full list is returned by handle when an artifact store is ' +
+          'configured. Pass `file` (any file in the project) as an anchor when the server only ' +
+          'builds a project once a file is open — typescript-language-server needs this; eager ' +
+          'indexers (gopls, rust-analyzer) do not.',
+        inputSchema: {
+          language: z.string().describe('a language bound in the operator registry'),
+          projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
+          query: z.string().describe('the symbol name (or fragment) to search for'),
+          file: z
+            .string()
+            .optional()
+            .describe(
+              'optional anchor file (relative to projectRoot) to open so the project loads; ' +
+                'required for typescript-language-server, unused by eager indexers',
+            ),
+        },
+      },
+      async (args) => {
+        const language = args.language as string
+        const projectRoot = args.projectRoot as string
+        const toolchain = opts.detectToolchain?.(projectRoot, language)
+        const result = await query({
+          language,
+          projectRoot,
+          query: args.query as string,
+          ...(args.file !== undefined ? { file: args.file as string } : {}),
+          kind: 'workspaceSymbol',
+          ...(toolchain ? { toolchain } : {}),
+        })
+        const symbols = result.workspaceSymbols ?? []
+        let structured: Record<string, unknown> = {
+          ...envelope(result),
+          symbolCount: symbols.length,
+          workspaceSymbols: symbols,
+        }
+        if (symbols.length > HEAD && artifacts) {
+          const id = `workspaceSymbol-${seq++}`
+          const fullHandle = artifacts.put(
+            id,
+            'workspace-symbols',
+            JSON.stringify(symbols, null, 2),
+            'application/json',
+          )
+          structured = {
+            ...envelope(result),
+            symbolCount: symbols.length,
+            workspaceSymbols: symbols.slice(0, HEAD),
             truncated: true,
             fullHandle,
           }

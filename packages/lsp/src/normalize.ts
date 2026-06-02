@@ -199,6 +199,57 @@ export function normalizeDocumentSymbols(
   return (result as DocumentSymbol[]).map(normalizeDocumentSymbol)
 }
 
+// --- Workspace symbol search (ADR 0011 staged tail) ----------------------------------------
+
+/**
+ * A raw `workspace/symbol` result member. Two shapes under one method (LSP 3.17):
+ * - `SymbolInformation`: `location` is a full `Location` (`{uri, range}`).
+ * - `WorkspaceSymbol`: `location` may be a full `Location` OR a uri-only `{uri}` — the server
+ *   defers the range to a `workspaceSymbol/resolve` round-trip. Reading `.location.range` off
+ *   the uri-only form yields `undefined`; we surface the uri and omit the range (v1 does not
+ *   resolve — see fixtures README; the real `typescript-language-server` 5.3.0 sends the full
+ *   `Location` form).
+ */
+export interface WorkspaceSymbol {
+  name: string
+  kind: number
+  containerName?: string
+  location: Location | { uri: string }
+}
+
+export interface NormalizedWorkspaceSymbol {
+  name: string
+  kind: number
+  kindName: string
+  uri: string
+  /** Absent when the server returned a uri-only `WorkspaceSymbol` (no range without resolve). */
+  range?: LspRange
+  /** The declaring container (class/namespace), when the server reported one. */
+  container?: string
+}
+
+function hasRange(loc: Location | { uri: string }): loc is Location {
+  return (loc as Location).range !== undefined
+}
+
+/** Normalize a `workspace/symbol` result (flat `SymbolInformation[]`/`WorkspaceSymbol[]`). */
+export function normalizeWorkspaceSymbols(
+  result: WorkspaceSymbol[] | null | undefined,
+): NormalizedWorkspaceSymbol[] {
+  if (result == null) return []
+  return result.map((s) => {
+    const out: NormalizedWorkspaceSymbol = {
+      name: s.name,
+      kind: s.kind,
+      kindName: symbolKindName(s.kind),
+      uri: s.location.uri,
+    }
+    if (hasRange(s.location)) out.range = s.location.range
+    if (s.containerName !== undefined) out.container = s.containerName
+    return out
+  })
+}
+
 // --- Call hierarchy (ADR 0011 staged tail) -------------------------------------------------
 
 /** A raw `CallHierarchyItem` (prepareCallHierarchy result + the node inside incoming/outgoing). */

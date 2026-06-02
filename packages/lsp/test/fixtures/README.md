@@ -34,6 +34,15 @@ has a real caller/callee edge), `index.ts` doing `const g = new Greeter(...)`:
   (`greet` calls `hello`).
 - `call-hierarchy-outgoing.json` — genuine `callHierarchy/outgoingCalls` from `greet`: `{to,
   fromRanges}`.
+- `workspace-symbols.json` — genuine `workspace/symbol` for the query `"Greeter"`. Returned as
+  a flat **`SymbolInformation[]`** — each member has a `location: {uri, range}` with the range
+  **present** (the server reports `workspaceSymbolProvider: true`, the boolean form; it does NOT
+  send the uri-only `WorkspaceSymbol` shape that would require a `workspaceSymbol/resolve`
+  round-trip). Two cross-file hits: the `greeter` const in `index.ts` (kind 14, Constant) and
+  the `Greeter` class in `greeter.ts` (kind 5, Class); no `containerName`. The uri-only
+  `WorkspaceSymbol` (range-absent) variant the server did not emit is exercised by an inline
+  hand-authored input in `normalize.test.ts` (it asserts our range-absent policy, not a server
+  payload shape — same carve-out as the rename resource-op branch).
 
 The only edit applied to the captures is normalizing the environment-specific absolute
 path prefix to a stable `/project` (structure preserved verbatim).

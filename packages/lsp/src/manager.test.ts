@@ -222,8 +222,8 @@ describe('LanguageServerManager.describe', () => {
     expect(desc[0]).toMatchObject({
       language: 'typescript',
       projectRoot: ROOT,
-      // default INIT fixture advertises definition/references/hover.
-      capabilities: { definition: true, references: true, hover: true },
+      // default INIT fixture advertises definition/references/hover + workspaceSymbol.
+      capabilities: { definition: true, references: true, hover: true, workspaceSymbol: true },
     })
   })
 })

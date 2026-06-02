@@ -12,6 +12,7 @@ import {
   type LspRenameResult,
   parseServerRegistry,
   type ResultSymbol,
+  type ResultWorkspaceSymbol,
   type ServerDescription,
   type ServerRegistry,
 } from '@strummer/lsp'
@@ -60,6 +61,8 @@ export async function runLsp(args: string[], io: CliIO, deps: LspDeps = {}): Pro
       return cmdQuery('hover', rest, io, deps)
     case 'symbols':
       return cmdQuery('documentSymbols', rest, io, deps)
+    case 'workspace-symbols':
+      return cmdWorkspaceSymbols(rest, io, deps)
     case 'call-hierarchy':
       return cmdQuery('callHierarchy', rest, io, deps)
     case 'rename':
@@ -286,6 +289,64 @@ async function cmdQuery(
   } finally {
     await engines.shutdown()
   }
+}
+
+/**
+ * `workspace-symbols <language> <query> [anchorFile]` — position-less project-wide symbol search.
+ * The optional `[anchorFile]` is opened first to establish the project; pass it for servers (like
+ * `typescript-language-server`) that only build a project once a file is open.
+ */
+async function cmdWorkspaceSymbols(args: string[], io: CliIO, deps: LspDeps): Promise<number> {
+  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: GATE_OPTIONS })
+  const [language, query, anchorFile] = positionals
+  if (!language || query === undefined) {
+    io.err('lsp workspace-symbols needs <language> <query> [anchorFile]\n')
+    return 1
+  }
+
+  const engines = makeEngines(values, io, deps)
+  if (!engines) return 1
+  try {
+    const result = await engines.query({
+      language,
+      projectRoot: engines.projectRoot,
+      kind: 'workspaceSymbol',
+      query,
+      ...(anchorFile !== undefined ? { file: anchorFile } : {}),
+    })
+
+    if (values.json) {
+      io.out(`${JSON.stringify(result, null, 2)}\n`)
+      return statusExit(result.status)
+    }
+
+    printHeader(io, result)
+    if (result.status === 'not_ready') {
+      io.out('the server is still indexing — retry shortly\n')
+      return 2
+    }
+    const symbols = result.workspaceSymbols ?? []
+    io.out(`${symbols.length} symbol(s):\n`)
+    for (const s of symbols) {
+      printWorkspaceSymbol(io, s)
+    }
+    return statusExit(result.status)
+  } catch (e) {
+    if (e instanceof LspGateError) {
+      io.err(`refused: ${e.message} (pass --allow-run)\n`)
+      return 1
+    }
+    io.err(`${(e as Error).message}\n`)
+    return 1
+  } finally {
+    await engines.shutdown()
+  }
+}
+
+function printWorkspaceSymbol(io: CliIO, s: ResultWorkspaceSymbol): void {
+  const container = s.container ? `  (in ${s.container})` : ''
+  const loc = s.range ? `  ${rangeStr(s.range)}${s.mapped ? '' : '  (unmapped)'}` : ''
+  io.out(`  ${s.name}  [${s.kindName}]  ${s.uri}${loc}${container}\n`)
 }
 
 /** Map a query kind back to its CLI subcommand name (for error messages). */

@@ -59,6 +59,7 @@ import {
   TypeDefinitionRequest,
   UnregistrationRequest,
   WorkDoneProgressCreateRequest,
+  WorkspaceSymbolRequest,
 } from 'vscode-languageserver-protocol'
 import { type PositionEncoding, PREFERRED_ENCODINGS, resolvePositionEncoding } from './encoding.js'
 import {
@@ -74,6 +75,7 @@ import {
   type NormalizedLocation,
   type NormalizedSymbol,
   type NormalizedWorkspaceEdit,
+  type NormalizedWorkspaceSymbol,
   normalizeCallHierarchyItem,
   normalizeDocumentSymbols,
   normalizeHover,
@@ -82,11 +84,13 @@ import {
   normalizeOutgoingCalls,
   normalizePrepareRename,
   normalizeWorkspaceEdit,
+  normalizeWorkspaceSymbols,
   type PrepareRenameOutcome,
   type QueryStatus,
   type RawPrepareRename,
   type RawWorkspaceEdit,
   type SymbolInformation,
+  type WorkspaceSymbol,
 } from './normalize.js'
 
 /** An operator-registry server entry: the binary + argv to spawn (structurally separate). */
@@ -294,6 +298,10 @@ export class LspClient {
         workspace: {
           configuration: true,
           workspaceFolders: true,
+          // workspace/symbol search (ADR 0011 staged tail). No `resolveSupport` — v1 does not do
+          // the `workspaceSymbol/resolve` round-trip, so the server returns full `Location`s
+          // (range present) rather than the uri-only `WorkspaceSymbol` form.
+          symbol: { dynamicRegistration: false },
           // Write-mode (ADR 0011 addendum): advertise WorkspaceEdit support so the server returns
           // a good rename edit. resourceOperations:[] honestly signals we do NOT apply file ops
           // (we still defend on apply); normalizesLineEndings:false — we send bytes verbatim.
@@ -466,6 +474,25 @@ export class LspClient {
     return this.withRetry(
       () => this.conn.sendRequest(DocumentSymbolRequest.method, { textDocument: { uri } }),
       (raw) => normalizeDocumentSymbols(raw as DocumentSymbol[] | SymbolInformation[] | null),
+      (syms) => syms.length === 0,
+    )
+  }
+
+  /**
+   * `workspace/symbol` — project-wide symbol search by name (ADR 0011 staged tail). Position-less
+   * and file-less: the query is just a name fragment matched against the whole indexed workspace,
+   * so it needs no open document (the project is loaded at `initialize`). Tri-state like the rest —
+   * an empty result while the project is still indexing is `not_ready`, never collapsed into
+   * "no such symbol" (the cold-load trap the rest of the client already guards). Handles both the
+   * flat `SymbolInformation[]` (range present) and the uri-only `WorkspaceSymbol[]` shapes.
+   */
+  async workspaceSymbols(query: string): Promise<NavResult<NormalizedWorkspaceSymbol[]>> {
+    if (!this.supports('workspaceSymbolProvider')) {
+      throw new LspUnsupportedError('server does not advertise workspace symbol support')
+    }
+    return this.withRetry(
+      () => this.conn.sendRequest(WorkspaceSymbolRequest.method, { query }),
+      (raw) => normalizeWorkspaceSymbols(raw as WorkspaceSymbol[] | null),
       (syms) => syms.length === 0,
     )
   }

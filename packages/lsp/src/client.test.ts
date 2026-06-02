@@ -19,6 +19,7 @@ import {
   REFERENCES,
   RENAME_CHANGES,
   TYPE_DEFINITION,
+  WORKSPACE_SYMBOLS,
 } from './peer.js'
 
 const GREETER_URI = 'file:///project/src/greeter.ts'
@@ -123,6 +124,30 @@ describe('LspClient navigation (tri-state + normalization over recorded payloads
     const greeter = r.result.find((s) => s.name === 'Greeter')
     expect(greeter?.kindName).toBe('Class')
     expect(greeter?.children?.some((c) => c.name === 'greet')).toBe(true)
+  })
+
+  it('workspaceSymbols: normalizes a real cross-file SymbolInformation[] to ok with kind names', async () => {
+    const { client } = await connectedClient({ onWorkspaceSymbol: () => WORKSPACE_SYMBOLS() })
+    const r = await client.workspaceSymbols('Greeter')
+    expect(r.status).toBe('ok')
+    expect(r.result.map((s) => s.name)).toEqual(['greeter', 'Greeter'])
+    const cls = r.result.find((s) => s.name === 'Greeter')
+    expect(cls?.kindName).toBe('Class')
+    expect(cls?.uri).toBe('file:///project/greeter.ts')
+    expect(cls?.range).toEqual({
+      start: { line: 6, character: 0 },
+      end: { line: 12, character: 1 },
+    })
+  })
+
+  it('workspaceSymbols: empty result while READY is no_result (tri-state)', async () => {
+    const { client } = await connectedClient({
+      onWorkspaceSymbol: () => [],
+      clientOptions: { timeoutMs: 1000, noRetry: true },
+    })
+    const r = await client.workspaceSymbols('Nonexistent')
+    expect(r.status).toBe('no_result')
+    expect(r.result).toEqual([])
   })
 
   it('callHierarchy incoming: prepare → incomingCalls, the edge item is the CALLER', async () => {
@@ -341,6 +366,13 @@ describe('LspClient capability gating', () => {
     init.capabilities.hoverProvider = false
     const { client } = await connectedClient({ initialize: init })
     await expect(client.hover(INDEX_URI, POS)).rejects.toThrow(/hover/i)
+  })
+
+  it('throws for workspaceSymbols when the server does not advertise it', async () => {
+    const init = INIT() as { capabilities: Record<string, unknown> }
+    init.capabilities.workspaceSymbolProvider = false
+    const { client } = await connectedClient({ initialize: init })
+    await expect(client.workspaceSymbols('X')).rejects.toThrow(/workspace symbol/i)
   })
 
   it('throws for callHierarchy when the base server does not advertise it', async () => {

@@ -34,6 +34,7 @@ interface ToolJson {
   hover?: { value: string }
   symbolCount?: number
   symbols?: Array<{ name: string; kindName: string; children?: unknown[] }>
+  workspaceSymbols?: Array<{ name: string; kindName: string; uri: string }>
   direction?: string
   callCount?: number
   callHierarchy?: Array<{ source: { name: string }; calls: Array<{ item: { name: string } }> }>
@@ -129,6 +130,7 @@ describe('lsp MCP surface gating', () => {
       'lsp_hover',
       'lsp_languages',
       'lsp_type_definition',
+      'lsp_workspace_symbols',
     ])
 
     // allowRun without an allowlist must NOT register the navigation tools.
@@ -282,6 +284,67 @@ describe('lsp navigation tools', () => {
     expect(data.callCount).toBe(1)
     expect(data.callHierarchy?.[0]?.source.name).toBe('hello')
     expect(data.callHierarchy?.[0]?.calls[0]?.item.name).toBe('greet')
+  })
+
+  it('lsp_workspace_symbols searches by name (no file/position) for the workspaceSymbol kind', async () => {
+    const stub = stubQuery({
+      status: 'ok',
+      kind: 'workspaceSymbol',
+      encoding: 'utf-16',
+      workspaceSymbols: [
+        {
+          name: 'Greeter',
+          kind: 5,
+          kindName: 'Class',
+          uri: 'file:///project/greeter.ts',
+          range: { start: { line: 7, column: 1 }, end: { line: 13, column: 2 } },
+          mapped: true,
+        },
+      ],
+    })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({
+      name: 'lsp_workspace_symbols',
+      arguments: { language: 'typescript', projectRoot: '/project', query: 'Greeter' },
+    })
+    const data = firstJson(res.content)
+    expect(stub.last()?.kind).toBe('workspaceSymbol')
+    expect(stub.last()?.query).toBe('Greeter')
+    expect(stub.last()?.file).toBeUndefined() // file-less
+    expect(stub.last()?.line).toBeUndefined() // position-less
+    expect(data.symbolCount).toBe(1)
+    expect(data.workspaceSymbols?.[0]?.name).toBe('Greeter')
+    expect(data.workspaceSymbols?.[0]?.uri).toBe('file:///project/greeter.ts')
+  })
+
+  it('offloads a large workspace-symbol result by handle and serves it', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      name: `Sym${i}`,
+      kind: 12,
+      kindName: 'Function',
+      uri: `file:///project/src/f${i}.ts`,
+      range: { start: { line: i + 1, column: 1 }, end: { line: i + 1, column: 5 } },
+      mapped: true,
+    }))
+    const stub = stubQuery({
+      status: 'ok',
+      kind: 'workspaceSymbol',
+      encoding: 'utf-16',
+      workspaceSymbols: many,
+    })
+    const artifacts = new ArtifactStore(tmp(), 'lsp')
+    const client = await connect({ ...GATED, query: stub.query, artifacts })
+    const res = await client.callTool({
+      name: 'lsp_workspace_symbols',
+      arguments: { language: 'typescript', projectRoot: '/project', query: 'Sym' },
+    })
+    const data = firstJson(res.content)
+    expect(data.symbolCount).toBe(120)
+    expect(data.workspaceSymbols?.length).toBeLessThan(120)
+    expect(data.truncated).toBe(true)
+    expect(data.fullHandle).toMatch(/^strummer:\/\/lsp\//)
+    const full = await client.readResource({ uri: data.fullHandle as string })
+    expect(firstJson<unknown[]>(full.contents)).toHaveLength(120)
   })
 
   it('passes through detected toolchain provenance', async () => {

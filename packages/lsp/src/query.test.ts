@@ -12,6 +12,7 @@ import {
   PROGRESS_BEGIN,
   type SpawnTracker,
   TYPE_DEFINITION,
+  WORKSPACE_SYMBOLS,
 } from './peer.js'
 import { LspGateError, LspQueryEngine } from './query.js'
 import { parseServerRegistry } from './registry.js'
@@ -34,9 +35,33 @@ const INDEX_TEXT = `import { Greeter } from './greeter'
 const g = new Greeter('world')
 console.log(g.greet())
 `
+// The `workspace/symbol` fixture was captured against the greeter project at the root (no `src/`
+// prefix), so its result uris are `file:///project/{greeter,index}.ts`. Serve those exact files so
+// the cross-file symbol ranges map back encoding-faithfully (mapped:true).
+const WSYM_GREETER_TEXT = `/** A free function the Greeter calls. */
+export function hello(name: string): string {
+  return \`Hello, \${name}!\`
+}
+
+/** The greeter class — imported and instantiated in \`index.ts\`. */
+export class Greeter {
+  constructor(private readonly name: string) {}
+
+  greet(): string {
+    return hello(this.name)
+  }
+}
+`
+const WSYM_INDEX_TEXT = `import { Greeter } from './greeter.js'
+
+const greeter = new Greeter('world')
+console.log(greeter.greet())
+`
 const FILES: Record<string, string> = {
   '/project/src/index.ts': INDEX_TEXT,
   '/project/src/greeter.ts': GREETER_TEXT,
+  '/project/greeter.ts': WSYM_GREETER_TEXT,
+  '/project/index.ts': WSYM_INDEX_TEXT,
 }
 const readFile = (path: string): string | undefined => FILES[path]
 
@@ -179,6 +204,89 @@ describe('LspQueryEngine documentSymbols (position-less)', () => {
         kind: 'definition',
       }),
     ).rejects.toBeInstanceOf(LspGateError)
+  })
+})
+
+describe('LspQueryEngine workspaceSymbol (file-less, position-less)', () => {
+  const WSYM_INPUT = {
+    language: 'typescript',
+    projectRoot: ROOT,
+    kind: 'workspaceSymbol' as const,
+    query: 'Greeter',
+  }
+
+  it('searches the workspace by name and maps cross-file ranges back to human coords', async () => {
+    let sent: { query?: string } | undefined
+    const engine = makeEngine({
+      onWorkspaceSymbol: (p) => {
+        sent = p as typeof sent
+        return WORKSPACE_SYMBOLS()
+      },
+    })
+    const r = await engine.query(WSYM_INPUT)
+    expect(sent?.query).toBe('Greeter')
+    expect(r.status).toBe('ok')
+    expect(r.kind).toBe('workspaceSymbol')
+    expect(r.workspaceSymbols?.map((s) => s.name)).toEqual(['greeter', 'Greeter'])
+    const cls = r.workspaceSymbols?.find((s) => s.name === 'Greeter')
+    expect(cls?.kindName).toBe('Class')
+    expect(cls?.uri).toBe('file:///project/greeter.ts')
+    // LSP 0-based line 6 → human line 7; the target file is served so the map is faithful.
+    expect(cls?.range?.start.line).toBe(7)
+    expect(cls?.mapped).toBe(true)
+  })
+
+  it('does not require a file or a line/column (file-less, for eager indexers)', async () => {
+    let opened = false
+    const engine = makeEngine({
+      onDidOpen: () => {
+        opened = true
+      },
+      onWorkspaceSymbol: () => WORKSPACE_SYMBOLS(),
+    })
+    // No `file`, no `line`/`column` — must resolve, not throw, and open NO document.
+    await expect(engine.query(WSYM_INPUT)).resolves.toMatchObject({ status: 'ok' })
+    expect(opened).toBe(false)
+  })
+
+  it('opens the anchor `file` first when given (so a tsserver-style project loads)', async () => {
+    let openedUri: string | undefined
+    const engine = makeEngine({
+      onDidOpen: (p) => {
+        openedUri = (p as { textDocument: { uri: string } }).textDocument.uri
+      },
+      onWorkspaceSymbol: () => WORKSPACE_SYMBOLS(),
+    })
+    const r = await engine.query({ ...WSYM_INPUT, file: 'src/index.ts' })
+    expect(r.status).toBe('ok')
+    // The anchor file was opened to establish the project before the search ran.
+    expect(openedUri).toBe('file:///project/src/index.ts')
+  })
+
+  it('refuses an anchor file that escapes the project root', async () => {
+    const engine = makeEngine({ onWorkspaceSymbol: () => WORKSPACE_SYMBOLS() })
+    await expect(engine.query({ ...WSYM_INPUT, file: '../secrets.ts' })).rejects.toBeInstanceOf(
+      LspGateError,
+    )
+  })
+
+  it('refuses a workspaceSymbol query with no `query` string', async () => {
+    const engine = makeEngine({ onWorkspaceSymbol: () => WORKSPACE_SYMBOLS() })
+    await expect(
+      engine.query({ language: 'typescript', projectRoot: ROOT, kind: 'workspaceSymbol' }),
+    ).rejects.toBeInstanceOf(LspGateError)
+  })
+
+  it('no_result: an empty workspace search while ready (no invented symbols)', async () => {
+    const engine = makeEngine({ onWorkspaceSymbol: () => [] })
+    const r = await engine.query({ ...WSYM_INPUT, query: 'Nope' })
+    expect(r.status).toBe('no_result')
+    expect(r.workspaceSymbols ?? []).toHaveLength(0)
+  })
+
+  it('still gated: refuses when allowRun is off', async () => {
+    const engine = makeEngine({ onWorkspaceSymbol: () => WORKSPACE_SYMBOLS() }, false)
+    await expect(engine.query(WSYM_INPUT)).rejects.toBeInstanceOf(LspGateError)
   })
 })
 

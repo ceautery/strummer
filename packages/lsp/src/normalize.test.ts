@@ -12,8 +12,10 @@ import {
   normalizeLocations,
   normalizePrepareRename,
   normalizeWorkspaceEdit,
+  normalizeWorkspaceSymbols,
   type RawWorkspaceEdit,
   symbolKindName,
+  type WorkspaceSymbol,
 } from './normalize.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -113,6 +115,48 @@ describe('normalizeDocumentSymbols', () => {
     expect(result[0]?.kindName).toBe('Class')
     expect(result[0]?.children).toBeUndefined()
     expect(result[1]?.container).toBe('Greeter')
+  })
+})
+
+describe('normalizeWorkspaceSymbols', () => {
+  it('returns [] for null', () => {
+    expect(normalizeWorkspaceSymbols(null)).toEqual([])
+  })
+
+  it('normalizes the real SymbolInformation[] payload (location.range present + kind names)', () => {
+    const result = normalizeWorkspaceSymbols(fixture('workspace-symbols.json'))
+    expect(result).toHaveLength(2)
+    expect(result.map((s) => s.name)).toEqual(['greeter', 'Greeter'])
+    expect(result.map((s) => s.kindName)).toEqual(['Constant', 'Class'])
+    expect(result[0]?.uri).toBe('file:///project/index.ts')
+    expect(result[1]?.uri).toBe('file:///project/greeter.ts')
+    // The full enclosing range rides through (these are SymbolInformation, range present).
+    expect(result[1]?.range).toEqual({
+      start: { line: 6, character: 0 },
+      end: { line: 12, character: 1 },
+    })
+  })
+
+  it('carries containerName → container when present', () => {
+    const syms: WorkspaceSymbol[] = [
+      {
+        name: 'greet',
+        kind: 6,
+        containerName: 'Greeter',
+        location: { uri: 'file:///g.ts', range: RANGE },
+      },
+    ]
+    expect(normalizeWorkspaceSymbols(syms)[0]?.container).toBe('Greeter')
+  })
+
+  it('handles a uri-only WorkspaceSymbol (range absent — would need workspaceSymbol/resolve)', () => {
+    // The LSP 3.17 WorkspaceSymbol form may carry a location with ONLY a uri; the server did not
+    // emit this (see fixtures README), so the range-absent policy is asserted on a hand-authored
+    // input: surface the uri, omit the range, never crash reading `location.range`.
+    const syms: WorkspaceSymbol[] = [{ name: 'Lazy', kind: 5, location: { uri: 'file:///x.ts' } }]
+    const out = normalizeWorkspaceSymbols(syms)
+    expect(out[0]).toEqual({ name: 'Lazy', kind: 5, kindName: 'Class', uri: 'file:///x.ts' })
+    expect(out[0]?.range).toBeUndefined()
   })
 })
 
