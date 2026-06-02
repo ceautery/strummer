@@ -127,6 +127,9 @@ importers:
       '@strummer/coverage':
         specifier: workspace:*
         version: link:../coverage
+      '@strummer/deps':
+        specifier: workspace:*
+        version: link:../deps
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed
@@ -146,6 +149,9 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
 
   packages/core:
     dependencies:

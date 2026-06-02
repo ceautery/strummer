@@ -1,22 +1,18 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ArtifactStore } from '@strummer/artifacts'
 import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
 import {
   auditDependency,
+  comparatorFor,
   type DependencyAudit,
-  gemComparator,
+  dependencyNames,
   loadOsvSnapshot,
-  normalizePypiName,
+  matchName,
+  OSV_ECOSYSTEMS,
   type OsvAdvisory,
+  type OsvEcosystem,
   type Packument,
-  pep440Comparator,
-  pythonManifestNames,
-  rubyManifestNames,
-  semverComparator,
   sliceChangelog,
-  type VersionComparator,
 } from '@strummer/deps'
 import { z } from 'zod'
 
@@ -50,30 +46,13 @@ export interface DepsToolsOptions {
   artifacts?: ArtifactStore
 }
 
-/** OSV ecosystem names this surface understands, mapped to the `@strummer/core`
- * detection ecosystem. v1 wires npm end-to-end; the others are staged. */
-const ECOSYSTEMS = ['npm', 'PyPI', 'RubyGems'] as const
-type OsvEcosystem = (typeof ECOSYSTEMS)[number]
+/** Map an OSV ecosystem to the `@strummer/core` installed-version detection ecosystem.
+ * (Comparator/match-name/manifest dispatch lives in `@strummer/deps`; this mapping needs
+ * `core`, which the engine deliberately does not depend on, so it stays here.) */
 const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
   npm: 'node',
   PyPI: 'python',
   RubyGems: 'ruby',
-}
-
-/** Version algebra per ecosystem (ADR 0012): npm=semver, PyPI=PEP 440, RubyGems=Gem. */
-const COMPARATORS: Record<OsvEcosystem, VersionComparator> = {
-  npm: semverComparator,
-  PyPI: pep440Comparator,
-  RubyGems: gemComparator,
-}
-
-function comparatorFor(ecosystem: OsvEcosystem): VersionComparator {
-  return COMPARATORS[ecosystem]
-}
-
-/** The name OSV matches on. PyPI advisory names are PEP 503-normalized; npm uses the name as-is. */
-function matchName(packageName: string, ecosystem: OsvEcosystem): string {
-  return ecosystem === 'PyPI' ? normalizePypiName(packageName) : packageName
 }
 
 const INSTRUCTIONS = `Strummer answers dependency/version questions for the version of a
@@ -105,52 +84,6 @@ function loadAdvisories(
   if (osvDir === undefined) return { advisories: [], loaded: false }
   const snapshot = loadOsvSnapshot(osvDir, ecosystem)
   return { advisories: snapshot.advisories, snapshotDate: snapshot.snapshotDate, loaded: true }
-}
-
-/** Read a project's npm manifest dependency names (prod + optional + optionally dev). */
-function manifestDependencies(project: string, includeDev: boolean): string[] {
-  const raw = readFileSync(join(project, 'package.json'), 'utf8')
-  const pkg = JSON.parse(raw) as {
-    dependencies?: Record<string, string>
-    optionalDependencies?: Record<string, string>
-    devDependencies?: Record<string, string>
-  }
-  const names = new Set<string>([
-    ...Object.keys(pkg.dependencies ?? {}),
-    ...Object.keys(pkg.optionalDependencies ?? {}),
-  ])
-  if (includeDev) for (const n of Object.keys(pkg.devDependencies ?? {})) names.add(n)
-  return [...names].sort()
-}
-
-/** Read a file, or undefined when it doesn't exist (other read errors propagate). */
-function readIfPresent(path: string): string | undefined {
-  try {
-    return readFileSync(path, 'utf8')
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined
-    throw err
-  }
-}
-
-/** Declared top-level dependency names for a project, dispatched by ecosystem. */
-function dependencyNames(project: string, ecosystem: OsvEcosystem, includeDev: boolean): string[] {
-  if (ecosystem === 'PyPI') {
-    return pythonManifestNames(
-      {
-        pyproject: readIfPresent(join(project, 'pyproject.toml')),
-        requirements: readIfPresent(join(project, 'requirements.txt')),
-      },
-      { includeDev },
-    )
-  }
-  if (ecosystem === 'RubyGems') {
-    return rubyManifestNames({
-      gemfileLock: readIfPresent(join(project, 'Gemfile.lock')),
-      gemfile: readIfPresent(join(project, 'Gemfile')),
-    })
-  }
-  return manifestDependencies(project, includeDev)
 }
 
 /** Detect → fetch → audit one package. Throws a clear error on a missing version or
@@ -189,7 +122,7 @@ async function auditOne(
 /** Register the dependency-intelligence tools onto a server. */
 export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}): void {
   const ecosystemArg = z
-    .enum(ECOSYSTEMS)
+    .enum(OSV_ECOSYSTEMS)
     .optional()
     .describe('OSV ecosystem (default "npm"; v1 wires npm end-to-end)')
 

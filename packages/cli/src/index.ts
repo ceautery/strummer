@@ -13,6 +13,7 @@ import type DatabaseType from 'better-sqlite3'
 import { runApi } from './api.js'
 import { runBrowser } from './browser.js'
 import { runCoverage } from './coverage.js'
+import { runDeps } from './deps.js'
 import { runFlake } from './flake.js'
 import { runMutate } from './mutate.js'
 
@@ -63,6 +64,11 @@ Flaky-test detection (--db <run-history.db> or STRUMMER_FLAKE_DB):
   strummer flake run <project-root>      [--repeat <n>] [--file <f>…] [--run-group <g>] [--allow-run] [--timeout-ms <n>] [--json]  (gated)
   strummer flake quarantine <testId>     --reason <r> --expires-at <ISO> [--flake-score <s>] [--allow-quarantine] [--max-expiry-ms <n>] [--json]  (gated write)
 
+Dependency/version intelligence (for the INSTALLED version; exit 1 on a finding):
+  strummer deps audit <project> <package>  [--ecosystem npm|PyPI|RubyGems] [--version <v>] [--osv-db <dir>] [--registry <url>] [--allow-private] [--json]
+  strummer deps audit-project <project>     [--ecosystem <e>] [--skip-dev] [--osv-db <dir>] [--registry <url>] [--allow-private] [--json]
+  strummer deps changelog <package>         (--from <v> | --project <dir>) [--to <v>] [--ecosystem <e>] [--registry <url>] [--json]
+
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)
 `
@@ -88,6 +94,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return runCoverage(rest, io)
     case 'flake':
       return runFlake(rest, io)
+    case 'deps':
+      return runDeps(rest, io)
     case 'help':
     case '--help':
     case '-h':

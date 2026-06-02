@@ -20,6 +20,13 @@ export {
   type Packument,
   type PackumentVersion,
 } from './deprecation.js'
+export {
+  comparatorFor,
+  dependencyNames,
+  matchName,
+  OSV_ECOSYSTEMS,
+  type OsvEcosystem,
+} from './ecosystem.js'
 export { gemComparator } from './gem.js'
 export {
   matchVulnerabilities,
