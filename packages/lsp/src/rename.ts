@@ -9,15 +9,22 @@
  * Single- AND multi-file edits apply, the latter under the manager's multi-URI lock (sorted,
  * deadlock-free) held across the whole stage→commit→`didChange` window. Every touched file is
  * confined to the root group (realpath, all-or-nothing) BEFORE any I/O. Resource operations
- * (CreateFile/RenameFile/DeleteFile) APPLY in `documentChanges` order interleaved with text edits
- * (default semantics, single regular file; non-default options + dir/recursive delete + editing a
- * renamed file are the staged v1 cuts, refused); a mid-commit fault is terminal (`partial`).
+ * (CreateFile/RenameFile/DeleteFile) APPLY in `documentChanges` order interleaved with text edits;
+ * the replay runs over a per-file `Fate` VFS keyed by ORIGINAL uri, so content flows through a
+ * rename (an edit to a renamed file's new path composes onto the carried content) and net-no-op
+ * batches (create-then-delete) drop out. The safe-subset v1 cuts are honored:
+ * `ignoreIfExists`/`ignoreIfNotExists` are conditional no-ops; `overwrite`/recursive-delete stay
+ * refused, as do genuinely ambiguous batches (a rename cycle, two renames into one target, editing
+ * a renamed-away path, deleting a path that is also a rename/create target). A mid-commit fault is
+ * terminal (`partial`).
  *
  * The adversarial corrections baked in here: oldText is sliced with absolute offsets (never
  * reconstructed from line:col); apply is staleness-guarded (the queried file vs its compute hash;
- * every edit site vs the old identifier) then stage-then-commit (the injected writer); out-of-root
- * edits never have their bytes read/surfaced; the post-write `didChange` doc-sync runs inside the
- * held lock(s); secrets are redacted in every surfaced hunk.
+ * each on-disk edit site vs the old identifier — a not-yet-on-disk rename target is skipped, so an
+ * import fix-up in a moved file never trips it) then stage-then-commit (the injected writer);
+ * out-of-root edits never have their bytes read/surfaced; the post-commit `didChange`/`didFileRename`
+ * doc-sync runs inside the held lock(s) and carries the bytes that ACTUALLY landed (pristine on a
+ * partial commit, never the projected edit); secrets are redacted in every surfaced hunk.
  */
 
 import { createHash } from 'node:crypto'
@@ -74,6 +81,14 @@ export type PhysicalOp =
   | { kind: 'write'; absPath: string; newText: string }
   | { kind: 'rename'; fromAbs: string; toAbs: string }
   | { kind: 'delete'; absPath: string }
+
+/**
+ * The projected fate of one file during the apply replay, keyed by its ORIGINAL uri. A `live` file
+ * ends at `finalUri` (≠ origin ⇒ it was renamed) with the given projected `content`; a `deleted`
+ * file ends removed. Content flows through a rename inside this record, so an edit to a renamed
+ * file's new path composes onto the carried content without a copy.
+ */
+type Fate = { kind: 'live'; finalUri: string; content: string } | { kind: 'deleted' }
 
 export interface CommitResult {
   /** The ops that completed, in order. */
@@ -385,26 +400,13 @@ export class LspRenameEngine {
       }
     }
 
-    // (b) Refuse the staged v1 cuts EARLY (before any I/O).
-    const renameEndpoints = new Set<string>()
-    for (const op of ops) {
-      if (op.type === 'rename') {
-        renameEndpoints.add(op.oldUri)
-        renameEndpoints.add(op.newUri)
-      }
-    }
+    // (b) Refuse the staged DESTRUCTIVE resource-op options EARLY (before any I/O). The other v1
+    // cuts (edit-of-a-renamed-file, ordering, cycles) are enforced inline in the replay below.
     for (const op of ops) {
       if (op.type !== 'edit' && hasRefusedOptions(op.options)) {
         return {
           applied: false,
           refused: 'resource-op options (overwrite/recursive) are unsupported in v1 (refused)',
-        }
-      }
-      if (op.type === 'edit' && renameEndpoints.has(op.uri)) {
-        return {
-          applied: false,
-          refused:
-            'editing a file that is also renamed in the same edit is unsupported in v1 (refused)',
         }
       }
     }
@@ -417,144 +419,280 @@ export class LspRenameEngine {
         ...(input.workspaceRoots ? { workspaceRoots: input.workspaceRoots } : {}),
       },
       async (client): Promise<ApplyOutcome> => {
-        // PHASE 1 (no writes): replay ops over a virtual content map, enforce the staleness guards.
-        const proj = new Map<string, string>() // uri -> projected final content
-        const created = new Set<string>()
+        const refuse = (msg: string): ApplyOutcome => ({ applied: false, refused: msg })
+        // PHASE 1 (no writes): replay ops over a VFS keyed by the file's ORIGINAL uri. Content flows
+        // THROUGH a rename inside one record (rename(A→B) carries A's content to finalUri B; a later
+        // edit(B) resolves to A and edits the carried content) — so edit composed with rename/delete
+        // works without copies, in documentChanges order.
+        const vfs = new Map<string, Fate>()
+        const created = new Set<string>() // born in-batch (keyed by origin)
+        const order: string[] = [] // first-touch order — drives the physical-plan emission
+        const ordered = new Set<string>() // O(1) membership companion to `order`
+        const aliasMap = new Map<string, string>() // a rename target uri -> its origin uri
+        const diskBefore = new Map<string, string>() // origin -> pre-batch disk content ('' if absent)
+        const renamedOld = new Set<string>() // oldUris consumed by a rename (E-OLD + cycle guards)
         const diskCache = new Map<string, string | undefined>()
         const readDisk = (u: string): string | undefined => {
           if (!diskCache.has(u)) diskCache.set(u, this.readFile(abs.get(u) as string))
           return diskCache.get(u)
         }
-        const contentOf = (u: string): string | undefined =>
-          proj.has(u) ? proj.get(u) : readDisk(u)
-        const renamePairs: Array<{ oldUri: string; newUri: string; content: string }> = []
-        const deletes: Array<{ uri: string; content: string }> = []
+        const resolveOrig = (u: string): string => aliasMap.get(u) ?? u
+        const touch = (o: string): void => {
+          if (!ordered.has(o)) {
+            ordered.add(o)
+            order.push(o)
+          }
+          if (!diskBefore.has(o)) diskBefore.set(o, readDisk(o) ?? '')
+        }
+        // Current projected content of `u` (undefined ⇒ absent: deleted, or never created/on-disk).
+        const contentOf = (u: string): string | undefined => {
+          const f = vfs.get(resolveOrig(u))
+          if (f) return f.kind === 'live' ? f.content : undefined
+          return readDisk(u)
+        }
+        // Does `u` name a LIVE file (on disk / created / edited-in-place) — NOT a pending rename target?
+        const liveOccupied = (u: string): boolean => {
+          const f = vfs.get(resolveOrig(u))
+          return f ? f.kind === 'live' : readDisk(u) !== undefined
+        }
         let expectedOld: string | undefined
 
         for (const op of ops) {
           if (op.type === 'create') {
-            if (readDisk(op.uri) !== undefined) {
-              if (op.options?.ignoreIfExists === true) continue // safe no-op: leave the file as-is
-              return { applied: false, refused: `cannot create ${rel(op.uri)}: it already exists` }
+            if (resolveOrig(op.uri) !== op.uri) {
+              return refuse(`cannot create ${rel(op.uri)}: conflicts with another operation`)
             }
-            proj.set(op.uri, '')
+            if (liveOccupied(op.uri)) {
+              if (op.options?.ignoreIfExists === true) continue // safe no-op: leave the file as-is
+              return refuse(`cannot create ${rel(op.uri)}: it already exists`)
+            }
+            touch(op.uri)
+            vfs.set(op.uri, { kind: 'live', finalUri: op.uri, content: '' })
             created.add(op.uri)
           } else if (op.type === 'delete') {
-            const cur = readDisk(op.uri)
-            if (cur === undefined) {
+            const base = contentOf(op.uri)
+            if (base === undefined) {
               if (op.options?.ignoreIfNotExists === true) continue // safe no-op: nothing to delete
-              return { applied: false, refused: `cannot delete ${rel(op.uri)}: it does not exist` }
+              return refuse(`cannot delete ${rel(op.uri)}: it does not exist`)
             }
-            if (!isRegularFile(abs.get(op.uri) as string)) {
-              return {
-                applied: false,
-                refused: `cannot delete ${rel(op.uri)}: not a regular file (recursive/directory delete unsupported in v1)`,
-              }
+            const o = resolveOrig(op.uri)
+            if (!created.has(o) && !isRegularFile(abs.get(o) as string)) {
+              return refuse(
+                `cannot delete ${rel(op.uri)}: not a regular file (recursive/directory delete unsupported in v1)`,
+              )
             }
-            deletes.push({ uri: op.uri, content: cur })
-            proj.delete(op.uri)
+            touch(o)
+            vfs.set(o, { kind: 'deleted' })
           } else if (op.type === 'rename') {
-            const cur = readDisk(op.oldUri)
-            if (cur === undefined) {
-              return {
-                applied: false,
-                refused: `cannot rename ${rel(op.oldUri)}: it does not exist`,
-              }
+            const src = contentOf(op.oldUri)
+            if (src === undefined)
+              return refuse(`cannot rename ${rel(op.oldUri)}: it does not exist`)
+            const o = resolveOrig(op.oldUri)
+            if (renamedOld.has(op.newUri) || resolveOrig(op.newUri) === o) {
+              return refuse(
+                `cannot rename ${rel(op.oldUri)} onto a same-batch source (rename cycle in this edit)`,
+              )
             }
-            if (readDisk(op.newUri) !== undefined) {
+            if (resolveOrig(op.newUri) !== op.newUri) {
+              return refuse(
+                `cannot rename to ${rel(op.newUri)}: it is already a target in this edit`,
+              )
+            }
+            if (liveOccupied(op.newUri)) {
               if (op.options?.ignoreIfExists === true) continue // safe no-op: skip; old stays
-              return {
-                applied: false,
-                refused: `cannot rename to ${rel(op.newUri)}: it already exists`,
-              }
+              return refuse(`cannot rename to ${rel(op.newUri)}: it already exists`)
             }
-            renamePairs.push({ oldUri: op.oldUri, newUri: op.newUri, content: cur })
+            touch(o)
+            vfs.set(o, { kind: 'live', finalUri: op.newUri, content: src })
+            aliasMap.set(op.newUri, o)
+            renamedOld.add(op.oldUri)
           } else {
-            const baseText = contentOf(op.uri)
-            if (baseText === undefined) {
-              return { applied: false, refused: `cannot read edited file ${rel(op.uri)}` }
+            // edit. An edit naming a uri that was itself renamed earlier is ambiguous (edit-the-moved
+            // file vs write-a-shim into the freed slot) — refuse rather than silently guess.
+            if (renamedOld.has(op.uri)) {
+              return refuse(
+                `cannot edit ${rel(op.uri)}: it was renamed in this edit; address the new path`,
+              )
             }
-            if (op.uri === queriedUri && sha256(baseText) !== sha256(text)) {
-              return {
-                applied: false,
-                refused:
-                  'the file changed on disk since the rename was computed; re-query and retry',
-              }
+            const base = contentOf(op.uri)
+            if (base === undefined) return refuse(`cannot read edited file ${rel(op.uri)}`)
+            if (op.uri === queriedUri && sha256(base) !== sha256(text)) {
+              return refuse(
+                'the file changed on disk since the rename was computed; re-query and retry',
+              )
             }
             if (op.uri === queriedUri && op.edits[0]) {
-              expectedOld = sliceByOffsets(baseText, op.edits[0].range, encoding)
+              expectedOld = sliceByOffsets(base, op.edits[0].range, encoding)
             }
-            proj.set(op.uri, applyTextEdits(baseText, op.edits, encoding))
+            const o = resolveOrig(op.uri)
+            const f = vfs.get(o)
+            const finalUri = f?.kind === 'live' ? f.finalUri : op.uri
+            touch(o)
+            vfs.set(o, {
+              kind: 'live',
+              finalUri,
+              content: applyTextEdits(base, op.edits, encoding),
+            })
           }
         }
 
-        // Old-identifier staleness guard for PRE-EXISTING edited files (skip created files — they
-        // have no on-disk old identifier to match).
+        // Old-identifier staleness guard. Reads each edited file's CURRENT on-disk slice; a rename
+        // TARGET (not yet on disk) reads `undefined` and is skipped, so an import fix-up in a moved
+        // file never trips it. Created files have no on-disk old identifier to match.
         if (expectedOld !== undefined) {
           for (const op of ops) {
-            if (op.type !== 'edit' || created.has(op.uri)) continue
+            if (op.type !== 'edit' || created.has(resolveOrig(op.uri))) continue
             const cur = readDisk(op.uri)
             if (cur === undefined) continue
             for (const e of op.edits) {
               if (sliceByOffsets(cur, e.range, encoding) !== expectedOld) {
-                return {
-                  applied: false,
-                  refused: 'an edit site no longer matches the renamed symbol; re-query and retry',
-                }
+                return refuse(
+                  'an edit site no longer matches the renamed symbol; re-query and retry',
+                )
               }
             }
           }
         }
 
-        // Build the physical plan + the audit digests in lockstep (content writes, then renames,
-        // then deletes — disjoint given the edit-on-renamed-file cut, so phase order is correct).
+        // Collision guard (data-loss): a path being DELETED must not also be a live rename/create
+        // target in the same batch (else its physical delete would unlink the just-moved file).
+        const liveFinalAbs = new Set<string>()
+        for (const o of order) {
+          const f = vfs.get(o)
+          if (f?.kind === 'live') liveFinalAbs.add(abs.get(f.finalUri) as string)
+        }
+        for (const o of order) {
+          const f = vfs.get(o)
+          if (f?.kind !== 'deleted' || created.has(o)) continue
+          if (liveFinalAbs.has(abs.get(o) as string)) {
+            return refuse(
+              `cannot delete ${rel(o)}: its path is a rename or create target in this edit`,
+            )
+          }
+        }
+
+        // Build the physical plan + audit digests. `digestForPhysical` maps every physical op to its
+        // digest row (an edited-AND-renamed pair is TWO ops → ONE shared row, so a partial commit
+        // that lands either half still surfaces the row). `before` is ALWAYS the pre-batch disk
+        // snapshot, so a delete-then-create revive reports the file's real prior content.
         const physical: PhysicalOp[] = []
         const digests: RenameDigest[] = []
-        for (const [uri, after] of proj) {
-          physical.push({ kind: 'write', absPath: abs.get(uri) as string, newText: after })
-          digests.push({
-            file: rel(uri),
-            before: sha256(readDisk(uri) ?? ''),
-            after: sha256(after),
-          })
+        const digestForPhysical: number[] = []
+        const push = (p: PhysicalOp, d: number): void => {
+          physical.push(p)
+          digestForPhysical.push(d)
         }
-        for (const r of renamePairs) {
-          physical.push({
-            kind: 'rename',
-            fromAbs: abs.get(r.oldUri) as string,
-            toAbs: abs.get(r.newUri) as string,
-          })
-          digests.push({
-            file: `${rel(r.oldUri)} → ${rel(r.newUri)}`,
-            before: sha256(r.content),
-            after: sha256(r.content),
-          })
+        // TIER 1 — writes & renames, in first-touch order.
+        for (const o of order) {
+          const f = vfs.get(o)
+          if (f?.kind !== 'live') continue
+          const moved = f.finalUri !== o
+          const before = sha256(diskBefore.get(o) ?? '')
+          const contentChanged = created.has(o) || sha256(f.content) !== before
+          if (!moved) {
+            if (contentChanged) {
+              const d = digests.push({ file: rel(o), before, after: sha256(f.content) }) - 1
+              push({ kind: 'write', absPath: abs.get(o) as string, newText: f.content }, d)
+            }
+          } else if (created.has(o)) {
+            // created then renamed pre-write: no inode to move — one write at the final path.
+            const d = digests.push({ file: rel(f.finalUri), before, after: sha256(f.content) }) - 1
+            push({ kind: 'write', absPath: abs.get(f.finalUri) as string, newText: f.content }, d)
+          } else if (contentChanged) {
+            // edited AND renamed: ONE digest row, TWO physical ops (rename THEN write) sharing it.
+            const d =
+              digests.push({
+                file: `${rel(o)} → ${rel(f.finalUri)}`,
+                before,
+                after: sha256(f.content),
+              }) - 1
+            push(
+              {
+                kind: 'rename',
+                fromAbs: abs.get(o) as string,
+                toAbs: abs.get(f.finalUri) as string,
+              },
+              d,
+            )
+            push({ kind: 'write', absPath: abs.get(f.finalUri) as string, newText: f.content }, d)
+          } else {
+            // pure rename (content unchanged).
+            const d =
+              digests.push({ file: `${rel(o)} → ${rel(f.finalUri)}`, before, after: before }) - 1
+            push(
+              {
+                kind: 'rename',
+                fromAbs: abs.get(o) as string,
+                toAbs: abs.get(f.finalUri) as string,
+              },
+              d,
+            )
+          }
         }
-        for (const d of deletes) {
-          physical.push({ kind: 'delete', absPath: abs.get(d.uri) as string })
-          digests.push({ file: `${rel(d.uri)} (deleted)`, before: sha256(d.content), after: '' })
+        // TIER 2 — deletes, in first-touch order, after every write/rename.
+        for (const o of order) {
+          const f = vfs.get(o)
+          if (f?.kind !== 'deleted' || created.has(o)) continue
+          const d =
+            digests.push({
+              file: `${rel(o)} (deleted)`,
+              before: sha256(diskBefore.get(o) ?? ''),
+              after: '',
+            }) - 1
+          push({ kind: 'delete', absPath: abs.get(o) as string }, d)
         }
         if (physical.length === 0) return { applied: false }
 
-        // PHASE 2: stage-then-commit, then resync the server's open buffers for what landed.
+        // PHASE 2: stage-then-commit, then resync the server's open buffer for what ACTUALLY landed
+        // (a partial commit must never push projected bytes the disk does not hold).
         const res = this.writer.commit(physical)
         const landed = new Set(res.completed)
-        const didWrite = (uri: string) =>
-          res.completed.some((o) => o.kind === 'write' && o.absPath === abs.get(uri))
-        for (const [uri, after] of proj) if (didWrite(uri)) client.applyEdited(uri, after)
-        for (const r of renamePairs) {
-          if (res.completed.some((o) => o.kind === 'rename' && o.toAbs === abs.get(r.newUri))) {
-            client.didFileRename(r.oldUri, r.newUri, r.content)
+        const landedWrite = (a: string) =>
+          res.completed.some((p) => p.kind === 'write' && p.absPath === a)
+        const landedRename = (a: string) =>
+          res.completed.some((p) => p.kind === 'rename' && p.toAbs === a)
+        const landedDelete = (a: string) =>
+          res.completed.some((p) => p.kind === 'delete' && p.absPath === a)
+
+        for (const o of order) {
+          const f = vfs.get(o)
+          if (f?.kind !== 'live') continue
+          const moved = f.finalUri !== o
+          const toAbs = abs.get(f.finalUri) as string
+          if (created.has(o)) {
+            if (landedWrite(toAbs)) {
+              // A created file that is ALSO the open (queried) file — only reachable via a
+              // delete→create→rename revive — must migrate the open buffer, not no-op applyEdited.
+              if (o === queriedUri && moved) client.didFileRename(o, f.finalUri, f.content)
+              else client.applyEdited(f.finalUri, f.content)
+            }
+          } else if (moved) {
+            // Migrate the open buffer ONLY if the physical rename actually landed. (The paired write
+            // executes AFTER the rename, so a landed write always implies a landed rename; we never
+            // tell the server a file moved when its origin still holds the bytes on disk.)
+            if (landedRename(toAbs)) {
+              // bytes now at finalUri = the edited content IFF the paired write landed; else pristine.
+              const wl = landedWrite(toAbs)
+              client.didFileRename(o, f.finalUri, wl ? f.content : (diskBefore.get(o) ?? ''))
+            }
+          } else if (landedWrite(abs.get(o) as string)) {
+            client.applyEdited(o, f.content)
           }
         }
-        for (const d of deletes) {
-          if (res.completed.some((o) => o.kind === 'delete' && o.absPath === abs.get(d.uri))) {
-            client.didFileDelete(d.uri)
-          }
+        for (const o of order) {
+          const f = vfs.get(o)
+          if (f?.kind !== 'deleted' || created.has(o)) continue
+          if (landedDelete(abs.get(o) as string)) client.didFileDelete(o)
         }
 
         const outDigests = res.partial
-          ? digests.filter((_, i) => landed.has(physical[i] as PhysicalOp))
+          ? [
+              ...new Set(
+                physical
+                  .map((p, i) => (landed.has(p) ? (digestForPhysical[i] as number) : -1))
+                  .filter((i) => i >= 0),
+              ),
+            ].map((i) => digests[i] as RenameDigest)
           : digests
         return {
           applied: true,

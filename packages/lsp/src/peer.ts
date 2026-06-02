@@ -84,6 +84,8 @@ export interface FakeServerOptions {
   onRename?: (params: unknown) => unknown
   onShutdown?: () => void
   onDidOpen?: (params: unknown) => void
+  onDidChange?: (params: unknown) => void
+  onDidClose?: (params: unknown) => void
   /** When set, the definition handler emits this `$/progress` notification before replying. */
   emitProgressBeforeDefinition?: unknown
   /** `$/progress` notifications the server emits (in order) right after `didOpen`. */
@@ -108,6 +110,8 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
       server.sendNotification('textDocument/publishDiagnostics', opts.diagnosticsOnOpen)
     }
   })
+  server.onNotification('textDocument/didChange', (params: unknown) => opts.onDidChange?.(params))
+  server.onNotification('textDocument/didClose', (params: unknown) => opts.onDidClose?.(params))
   server.onRequest('textDocument/definition', (params: unknown) => {
     if (opts.emitProgressBeforeDefinition !== undefined) {
       server.sendNotification('$/progress', opts.emitProgressBeforeDefinition)

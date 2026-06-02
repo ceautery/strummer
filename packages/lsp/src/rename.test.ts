@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -99,6 +100,8 @@ afterEach(() => {
 function setup(opts: {
   onRename: FakeServerOptions['onRename']
   onPrepareRename?: FakeServerOptions['onPrepareRename']
+  /** Extra fake-server hooks (e.g. onDidOpen/onDidChange/onDidClose to observe doc resync). */
+  server?: Partial<FakeServerOptions>
 }): { root: string; manager: LanguageServerManager } {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-rename-')))
   writeFileSync(join(root, 'greeter.ts'), GREETER_TS)
@@ -107,6 +110,7 @@ function setup(opts: {
     initialize: INIT_RENAME(),
     onRename: opts.onRename,
     onPrepareRename: opts.onPrepareRename ?? (() => DECL_RANGE),
+    ...opts.server,
   })
   disposers.push(tracker.disposeAll)
   const manager = new LanguageServerManager({
@@ -322,34 +326,6 @@ describe('LspRenameEngine — single-file apply (allowWrite on)', () => {
     expect(r.refused).toMatch(/outside the project root/i)
     expect(r.edits[0]?.outOfRoot).toBe(true)
     expect(r.edits[0]?.hunks).toBeUndefined() // bytes never surfaced
-  })
-
-  it('REFUSES (v1 cut) editing a file that is ALSO renamed in the same edit', async () => {
-    const { root, manager } = setup({
-      onRename: (params) => {
-        const uri = (params as { textDocument: { uri: string } }).textDocument.uri
-        return {
-          documentChanges: [
-            {
-              textDocument: { uri, version: 1 },
-              edits: [{ newText: 'Greeter2', range: DECL_RANGE }],
-            },
-            { kind: 'rename', oldUri: uri, newUri: `${uri}.bak` },
-          ],
-        }
-      },
-    })
-    const engine = new LspRenameEngine({
-      manager,
-      allowRun: true,
-      allowedRoots: [root],
-      allowWrite: true,
-      writer: THROWING_WRITER, // refused EARLY, before any I/O
-    })
-    const r = await engine.rename(renameInput(root))
-    expect(r.applied).toBe(false)
-    expect(r.refused).toMatch(/editing a file that is also renamed/i)
-    expect(r.resourceOps?.[0]?.kind).toBe('rename')
   })
 })
 
@@ -621,6 +597,353 @@ describe('LspRenameEngine — resource-op options (safe-subset ignoreIf*)', () =
     expect(r.applied).toBe(true)
     expect(writeOps(ops).map((w) => w.absPath)).toEqual([join(root, 'fresh.ts')])
     expect(writeOps(ops)[0]?.newText).toBe('')
+  })
+})
+
+describe('LspRenameEngine — edit composed with rename/delete (safe-subset v1 cuts)', () => {
+  const docChanges =
+    (build: (dir: string) => unknown[]) =>
+    (params: unknown): unknown => {
+      const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+      const dir = uri.slice(0, uri.lastIndexOf('/'))
+      return { documentChanges: build(dir) }
+    }
+  const engineFor = (
+    root: string,
+    manager: LanguageServerManager,
+    writer: RenameWriter = defaultRenameWriter,
+  ) =>
+    new LspRenameEngine({ manager, allowRun: true, allowedRoots: [root], allowWrite: true, writer })
+  const renameOpOf = (ops: PhysicalOp[]) =>
+    ops.find((o): o is Extract<PhysicalOp, { kind: 'rename' }> => o.kind === 'rename')
+
+  // INDEX_TS with only the import-symbol occurrence renamed (a fix-up edit in the moved file).
+  const INDEX_IMPORT2 = INDEX_TS.replace('import { Greeter }', 'import { Greeter2 }')
+
+  it('B1: rename(index→moved) THEN edit(moved) applies the fix-up to the moved content', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          textDocument: { uri: `${dir}/greeter.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: DECL_RANGE }],
+        },
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+        {
+          textDocument: { uri: `${dir}/moved.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: IMPORT_RANGE }],
+        },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    const byPath = new Map(writeOps(ops).map((w) => [w.absPath, w.newText]))
+    expect(byPath.get(join(root, 'greeter.ts'))).toBe(GREETER2_TS)
+    expect(byPath.get(join(root, 'moved.ts'))).toBe(INDEX_IMPORT2)
+    // the RenameFile executes BEFORE the write to the moved path
+    const renameIdx = ops.findIndex((o) => o.kind === 'rename')
+    const movedWriteIdx = ops.findIndex(
+      (o) => o.kind === 'write' && o.absPath === join(root, 'moved.ts'),
+    )
+    expect(renameIdx).toBeGreaterThanOrEqual(0)
+    expect(renameIdx).toBeLessThan(movedWriteIdx)
+    expect(r.digests?.map((d) => d.file)).toContain('index.ts → moved.ts')
+  })
+
+  it('B2: edit(A) THEN rename(A→B) writes the edited content to the new path', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          textDocument: { uri: `${dir}/index.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: IMPORT_RANGE }],
+        },
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(writeOps(ops).map((w) => w.absPath)).toEqual([join(root, 'moved.ts')])
+    expect(writeOps(ops)[0]?.newText).toBe(INDEX_IMPORT2)
+    expect(renameOpOf(ops)).toMatchObject({
+      fromAbs: join(root, 'index.ts'),
+      toAbs: join(root, 'moved.ts'),
+    })
+    const d = r.digests?.find((x) => x.file === 'index.ts → moved.ts')
+    expect(d?.before).not.toBe(d?.after)
+  })
+
+  it('B3: edit(A) THEN rename(A→B) THEN edit(B) composes both edits onto the moved content', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          textDocument: { uri: `${dir}/index.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: IMPORT_RANGE }],
+        },
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+        {
+          textDocument: { uri: `${dir}/moved.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: USAGE_RANGE }],
+        },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    // both the import AND usage occurrences renamed = INDEX2_TS
+    expect(writeOps(ops).find((w) => w.absPath === join(root, 'moved.ts'))?.newText).toBe(INDEX2_TS)
+  })
+
+  it('B5: create(C) THEN delete(C) is a net no-op', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/scratch.ts` },
+        { kind: 'delete', uri: `${dir}/scratch.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(existsSync(join(root, 'scratch.ts'))).toBe(false)
+  })
+
+  it('B7: edit(A) THEN delete(A) discards the edit; delete digest before = original content', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          textDocument: { uri: `${dir}/index.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: IMPORT_RANGE }],
+        },
+        { kind: 'delete', uri: `${dir}/index.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(writeOps(ops)).toHaveLength(0)
+    expect(ops.some((o) => o.kind === 'delete' && o.absPath === join(root, 'index.ts'))).toBe(true)
+    const d = r.digests?.find((x) => x.file === 'index.ts (deleted)')
+    expect(d?.before).toBe(createHash('sha256').update(INDEX_TS).digest('hex'))
+    expect(d?.after).toBe('')
+  })
+
+  it('B8: rename(A→B) THEN delete(B) deletes the origin, emits no rename', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+        { kind: 'delete', uri: `${dir}/moved.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(renameOpOf(ops)).toBeUndefined()
+    expect(ops.some((o) => o.kind === 'delete' && o.absPath === join(root, 'index.ts'))).toBe(true)
+    expect(r.digests?.map((d) => d.file)).toContain('index.ts (deleted)')
+  })
+
+  it('B9: delete(A) THEN create(A) (revive) writes empty; digest before = original content', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'delete', uri: `${dir}/index.ts` },
+        { kind: 'create', uri: `${dir}/index.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(writeOps(ops).map((w) => [w.absPath, w.newText])).toEqual([[join(root, 'index.ts'), '']])
+    const d = r.digests?.find((x) => x.file === 'index.ts')
+    expect(d?.before).toBe(createHash('sha256').update(INDEX_TS).digest('hex'))
+    expect(d?.after).toBe(createHash('sha256').update('').digest('hex'))
+  })
+
+  it('B10: delete(A) THEN rename(B→A) is refused (delete path is a rename target)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'delete', uri: `${dir}/index.ts` },
+        { kind: 'rename', oldUri: `${dir}/other.ts`, newUri: `${dir}/index.ts` },
+      ]),
+    })
+    writeFileSync(join(root, 'other.ts'), 'export const x = 1\n')
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/its path is a rename or create target in this edit/i)
+  })
+
+  it('B11: rename(A→B) THEN rename(B→A) (swap) is refused as a cycle', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+        { kind: 'rename', oldUri: `${dir}/moved.ts`, newUri: `${dir}/index.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/rename cycle/i)
+  })
+
+  it('B12: rename(A→X) THEN rename(B→X) (two into one) is refused', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+        { kind: 'rename', oldUri: `${dir}/other.ts`, newUri: `${dir}/moved.ts` },
+      ]),
+    })
+    writeFileSync(join(root, 'other.ts'), 'export const x = 1\n')
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/already a target in this edit/i)
+  })
+
+  it('B13: create(C) THEN rename(A→C) is refused (target already exists)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/scratch.ts` },
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/scratch.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/cannot rename to .*already exists/i)
+  })
+
+  it('B15: create(C) THEN rename(C→D) writes once at D (no fs rename)', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/scratch.ts` },
+        { kind: 'rename', oldUri: `${dir}/scratch.ts`, newUri: `${dir}/final.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(renameOpOf(ops)).toBeUndefined()
+    expect(writeOps(ops).map((w) => w.absPath)).toEqual([join(root, 'final.ts')])
+    expect(r.digests?.map((d) => d.file)).toEqual(['final.ts'])
+  })
+
+  it('B16: rename(A→B) THEN edit(A) (edit the renamed-away path) is refused', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'rename', oldUri: `${dir}/index.ts`, newUri: `${dir}/moved.ts` },
+        {
+          textDocument: { uri: `${dir}/index.ts`, version: 1 },
+          edits: [{ newText: 'X', range: IMPORT_RANGE }],
+        },
+      ]),
+    })
+    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/was renamed in this edit; address the new path/i)
+  })
+
+  // --- resync of the OPEN (queried) file: only the queried file is opened, so this is the only
+  // place the server-buffer migration is observable. ---
+  function captureSync() {
+    const opened: Array<{ uri: string; text: string }> = []
+    const closed: string[] = []
+    const changed: Array<{ uri: string; text: string }> = []
+    return {
+      opened,
+      closed,
+      changed,
+      hooks: {
+        // biome-ignore lint/suspicious/noExplicitAny: test capture of raw JSON-RPC params
+        onDidOpen: (p: any) => opened.push({ uri: p.textDocument.uri, text: p.textDocument.text }),
+        // biome-ignore lint/suspicious/noExplicitAny: test capture
+        onDidClose: (p: any) => closed.push(p.textDocument.uri),
+        // biome-ignore lint/suspicious/noExplicitAny: test capture
+        onDidChange: (p: any) =>
+          changed.push({ uri: p.textDocument.uri, text: p.contentChanges[0].text }),
+      } as Partial<FakeServerOptions>,
+    }
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 30))
+
+  it('B17: queried file edited AND renamed migrates the open buffer (didClose old + didOpen new)', async () => {
+    const sync = captureSync()
+    const { writer } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          textDocument: { uri: `${dir}/greeter.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: DECL_RANGE }],
+        },
+        { kind: 'rename', oldUri: `${dir}/greeter.ts`, newUri: `${dir}/greeter2.ts` },
+      ]),
+      server: sync.hooks,
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    await flush()
+    const greeterUri = pathToFileURL(join(root, 'greeter.ts')).toString()
+    const g2Uri = pathToFileURL(join(root, 'greeter2.ts')).toString()
+    expect(sync.closed).toContain(greeterUri)
+    expect(sync.opened.find((o) => o.uri === g2Uri)?.text).toBe(GREETER2_TS)
+  })
+
+  it('B18: queried file deleted closes+evicts the open buffer', async () => {
+    const sync = captureSync()
+    const { writer } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [{ kind: 'delete', uri: `${dir}/greeter.ts` }]),
+      server: sync.hooks,
+    })
+    const r = await engineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    await flush()
+    expect(sync.closed).toContain(pathToFileURL(join(root, 'greeter.ts')).toString())
+  })
+
+  it('B19: PARTIAL (rename lands, write faults) resyncs the open buffer with PRISTINE bytes', async () => {
+    const sync = captureSync()
+    // commit only the first physical op (the rename), then fault on the write.
+    const partialWriter: RenameWriter = {
+      commit: (o) => ({ completed: o.slice(0, 1), partial: true, error: 'EIO on write' }),
+    }
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          textDocument: { uri: `${dir}/greeter.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: DECL_RANGE }],
+        },
+        { kind: 'rename', oldUri: `${dir}/greeter.ts`, newUri: `${dir}/greeter2.ts` },
+      ]),
+      server: sync.hooks,
+    })
+    const r = await engineFor(root, manager, partialWriter).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(r.partial).toBe(true)
+    expect(r.digests).toHaveLength(1) // the combined row still surfaces (shared digest index)
+    await flush()
+    const g2Uri = pathToFileURL(join(root, 'greeter2.ts')).toString()
+    // The write faulted, so disk holds the PRISTINE bytes; the buffer must match disk, not the edit.
+    expect(sync.opened.find((o) => o.uri === g2Uri)?.text).toBe(GREETER_TS)
+  })
+
+  it('B20: PARTIAL where only the write half lands still surfaces the combined digest row', async () => {
+    // An injected writer that lands ONLY the write op (index 1), not the rename — proves the shared
+    // digest index keeps the audit non-empty when the rename half is the one that did not land.
+    const writeOnlyWriter: RenameWriter = {
+      commit: (o) => {
+        const w = o.filter((x) => x.kind === 'write')
+        return { completed: w, partial: true, error: 'EIO on rename' }
+      },
+    }
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          textDocument: { uri: `${dir}/greeter.ts`, version: 1 },
+          edits: [{ newText: 'Greeter2', range: DECL_RANGE }],
+        },
+        { kind: 'rename', oldUri: `${dir}/greeter.ts`, newUri: `${dir}/greeter2.ts` },
+      ]),
+    })
+    const r = await engineFor(root, manager, writeOnlyWriter).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(r.partial).toBe(true)
+    expect(r.digests).toHaveLength(1)
+    expect(r.digests?.[0]?.file).toBe('greeter.ts → greeter2.ts')
   })
 })
 
