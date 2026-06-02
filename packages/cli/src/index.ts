@@ -12,6 +12,7 @@ import type { Embedder } from '@strummer/embed'
 import type DatabaseType from 'better-sqlite3'
 import { runApi } from './api.js'
 import { runBrowser } from './browser.js'
+import { runCoverage } from './coverage.js'
 import { runMutate } from './mutate.js'
 
 /** Output sinks and dependencies injected into `run` (so it is testable). */
@@ -49,6 +50,10 @@ Mutation testing:
   strummer mutate summarize <report-file>  [--format stryker|mutmut] [--json]
   strummer mutate run <project-root>        [--file <f>…] [--incremental] [--allow-run] [--timeout-ms <n>] [--report-path <p>] [--json]  (gated; needs --allow-run)
 
+Coverage (impact-scoped; exit 1 when a new line is uncovered):
+  strummer coverage uncovered-in-diff --diff <file> --coverage <file>  [--coverage-format istanbul|coveragepy] [--project-root <p>] [--json]
+  strummer coverage run-scoped <project-root>  --changed-file <f>…  [--diff <file>] [--allow-run] [--timeout-ms <n>] [--json]  (gated; needs --allow-run)
+
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)
 `
@@ -70,6 +75,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return runBrowser(rest, io)
     case 'mutate':
       return runMutate(rest, io)
+    case 'coverage':
+      return runCoverage(rest, io)
     case 'help':
     case '--help':
     case '-h':

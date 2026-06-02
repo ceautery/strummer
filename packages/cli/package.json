@@ -25,6 +25,7 @@
     "@strummer/api": "workspace:*",
     "@strummer/browser": "workspace:*",
     "@strummer/core": "workspace:*",
+    "@strummer/coverage": "workspace:*",
     "@strummer/embed": "workspace:*",
     "@strummer/mutate": "workspace:*",
     "@strummer/safety": "workspace:*",

@@ -124,6 +124,9 @@ importers:
       '@strummer/core':
         specifier: workspace:*
         version: link:../core
+      '@strummer/coverage':
+        specifier: workspace:*
+        version: link:../coverage
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed
