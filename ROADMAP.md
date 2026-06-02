@@ -662,7 +662,8 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `--allow-write`). The human is the operator (`--allow-run`/`--allow-write` straight-through;
         `--servers` binds the registry, `--project` is the allowlist); the engine is injectable so
         the gate never spawns a real server, and production builds the real manager/engine per
-        invocation and shuts it down. Exit 2 = `not_ready` (retry).
+        invocation and shuts it down. Exit 2 = `not_ready` (retry). Ships `examples/lsp/greeter`
+        (a tiny TS project mirroring the fixture-capture shape) + an offline coordinate guard.
   - [ ] *(staged, not amputated)* write-mode for resource ops + multi-file conflict reconciliation,
         `workspace/symbol` search, `diagnostics`, multi-root, full toolchain-version resolution,
         Python adapter posture.

@@ -1,0 +1,11 @@
+{
+  "name": "@strummer-examples/lsp-greeter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A tiny TypeScript project for the strummer lsp quickstart",
+  "type": "module",
+  "devDependencies": {
+    "typescript": "5.3.3",
+    "typescript-language-server": "5.3.0"
+  }
+}

@@ -1,10 +1,14 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import type { LspQueryInput, LspQueryResult, LspRenameInput, LspRenameResult } from '@strummer/lsp'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { LspQueryInput, LspQueryResult, LspRenameResult } from '@strummer/lsp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from './index.js'
 import { runLsp } from './lsp.js'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const GREETER = resolve(here, '../../../examples/lsp/greeter')
 
 function capture() {
   const out: string[] = []
@@ -236,5 +240,33 @@ describe('strummer lsp CLI', () => {
     const c = capture()
     expect(await run(['lsp', 'frobnicate'], c.io)).toBe(1)
     expect(c.err()).toMatch(/unknown lsp subcommand/)
+  })
+})
+
+// Guards the shipped greeter example (and its README's line:column coordinates) against
+// source drift. Offline only — `languages` never spawns, and the coordinate check just
+// slices the source files (no real language server runs in the gate, per ADR 0011).
+describe('bundled example greeter project', () => {
+  it('languages lists typescript from the example servers.json registry', async () => {
+    const servers = readFileSync(join(GREETER, 'servers.json'), 'utf8')
+    const c = capture()
+    expect(await run(['lsp', 'languages', '--servers', servers, '--json'], c.io)).toBe(0)
+    expect(JSON.parse(c.out()).languages).toEqual(['typescript'])
+  })
+
+  it("the README's documented positions point at the named identifiers", () => {
+    // [file, 1-based line, 1-based column, identifier] — must match the example README.
+    const coords: [string, number, number, string][] = [
+      ['greeter.ts', 2, 17, 'hello'], // the hello declaration
+      ['greeter.ts', 7, 14, 'Greeter'], // the Greeter class declaration
+      ['greeter.ts', 11, 12, 'hello'], // the hello CALL inside greet()
+      ['index.ts', 3, 7, 'greeter'], // the `greeter` value
+      ['index.ts', 3, 21, 'Greeter'], // the `new Greeter(...)` reference
+    ]
+    for (const [file, line, col, name] of coords) {
+      const lines = readFileSync(join(GREETER, file), 'utf8').split('\n')
+      const text = lines[line - 1] ?? ''
+      expect(text.slice(col - 1, col - 1 + name.length)).toBe(name)
+    }
   })
 })

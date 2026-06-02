@@ -168,8 +168,10 @@ vision and `ARCHITECTURE.md` for the technical design.
   flags and shuts it down per single-shot invocation).
 - `py/strummer_ingest/` — Python ingester (uv).
 - `schema/` — the SQLite contract (`*.sql` + `*.json`).
-- `examples/` — runnable sample collections (e.g. `examples/api/jsonplaceholder`,
-  used by the `@strummer/cli` API quickstart).
+- `examples/` — runnable samples (e.g. `examples/api/jsonplaceholder`,
+  `examples/browser/login`, and `examples/lsp/greeter` — a tiny TS project for the
+  `strummer lsp` quickstart), used by the `@strummer/cli` quickstarts; each guarded by
+  an offline test so the sample + its docs can't drift.
 - `.github/workflows/ci.yml` — CI mirroring `pnpm gate` on push/PR.
 - The Linux dev-container harness (`docker/`, `docker-compose.yml`) that hosts
   Claude Code is **untracked** (gitignored) — local tooling for creating the

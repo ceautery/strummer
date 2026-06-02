@@ -696,7 +696,8 @@ no-real-spawn-in-gate): **`mutate`** (`summarize` stryker|mutmut + gated `run`);
 `languages`/`definition`/`type-definition`/`references`/`hover`/`symbols`/`call-hierarchy` + write-mode
 `rename`, dry-run unless `--allow-write`; `--allow-run` + `--servers`(JSON registry) + `--project`
 allowlist; the engine is injectable so the gate never spawns a real server — production builds the
-real manager/engine per invocation and shuts it down; exit 2 = `not_ready`). The deps CLI forced a
+real manager/engine per invocation and shuts it down; exit 2 = `not_ready`; ships
+`examples/lsp/greeter` — a tiny runnable TS project + an offline coordinate guard). The deps CLI forced a
 **behavior-preserving refactor**: the pure ecosystem-dispatch helpers (`comparatorFor`/`matchName`/
 `dependencyNames` + `OsvEcosystem`/`OSV_ECOSYSTEMS`) were lifted out of `packages/mcp/src/deps.ts`
 into a new `@strummer/deps` `ecosystem.ts` (one source of truth, shared by the MCP surface + the
