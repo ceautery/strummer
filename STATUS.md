@@ -1005,7 +1005,11 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > = a data-loss guard). Designed via the `lsp-resource-op-safe-cuts-design` fan-out (2 proposals →
 > synthesis → 3 adversarial critics, five holes folded in) + a recall-biased review fan-out (trimmed a
 > migrate-on-write-without-rename resync branch + an O(n²) order scan). Fixture-only gate (no real
-> server). **935 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> server) — but **verified LIVE against rust-analyzer 0.3.2921**: a module rename (`mod greeter`→
+> `welcome`) applied cross-file edits + the `RenameFile` to disk, AND the editing-a-renamed-file case
+> (a `crate::greeter::` self-reference in the module file) applied with the moved `welcome.rs` carrying
+> the EDITED content — the exact batch the old code refused (repro + the 30s-deadline gotcha in
+> [[strummer-lsp-rust-analyzer]]). **935 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
 > staged (non-blocking) LSP tails:** pull-diagnostics (`textDocument/diagnostic` — rust-analyzer DOES
 > advertise `diagnosticProvider`, captured in its init fixture, so this is now live-verifiable); dynamic
 > `didChangeWorkspaceFolders`; the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete

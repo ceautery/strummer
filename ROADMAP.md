@@ -750,7 +750,10 @@ Two independent tracks, then the test-quality chain, then LSP last:
         also a rename/create target** (a data-loss guard). Designed via the
         `lsp-resource-op-safe-cuts-design` fan-out (2 proposals → synthesis → 3 adversarial critics,
         five holes folded in) + a recall-biased review fan-out. Fixture-only gate (no real server);
-        TDD A1-A9 + B1-B20.
+        TDD A1-A9 + B1-B20. **Verified live against rust-analyzer 0.3.2921**: a module rename applied
+        cross-file edits + the `RenameFile`, and the editing-a-renamed-file case (a `crate::greeter::`
+        self-reference) applied with the moved file carrying the edited content (the batch the old
+        code refused).
   - [ ] *(staged, not amputated)* pull-diagnostics (`textDocument/diagnostic`, for servers that
         advertise `diagnosticProvider` — note rust-analyzer DOES, captured in its init fixture), dynamic
         `didChangeWorkspaceFolders` (+ its write-mode interaction), the DESTRUCTIVE resource-op options
