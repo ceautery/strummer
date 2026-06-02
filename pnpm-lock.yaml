@@ -130,6 +130,9 @@ importers:
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed
+      '@strummer/flake':
+        specifier: workspace:*
+        version: link:../flake
       '@strummer/mutate':
         specifier: workspace:*
         version: link:../mutate

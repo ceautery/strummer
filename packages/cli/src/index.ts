@@ -13,6 +13,7 @@ import type DatabaseType from 'better-sqlite3'
 import { runApi } from './api.js'
 import { runBrowser } from './browser.js'
 import { runCoverage } from './coverage.js'
+import { runFlake } from './flake.js'
 import { runMutate } from './mutate.js'
 
 /** Output sinks and dependencies injected into `run` (so it is testable). */
@@ -54,6 +55,14 @@ Coverage (impact-scoped; exit 1 when a new line is uncovered):
   strummer coverage uncovered-in-diff --diff <file> --coverage <file>  [--coverage-format istanbul|coveragepy] [--project-root <p>] [--json]
   strummer coverage run-scoped <project-root>  --changed-file <f>…  [--diff <file>] [--allow-run] [--timeout-ms <n>] [--json]  (gated; needs --allow-run)
 
+Flaky-test detection (--db <run-history.db> or STRUMMER_FLAKE_DB):
+  strummer flake status                  [--min-runs <n>] [--limit-per-test <n>] [--since <ISO>] [--json]
+  strummer flake candidates              [--min-flake-score <0..1>] [--min-runs <n>] [--json]
+  strummer flake ingest <report-file>    [--format vitest|pytest] [--at <ISO>] [--project-root <p>] [--run-group <g>] [--json]
+  strummer flake release <testId>
+  strummer flake run <project-root>      [--repeat <n>] [--file <f>…] [--run-group <g>] [--allow-run] [--timeout-ms <n>] [--json]  (gated)
+  strummer flake quarantine <testId>     --reason <r> --expires-at <ISO> [--flake-score <s>] [--allow-quarantine] [--max-expiry-ms <n>] [--json]  (gated write)
+
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)
 `
@@ -77,6 +86,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return runMutate(rest, io)
     case 'coverage':
       return runCoverage(rest, io)
+    case 'flake':
+      return runFlake(rest, io)
     case 'help':
     case '--help':
     case '-h':
