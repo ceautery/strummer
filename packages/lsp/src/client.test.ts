@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { MessageConnection } from 'vscode-jsonrpc/node.js'
+import { type MessageConnection, ResponseError } from 'vscode-jsonrpc/node.js'
 import { LspClient } from './client.js'
 import {
   CALL_HIERARCHY_INCOMING,
@@ -389,6 +389,57 @@ describe('LspClient write-mode (rename / prepareRename)', () => {
     init.capabilities.renameProvider = false
     const { client } = await connectedClient({ initialize: init })
     await expect(client.rename(GREETER_URI, POS, 'X')).rejects.toThrow(/rename/i)
+  })
+})
+
+describe('LspClient readiness — servers that signal not-ready via an ERROR (rust-analyzer)', () => {
+  // rust-analyzer returns a ResponseError -32602 "No references found at position" when queried
+  // mid-index (and ALSO for a genuinely non-renameable position); tsserver returns an empty result
+  // in that state. The tri-state readiness must handle the error channel the same way: indexing ⇒
+  // not_ready (retry within the deadline), settled ⇒ no_result — never a hard throw, never `ok`.
+  const RA_NOT_READY = () => new ResponseError(-32602, 'No references found at position')
+
+  it('a not-ready error WHILE INDEXING ⇒ waits out $/progress and re-queries to ok', async () => {
+    const begin = PROGRESS_BEGIN() as { token: string }
+    const end = { token: begin.token, value: { kind: 'end' } }
+    let calls = 0
+    const { client, server } = await connectedClient({ initialize: INIT_RENAME() })
+    server.onRequest('textDocument/rename', () => {
+      calls += 1
+      if (calls === 1) {
+        server.sendNotification('$/progress', begin) // indexing active at error time
+        setTimeout(() => server.sendNotification('$/progress', end), 5) // ...then it finishes
+        throw RA_NOT_READY()
+      }
+      return RENAME_CHANGES() // the loaded project answers in full on the retry
+    })
+    const r = await client.rename(GREETER_URI, { line: 4, character: 14 }, 'Greeter2')
+    expect(calls).toBe(2) // did NOT hard-fail on the error; waited + re-queried
+    expect(r.status).toBe('ok')
+    expect(r.result.files.length).toBeGreaterThan(0)
+  })
+
+  it('a persistent error WHILE SETTLED ⇒ no_result (never ok, never throws)', async () => {
+    const { client, server } = await connectedClient({
+      initialize: INIT_RENAME(),
+      clientOptions: { timeoutMs: 1000, noRetry: true },
+    })
+    server.onRequest('textDocument/rename', () => {
+      throw RA_NOT_READY()
+    })
+    const r = await client.rename(GREETER_URI, { line: 4, character: 14 }, 'X')
+    expect(r.status).toBe('no_result')
+    expect(r.result.files).toEqual([])
+  })
+
+  it('a non-soft error (InternalError) still propagates as a hard failure', async () => {
+    const { client, server } = await connectedClient({ initialize: INIT_RENAME() })
+    server.onRequest('textDocument/rename', () => {
+      throw new ResponseError(-32603, 'internal server error')
+    })
+    await expect(client.rename(GREETER_URI, { line: 4, character: 14 }, 'X')).rejects.toThrow(
+      /internal server error/i,
+    )
   })
 })
 

@@ -34,6 +34,7 @@ import { spawn } from 'node:child_process'
 import {
   createMessageConnection,
   type MessageConnection,
+  ResponseError,
   StreamMessageReader,
   StreamMessageWriter,
 } from 'vscode-jsonrpc/node.js'
@@ -195,6 +196,17 @@ export class LspUnsupportedError extends Error {
 }
 
 const defaultDelay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * `ResponseError` codes a server uses to signal "not ready / nothing to answer here" rather than
+ * returning an empty result. Some servers (rust-analyzer) ERROR where tsserver returns empty —
+ * `withRetry` routes these through the SAME tri-state path as an empty result (indexing ⇒ not_ready
+ * and retry within the deadline; settled ⇒ no_result), instead of letting them throw as a hard
+ * failure. Any OTHER error (a genuine protocol/internal failure) propagates unchanged.
+ * -32801 ContentModified / -32802 ServerCancelled / -32800 RequestCancelled — the spec's
+ * retry/cancel codes; -32602 InvalidParams — rust-analyzer's "No references found at position".
+ */
+const SOFT_NOT_READY_CODES = new Set([-32801, -32802, -32800, -32602])
 
 export class LspClient {
   private readonly conn: MessageConnection
@@ -709,13 +721,28 @@ export class LspClient {
     while (true) {
       // (1) Never query a still-loading project; wait for the indexing $/progress to drain.
       await this.awaitIndexingSettled(deadline)
-      const value = normalize(await send())
+      let value: T
+      let softError = false
+      try {
+        value = normalize(await send())
+      } catch (err) {
+        // A server that signals "not ready / nothing here" via a recognized ResponseError (e.g.
+        // rust-analyzer's -32602) is treated as the EMPTY outcome — readiness decides below. Any
+        // other error is a genuine failure and propagates unchanged.
+        if (!(err instanceof ResponseError) || !SOFT_NOT_READY_CODES.has(err.code)) throw err
+        value = normalize(null)
+        softError = true
+      }
       // (2) The send may have kicked off the configured-project load and been answered from the
       // inferred project — re-query once it settles (unless we are out of deadline).
       if (this.indexing && this.now() < deadline) continue
 
       const status = decideStatus(isEmpty(value), !this.indexing)
       if (status !== 'no_result') return this.wrap(status, value)
+
+      // A settled soft-error is terminal — a genuine "nothing renameable here", not eventual
+      // consistency; do not spin retrying it (an empty-but-no-error result still gets the backoff).
+      if (softError) return this.wrap('no_result', value)
 
       // (3) Empty + settled: retry with bounded backoff strictly inside the deadline.
       attempt += 1
