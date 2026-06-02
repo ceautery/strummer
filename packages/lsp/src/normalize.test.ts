@@ -229,9 +229,77 @@ describe('decideStatus (tri-state)', () => {
 
 describe('normalizeWorkspaceEdit', () => {
   it('returns empty for null/undefined and an edit with neither shape', () => {
-    expect(normalizeWorkspaceEdit(null)).toEqual({ files: [], resourceOps: [] })
-    expect(normalizeWorkspaceEdit(undefined)).toEqual({ files: [], resourceOps: [] })
-    expect(normalizeWorkspaceEdit({})).toEqual({ files: [], resourceOps: [] })
+    expect(normalizeWorkspaceEdit(null)).toEqual({ files: [], resourceOps: [], operations: [] })
+    expect(normalizeWorkspaceEdit(undefined)).toEqual({
+      files: [],
+      resourceOps: [],
+      operations: [],
+    })
+    expect(normalizeWorkspaceEdit({})).toEqual({ files: [], resourceOps: [], operations: [] })
+  })
+
+  it('builds an ordered `operations` list preserving interleaving (REAL rust-analyzer RenameFile)', () => {
+    const out = normalizeWorkspaceEdit(fixture<RawWorkspaceEdit>('rename-renamefile.json'))
+    // edits-then-RenameFile, in documentChanges order — the apply engine must honor this.
+    expect(out.operations.map((o) => o.type)).toEqual(['edit', 'rename'])
+    expect(out.operations[0]).toMatchObject({ type: 'edit', uri: 'file:///project/src/main.rs' })
+    expect(out.operations[1]).toMatchObject({
+      type: 'rename',
+      oldUri: 'file:///project/src/greeter.rs',
+      newUri: 'file:///project/src/welcome.rs',
+    })
+    // back-compat: files + resourceOps still populated for preview.
+    expect(out.files.map((f) => f.uri)).toEqual(['file:///project/src/main.rs'])
+    expect(out.resourceOps).toEqual([
+      {
+        kind: 'rename',
+        uris: ['file:///project/src/greeter.rs', 'file:///project/src/welcome.rs'],
+      },
+    ])
+  })
+
+  it('preserves Move-to-file ordering: create → edit-new → delete-old', () => {
+    const raw: RawWorkspaceEdit = {
+      documentChanges: [
+        { kind: 'create', uri: 'file:///project/b.ts' },
+        {
+          textDocument: { uri: 'file:///project/b.ts', version: 1 },
+          edits: [{ range: RANGE, newText: 'moved' }],
+        },
+        { kind: 'delete', uri: 'file:///project/a.ts' },
+      ],
+    }
+    const out = normalizeWorkspaceEdit(raw)
+    expect(out.operations.map((o) => o.type)).toEqual(['create', 'edit', 'delete'])
+    expect(out.operations[1]).toMatchObject({ type: 'edit', uri: 'file:///project/b.ts' })
+  })
+
+  it('captures resource-op options (overwrite / ignoreIfExists / recursive)', () => {
+    const raw: RawWorkspaceEdit = {
+      documentChanges: [
+        {
+          kind: 'create',
+          uri: 'file:///project/c.ts',
+          options: { overwrite: true, ignoreIfExists: false },
+        },
+        { kind: 'delete', uri: 'file:///project/d', options: { recursive: true } },
+      ],
+    }
+    const ops = normalizeWorkspaceEdit(raw).operations
+    expect(ops[0]).toMatchObject({
+      type: 'create',
+      options: { overwrite: true, ignoreIfExists: false },
+    })
+    expect(ops[1]).toMatchObject({ type: 'delete', options: { recursive: true } })
+  })
+
+  it('the changes-map form yields edit-only operations (never resource ops)', () => {
+    const out = normalizeWorkspaceEdit(fixture<RawWorkspaceEdit>('rename-changes.json'))
+    expect(out.operations.every((o) => o.type === 'edit')).toBe(true)
+    expect(out.operations.map((o) => (o as { uri: string }).uri)).toEqual([
+      'file:///project/greeter.ts',
+      'file:///project/index.ts',
+    ])
   })
 
   it('normalizes the REAL captured `changes` map (tsserver 5.3.0 rename), order preserved', () => {

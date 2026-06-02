@@ -417,12 +417,21 @@ export interface RawTextDocumentEdit {
   edits: RawTextEdit[]
 }
 
+/** Resource-operation options (LSP `CreateFileOptions`/`RenameFileOptions`/`DeleteFileOptions`). */
+export interface ResourceOpOptions {
+  overwrite?: boolean
+  ignoreIfExists?: boolean
+  ignoreIfNotExists?: boolean
+  recursive?: boolean
+}
+
 /** A raw file-resource operation documentChanges member (CreateFile/RenameFile/DeleteFile). */
 export interface RawResourceOperation {
   kind: 'create' | 'rename' | 'delete'
   uri?: string
   oldUri?: string
   newUri?: string
+  options?: ResourceOpOptions
 }
 
 export interface RawWorkspaceEdit {
@@ -446,15 +455,28 @@ export interface NormalizedFileEdits {
   edits: NormalizedFileEdit[]
 }
 
-/** A flagged resource operation — v1 surfaces these in the preview and REFUSES them on apply. */
+/** A flagged resource operation — surfaced in the preview (paths relativized at the surface). */
 export interface NormalizedResourceOp {
   kind: 'create' | 'rename' | 'delete'
   uris: string[]
 }
 
+/**
+ * One operation in `documentChanges` ORDER (the apply engine executes these in sequence — a
+ * "Move to file" is `create`→`edit`(new)→`delete`(old), so order is load-bearing). `files`/
+ * `resourceOps` are the order-free buckets kept for preview/back-compat.
+ */
+export type NormalizedOp =
+  | { type: 'edit'; uri: string; edits: NormalizedFileEdit[] }
+  | { type: 'create'; uri: string; options?: ResourceOpOptions }
+  | { type: 'rename'; oldUri: string; newUri: string; options?: ResourceOpOptions }
+  | { type: 'delete'; uri: string; options?: ResourceOpOptions }
+
 export interface NormalizedWorkspaceEdit {
   files: NormalizedFileEdits[]
   resourceOps: NormalizedResourceOp[]
+  /** The operations in `documentChanges` order (the apply engine's authority). */
+  operations: NormalizedOp[]
 }
 
 function isResourceOp(
@@ -482,7 +504,7 @@ function isResourceOp(
 export function normalizeWorkspaceEdit(
   raw: RawWorkspaceEdit | null | undefined,
 ): NormalizedWorkspaceEdit {
-  if (raw == null) return { files: [], resourceOps: [] }
+  if (raw == null) return { files: [], resourceOps: [], operations: [] }
   const annotations = raw.changeAnnotations ?? {}
   const mapEdit = (e: RawTextEdit): NormalizedFileEdit => {
     const out: NormalizedFileEdit = { range: e.range, newText: e.newText }
@@ -497,6 +519,7 @@ export function normalizeWorkspaceEdit(
   if (raw.documentChanges !== undefined) {
     const files: NormalizedFileEdits[] = []
     const resourceOps: NormalizedResourceOp[] = []
+    const operations: NormalizedOp[] = []
     for (const member of raw.documentChanges) {
       if (isResourceOp(member)) {
         const uris =
@@ -506,24 +529,43 @@ export function normalizeWorkspaceEdit(
               ? [member.uri]
               : []
         resourceOps.push({ kind: member.kind, uris })
+        if (member.kind === 'rename') {
+          operations.push({
+            type: 'rename',
+            oldUri: member.oldUri ?? '',
+            newUri: member.newUri ?? '',
+            ...(member.options ? { options: member.options } : {}),
+          })
+        } else {
+          operations.push({
+            type: member.kind,
+            uri: member.uri ?? '',
+            ...(member.options ? { options: member.options } : {}),
+          })
+        }
       } else {
-        files.push({ uri: member.textDocument.uri, edits: member.edits.map(mapEdit) })
+        const edits = member.edits.map(mapEdit)
+        files.push({ uri: member.textDocument.uri, edits })
+        operations.push({ type: 'edit', uri: member.textDocument.uri, edits })
       }
     }
-    return { files, resourceOps }
+    return { files, resourceOps, operations }
   }
 
   if (raw.changes !== undefined) {
+    // A `changes` map never carries resource ops — every operation is a plain edit (order = key order).
+    const files = Object.entries(raw.changes).map(([uri, edits]) => ({
+      uri,
+      edits: edits.map(mapEdit),
+    }))
     return {
-      files: Object.entries(raw.changes).map(([uri, edits]) => ({
-        uri,
-        edits: edits.map(mapEdit),
-      })),
+      files,
       resourceOps: [],
+      operations: files.map((f) => ({ type: 'edit', uri: f.uri, edits: f.edits })),
     }
   }
 
-  return { files: [], resourceOps: [] }
+  return { files: [], resourceOps: [], operations: [] }
 }
 
 /** `textDocument/prepareRename` raw result variants. */

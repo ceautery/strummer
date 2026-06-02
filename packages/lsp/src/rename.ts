@@ -252,7 +252,7 @@ export class LspRenameEngine {
       },
       async (client): Promise<RunOutcome> => {
         const pos = toLspPosition(text, input.line, input.column, client.encoding)
-        const empty: NormalizedWorkspaceEdit = { files: [], resourceOps: [] }
+        const empty: NormalizedWorkspaceEdit = { files: [], resourceOps: [], operations: [] }
 
         if (client.supportsPrepareRename) {
           const prep = await client.prepareRename(queriedUri, pos)
