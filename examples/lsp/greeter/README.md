@@ -57,6 +57,11 @@ $S lsp symbols typescript greeter.ts --project $P --allow-run
 # project file (eager indexers like gopls/rust-analyzer don't need it):
 $S lsp workspace-symbols typescript Greeter greeter.ts --project $P --allow-run
 
+# Errors/warnings for a file (no position). The greeter is clean, so this reports 0 problems;
+# introduce a type error to see one. Diagnostics are PUSHED after analysis, so a cold call waits
+# out indexing (exit 2 = not_ready, retry):
+$S lsp diagnostics typescript greeter.ts --project $P --allow-run
+
 # Who calls hello? (incoming edge: Greeter.greet → hello)
 $S lsp call-hierarchy typescript greeter.ts 2 17 --project $P --allow-run
 

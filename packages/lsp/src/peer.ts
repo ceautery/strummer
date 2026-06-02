@@ -33,10 +33,12 @@ export const REFERENCES = () => loadFixture('references-locations.json')
 export const HOVER = () => loadFixture('hover-markup.json')
 export const DOCUMENT_SYMBOLS = () => loadFixture('document-symbols-hierarchical.json')
 export const WORKSPACE_SYMBOLS = () => loadFixture('workspace-symbols.json')
+export const DIAGNOSTICS = () => loadFixture('diagnostics-publish.json')
 export const CALL_HIERARCHY_PREPARE = () => loadFixture('call-hierarchy-prepare.json')
 export const CALL_HIERARCHY_INCOMING = () => loadFixture('call-hierarchy-incoming.json')
 export const CALL_HIERARCHY_OUTGOING = () => loadFixture('call-hierarchy-outgoing.json')
 export const PROGRESS_BEGIN = () => loadFixture('progress-begin.json')
+export const PROGRESS_END = () => loadFixture('progress-end.json')
 export const INIT_RENAME = () => loadFixture('initialize-result-rename.json')
 export const PREPARE_RENAME = () => loadFixture('prepare-rename.json')
 export const RENAME_CHANGES = () => loadFixture('rename-changes.json')
@@ -81,6 +83,10 @@ export interface FakeServerOptions {
   onDidOpen?: (params: unknown) => void
   /** When set, the definition handler emits this `$/progress` notification before replying. */
   emitProgressBeforeDefinition?: unknown
+  /** `$/progress` notifications the server emits (in order) right after `didOpen`. */
+  progressOnOpen?: unknown[]
+  /** A `textDocument/publishDiagnostics` params object the server pushes after `didOpen`/progress. */
+  diagnosticsOnOpen?: unknown
 }
 
 /** Wire a fake LSP server: answers the handshake + drained notifications, plus the given replies. */
@@ -90,7 +96,15 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
     return opts.initialize ?? INIT()
   })
   server.onNotification('initialized', () => {})
-  server.onNotification('textDocument/didOpen', (params: unknown) => opts.onDidOpen?.(params))
+  server.onNotification('textDocument/didOpen', (params: unknown) => {
+    opts.onDidOpen?.(params)
+    // Push-diagnostics model: the server emits its project-load progress then publishes
+    // diagnostics for the opened file (mirrors the captured real-server timeline).
+    for (const pr of opts.progressOnOpen ?? []) server.sendNotification('$/progress', pr)
+    if (opts.diagnosticsOnOpen !== undefined) {
+      server.sendNotification('textDocument/publishDiagnostics', opts.diagnosticsOnOpen)
+    }
+  })
   server.onRequest('textDocument/definition', (params: unknown) => {
     if (opts.emitProgressBeforeDefinition !== undefined) {
       server.sendNotification('$/progress', opts.emitProgressBeforeDefinition)

@@ -52,6 +52,7 @@ import {
   InitializedNotification,
   InitializeRequest,
   PrepareRenameRequest,
+  PublishDiagnosticsNotification,
   ReferencesRequest,
   RegistrationRequest,
   RenameRequest,
@@ -64,6 +65,7 @@ import {
 import { type PositionEncoding, PREFERRED_ENCODINGS, resolvePositionEncoding } from './encoding.js'
 import {
   type CallHierarchyItem,
+  type Diagnostic,
   type DocumentSymbol,
   decideStatus,
   type Hover,
@@ -71,12 +73,14 @@ import {
   type LocationLink,
   type NormalizedCall,
   type NormalizedCallItem,
+  type NormalizedDiagnostic,
   type NormalizedHover,
   type NormalizedLocation,
   type NormalizedSymbol,
   type NormalizedWorkspaceEdit,
   type NormalizedWorkspaceSymbol,
   normalizeCallHierarchyItem,
+  normalizeDiagnostics,
   normalizeDocumentSymbols,
   normalizeHover,
   normalizeIncomingCalls,
@@ -217,6 +221,17 @@ export class LspClient {
    */
   private readonly open = new Map<string, { refs: number; version: number }>()
 
+  /**
+   * Pushed diagnostics per uri (the PUSH model — `textDocument/publishDiagnostics` is a server
+   * notification, not a request; tsserver advertises no `diagnosticProvider`, so pull diagnostics
+   * are unavailable). An entry's absence ⇒ the server hasn't published for that uri yet.
+   */
+  private readonly diagnostics = new Map<string, { items: Diagnostic[] }>()
+  /** Uris freshly `didOpen`ed whose first post-open publish hasn't arrived yet. */
+  private readonly awaitingDiagnostics = new Set<string>()
+  /** Resolvers waiting for the NEXT publish on a uri (keyed); fired by the publish handler. */
+  private readonly diagnosticsWaiters = new Map<string, Array<() => void>>()
+
   constructor(connection: MessageConnection, options: LspClientOptions) {
     this.conn = connection
     this.timeoutMs = options.timeoutMs
@@ -287,6 +302,14 @@ export class LspClient {
           references: {},
           hover: { contentFormat: ['markdown', 'plaintext'] },
           documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+          // Push diagnostics (ADR 0011 staged tail): advertise client support so the server sends
+          // related-information + tags. There is NO `*Provider` to gate on — every server may push.
+          publishDiagnostics: {
+            relatedInformation: true,
+            tagSupport: { valueSet: [1, 2] },
+            versionSupport: true,
+            codeDescriptionSupport: true,
+          },
           callHierarchy: { dynamicRegistration: false },
           rename: {
             dynamicRegistration: false,
@@ -344,6 +367,17 @@ export class LspClient {
       applied: false,
       failureReason: 'strummer applies rename edits itself; server-initiated edits are declined',
     }))
+    // Push diagnostics: cache the latest per uri, clear the "awaiting first publish" flag, and wake
+    // any `documentDiagnostics` waiter. An empty `diagnostics` array is a legitimate publish (the
+    // server clearing a now-clean file), so it counts as a real answer.
+    this.conn.onNotification(
+      PublishDiagnosticsNotification.method,
+      (p: { uri: string; diagnostics?: Diagnostic[] }) => {
+        this.diagnostics.set(p.uri, { items: p.diagnostics ?? [] })
+        this.awaitingDiagnostics.delete(p.uri)
+        for (const w of this.diagnosticsWaiters.get(p.uri)?.splice(0) ?? []) w()
+      },
+    )
     this.conn.onNotification('$/progress', (p: ProgressParams) => {
       const kind = p?.value?.kind
       if (kind === 'begin') this.activeProgress.add(p.token)
@@ -387,6 +421,9 @@ export class LspClient {
       return
     }
     this.open.set(uri, { refs: 1, version: 1 })
+    // A fresh open triggers the server's first diagnostics publish for this uri; mark it pending so
+    // `documentDiagnostics` waits for that publish rather than trusting a stale/absent cache.
+    this.awaitingDiagnostics.add(uri)
     this.conn.sendNotification(DidOpenTextDocumentNotification.method, {
       textDocument: { uri, languageId, version: 1, text },
     })
@@ -476,6 +513,46 @@ export class LspClient {
       (raw) => normalizeDocumentSymbols(raw as DocumentSymbol[] | SymbolInformation[] | null),
       (syms) => syms.length === 0,
     )
+  }
+
+  /** A promise that resolves on the next `publishDiagnostics` for `uri`. */
+  private nextDiagnostics(uri: string): Promise<void> {
+    return new Promise((resolve) => {
+      const list = this.diagnosticsWaiters.get(uri) ?? []
+      list.push(resolve)
+      this.diagnosticsWaiters.set(uri, list)
+    })
+  }
+
+  /**
+   * Diagnostics for an OPEN document (ADR 0011 staged tail; PUSH model). NOT capability-gated —
+   * `textDocument/publishDiagnostics` is a server notification every server may send, and tsserver
+   * advertises no `diagnosticProvider` (pull diagnostics are staged). The caller (manager.run) has
+   * already `didOpen`ed the file, which triggers the server's publish.
+   *
+   * Readiness (grounded in the captured timeline — `didOpen` → `$/progress` begin/end → publish
+   * ~60ms AFTER the project loads): wait out the project-load `$/progress`, then return the publish
+   * once the file's first post-open publish has arrived. An EMPTY publish is a legitimate `ok` (a
+   * clean file), never `no_result`. If the project never settles or no publish arrives within the
+   * deadline ⇒ `not_ready` (retry), the same honest-tri-state posture as the navigation reads.
+   */
+  async documentDiagnostics(uri: string): Promise<NavResult<NormalizedDiagnostic[]>> {
+    const deadline = this.now() + this.timeoutMs
+    while (true) {
+      await this.awaitIndexingSettled(deadline)
+      // Once the project is loaded AND the file's first post-open publish has landed, the cached
+      // diagnostics are authoritative (a warm re-query takes this path immediately).
+      if (!this.indexing && !this.awaitingDiagnostics.has(uri)) {
+        const cached = this.diagnostics.get(uri)
+        return this.wrap('ok', normalizeDiagnostics(cached?.items))
+      }
+      const remaining = deadline - this.now()
+      if (remaining <= 0) {
+        const cached = this.diagnostics.get(uri)
+        return this.wrap('not_ready', normalizeDiagnostics(cached?.items))
+      }
+      await Promise.race([this.nextDiagnostics(uri), this.delay(remaining)])
+    }
   }
 
   /**

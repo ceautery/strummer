@@ -32,6 +32,7 @@ import type { LanguageServerManager } from './manager.js'
 import type {
   LspRange,
   NormalizedCallItem,
+  NormalizedDiagnostic,
   NormalizedHover,
   NormalizedLocation,
   NormalizedSymbol,
@@ -71,6 +72,7 @@ export type LspQueryKind =
   | 'hover'
   | 'documentSymbols'
   | 'workspaceSymbol'
+  | 'diagnostics'
   | 'callHierarchy'
 
 /** The position-based kinds — those that require a `line`/`column`. */
@@ -131,6 +133,18 @@ export interface ResultSymbol {
   children?: ResultSymbol[]
 }
 
+/** A diagnostic with its range(s) mapped to human 1-based coords. */
+export interface ResultDiagnostic {
+  range: HumanRange
+  message: string
+  severity?: number
+  severityName?: string
+  code?: number | string
+  source?: string
+  tags?: string[]
+  related?: { uri: string; range: HumanRange; message: string }[]
+}
+
 /** A workspace symbol with its range (if any) mapped to human 1-based coords. */
 export interface ResultWorkspaceSymbol {
   name: string
@@ -175,6 +189,7 @@ export interface LspQueryResult {
   hover?: { value: string; range?: HumanRange }
   symbols?: ResultSymbol[]
   workspaceSymbols?: ResultWorkspaceSymbol[]
+  diagnostics?: ResultDiagnostic[]
   callHierarchy?: ResultCallGroup[]
   serverInfo?: ServerInfo
   toolchain?: { name: string; version: string | null }
@@ -225,6 +240,7 @@ export class LspQueryEngine {
       | NavResult<NormalizedLocation[]>
       | NavResult<NormalizedHover | null>
       | NavResult<NormalizedSymbol[]>
+      | NavResult<NormalizedDiagnostic[]>
       | NavResult<CallHierarchyGroup[]>
     const nav = await this.manager.run<Nav>(
       { language: input.language, projectRoot: input.projectRoot, uri, text },
@@ -232,6 +248,8 @@ export class LspQueryEngine {
         switch (input.kind) {
           case 'documentSymbols':
             return client.documentSymbols(uri)
+          case 'diagnostics':
+            return client.documentDiagnostics(uri)
           default: {
             const pos = toLspPosition(
               text,
@@ -328,12 +346,23 @@ export class LspQueryEngine {
       | NavResult<NormalizedLocation[]>
       | NavResult<NormalizedHover | null>
       | NavResult<NormalizedSymbol[]>
+      | NavResult<NormalizedDiagnostic[]>
       | NavResult<CallHierarchyGroup[]>,
     queriedUri: string,
     queriedText: string,
   ): LspQueryResult {
     const { encoding } = nav
     const base = this.baseResult(input, nav)
+
+    if (input.kind === 'diagnostics') {
+      const diags = (nav as NavResult<NormalizedDiagnostic[]>).result
+      // Diagnostics are all in the QUERIED file; relatedInformation may point at other files.
+      const cache = new Map<string, string | undefined>([[queriedUri, queriedText]])
+      return {
+        ...base,
+        diagnostics: diags.map((d) => this.mapDiagnostic(d, queriedText, encoding, cache)),
+      }
+    }
 
     if (input.kind === 'hover') {
       const hover = (nav as NavResult<NormalizedHover | null>).result
@@ -407,6 +436,32 @@ export class LspQueryEngine {
     if (s.container !== undefined) out.container = s.container
     if (s.children && s.children.length > 0) {
       out.children = s.children.map((c) => this.mapSymbol(c, text, encoding))
+    }
+    return out
+  }
+
+  /** Map a diagnostic's range (queried file) + any relatedInformation ranges (their own files). */
+  private mapDiagnostic(
+    d: NormalizedDiagnostic,
+    queriedText: string,
+    encoding: PositionEncoding,
+    cache: Map<string, string | undefined>,
+  ): ResultDiagnostic {
+    const out: ResultDiagnostic = {
+      range: this.mapRange(queriedText, d.range, encoding),
+      message: d.message,
+    }
+    if (d.severity !== undefined) out.severity = d.severity
+    if (d.severityName !== undefined) out.severityName = d.severityName
+    if (d.code !== undefined) out.code = d.code
+    if (d.source !== undefined) out.source = d.source
+    if (d.tags !== undefined) out.tags = d.tags
+    if (d.related !== undefined) {
+      out.related = d.related.map((r) => ({
+        uri: r.uri,
+        range: this.mapRange(this.textForUri(r.uri, cache), r.range, encoding),
+        message: r.message,
+      }))
     }
     return out
   }

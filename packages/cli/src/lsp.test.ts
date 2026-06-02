@@ -202,6 +202,60 @@ describe('strummer lsp CLI', () => {
     expect(c.err()).toMatch(/workspace-symbols/)
   })
 
+  it('diagnostics (no position) prints the problems and exits 0', async () => {
+    let seen: LspQueryInput | undefined
+    const c = capture()
+    const code = await runLsp(
+      ['diagnostics', 'typescript', 'src/a.ts', '--project', '/proj'],
+      c.io,
+      {
+        query: async (input) => {
+          seen = input
+          return {
+            status: 'ok',
+            kind: 'diagnostics',
+            encoding: 'utf-16',
+            diagnostics: [
+              {
+                range: { start: { line: 6, column: 7 }, end: { line: 6, column: 11 } },
+                message: "Type 'string' is not assignable to type 'number'.",
+                severity: 1,
+                severityName: 'Error',
+                code: 2322,
+                source: 'typescript',
+              },
+            ],
+          }
+        },
+      },
+    )
+    expect(code).toBe(0)
+    expect(seen?.kind).toBe('diagnostics')
+    expect(seen?.file).toBe('src/a.ts')
+    expect(seen?.line).toBeUndefined()
+    expect(c.out()).toMatch(/Error/)
+    expect(c.out()).toMatch(/2322/)
+    expect(c.out()).toMatch(/6:7/)
+  })
+
+  it('diagnostics on a clean file reports no problems', async () => {
+    const c = capture()
+    const code = await runLsp(
+      ['diagnostics', 'typescript', 'src/a.ts', '--project', '/proj'],
+      c.io,
+      {
+        query: async () => ({
+          status: 'ok',
+          kind: 'diagnostics',
+          encoding: 'utf-16',
+          diagnostics: [],
+        }),
+      },
+    )
+    expect(code).toBe(0)
+    expect(c.out()).toMatch(/0 (diagnostic|problem)/i)
+  })
+
   it('not_ready status exits 2 (transient — retry)', async () => {
     const c = capture()
     const code = await runLsp(

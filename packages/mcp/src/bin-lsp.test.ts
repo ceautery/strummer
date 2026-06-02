@@ -50,6 +50,7 @@ describe('buildLspServerFromEnv', () => {
     expect(built.manager).toBeDefined()
     expect(await toolNames(built)).toEqual([
       'lsp_call_hierarchy',
+      'lsp_diagnostics',
       'lsp_document_symbols',
       'lsp_find_definition',
       'lsp_find_references',

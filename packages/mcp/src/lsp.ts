@@ -60,7 +60,8 @@ bound a server for, plus — once a server is running — its advertised capabil
 only when the operator enabled navigation) take a language + project root + file + 1-based
 line:column; \`lsp_document_symbols\` takes just a file (the outline, no position); and
 \`lsp_workspace_symbols\` takes just a query string (a project-wide symbol search by name — no file,
-no position). All return the answer with line:column mapped back to human coordinates. Positions are 1-based; columns count
+no position); and \`lsp_diagnostics\` takes just a file and lists its errors/warnings (an empty
+result = a clean file). All return the answer with line:column mapped back to human coordinates. Positions are 1-based; columns count
 Unicode code points. A result \`status\` is tri-state: "ok", "not_ready" (the server is still
 indexing — retry shortly; NOT the same as no result), or "no_result". Navigation requires a live
 indexing daemon, so it is operator-gated and confined to allowlisted project roots.
@@ -273,6 +274,63 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             ...envelope(result),
             symbolCount: symbols.length,
             symbols: symbols.slice(0, HEAD),
+            truncated: true,
+            fullHandle,
+          }
+        }
+        return { content: [text(structured)], structuredContent: structured }
+      },
+    )
+
+    server.registerTool(
+      'lsp_diagnostics',
+      {
+        title: 'Diagnostics (errors / warnings) for a file',
+        description:
+          'List the diagnostics (errors/warnings/hints) the language server reports for a file — ' +
+          'each with severity, message, code/source, and range in human 1-based line:column. No ' +
+          'position needed. PUSH model: the server publishes diagnostics after it analyses the open ' +
+          'file, so a cold call waits out project indexing — status "not_ready" means retry shortly. ' +
+          'An EMPTY result is a clean file (no problems). Operator-gated and confined to allowlisted ' +
+          'project roots. A large list is capped inline; the full list is returned by handle when an ' +
+          'artifact store is configured.',
+        inputSchema: {
+          language: z.string().describe('a language bound in the operator registry'),
+          projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
+          file: z
+            .string()
+            .describe('the file to diagnose, relative to projectRoot (or absolute within it)'),
+        },
+      },
+      async (args) => {
+        const language = args.language as string
+        const projectRoot = args.projectRoot as string
+        const toolchain = opts.detectToolchain?.(projectRoot, language)
+        const result = await query({
+          language,
+          projectRoot,
+          file: args.file as string,
+          kind: 'diagnostics',
+          ...(toolchain ? { toolchain } : {}),
+        })
+        const diagnostics = result.diagnostics ?? []
+        let structured: Record<string, unknown> = {
+          ...envelope(result),
+          diagnosticCount: diagnostics.length,
+          diagnostics,
+        }
+        if (diagnostics.length > HEAD && artifacts) {
+          const id = `diagnostics-${seq++}`
+          const fullHandle = artifacts.put(
+            id,
+            'diagnostics',
+            JSON.stringify(diagnostics, null, 2),
+            'application/json',
+          )
+          structured = {
+            ...envelope(result),
+            diagnosticCount: diagnostics.length,
+            diagnostics: diagnostics.slice(0, HEAD),
             truncated: true,
             fullHandle,
           }

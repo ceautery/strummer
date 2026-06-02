@@ -3,10 +3,12 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  type Diagnostic,
   decideStatus,
   type Hover,
   type Location,
   type LocationLink,
+  normalizeDiagnostics,
   normalizeDocumentSymbols,
   normalizeHover,
   normalizeLocations,
@@ -157,6 +159,58 @@ describe('normalizeWorkspaceSymbols', () => {
     const out = normalizeWorkspaceSymbols(syms)
     expect(out[0]).toEqual({ name: 'Lazy', kind: 5, kindName: 'Class', uri: 'file:///x.ts' })
     expect(out[0]?.range).toBeUndefined()
+  })
+})
+
+describe('normalizeDiagnostics', () => {
+  it('returns [] for null', () => {
+    expect(normalizeDiagnostics(null)).toEqual([])
+  })
+
+  it('normalizes the real publishDiagnostics payload (severity name, numeric code, source)', () => {
+    const params = fixture<{ diagnostics: Diagnostic[] }>('diagnostics-publish.json')
+    const result = normalizeDiagnostics(params.diagnostics)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      severity: 1,
+      severityName: 'Error',
+      code: 2322,
+      source: 'typescript',
+    })
+    expect(result[0]?.message).toContain('not assignable')
+    expect(result[0]?.range.start).toEqual({ line: 5, character: 6 })
+    // An empty `tags: []` is dropped (not surfaced as an empty array).
+    expect(result[0]?.tags).toBeUndefined()
+  })
+
+  it('maps severities + tags to names, keeps a string code, and carries relatedInformation', () => {
+    const diags: Diagnostic[] = [
+      {
+        range: RANGE,
+        message: 'unused + deprecated',
+        severity: 2,
+        code: 'no-unused',
+        tags: [1, 2],
+        relatedInformation: [
+          { location: { uri: 'file:///other.ts', range: RANGE }, message: 'first declared here' },
+        ],
+      },
+    ]
+    const [d] = normalizeDiagnostics(diags)
+    expect(d?.severityName).toBe('Warning')
+    expect(d?.code).toBe('no-unused')
+    expect(d?.tags).toEqual(['Unnecessary', 'Deprecated'])
+    expect(d?.related?.[0]).toEqual({
+      uri: 'file:///other.ts',
+      range: RANGE,
+      message: 'first declared here',
+    })
+  })
+
+  it('omits severityName when the server sent no severity', () => {
+    const [d] = normalizeDiagnostics([{ range: RANGE, message: 'bare' }])
+    expect(d?.severity).toBeUndefined()
+    expect(d?.severityName).toBeUndefined()
   })
 })
 

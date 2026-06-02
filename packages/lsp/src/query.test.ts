@@ -4,6 +4,7 @@ import {
   CALL_HIERARCHY_INCOMING,
   CALL_HIERARCHY_PREPARE,
   DEFINITION,
+  DIAGNOSTICS,
   DOCUMENT_SYMBOLS,
   fakeSpawn,
   HOVER,
@@ -86,6 +87,21 @@ function makeEngine(opts: Parameters<typeof fakeSpawn>[0] = {}, allowRun = true)
     },
   })
   return new LspQueryEngine({ manager, allowRun, allowedRoots: [ROOT], readFile })
+}
+
+// Push diagnostics arrive as an async server notification (stream I/O), which a real timer loses
+// to but the instant injected clock would race ahead of. So the diagnostics "ok" cases use a real
+// timer (the publish lands in ~1ms; the 1s backstop never fires) — `not_ready` stays on the clock.
+function makeRealTimerEngine(opts: Parameters<typeof fakeSpawn>[0] = {}): LspQueryEngine {
+  const tracker = fakeSpawn(opts)
+  trackers.push(tracker)
+  const manager = new LanguageServerManager({
+    registry: REGISTRY,
+    serverSpawn: tracker.spawn,
+    allowedRoots: [ROOT],
+    timeoutMs: 1000,
+  })
+  return new LspQueryEngine({ manager, allowRun: true, allowedRoots: [ROOT], readFile })
 }
 
 const DEF_INPUT = {
@@ -287,6 +303,59 @@ describe('LspQueryEngine workspaceSymbol (file-less, position-less)', () => {
   it('still gated: refuses when allowRun is off', async () => {
     const engine = makeEngine({ onWorkspaceSymbol: () => WORKSPACE_SYMBOLS() }, false)
     await expect(engine.query(WSYM_INPUT)).rejects.toBeInstanceOf(LspGateError)
+  })
+})
+
+describe('LspQueryEngine diagnostics (push, file-based, position-less)', () => {
+  const DIAG_INPUT = {
+    language: 'typescript',
+    projectRoot: ROOT,
+    file: 'src/index.ts',
+    kind: 'diagnostics' as const,
+  }
+  // A publish for the opened file (uri must match `pathToFileURL(<root>/src/index.ts)`), with a
+  // diagnostic whose LSP range lands inside INDEX_TEXT so it maps to human coords faithfully.
+  const PUBLISH = (diagnostics: unknown[]) => ({
+    diagnosticsOnOpen: {
+      uri: 'file:///project/src/index.ts',
+      diagnostics,
+    },
+  })
+  const errorAt = {
+    range: { start: { line: 2, character: 6 }, end: { line: 2, character: 7 } },
+    message: "Type 'string' is not assignable to type 'number'.",
+    severity: 1,
+    code: 2322,
+    source: 'typescript',
+  }
+
+  it('opens the file, returns the pushed diagnostics mapped to human coords (no position)', async () => {
+    const engine = makeRealTimerEngine(PUBLISH([errorAt]))
+    const r = await engine.query(DIAG_INPUT)
+    expect(r.status).toBe('ok')
+    expect(r.kind).toBe('diagnostics')
+    expect(r.diagnostics).toHaveLength(1)
+    expect(r.diagnostics?.[0]?.severityName).toBe('Error')
+    // LSP 0-based line 2 char 6 → human line 3 column 7.
+    expect(r.diagnostics?.[0]?.range.start).toEqual({ line: 3, column: 7 })
+  })
+
+  it('a clean file (empty publish) is ok with no diagnostics (not no_result)', async () => {
+    const engine = makeRealTimerEngine(PUBLISH([]))
+    const r = await engine.query(DIAG_INPUT)
+    expect(r.status).toBe('ok')
+    expect(r.diagnostics).toEqual([])
+  })
+
+  it('not_ready while the project is still indexing and nothing is published', async () => {
+    const engine = makeEngine({ progressOnOpen: [PROGRESS_BEGIN()] }) // begin, no end, no publish
+    const r = await engine.query(DIAG_INPUT)
+    expect(r.status).toBe('not_ready')
+  })
+
+  it('still gated: refuses when allowRun is off', async () => {
+    const engine = makeEngine(PUBLISH([errorAt]), false)
+    await expect(engine.query(DIAG_INPUT)).rejects.toBeInstanceOf(LspGateError)
   })
 })
 

@@ -6,6 +6,7 @@ import {
   CALL_HIERARCHY_OUTGOING,
   CALL_HIERARCHY_PREPARE,
   DEFINITION,
+  DIAGNOSTICS,
   DOCUMENT_SYMBOLS,
   type FakeServerOptions,
   fakeServer,
@@ -16,6 +17,7 @@ import {
   makePeerPair,
   PREPARE_RENAME,
   PROGRESS_BEGIN,
+  PROGRESS_END,
   REFERENCES,
   RENAME_CHANGES,
   TYPE_DEFINITION,
@@ -357,6 +359,59 @@ describe('LspClient write-mode (rename / prepareRename)', () => {
     init.capabilities.renameProvider = false
     const { client } = await connectedClient({ initialize: init })
     await expect(client.rename(GREETER_URI, POS, 'X')).rejects.toThrow(/rename/i)
+  })
+})
+
+describe('LspClient.documentDiagnostics (push model)', () => {
+  const DIAG_URI = 'file:///project/diag.ts'
+  const publishFor = (uri: string, diagnostics: unknown[]) => ({ uri, diagnostics })
+  const errorDiags = () => (DIAGNOSTICS() as { diagnostics: unknown[] }).diagnostics
+
+  it('returns ok with the pushed diagnostics after didOpen (no capability gate — push has none)', async () => {
+    const { client } = await connectedClient({
+      diagnosticsOnOpen: publishFor(DIAG_URI, errorDiags()),
+    })
+    client.ensureOpen(DIAG_URI, 'typescript', 'const _bad: number = "x"\n')
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('ok')
+    expect(r.result).toHaveLength(1)
+    expect(r.result[0]).toMatchObject({ severityName: 'Error', code: 2322, source: 'typescript' })
+  })
+
+  it('treats an empty publish as ok (a clean file, NOT no_result)', async () => {
+    const { client } = await connectedClient({ diagnosticsOnOpen: publishFor(DIAG_URI, []) })
+    client.ensureOpen(DIAG_URI, 'typescript', 'const ok = 1\n')
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('ok')
+    expect(r.result).toEqual([])
+  })
+
+  it('waits out the project-load $/progress, then returns the post-settle publish', async () => {
+    const { client } = await connectedClient({
+      progressOnOpen: [PROGRESS_BEGIN(), PROGRESS_END()],
+      diagnosticsOnOpen: publishFor(DIAG_URI, errorDiags()),
+    })
+    client.ensureOpen(DIAG_URI, 'typescript', 'const _bad: number = "x"\n')
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('ok')
+    expect(r.result).toHaveLength(1)
+  })
+
+  it('not_ready when the project never settles and no diagnostics are published', async () => {
+    let t = 0
+    const { client } = await connectedClient({
+      progressOnOpen: [PROGRESS_BEGIN()], // begin, no end ⇒ indexing stays active
+      clientOptions: {
+        timeoutMs: 1000,
+        now: () => t,
+        delay: async (ms: number) => {
+          t += ms
+        },
+      },
+    })
+    client.ensureOpen(DIAG_URI, 'typescript', 'const x = 1\n')
+    const r = await client.documentDiagnostics(DIAG_URI)
+    expect(r.status).toBe('not_ready')
   })
 })
 

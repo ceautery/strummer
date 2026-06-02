@@ -683,8 +683,20 @@ Two independent tracks, then the test-quality chain, then LSP last:
         lists by handle) + `strummer lsp workspace-symbols <language> <query> [anchorFile]` CLI.
         An OPTIONAL anchor `file` opens a document so a tsserver-style project loads (a "No Project"
         bug caught running the greeter live; eager indexers don't need it). Verified live.
-  - [ ] *(staged, not amputated)* write-mode for resource ops + multi-file conflict reconciliation,
-        `diagnostics`, multi-**root** (the project-LOAD half is fixed),
+  - [x] **`diagnostics` — `lsp_diagnostics` (PUSH model).** Errors/warnings for a file.
+        `textDocument/publishDiagnostics` is a server NOTIFICATION, not a request (tsserver advertises
+        no `diagnosticProvider`, so pull `textDocument/diagnostic` is staged). Pure
+        `normalizeDiagnostics` (severity/tag names, code, source, relatedInformation) over a recorded
+        real `typescript-language-server` 5.3.0 publish payload; `client.documentDiagnostics`
+        accumulates pushed diagnostics per-uri and — grounded in the captured timeline (publish lands
+        ~60ms AFTER the project loads) — waits out the project-load `$/progress` then returns the
+        post-settle publish (empty = clean `ok`, never settles/no publish = `not_ready`); a
+        `'diagnostics'` query kind (file-based, position-less); the gated `lsp_diagnostics` MCP tool
+        (large lists by handle) + `strummer lsp diagnostics <language> <file>` CLI. Verified live
+        (clean file → 0; an introduced error → the 2322 error + a 6133 unused hint).
+  - [ ] *(staged, not amputated)* pull-diagnostics (`textDocument/diagnostic`, for servers that
+        advertise `diagnosticProvider`), write-mode for resource ops + multi-file conflict
+        reconciliation, multi-**root** (the project-LOAD half is fixed),
         full toolchain-version resolution, Python adapter posture.
 
 ## Ongoing

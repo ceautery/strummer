@@ -250,6 +250,75 @@ export function normalizeWorkspaceSymbols(
   })
 }
 
+// --- Diagnostics (ADR 0011 staged tail; PUSH model) ----------------------------------------
+
+// LSP DiagnosticSeverity (1-based) + DiagnosticTag enums.
+const SEVERITY_NAMES = ['Error', 'Warning', 'Information', 'Hint'] as const
+const TAG_NAMES: Record<number, string> = { 1: 'Unnecessary', 2: 'Deprecated' }
+
+export function diagnosticSeverityName(severity: number): string {
+  return SEVERITY_NAMES[severity - 1] ?? 'Unknown'
+}
+
+/** A raw LSP `Diagnostic` (the member of a `publishDiagnostics` notification's `diagnostics`). */
+export interface Diagnostic {
+  range: LspRange
+  message: string
+  severity?: number
+  code?: number | string
+  source?: string
+  tags?: number[]
+  relatedInformation?: { location: Location; message: string }[]
+}
+
+export interface NormalizedRelatedInfo {
+  uri: string
+  /** LSP 0-based range (mapped to human coords against its own file at the surface). */
+  range: LspRange
+  message: string
+}
+
+export interface NormalizedDiagnostic {
+  /** LSP 0-based range (mapped to human coords in the queried file at the surface). */
+  range: LspRange
+  message: string
+  severity?: number
+  /** `Error`/`Warning`/`Information`/`Hint`, when the server set a severity. */
+  severityName?: string
+  code?: number | string
+  source?: string
+  /** `Unnecessary`/`Deprecated`, only when non-empty. */
+  tags?: string[]
+  related?: NormalizedRelatedInfo[]
+}
+
+/** Normalize a `publishDiagnostics` `diagnostics[]` (push model) — severity/tag names, related info. */
+export function normalizeDiagnostics(
+  items: Diagnostic[] | null | undefined,
+): NormalizedDiagnostic[] {
+  if (items == null) return []
+  return items.map((d) => {
+    const out: NormalizedDiagnostic = { range: d.range, message: d.message }
+    if (d.severity !== undefined) {
+      out.severity = d.severity
+      out.severityName = diagnosticSeverityName(d.severity)
+    }
+    if (d.code !== undefined) out.code = d.code
+    if (d.source !== undefined) out.source = d.source
+    if (d.tags && d.tags.length > 0) {
+      out.tags = d.tags.map((t) => TAG_NAMES[t] ?? `Tag(${t})`)
+    }
+    if (d.relatedInformation && d.relatedInformation.length > 0) {
+      out.related = d.relatedInformation.map((r) => ({
+        uri: r.location.uri,
+        range: r.location.range,
+        message: r.message,
+      }))
+    }
+    return out
+  })
+}
+
 // --- Call hierarchy (ADR 0011 staged tail) -------------------------------------------------
 
 /** A raw `CallHierarchyItem` (prepareCallHierarchy result + the node inside incoming/outgoing). */

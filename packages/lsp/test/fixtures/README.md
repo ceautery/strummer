@@ -44,6 +44,19 @@ has a real caller/callee edge), `index.ts` doing `const g = new Greeter(...)`:
   hand-authored input in `normalize.test.ts` (it asserts our range-absent policy, not a server
   payload shape — same carve-out as the rename resource-op branch).
 
+- `diagnostics-publish.json` — a genuine `textDocument/publishDiagnostics` notification params
+  object. PUSH diagnostics: the server reports problems for an open file via a notification, NOT a
+  request (tsserver 5.3.0 advertises **no `diagnosticProvider`**, so the LSP 3.17 pull
+  `textDocument/diagnostic` request is unavailable — push is the v1 model). Captured by temporarily
+  adding a `const _bad: number = "not a number"` type error to `index.ts`. The observed timing
+  settles the readiness model: `didOpen` → `$/progress` begin (+141ms) → end (+554ms, project load)
+  → **publishDiagnostics (+617ms, AFTER indexing ends)**, exactly once, `version: undefined`. So
+  `documentDiagnostics` opens the file, waits out the project-load `$/progress`, then awaits the
+  post-settle publish. One `Diagnostic`: `severity: 1` (Error), `code: 2322` (a number), `source:
+  "typescript"`, empty `tags`. A clean file publishes an empty `diagnostics` array (= no problems);
+  that and the `relatedInformation`/string-`code` variants are exercised by inline inputs in
+  `normalize.test.ts` (policy, not a captured server shape — the same carve-out as elsewhere).
+
 The only edit applied to the captures is normalizing the environment-specific absolute
 path prefix to a stable `/project` (structure preserved verbatim).
 

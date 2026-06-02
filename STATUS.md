@@ -153,8 +153,11 @@ dry-run-default + a separate `allowWrite` gate)**, and **the five human verifica
 (`strummer mutate`/`coverage`/`flake`/`deps`/`lsp`), the LSP cold-project-load fix, and now the
 **LSP `workspace/symbol` search tail** (project-wide symbol search by name — `lsp_workspace_symbols`
 MCP tool + `strummer lsp workspace-symbols` CLI + the gated query path; an optional anchor `file`
-opens a document so a tsserver-style project loads, a bug caught running the greeter live) — current
-count is 861 TS + 45 Py green; see the Next-action block for the detail.**)_
+opens a document so a tsserver-style project loads, a bug caught running the greeter live), and now
+the **LSP `diagnostics` tail** (push-model errors/warnings for a file — `lsp_diagnostics` MCP tool +
+`strummer lsp diagnostics` CLI; the server PUSHES `publishDiagnostics` after analysis, so the client
+waits out indexing then returns the post-settle publish; empty = clean, not_ready = retry) — current
+count is 876 TS + 45 Py green; see the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -740,14 +743,34 @@ file is open, so a file-less `workspace/symbol` errors "No Project" — fixed by
 `file` that the engine opens first to establish the project (eager indexers gopls/rust-analyzer
 don't need it). Verified live: `Greeter` returns the const + class with correctly mapped human
 ranges; file-less surfaces the honest "No Project" error. Greeter + CLI READMEs document the anchor.
-**Remaining non-blocking tails:** LSP `diagnostics`, **multi-ROOT** (the project-LOAD half is fixed),
-write-mode for resource ops + multi-file conflict reconciliation, full toolchain-mismatch heuristic;
-mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems.
+**LSP `diagnostics` DONE, 876 TS + 45 Py green (ADR 0011 staged tail):** errors/warnings for a file
+via the **PUSH model** — `textDocument/publishDiagnostics` is a server NOTIFICATION, not a request
+(tsserver advertises no `diagnosticProvider`, so the LSP 3.17 pull `textDocument/diagnostic` is
+unavailable; pull is staged). Slices, all TDD: pure `normalizeDiagnostics` (severity/tag names,
+numeric|string `code`, `source`, `relatedInformation`) over a **recorded real
+`typescript-language-server` 5.3.0** `publishDiagnostics` payload (`diagnostics-publish.json`,
+captured out-of-gate by temporarily adding a type error to `index.ts`); `client.documentDiagnostics`
+(NOT capability-gated — push has no provider; accumulates pushed diagnostics per-uri, marks a fresh
+`didOpen` as awaiting-first-publish, waits out the project-load `$/progress` then returns the
+post-settle publish — empty = clean `ok`, never `no_result`; no publish/never-settles = `not_ready`);
+a `'diagnostics'` `LspQueryKind` (file-based, position-less; ranges + relatedInformation mapped to
+human coords); the gated `lsp_diagnostics` MCP tool (nav group; large lists by handle) + `strummer
+lsp diagnostics <language> <file>` CLI. **The readiness model was grounded in the captured timeline,
+not guessed** — `didOpen` → `$/progress` begin/end → publish ~60ms AFTER the project loads. Gate
+determinism: push diagnostics arrive as async stream I/O, which the instant injected test-clock would
+race ahead of, so the "ok" paths use a real timer (publish lands in ~1ms) while `not_ready` stays on
+the clock. Verified live: a clean file → 0 diagnostics; an introduced type error → the 2322 error +
+a 6133 unused-var hint (both severities + human-mapped ranges).
+**Remaining non-blocking tails:** LSP pull-diagnostics (`textDocument/diagnostic`, for servers that
+advertise `diagnosticProvider`), **multi-ROOT** (the project-LOAD half is fixed), write-mode for
+resource ops + multi-file conflict reconciliation, full toolchain-mismatch heuristic; mutate
+cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems.
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); `workspace/symbol` search
-(DONE — `lsp_workspace_symbols` + CLI, optional anchor file); then
-`diagnostics`, multi-root, the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
+(DONE — `lsp_workspace_symbols` + CLI, optional anchor file); `diagnostics` (DONE — push-model
+`lsp_diagnostics` + CLI; pull-diagnostics `textDocument/diagnostic` still staged); then
+multi-root, the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
 write-mode resource-ops + multi-file conflict reconciliation, and a Python adapter posture. **Other
 Phase-4 staged tails:** `istanbul-lib-coverage` `CoverageMap` merging; a Python `run_scoped` (pytest
 --cov) sibling; mutate cosmic-ray adapter + gated `runMutmut` spawner. (The deps PyPI/RubyGems

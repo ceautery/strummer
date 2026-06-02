@@ -11,6 +11,7 @@ import {
   type LspRenameInput,
   type LspRenameResult,
   parseServerRegistry,
+  type ResultDiagnostic,
   type ResultSymbol,
   type ResultWorkspaceSymbol,
   type ServerDescription,
@@ -61,6 +62,8 @@ export async function runLsp(args: string[], io: CliIO, deps: LspDeps = {}): Pro
       return cmdQuery('hover', rest, io, deps)
     case 'symbols':
       return cmdQuery('documentSymbols', rest, io, deps)
+    case 'diagnostics':
+      return cmdQuery('diagnostics', rest, io, deps)
     case 'workspace-symbols':
       return cmdWorkspaceSymbols(rest, io, deps)
     case 'call-hierarchy':
@@ -221,7 +224,7 @@ async function cmdQuery(
     allowPositionals: true,
     options: { ...GATE_OPTIONS, direction: { type: 'string' } },
   })
-  const positionLess = kind === 'documentSymbols'
+  const positionLess = kind === 'documentSymbols' || kind === 'diagnostics'
   const [language, file, lineRaw, colRaw] = positionals
   if (!language || !file || (!positionLess && (lineRaw === undefined || colRaw === undefined))) {
     io.err(
@@ -263,6 +266,12 @@ async function cmdQuery(
       const symbols = result.symbols ?? []
       io.out(`${symbols.length} symbol(s):\n`)
       printSymbols(io, symbols, 0)
+    } else if (kind === 'diagnostics') {
+      const diags = result.diagnostics ?? []
+      io.out(`${diags.length} diagnostic(s):\n`)
+      for (const d of diags) {
+        printDiagnostic(io, d)
+      }
     } else if (kind === 'callHierarchy') {
       const groups = result.callHierarchy ?? []
       for (const g of groups) {
@@ -340,6 +349,16 @@ async function cmdWorkspaceSymbols(args: string[], io: CliIO, deps: LspDeps): Pr
     return 1
   } finally {
     await engines.shutdown()
+  }
+}
+
+function printDiagnostic(io: CliIO, d: ResultDiagnostic): void {
+  const sev = d.severityName ?? (d.severity !== undefined ? `severity ${d.severity}` : 'Diagnostic')
+  const where = `${d.range.start.line}:${d.range.start.column}`
+  const code = d.code !== undefined ? ` [${d.source ? `${d.source} ` : ''}${d.code}]` : ''
+  io.out(`  ${where}  ${sev}${code}  ${d.message}\n`)
+  for (const r of d.related ?? []) {
+    io.out(`      ↳ ${r.uri} ${r.range.start.line}:${r.range.start.column}  ${r.message}\n`)
   }
 }
 

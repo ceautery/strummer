@@ -35,6 +35,8 @@ interface ToolJson {
   symbolCount?: number
   symbols?: Array<{ name: string; kindName: string; children?: unknown[] }>
   workspaceSymbols?: Array<{ name: string; kindName: string; uri: string }>
+  diagnosticCount?: number
+  diagnostics?: Array<{ message: string; severityName?: string; code?: number | string }>
   direction?: string
   callCount?: number
   callHierarchy?: Array<{ source: { name: string }; calls: Array<{ item: { name: string } }> }>
@@ -124,6 +126,7 @@ describe('lsp MCP surface gating', () => {
     const gated = await connect({ ...GATED, query: stubQuery(okDefinition).query })
     expect((await gated.listTools()).tools.map((t) => t.name).sort()).toEqual([
       'lsp_call_hierarchy',
+      'lsp_diagnostics',
       'lsp_document_symbols',
       'lsp_find_definition',
       'lsp_find_references',
@@ -345,6 +348,35 @@ describe('lsp navigation tools', () => {
     expect(data.fullHandle).toMatch(/^strummer:\/\/lsp\//)
     const full = await client.readResource({ uri: data.fullHandle as string })
     expect(firstJson<unknown[]>(full.contents)).toHaveLength(120)
+  })
+
+  it('lsp_diagnostics returns diagnostics for a file (no position) for the diagnostics kind', async () => {
+    const stub = stubQuery({
+      status: 'ok',
+      kind: 'diagnostics',
+      encoding: 'utf-16',
+      diagnostics: [
+        {
+          range: { start: { line: 6, column: 7 }, end: { line: 6, column: 11 } },
+          message: "Type 'string' is not assignable to type 'number'.",
+          severity: 1,
+          severityName: 'Error',
+          code: 2322,
+          source: 'typescript',
+        },
+      ],
+    })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({
+      name: 'lsp_diagnostics',
+      arguments: { language: 'typescript', projectRoot: '/project', file: 'src/index.ts' },
+    })
+    const data = firstJson(res.content)
+    expect(stub.last()?.kind).toBe('diagnostics')
+    expect(stub.last()?.line).toBeUndefined() // position-less
+    expect(data.diagnosticCount).toBe(1)
+    expect(data.diagnostics?.[0]?.severityName).toBe('Error')
+    expect(data.diagnostics?.[0]?.code).toBe(2322)
   })
 
   it('passes through detected toolchain provenance', async () => {
