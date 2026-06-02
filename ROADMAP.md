@@ -664,9 +664,18 @@ Two independent tracks, then the test-quality chain, then LSP last:
         the gate never spawns a real server, and production builds the real manager/engine per
         invocation and shuts it down. Exit 2 = `not_ready` (retry). Ships `examples/lsp/greeter`
         (a tiny TS project mirroring the fixture-capture shape) + an offline coordinate guard.
+  - [x] **Cold-project-load fix** — running the greeter example live caught a real bug: tsserver
+        answers an early request from a single-file *inferred* project (a non-empty BUT partial
+        result) while still loading the configured `tsconfig` project, so a cold cross-file
+        `references`/`rename` saw only the opened file. Fixed in `client.ts` `withRetry`: a result
+        returned **while indexing is active is untrusted** — wait out the project-load `$/progress`
+        (event-driven, injected-`delay` deadline backstop) and re-query the loaded project; traded
+        "return `not_ready` fast" for "wait for the correct answer within the deadline". Verified
+        live (cold `Greeter` references/rename now return the full cross-file set). New fake-peer
+        test replays the captured timeline; no real server in the gate (ADR 0011).
   - [ ] *(staged, not amputated)* write-mode for resource ops + multi-file conflict reconciliation,
-        `workspace/symbol` search, `diagnostics`, multi-root, full toolchain-version resolution,
-        Python adapter posture.
+        `workspace/symbol` search, `diagnostics`, multi-**root** (the project-LOAD half is fixed),
+        full toolchain-version resolution, Python adapter posture.
 
 ## Ongoing
 

@@ -58,30 +58,28 @@ $S lsp call-hierarchy typescript greeter.ts 2 17 --project $P --allow-run
 # Type of the `greeter` value in index.ts (index.ts:3:7) → class Greeter:
 $S lsp type-definition typescript index.ts 3 7 --project $P --allow-run
 
-# Rename hello → greetWith (greeter.ts:2:17). DRY-RUN by default — prints the
-# proposed edits (the declaration + its call in greet) and writes nothing:
-$S lsp rename typescript greeter.ts 2 17 greetWith --project $P --allow-run
-# Add --allow-write to actually write the edits to disk, with per-file SHA-256 digests:
-$S lsp rename typescript greeter.ts 2 17 greetWith --project $P --allow-run --allow-write
+# Rename the Greeter class (greeter.ts:7:14) — CROSS-FILE. DRY-RUN by default:
+# prints the proposed edits (the declaration + the import & usage in index.ts) and
+# writes nothing:
+$S lsp rename typescript greeter.ts 7 14 Welcomer --project $P --allow-run
+# Add --allow-write to write the edits to disk across both files, with SHA-256 digests:
+$S lsp rename typescript greeter.ts 7 14 Welcomer --project $P --allow-run --allow-write
 ```
 
-### A note on cold, single-shot resolution
+### Cross-file results & the indexing wait
 
-Each invocation opens **only the queried file** and asks the server once. `tsserver`
-answers an early request from a single-file *inferred* project before it has finished
-loading the `tsconfig.json` project, so a **cold** `references`/`rename` sees only the
-symbols in the opened file. `hello` lives entirely in `greeter.ts`, so renaming it
-rewrites both its uses; but renaming `Greeter` *from `greeter.ts`* rewrites only its
-declaration and misses the `index.ts` import/usage (run `references` from each side to
-see this — `Greeter` from `index.ts:3:21` finds the two `index.ts` sites, `Greeter` from
-`greeter.ts:7:14` finds only the declaration). `type-definition` still crosses files
-because that is forward module resolution (the server reads the imported file), not a
-project-wide reverse search. Project-wide cross-file rename depends on the full project
-being loaded — tracked as a staged LSP tail (project load / multi-root). For now, prefer
-single-file symbols (like `hello`) for `--allow-write`, and review the dry-run preview
-first.
+Each invocation opens **only the queried file**, but cross-file answers are still correct:
+the engine **waits out the server's project-load `$/progress`** before trusting a result,
+so `references`/`rename` on `Greeter` see the `index.ts` import + usage too (not just the
+`greeter.ts` declaration). `tsserver` answers an early request from a single-file *inferred*
+project while still loading the `tsconfig.json` project; the engine detects the in-flight
+indexing and re-queries the loaded project, so you get the full set. The trade-off is
+latency: a **cold** query pauses briefly (a few hundred ms) while the server indexes. If
+indexing exceeds the per-request timeout the result `status` is `not_ready` (retry); raise
+it with `--timeout-ms`. (Multi-*root* workspaces remain a staged LSP tail.)
 
-A result `status` is tri-state — `ok`, `no_result`, or `not_ready` (the server is still
-indexing; **retry**). Exit codes: `0` the query ran, `1` denied/refused/error, `2`
-`not_ready`. Each invocation is single-shot: the CLI spawns the server, runs one query,
+A result `status` is tri-state — `ok`, `no_result`, or `not_ready` (the server was still
+indexing past the deadline; **retry** or raise `--timeout-ms`). Exit codes: `0` the query
+ran, `1` denied/refused/error, `2` `not_ready`. Each invocation is single-shot: the CLI
+spawns the server, runs one query,
 and shuts it down.

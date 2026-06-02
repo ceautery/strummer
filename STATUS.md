@@ -150,7 +150,7 @@ MCP surface/bin) now also landed — Phase 4 pillars COMPLETE (at 659 TS). **Sin
 non-blocking tails landed: the cross-pillar Python adapters (flake/coverage/deps/mutate), the LSP
 capability-gated read tails, **LSP write-mode (`lsp_rename`, ADR 0011 addendum slices A–G:
 dry-run-default + a separate `allowWrite` gate)**, and **the five human verification CLIs
-(`strummer mutate`/`coverage`/`flake`/`deps`/`lsp`)** — current count is 839 TS + 45 Py green; see
+(`strummer mutate`/`coverage`/`flake`/`deps`/`lsp`), plus the LSP cold-project-load fix — current count is 842 TS + 45 Py green; see
 the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
@@ -707,9 +707,22 @@ per-surface pattern; private registries gated by `--allow-private`). The `lsp` C
 surface's stub pattern (inject `query`/`rename`/`describeServers` for success paths; the gate-refusal
 path uses the real build, where `assertAllowed` throws before any spawn — so no real server in the
 gate, ADR 0011). 41 new CLI tests across five files (`mutate`/`coverage`/`flake`/`deps`/`lsp`).
-**Remaining non-blocking tails:** LSP `workspace/symbol`, `diagnostics`, multi-root, write-mode for
-resource ops + multi-file conflict reconciliation, full toolchain-mismatch heuristic; deps
-cosmic-ray/`runMutmut` spawner.
+**LSP COLD-PROJECT-LOAD FIX DONE, 842 TS + 45 Py green:** running the new `examples/lsp/greeter`
+live (typescript-language-server 5.3.0) caught a real bug — tsserver answers an early request from
+a single-file **inferred** project (a non-empty BUT partial result) while still loading the
+configured `tsconfig` project, and the client's `withRetry` trusted any non-empty result as `ok`
+(so a cold cross-file `references`/`rename` saw only the opened file — e.g. renaming `Greeter`
+missed its `index.ts` usages). A live capture proved the `$/progress` timeline. Fixed in
+`client.ts` `withRetry`: a result returned **while indexing is active is untrusted** — wait out the
+project-load `$/progress` (event-driven on the `end`, injected-`delay` deadline backstop) before
+trusting/returning, and re-query if the send itself triggered the load. Traded "return `not_ready`
+fast" for "wait for the correct answer within the deadline" (bounded). Applies to all withRetry
+paths (definition/references/hover/symbols/prepareRename/rename). Verified live: cold
+`references`/`rename` on `Greeter` now return the full cross-file set (3 locs / 3 edits across 2
+files). The example README + the `strummer-lsp-cold-single-shot` memory updated to reflect the fix.
+**Remaining non-blocking tails:** LSP `workspace/symbol`, `diagnostics`, **multi-ROOT** (the
+project-LOAD half is now fixed), write-mode for resource ops + multi-file conflict reconciliation,
+full toolchain-mismatch heuristic; deps cosmic-ray/`runMutmut` spawner.
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); then `workspace/symbol`,
