@@ -204,6 +204,8 @@ export class LspClient {
 
   /** Active indexing work-done-progress tokens — non-empty ⇒ the server is still indexing. */
   private readonly activeProgress = new Set<string | number>()
+  /** Resolvers waiting for indexing to DRAIN (the active set to empty); fired on the final `end`. */
+  private readonly drainWaiters: Array<() => void> = []
   /**
    * Open documents (open-once, no `didClose` by default). `version` is the per-uri monotonic
    * document version: seeded at 1 by `didOpen`, pre-incremented by each `applyEdited` `didChange`
@@ -337,8 +339,36 @@ export class LspClient {
     this.conn.onNotification('$/progress', (p: ProgressParams) => {
       const kind = p?.value?.kind
       if (kind === 'begin') this.activeProgress.add(p.token)
-      else if (kind === 'end') this.activeProgress.delete(p.token)
+      else if (kind === 'end') {
+        this.activeProgress.delete(p.token)
+        // The project finished loading — wake anyone waiting for the index to settle.
+        if (this.activeProgress.size === 0) {
+          for (const w of this.drainWaiters.splice(0)) w()
+        }
+      }
     })
+  }
+
+  /** A promise that resolves the next time indexing drains to empty (an `end` clears the set). */
+  private indexingDrain(): Promise<void> {
+    return new Promise((resolve) => this.drainWaiters.push(resolve))
+  }
+
+  /**
+   * Wait until the server is NOT indexing, bounded by `deadline`. Returns true if it settled,
+   * false if the deadline elapsed while still indexing. Event-driven (resolves on the `$/progress`
+   * `end`), with the injected `delay` as the deadline backstop — so the gate drives it
+   * deterministically and a real session blocks no longer than the operator timeout.
+   */
+  private async awaitIndexingSettled(deadline: number): Promise<boolean> {
+    while (this.indexing) {
+      const remaining = deadline - this.now()
+      if (remaining <= 0) return false
+      const drained = this.indexingDrain()
+      if (!this.indexing) return true // an `end` raced in between the check and the registration
+      await Promise.race([drained, this.delay(remaining)])
+    }
+    return true
   }
 
   /** Open a document full-text once (version 1); subsequent calls just bump the refcount. */
@@ -543,10 +573,23 @@ export class LspClient {
   }
 
   /**
-   * The tri-state request loop: send → normalize → decide. A non-empty result is `ok`; an
-   * empty result while indexing is `not_ready` (returned fast); an empty result with no
-   * indexing is `no_result` — and ONLY that case is retried, with bounded backoff strictly
-   * inside the single operator deadline.
+   * The tri-state request loop: settle → send → decide, all inside one operator deadline.
+   *
+   * The load-bearing rule (ADR 0011 addendum — proven by a live `typescript-language-server`
+   * capture): **a result returned while the server is still indexing the project is NOT
+   * trustworthy** — tsserver answers an early request from a single-file *inferred* project
+   * (a non-empty BUT PARTIAL answer — e.g. a cross-file rename that sees only the opened file)
+   * and only *then* finishes loading the configured project. So:
+   *
+   * 1. Before sending, wait out any in-flight indexing (`awaitIndexingSettled`) so we hit the
+   *    loaded project.
+   * 2. After sending, if indexing is active (the send itself triggered the configured-project
+   *    load), the answer is from the unstable inferred project — loop to settle + re-query.
+   * 3. Once the server is settled: a non-empty result is `ok`; an empty result is `no_result`
+   *    (retried with bounded backoff) — or `not_ready` only if we hit the deadline still indexing.
+   *
+   * This trades the old "return `not_ready` fast" for "wait for the correct answer within the
+   * deadline" — correctness over latency, bounded by the operator timeout.
    */
   private async withRetry<T>(
     send: () => Promise<unknown>,
@@ -556,10 +599,17 @@ export class LspClient {
     const deadline = this.now() + this.timeoutMs
     let attempt = 0
     while (true) {
+      // (1) Never query a still-loading project; wait for the indexing $/progress to drain.
+      await this.awaitIndexingSettled(deadline)
       const value = normalize(await send())
+      // (2) The send may have kicked off the configured-project load and been answered from the
+      // inferred project — re-query once it settles (unless we are out of deadline).
+      if (this.indexing && this.now() < deadline) continue
+
       const status = decideStatus(isEmpty(value), !this.indexing)
       if (status !== 'no_result') return this.wrap(status, value)
 
+      // (3) Empty + settled: retry with bounded backoff strictly inside the deadline.
       attempt += 1
       const backoff = Math.min(this.baseBackoffMs * 2 ** (attempt - 1), this.maxBackoffMs)
       if (this.noRetry || this.now() + backoff > deadline) return this.wrap('no_result', value)

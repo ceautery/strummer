@@ -172,16 +172,50 @@ describe('LspClient navigation (tri-state + normalization over recorded payloads
     expect(r.result).toEqual([])
   })
 
-  it('not_ready: an empty result WHILE a $/progress work-done token is active (never "no definition")', async () => {
-    const { client, server } = await connectedClient()
-    // The server emits a real indexing $/progress BEGIN, then replies empty — stream order
-    // guarantees the client marks indexing active before the empty response resolves.
+  it('not_ready: still indexing at the deadline ⇒ not_ready (never "no definition")', async () => {
+    // The server keeps a $/progress token open and never ends it: the client waits out the
+    // whole deadline (fake clock) and only THEN, still indexing, reports not_ready.
+    let t = 0
+    const { client, server } = await connectedClient({
+      clientOptions: {
+        timeoutMs: 1000,
+        now: () => t,
+        delay: async (ms) => {
+          t += ms
+        },
+      },
+    })
     server.onRequest('textDocument/definition', () => {
-      server.sendNotification('$/progress', PROGRESS_BEGIN())
+      server.sendNotification('$/progress', PROGRESS_BEGIN()) // begin, never end
       return null
     })
     const r = await client.definition(INDEX_URI, POS)
     expect(r.status).toBe('not_ready')
+  })
+
+  it('re-queries after indexing drains, returning the full result not the mid-load partial', async () => {
+    // Mirrors the live tsserver timeline (ADR 0011 addendum): the FIRST query is answered from
+    // the still-loading inferred project (a non-empty BUT partial 1-location answer) while a
+    // $/progress token is active; once it ends, the configured project answers in full.
+    const begin = PROGRESS_BEGIN() as { token: string }
+    const end = { token: begin.token, value: { kind: 'end' } }
+    const full = REFERENCES() as unknown[]
+    const partial = [full[0]] // the inferred-project answer: only the opened file
+    let calls = 0
+    const { client, server } = await connectedClient()
+    server.onRequest('textDocument/references', () => {
+      calls += 1
+      if (calls === 1) {
+        server.sendNotification('$/progress', begin) // indexing active at response time
+        setTimeout(() => server.sendNotification('$/progress', end), 5) // ...then it finishes
+        return partial
+      }
+      return full // the loaded configured project — the complete cross-file set
+    })
+    const r = await client.references(INDEX_URI, POS)
+    expect(calls).toBe(2) // it did NOT trust the mid-load partial; it re-queried
+    expect(r.status).toBe('ok')
+    expect(r.result.length).toBe(3) // the full set, not the 1-location partial
   })
 
   it('retries an empty-but-not-indexing result within the deadline, then returns ok', async () => {
@@ -273,10 +307,20 @@ describe('LspClient write-mode (rename / prepareRename)', () => {
     expect(r.result.resourceOps).toEqual([])
   })
 
-  it('rename: empty result while indexing ⇒ not_ready (never "cannot rename")', async () => {
-    const { client, server } = await connectedClient({ initialize: INIT_RENAME() })
+  it('rename: still indexing at the deadline ⇒ not_ready (never "cannot rename")', async () => {
+    let t = 0
+    const { client, server } = await connectedClient({
+      initialize: INIT_RENAME(),
+      clientOptions: {
+        timeoutMs: 1000,
+        now: () => t,
+        delay: async (ms) => {
+          t += ms
+        },
+      },
+    })
     server.onRequest('textDocument/rename', () => {
-      server.sendNotification('$/progress', PROGRESS_BEGIN())
+      server.sendNotification('$/progress', PROGRESS_BEGIN()) // begin, never end
       return null
     })
     const r = await client.rename(GREETER_URI, { line: 4, character: 14 }, 'Greeter2')
