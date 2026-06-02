@@ -127,6 +127,9 @@ importers:
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed
+      '@strummer/mutate':
+        specifier: workspace:*
+        version: link:../mutate
       '@strummer/safety':
         specifier: workspace:*
         version: link:../safety

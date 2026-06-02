@@ -12,6 +12,7 @@ import type { Embedder } from '@strummer/embed'
 import type DatabaseType from 'better-sqlite3'
 import { runApi } from './api.js'
 import { runBrowser } from './browser.js'
+import { runMutate } from './mutate.js'
 
 /** Output sinks and dependencies injected into `run` (so it is testable). */
 export interface CliIO {
@@ -44,6 +45,10 @@ Browser testing (single-shot; the typed host is auto-allowed):
   strummer browser screenshot <url>  [--out <file>] [--full-page] [same flags]
   strummer browser run <flow.bru>    [--var k=v…] [--unsafe] [--allow-host <h>…] [same flags]  (replay a persisted flow; exit 1 on failure)
 
+Mutation testing:
+  strummer mutate summarize <report-file>  [--format stryker|mutmut] [--json]
+  strummer mutate run <project-root>        [--file <f>…] [--incremental] [--allow-run] [--timeout-ms <n>] [--report-path <p>] [--json]  (gated; needs --allow-run)
+
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)
 `
@@ -63,6 +68,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return runApi(rest, io)
     case 'browser':
       return runBrowser(rest, io)
+    case 'mutate':
+      return runMutate(rest, io)
     case 'help':
     case '--help':
     case '-h':
