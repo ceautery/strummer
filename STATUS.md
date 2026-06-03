@@ -191,8 +191,17 @@ now **LSP dynamic `didChangeWorkspaceFolders`** (grow-only warm-server reuse: a 
 group is a SUPERSET of a warm same-language server's folders extends that server in place via
 `workspace/didChangeWorkspaceFolders` + re-keys it, instead of spawning a fresh server and re-paying
 indexing — capability-gated on the server advertising `workspaceFolders.changeNotifications`; live-
-verified vs rust-analyzer 0.3.2921) — **current count is 953 TS + 45 Py green**; see
-the Next-action block for the detail.**)_
+verified vs rust-analyzer 0.3.2921). Most recent: the **LSP Python adapter** — pyright as a THIRD
+real server (the engine is language-agnostic, so this is fixtures + an example + docs, NO engine
+code): recorded `pyright-langserver` 1.1.410 payloads in the gate (object-form caps, no `serverInfo`
+⇒ `versionWarning`, no `positionEncoding` ⇒ utf-16, no `diagnosticProvider` ⇒ push, flat-`Location`
+definition, a `documentChanges`+`version:null` multi-file rename — a REAL payload for the branch the
+synthesized fixture only guessed) + the `examples/lsp/pygreeter` quickstart (offline coordinate
+guard) + a documented pyright quirk (references is open-files-scoped while rename is whole-workspace —
+verified live across definition/references/hover/symbols/type-def/call-hierarchy/push-diagnostics and
+a live `--allow-write` rename that re-type-checks clean). Provenance: python has no clean single-pkg
+toolchain map, so `bin-lsp.ts` deliberately maps none (versionWarning is the honest signal). —
+**current count is 959 TS + 45 Py green**; see the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -815,9 +824,12 @@ served by the multi-root server, and cross-root **definition** (b→a) resolves.
 (gopls/rust-analyzer) cover all folders, but tsserver loads a folder's project lazily on file open,
 so its reference search only spans roots whose files have been touched (documented in the greeter
 README). **Remaining non-blocking tails:** the DESTRUCTIVE resource-op options (`overwrite`) +
-recursive/dir delete (refused by design), full toolchain-mismatch heuristic, an LSP Python adapter;
+recursive/dir delete (refused by design), full toolchain-mismatch heuristic;
 mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems. _(DONE since: LSP
-pull-diagnostics, and dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse.)_
+pull-diagnostics, dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse — and the **LSP
+Python adapter** (pyright as a third real server: recorded payloads in the gate + the
+`examples/lsp/pygreeter` quickstart + the references-scope-vs-rename-scope quirk documented; no engine
+code — the engine is language-agnostic, verified live).)_
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); `workspace/symbol` search
@@ -1023,10 +1035,14 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > `welcome`) applied cross-file edits + the `RenameFile` to disk, AND the editing-a-renamed-file case
 > (a `crate::greeter::` self-reference in the module file) applied with the moved `welcome.rs` carrying
 > the EDITED content — the exact batch the old code refused (repro + the 30s-deadline gotcha in
-> [[strummer-lsp-rust-analyzer]]). **953 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> [[strummer-lsp-rust-analyzer]]). **959 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
 > staged (non-blocking) LSP tails:** the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
-> delete (kept refused by design); full toolchain-mismatch heuristic; an LSP Python adapter. _(DONE
-> since: dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse: a query whose root group
+> delete (kept refused by design); full toolchain-mismatch heuristic. _(DONE since: the **LSP Python
+> adapter** — pyright as a third real server, gate replays recorded `pyright-langserver` 1.1.410
+> payloads + the `examples/lsp/pygreeter` quickstart + the references-open-files-scope-vs-rename-whole-
+> workspace quirk documented; the engine is language-agnostic so NO engine code, verified live across
+> every capability incl. a `--allow-write` rename that re-type-checks clean — see
+> [[strummer-lsp-pyright]]. And dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse: a query whose root group
 > is a SUPERSET of a warm same-language server's folders extends that server in place via
 > `workspace/didChangeWorkspaceFolders` + re-keys it (capability-gated on
 > `workspaceFolders.changeNotifications`; ambiguous-tie/no-cap ⇒ spawn fresh; grow-only, never shrinks;

@@ -44,6 +44,14 @@ export const PROGRESS_END = () => loadFixture('progress-end.json')
 export const INIT_RENAME = () => loadFixture('initialize-result-rename.json')
 export const PREPARE_RENAME = () => loadFixture('prepare-rename.json')
 export const RENAME_CHANGES = () => loadFixture('rename-changes.json')
+// pyright captures (the Python adapter, ADR 0011). A third real server: object-form provider
+// capabilities, NO serverInfo, NO positionEncoding (⇒ utf-16), NO diagnosticProvider (⇒ push),
+// definition as a flat Location[] (it ignores linkSupport), and a `documentChanges` rename with
+// `version: null` — the real payload for the branch the synthesized fixture only guessed.
+export const INIT_PYRIGHT = () => loadFixture('initialize-result-pyright.json')
+export const DEFINITION_PYRIGHT = () => loadFixture('definition-pyright.json')
+export const RENAME_PYRIGHT = () => loadFixture('rename-pyright-documentchanges.json')
+export const DIAGNOSTICS_PYRIGHT = () => loadFixture('diagnostics-publish-pyright.json')
 // rust-analyzer captures (write-mode resource ops). RA emits a real RenameFile on a module rename.
 export const INIT_RUST = () => loadFixture('initialize-result-rust.json')
 export const RENAME_RENAMEFILE = () => loadFixture('rename-renamefile.json')

@@ -1,0 +1,59 @@
+{
+  "documentChanges": [
+    {
+      "textDocument": {
+        "uri": "file:///project/greeter.py",
+        "version": null
+      },
+      "edits": [
+        {
+          "range": {
+            "start": {
+              "line": 8,
+              "character": 6
+            },
+            "end": {
+              "line": 8,
+              "character": 13
+            }
+          },
+          "newText": "Welcomer"
+        }
+      ]
+    },
+    {
+      "textDocument": {
+        "uri": "file:///project/main.py",
+        "version": null
+      },
+      "edits": [
+        {
+          "range": {
+            "start": {
+              "line": 0,
+              "character": 20
+            },
+            "end": {
+              "line": 0,
+              "character": 27
+            }
+          },
+          "newText": "Welcomer"
+        },
+        {
+          "range": {
+            "start": {
+              "line": 2,
+              "character": 10
+            },
+            "end": {
+              "line": 2,
+              "character": 17
+            }
+          },
+          "newText": "Welcomer"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+[project]
+name = "strummer-examples-lsp-pygreeter"
+version = "0.0.0"
+description = "A tiny Python project for the strummer lsp quickstart"
+requires-python = ">=3.9"
+
+# pyright reads this section for its analysis roots; the defaults are fine for a
+# flat two-module project, so it is intentionally minimal.
+[tool.pyright]
+include = ["greeter.py", "main.py"]

@@ -131,3 +131,46 @@ returns a `ResponseError -32602 "No references found at position"` when `rename`
 `cachePriming` ends** (and the rename is refused outright unless the client advertises
 `resourceOperations`, since the edit needs a `RenameFile`). The gate replays this via the fake peer;
 no real server runs in `pnpm gate`.
+
+## Python adapter captures — `pyright`
+
+The LSP pillar is language-agnostic, but ADR 0011 wants the gate to replay a **real payload** from
+every server we claim to support, not assume one server's shapes generalize. These were captured from
+**`pyright-langserver` 1.1.410** (the PyPI `pyright` wrapper) driving
+[`examples/lsp/pygreeter`](../../../../examples/lsp/pygreeter) — a free `hello(name)` and a `class
+Greeter` whose `greet()` calls it (`greeter.py`), imported and `Greeter("world")`-ed in `main.py`.
+pyright differs from tsserver and rust-analyzer in ways that exercise paths neither did against a real
+payload:
+
+- `initialize-result-pyright.json` — the genuine `initialize` result. pyright sends **no
+  `serverInfo`** (⇒ unattributable provenance, `versionWarning`) and **no `positionEncoding`** (⇒
+  spec-default utf-16), advertises **object-form** provider capabilities (`definitionProvider:
+  {workDoneProgress: true}`, etc. — exercises `supports()` treating an object as enabled), a
+  `renameProvider: {prepareProvider: true, workDoneProgress: true}`, a bare `callHierarchyProvider:
+  true`, and **no `diagnosticProvider`** (⇒ the push diagnostics model).
+- `definition-pyright.json` — genuine `textDocument/definition`, returned as a **flat `Location[]`**
+  even though the client advertised `linkSupport: true` (pyright ignores it for definition — unlike
+  tsserver's `LocationLink[]`). The flat-`Location` definition branch, from a real payload.
+- `rename-pyright-documentchanges.json` — genuine `textDocument/rename` for `Greeter`→`Welcomer`, in
+  the **`documentChanges`** form (`TextDocumentEdit[]`) with **`version: null`** and **no resource
+  ops** — multi-file (the `greeter.py` declaration + the `main.py` import binding & usage). This is a
+  **real** payload for the `documentChanges` rename branch that `rename-documentchanges.json` only
+  *synthesized* (tsserver returns the legacy `changes` map; rust-analyzer's documentChanges carried a
+  `RenameFile`; pyright is the plain multi-file documentChanges with a null version). Verified live:
+  `--allow-write` applies it across both files and the project still type-checks clean.
+- `diagnostics-publish-pyright.json` — a genuine `textDocument/publishDiagnostics` params object
+  (PUSH; pyright advertises no pull provider). Its `code` is a **string** rule name
+  (`reportAssignmentType`), not a number — captured by giving `bad.py` a `result: str = add(1, 2)`
+  type error. `source: "Pyright"`, `severity: 1` (Error).
+
+Behavioral note (observed live, documented in the example README, not a code fix): pyright's
+`references` is scoped to open files + their import dependencies, while `rename` forces a
+whole-workspace scan — so `references` on a *declaration* misses cross-file uses in non-dependency
+files, but `rename` is complete. A server capability difference, not a Strummer bug. Provenance note:
+pyright has no clean single-package toolchain mapping (its analysis bundles its own typeshed; "answer
+for the installed version" means the analyzed libraries, not one package), so — unlike `typescript` →
+the `typescript` package — `bin-lsp.ts` deliberately maps **no** toolchain for `python`; the
+`versionWarning` is the correct, honest signal.
+
+Paths in all four are normalized to a stable `/project` prefix; structure is verbatim. The gate
+replays them via the fake peer — no real server runs in `pnpm gate`.

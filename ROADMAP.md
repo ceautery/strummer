@@ -777,8 +777,24 @@ Two independent tracks, then the test-quality chain, then LSP last:
         group, independent of server folder state). Gate uses the real RA init fixture (advertises the
         cap) + tsserver (does not). **Verified live vs rust-analyzer 0.3.2921** (superset query grows
         the warm server in place, serverCount stays 1, post-grow query still resolves).
+  - [x] **Python adapter — pyright as a third real server.** The LSP engine is language-agnostic, so
+        this is NOT engine code: it is gate coverage + an example + docs proving (and documenting) a
+        real Python server. The gate replays recorded **`pyright-langserver` 1.1.410** payloads (a
+        third real server alongside tsserver + rust-analyzer): an `initialize` with object-form
+        provider caps, **no `serverInfo`** (⇒ `versionWarning`), **no `positionEncoding`** (⇒ utf-16),
+        and **no `diagnosticProvider`** (⇒ push); a **flat `Location[]`** definition (pyright ignores
+        `linkSupport`); a **`documentChanges`+`version:null` multi-file rename** (a REAL payload for the
+        branch `rename-documentchanges.json` only synthesized); and a **string-code** push
+        `publishDiagnostics`. Ships `examples/lsp/pygreeter` (the Python counterpart of `greeter`:
+        `greeter.py`+`main.py`) + an offline coordinate guard. **Verified live across every capability**
+        (definition/references/hover/symbols/type-def/call-hierarchy/push-diagnostics + a
+        `--allow-write` rename that re-type-checks clean). Documented quirk (capability difference, no
+        code fix): pyright's `references` is open-files-scoped (misses cross-file uses from a
+        *declaration*) while `rename` forces a whole-workspace scan (complete + safe). Provenance:
+        python has **no** clean single-package toolchain map, so `bin-lsp.ts` deliberately maps none
+        (the `versionWarning` is the honest signal). See [[strummer-lsp-pyright]].
   - [ ] *(staged, not amputated)* the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
-        delete (kept refused by design), full toolchain-version resolution, Python adapter posture.
+        delete (kept refused by design), full toolchain-version resolution.
 
 ## Ongoing
 

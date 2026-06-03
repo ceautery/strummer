@@ -1,0 +1,6 @@
+{
+  "python": {
+    "command": "pyright-langserver",
+    "args": ["--stdio"]
+  }
+}

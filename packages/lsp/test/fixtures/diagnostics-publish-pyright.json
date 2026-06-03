@@ -1,0 +1,25 @@
+{
+  "uri": "file:///project/bad.py",
+  "version": 1,
+  "diagnostics": [
+    {
+      "range": {
+        "start": {
+          "line": 4,
+          "character": 14
+        },
+        "end": {
+          "line": 4,
+          "character": 23
+        }
+      },
+      "message": "Type \"int\" is not assignable to declared type \"str\"\n  \"int\" is not assignable to \"str\"",
+      "severity": 1,
+      "code": "reportAssignmentType",
+      "source": "Pyright",
+      "codeDescription": {
+        "href": "https://github.com/microsoft/pyright/blob/main/docs/configuration.md#reportAssignmentType"
+      }
+    }
+  ]
+}

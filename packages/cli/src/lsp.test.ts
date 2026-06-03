@@ -9,6 +9,7 @@ import { runLsp } from './lsp.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const GREETER = resolve(here, '../../../examples/lsp/greeter')
+const PYGREETER = resolve(here, '../../../examples/lsp/pygreeter')
 
 function capture() {
   const out: string[] = []
@@ -447,6 +448,35 @@ describe('bundled example greeter project', () => {
     ]
     for (const [file, line, col, name] of coords) {
       const lines = readFileSync(join(GREETER, file), 'utf8').split('\n')
+      const text = lines[line - 1] ?? ''
+      expect(text.slice(col - 1, col - 1 + name.length)).toBe(name)
+    }
+  })
+})
+
+// Guards the shipped pygreeter example (the LSP Python adapter quickstart) and its README's
+// coordinates against source drift — same offline posture as the greeter guard (no server spawns;
+// the gate replays recorded pyright payloads, never a live one, per ADR 0011).
+describe('bundled example pygreeter project', () => {
+  it('languages lists python from the example servers.json registry', async () => {
+    const servers = readFileSync(join(PYGREETER, 'servers.json'), 'utf8')
+    const c = capture()
+    expect(await run(['lsp', 'languages', '--servers', servers, '--json'], c.io)).toBe(0)
+    expect(JSON.parse(c.out()).languages).toEqual(['python'])
+  })
+
+  it("the README's documented positions point at the named identifiers", () => {
+    // [file, 1-based line, 1-based column, identifier] — must match the example README.
+    const coords: [string, number, number, string][] = [
+      ['greeter.py', 4, 5, 'hello'], // the hello declaration
+      ['greeter.py', 9, 7, 'Greeter'], // the Greeter class declaration
+      ['greeter.py', 16, 16, 'hello'], // the hello CALL inside greet()
+      ['main.py', 1, 21, 'Greeter'], // the Greeter import binding
+      ['main.py', 3, 1, 'greeter'], // the `greeter` value
+      ['main.py', 3, 11, 'Greeter'], // the `Greeter("world")` reference
+    ]
+    for (const [file, line, col, name] of coords) {
+      const lines = readFileSync(join(PYGREETER, file), 'utf8').split('\n')
       const text = lines[line - 1] ?? ''
       expect(text.slice(col - 1, col - 1 + name.length)).toBe(name)
     }

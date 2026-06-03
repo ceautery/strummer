@@ -1,0 +1,15 @@
+[
+  {
+    "uri": "file:///project/greeter.py",
+    "range": {
+      "start": {
+        "line": 3,
+        "character": 4
+      },
+      "end": {
+        "line": 3,
+        "character": 9
+      }
+    }
+  }
+]

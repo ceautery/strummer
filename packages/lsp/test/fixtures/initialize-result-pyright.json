@@ -1,0 +1,60 @@
+{
+  "capabilities": {
+    "textDocumentSync": 2,
+    "definitionProvider": {
+      "workDoneProgress": true
+    },
+    "declarationProvider": {
+      "workDoneProgress": true
+    },
+    "typeDefinitionProvider": {
+      "workDoneProgress": true
+    },
+    "referencesProvider": {
+      "workDoneProgress": true
+    },
+    "documentSymbolProvider": {
+      "workDoneProgress": true
+    },
+    "workspaceSymbolProvider": {
+      "workDoneProgress": true
+    },
+    "hoverProvider": {
+      "workDoneProgress": true
+    },
+    "documentHighlightProvider": {
+      "workDoneProgress": true
+    },
+    "renameProvider": {
+      "prepareProvider": true,
+      "workDoneProgress": true
+    },
+    "completionProvider": {
+      "triggerCharacters": [".", "[", "\"", "'"],
+      "resolveProvider": true,
+      "workDoneProgress": true,
+      "completionItem": {
+        "labelDetailsSupport": true
+      }
+    },
+    "signatureHelpProvider": {
+      "triggerCharacters": ["(", ",", ")"],
+      "workDoneProgress": true
+    },
+    "codeActionProvider": {
+      "codeActionKinds": ["quickfix", "source.organizeImports"],
+      "workDoneProgress": true
+    },
+    "executeCommandProvider": {
+      "commands": [],
+      "workDoneProgress": true
+    },
+    "callHierarchyProvider": true,
+    "workspace": {
+      "workspaceFolders": {
+        "supported": true,
+        "changeNotifications": true
+      }
+    }
+  }
+}
