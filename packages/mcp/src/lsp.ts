@@ -94,15 +94,46 @@ function text(value: unknown) {
   return { type: 'text' as const, text: JSON.stringify(value, null, 2) }
 }
 
+// Servers whose reported `serverInfo.version` IS the language toolchain's version, so a differing
+// MAJOR is a real "answering for the wrong version" signal. `typescript-language-server` is
+// deliberately EXCLUDED — its `serverInfo.version` is the WRAPPER's, NOT the bundled tsserver, so a
+// major-compare would mis-fire. A real cross-version resolution matrix (server↔toolchain) is staged.
+const LANGUAGE_SERVER_IS_TOOLCHAIN = new Set(['rust-analyzer', 'gopls'])
+
+function majorOf(v: string): number | undefined {
+  const m = /\d+/.exec(v)
+  return m ? Number(m[0]) : undefined
+}
+
+/**
+ * A CONSERVATIVE warn-on-toolchain-mismatch (ADR 0011): only for a server whose version IS the
+ * toolchain version (the allowlist — no guessing), only on a differing MAJOR, and never a hard
+ * fail. Returns undefined otherwise. The engine's serverInfo-ABSENT `versionWarning` takes
+ * precedence; this is the fallback when the engine emitted none (so we never double-warn).
+ */
+export function toolchainMismatchWarning(
+  serverInfo: { name: string; version?: string | null } | undefined,
+  toolchain: { name: string; version: string | null } | undefined,
+): string | undefined {
+  if (!serverInfo?.version || !toolchain?.version) return undefined
+  if (!LANGUAGE_SERVER_IS_TOOLCHAIN.has(serverInfo.name)) return undefined
+  const sv = majorOf(serverInfo.version)
+  const tv = majorOf(toolchain.version)
+  if (sv === undefined || tv === undefined || sv === tv) return undefined
+  return `the language server reports version ${serverInfo.version} but the project's ${toolchain.name} toolchain is ${toolchain.version}; navigation/rename may not reflect the installed version`
+}
+
 /** The shared provenance/status envelope on every navigation result. */
 function envelope(result: LspQueryResult) {
+  const versionWarning =
+    result.versionWarning ?? toolchainMismatchWarning(result.serverInfo, result.toolchain)
   return {
     status: result.status,
     kind: result.kind,
     encoding: result.encoding,
     ...(result.serverInfo ? { serverInfo: result.serverInfo } : {}),
     ...(result.toolchain ? { toolchain: result.toolchain } : {}),
-    ...(result.versionWarning ? { versionWarning: result.versionWarning } : {}),
+    ...(versionWarning ? { versionWarning } : {}),
   }
 }
 
@@ -513,6 +544,8 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             ...wsRoots(args),
             ...(toolchain ? { toolchain } : {}),
           })
+          const renameVersionWarning =
+            result.versionWarning ?? toolchainMismatchWarning(result.serverInfo, result.toolchain)
           const head = {
             status: result.status,
             kind: result.kind,
@@ -524,9 +557,12 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             encoding: result.encoding,
             ...(result.serverInfo ? { serverInfo: result.serverInfo } : {}),
             ...(result.toolchain ? { toolchain: result.toolchain } : {}),
-            ...(result.versionWarning ? { versionWarning: result.versionWarning } : {}),
+            ...(renameVersionWarning ? { versionWarning: renameVersionWarning } : {}),
             ...(result.resourceOps ? { resourceOps: result.resourceOps } : {}),
             ...(result.digests ? { digests: result.digests } : {}),
+            // A destructive overwrite clobbered an existing file — the agent must SEE it explicitly,
+            // not infer it from a digest diff (operator-gated; landed only).
+            ...(result.overwritten?.length ? { overwritten: result.overwritten } : {}),
             ...(result.partial ? { partial: true } : {}),
             ...(result.partialError ? { partialError: result.partialError } : {}),
             // Partial-rename guard: the agent must see when an edit is likely incomplete (an

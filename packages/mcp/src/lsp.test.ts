@@ -13,7 +13,7 @@ import type {
   ServerRegistry,
 } from '@strummer/lsp'
 import { afterAll, describe, expect, it } from 'vitest'
-import { createLspServer, type LspToolsOptions } from './lsp.js'
+import { createLspServer, type LspToolsOptions, toolchainMismatchWarning } from './lsp.js'
 
 const REGISTRY: ServerRegistry = {
   typescript: { command: 'tsls', args: ['--stdio'] },
@@ -44,6 +44,7 @@ interface ToolJson {
   servers?: unknown
   completeness?: string
   suspectedMissedFiles?: string[]
+  overwritten?: string[]
 }
 
 /** Parse the first text block of an MCP content/contents array. */
@@ -424,6 +425,21 @@ describe('lsp navigation tools', () => {
     expect(data.suspectedMissedFiles).toEqual(['src/index.ts', 'src/extra.ts'])
   })
 
+  it('surfaces a destructive `overwritten` clobber in the rename envelope', async () => {
+    const stub = stubRename({
+      ...previewResult,
+      applied: true,
+      overwritten: ['moved.ts'],
+    })
+    const client = await connect({
+      ...GATED,
+      query: stubQuery(okDefinition).query,
+      rename: stub.rename,
+    })
+    const res = await client.callTool({ name: 'lsp_rename', arguments: RENAME_ARGS })
+    expect(firstJson(res.content).overwritten).toEqual(['moved.ts'])
+  })
+
   it('passes through detected toolchain provenance', async () => {
     const stub = stubQuery(okDefinition)
     const client = await connect({
@@ -444,6 +460,40 @@ describe('lsp navigation tools', () => {
     const res = await client.callTool({ name: 'lsp_find_definition', arguments: DEF_ARGS })
     const data = firstJson(res.content)
     expect(data.versionWarning).toMatch(/version/i)
+  })
+
+  it('derives a toolchain-mismatch versionWarning for a toolchain-identity server (differing major)', async () => {
+    const stub = stubQuery({
+      ...okDefinition,
+      serverInfo: { name: 'rust-analyzer', version: '2.0.0' },
+      toolchain: { name: 'rust', version: '1.70.0' }, // differing MAJOR (2 vs 1)
+    })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({ name: 'lsp_find_definition', arguments: DEF_ARGS })
+    expect(firstJson(res.content).versionWarning).toMatch(/may not reflect the installed version/i)
+  })
+
+  it('does NOT toolchain-warn for typescript-language-server (wrapper version, excluded)', async () => {
+    const stub = stubQuery({
+      ...okDefinition,
+      serverInfo: { name: 'typescript-language-server', version: '5.3.0' },
+      toolchain: { name: 'typescript', version: '4.9.0' }, // differing major, but excluded server
+    })
+    const client = await connect({ ...GATED, query: stub.query })
+    const res = await client.callTool({ name: 'lsp_find_definition', arguments: DEF_ARGS })
+    expect(firstJson(res.content).versionWarning).toBeUndefined()
+  })
+
+  it('toolchainMismatchWarning is silent on matching majors / missing data (unit)', () => {
+    expect(
+      toolchainMismatchWarning(
+        { name: 'rust-analyzer', version: '1.84.0' },
+        { name: 'rust', version: '1.99.0' },
+      ),
+    ).toBeUndefined() // same major
+    expect(
+      toolchainMismatchWarning({ name: 'rust-analyzer', version: '1.0.0' }, undefined),
+    ).toBeUndefined() // no toolchain version
   })
 
   it('does NOT register lsp_rename unless a rename engine is wired', async () => {
