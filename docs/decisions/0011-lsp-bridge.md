@@ -633,3 +633,53 @@ early): any resource op carrying non-default `options` (overwrite/ignoreIfExists
 **editing a file that is also renamed in the same batch** (the one cross-op interaction; neither
 real shape — RA's pure-rename, a Move-to-file's create+edit — needs it). Resource-op `options`,
 recursive delete, edit-on-renamed-file, and full conflict reconciliation remain staged.
+
+## Addendum (2026-06-03): destructive resource-ops = `overwrite` only (recursive delete stays refused)
+
+The first two staged cuts are now revisited. Designed via the
+`lsp-destructive-overwrite-design` fan-out (1 draft → 3 adversarial critics across
+filesystem-data-loss / LSP-spec / gate-security lenses → synthesis); the adversarial pass caught
+**two blockers** that reshaped the design.
+
+**Shipped — `overwrite` truncate-and-replace, behind a SEPARATE operator gate.** A `CreateFile` or
+`RenameFile` carrying `overwrite: true` now APPLIES, clobbering an **existing regular file**, but
+only behind a new deny-by-default sub-gate `allowDestructiveResourceOps` (modeled on
+`allowPartialRename`; env `STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS`, CLI
+`--allow-destructive-resource-ops`). The gate is **self-enforcing** in the engine — it re-requires
+`allowWrite` even though the bin/CLI also hard-error on the contradiction (mirrors `assertAllowed`
+re-checking `allowRun`). The destroyed bytes are audited (a `<path> (overwritten)` digest row,
+folded into the same `extraRowsForPhysical` partial-commit reconstruction as the edited-and-renamed
+pair) and the clobbered paths are surfaced in a new `overwritten[]` result field (landed only), so
+a destructive clobber is always **explicit**, never inferred from a digest diff.
+
+Adversarial corrections baked in: (1, **blocker**) an overwrite-create is tracked in a separate
+`overwroteExisting` set, **not** `created` — it is a real on-disk inode, so a following `delete` of
+the same path still emits a physical delete (the naive `created.add` made `[create-overwrite, delete]`
+a silent net-no-op leaving the file intact); (2, **blocker**) a symlink target is **refused**
+(`lstatSync` / `isOverwritableRegularFile`) — clobbering through a link would replace the link while
+the digest read the link target's bytes (an audit lie + the real file survives); (3) the clobbered
+destination's bytes are captured without a phantom `order`/`diskBefore` entry; (4) the clobbered
+target's stale server buffer is closed (`didFileDelete`) before the source's `didFileRename`; (5) an
+overwrite whose target is the **queried/open file** is drift-guarded (refused if it changed on disk
+since compute); (6) a **destructive batch raises the partial-rename completeness bar** — an `unknown`
+(truncated, unverifiable) verdict blocks like `suspect` (an irreversible clobber must not ride on a
+scan we could not finish), overridable by `allowPartialRename`.
+
+**STAYS refused-by-design** (even with `allowDestructiveResourceOps` + `allowWrite` + `allowRun`):
+**recursive / directory delete** (`DeleteFile` with `recursive: true` — its own unconditional branch;
+no `rm -rf` from a server payload, the least-reversible op, and no real rename payload emits it);
+delete of a non-regular file; **overwrite onto a directory or a symlink**; `overwrite` on a delete
+(malformed); overwrite onto an in-batch created/edited target (two-into-one); a drifted queried file;
+and out-of-root / non-`file://` endpoints. Apply-policy tests are hand-authored INPUT fixtures
+(asserting OUR policy, like the `confine` tests) — **no real server emits `overwrite` in a rename
+flow**, so there is no recorded fixture and no live verification for the overwrite path (honest
+limitation). The residual confine→commit parent-dir-swap TOCTOU is documented as
+terminal-partial-but-confined (the symlink-target refusal closes the destructive-specific delta).
+
+**Toolchain-mismatch heuristic (conservative scaffold).** A `versionWarning` is now also derived
+when a **toolchain-identity** server (allowlist: `rust-analyzer`/`gopls`, whose `serverInfo.version`
+IS the toolchain version) reports a **differing major** from the detected toolchain. Never a hard
+fail; the engine's serverInfo-absent warning takes precedence. `typescript-language-server` is
+**excluded** (its `serverInfo.version` is the wrapper's, not the bundled tsserver). A real
+cross-version resolution matrix (server↔toolchain) remains staged — this is the feasible, honest
+scaffold, not the "full" heuristic.

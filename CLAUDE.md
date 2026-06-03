@@ -169,8 +169,14 @@ vision and `ARCHITECTURE.md` for the technical design.
   query whose root group is a SUPERSET of a warm same-language server's folders extends it in place +
   re-keys it instead of respawning; capability-gated on `workspaceFolders.changeNotifications`;
   ambiguous-tie/no-cap ⇒ spawn fresh; allowlist + write-mode confinement unchanged; live-verified vs
-  rust-analyzer). Staged: the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete
-  (refused by design), full toolchain-mismatch heuristic, an LSP Python adapter),
+  rust-analyzer). Destructive `overwrite` DONE (ADR 0011 addendum): a Create/Rename `overwrite:true`
+  truncate-and-replaces an EXISTING regular file behind a SEPARATE self-enforcing gate
+  (`allowDestructiveResourceOps`); destroyed bytes audited (`(overwritten)` digest row) + surfaced as
+  `overwritten[]`; symlink/dir targets refused (lstat), overwrite-create kept out of `created` (a
+  later delete stays real), queried-file drift guard, destructive batch escalates the completeness
+  guard. Plus a conservative toolchain-mismatch `versionWarning` (toolchain-identity servers only;
+  tsserver excluded). Staged-as-refused-by-design: recursive/dir delete; the FULL toolchain
+  cross-version matrix),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write

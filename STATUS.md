@@ -206,8 +206,26 @@ renamed only the declaration). An anchor file does NOT fix it (unlike `workspace
 config (diagnosticMode/indexing) doesn't either. The 2-file example's complete rename is a
 small-workspace artifact. Single-target nav (definition/hover/type-def) is unaffected. Provenance:
 python has no clean single-pkg toolchain map, so `bin-lsp.ts` deliberately maps none (versionWarning
-is the honest signal). — **current count is 968 TS + 45 Py green**; see the Next-action block for the
-detail.**)_
+is the honest signal). **Most recent: DESTRUCTIVE resource-op `overwrite` (ADR 0011 addendum
+2026-06-03), 9 TDD slices** — a Create/Rename `overwrite:true` truncate-and-replaces an EXISTING
+regular file behind a SEPARATE deny-by-default operator gate (`allowDestructiveResourceOps`,
+self-enforcing ⇒ allowWrite; `STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS` / `--allow-destructive-
+resource-ops`; default off everywhere with hard errors on the contradiction). Destroyed bytes are
+audited (a `<path> (overwritten)` digest row folded into the partial-commit-safe
+`extraRowsForPhysical` reconstruction) and surfaced as a new `overwritten[]` result field (landed
+only). Designed via the `lsp-destructive-overwrite-design` fan-out (1 draft → 3 adversarial critics →
+synthesis) which caught **2 blockers**: an overwrite-create kept in a SEPARATE `overwroteExisting`
+set (NOT `created`, else a following delete silently no-ops, leaving the file intact); and symlink
+targets REFUSED via `lstatSync`/`isOverwritableRegularFile` (clobber-through-link = an audit lie +
+the real file survives). Also: directory targets refused, queried-file drift guard, clobbered-buffer
+close (`didFileDelete` before `didFileRename`), and a destructive batch ESCALATES the completeness
+guard (`unknown`/truncated ⇒ blocking like `suspect`). STAYS refused-by-design even with the gate:
+recursive/dir delete (own unconditional branch), overwrite-on-delete (malformed), in-batch
+two-into-one. Plus a CONSERVATIVE toolchain-mismatch `versionWarning` (toolchain-identity servers
+only — rust-analyzer/gopls; tsserver EXCLUDED as a wrapper version; the full cross-version matrix
+stays staged). Hand-authored INPUT fixtures (no real server emits overwrite in a rename flow — an
+honest limitation, no live verification). — **current count is 988 TS + 45 Py green**; see the
+Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -829,9 +847,11 @@ served by the multi-root server, and cross-root **definition** (b→a) resolves.
 (found live):** cross-root **references** depend on the server's indexing model — eager indexers
 (gopls/rust-analyzer) cover all folders, but tsserver loads a folder's project lazily on file open,
 so its reference search only spans roots whose files have been touched (documented in the greeter
-README). **Remaining non-blocking tails:** the DESTRUCTIVE resource-op options (`overwrite`) +
-recursive/dir delete (refused by design), full toolchain-mismatch heuristic;
-mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems. _(DONE since: LSP
+README). **Remaining non-blocking tails:** recursive/dir delete (kept refused-by-design — the
+least-reversible op) + the FULL toolchain cross-version resolution matrix (the conservative scaffold
+shipped); mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems. _(DONE
+since: the **destructive `overwrite` resource-op** (ADR 0011 addendum — gated truncate-and-replace,
+2 blockers caught by the design fan-out, +20 TS tests → 988); LSP
 pull-diagnostics, dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse — and the **LSP
 Python adapter** (pyright as a third real server: recorded payloads in the gate + the
 `examples/lsp/pygreeter` quickstart; no engine code — the engine is language-agnostic, verified live.
@@ -1049,9 +1069,10 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > `welcome`) applied cross-file edits + the `RenameFile` to disk, AND the editing-a-renamed-file case
 > (a `crate::greeter::` self-reference in the module file) applied with the moved `welcome.rs` carrying
 > the EDITED content — the exact batch the old code refused (repro + the 30s-deadline gotcha in
-> [[strummer-lsp-rust-analyzer]]). **968 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
-> staged (non-blocking) LSP tails:** the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
-> delete (kept refused by design); full toolchain-mismatch heuristic. _(DONE since: the **LSP Python
+> [[strummer-lsp-rust-analyzer]]). **988 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> staged (non-blocking) LSP tails:** recursive/dir delete (kept refused-by-design); the FULL toolchain
+> cross-version resolution matrix. _(DONE since: the **destructive `overwrite` resource-op** (ADR 0011
+> addendum — gated truncate-and-replace + conservative toolchain-mismatch warning); the **LSP Python
 > adapter** — pyright as a third real server, gate replays recorded `pyright-langserver` 1.1.410
 > payloads + the `examples/lsp/pygreeter` quickstart; the engine is language-agnostic so NO engine
 > code, verified live. **Documented pyright limitation (deep-dived after a follow-up question): both

@@ -811,8 +811,22 @@ Two independent tracks, then the test-quality chain, then LSP last:
         A whole-project-rename server (tsserver/rust-analyzer) covers every use ⇒ `complete` (no false
         block). Verified live: a 60-importer pyright project refuses the partial write (nothing lost),
         the override applies, and complete renames (pygreeter, tsserver greeter) are not flagged.
-  - [ ] *(staged, not amputated)* the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
-        delete (kept refused by design), full toolchain-version resolution.
+  - [x] **Destructive resource-op `overwrite`** (ADR 0011 addendum 2026-06-03) — a `CreateFile`/
+        `RenameFile` carrying `overwrite:true` truncate-and-replaces an EXISTING regular file behind a
+        SEPARATE deny-by-default operator gate (`allowDestructiveResourceOps` / `STRUMMER_LSP_ALLOW_
+        DESTRUCTIVE_RESOURCE_OPS` / `--allow-destructive-resource-ops`; self-enforcing ⇒ allowWrite).
+        The destroyed bytes are audited (`<path> (overwritten)` digest row, partial-commit-safe) and
+        surfaced as `overwritten[]`. Designed via the `lsp-destructive-overwrite-design` fan-out (2
+        blockers caught): symlink/dir targets REFUSED (lstat — no clobber-through-link audit lie);
+        an overwrite-create kept OUT of `created` so a following delete is still real; queried-file
+        drift guard; clobbered-buffer close; a destructive batch escalates the completeness guard
+        (`unknown`⇒blocking). Hand-authored INPUT fixtures (no real server emits overwrite in a
+        rename flow). Plus a conservative toolchain-mismatch `versionWarning` (toolchain-identity
+        servers only — rust-analyzer/gopls; tsserver excluded as a wrapper version).
+  - [ ] *(staged, kept refused-by-design / not feasible yet)* recursive / directory delete (the
+        least-reversible op — no `rm -rf` from a server payload); the FULL toolchain cross-version
+        resolution matrix (server↔toolchain); the residual confine→commit parent-dir-swap TOCTOU
+        (documented terminal-partial-but-confined).
 
 ## Ongoing
 

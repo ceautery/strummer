@@ -132,9 +132,15 @@ work also generalized the readiness model to servers that signal not-ready via a
 recently, **dynamic workspace-folder changes** (`didChangeWorkspaceFolders`) landed as grow-only
 warm-server reuse — a query whose root group is a superset of a warm same-language server's folders
 extends that server in place (capability-gated; ambiguous-tie/no-cap ⇒ spawn fresh) instead of
-respawning and re-indexing; verified live against rust-analyzer. Staged next: the destructive
-resource-op options (`overwrite`) + recursive/dir delete (refused by design), the full toolchain
-heuristic, and an LSP Python adapter.
+respawning and re-indexing; verified live against rust-analyzer. Most recently, **destructive
+`overwrite`** landed (ADR 0011 addendum): a Create/Rename `overwrite:true` truncate-and-replaces an
+EXISTING regular file behind a separate, self-enforcing operator gate
+(`allowDestructiveResourceOps`), auditing the destroyed bytes and surfacing an `overwritten[]` list —
+designed via an adversarial fan-out that caught two data-loss blockers (a symlink-clobber audit lie;
+an overwrite-create that silently no-op'd a following delete), so symlink/dir targets stay refused and
+the completeness guard escalates on a destructive batch. A conservative toolchain-mismatch warning
+also lands. Staged-as-refused-by-design: recursive/dir delete (the least-reversible op) and the full
+toolchain cross-version resolution matrix.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
