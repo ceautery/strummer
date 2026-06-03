@@ -93,6 +93,8 @@ export interface FakeServerOptions {
   onDidOpen?: (params: unknown) => void
   onDidChange?: (params: unknown) => void
   onDidClose?: (params: unknown) => void
+  /** `workspace/didChangeWorkspaceFolders` — the dynamic-folders notification (grow-only reuse). */
+  onDidChangeWorkspaceFolders?: (params: unknown) => void
   /** When set, the definition handler emits this `$/progress` notification before replying. */
   emitProgressBeforeDefinition?: unknown
   /** `$/progress` notifications the server emits (in order) right after `didOpen`. */
@@ -119,6 +121,9 @@ export function fakeServer(server: MessageConnection, opts: FakeServerOptions = 
   })
   server.onNotification('textDocument/didChange', (params: unknown) => opts.onDidChange?.(params))
   server.onNotification('textDocument/didClose', (params: unknown) => opts.onDidClose?.(params))
+  server.onNotification('workspace/didChangeWorkspaceFolders', (params: unknown) =>
+    opts.onDidChangeWorkspaceFolders?.(params),
+  )
   server.onRequest('textDocument/definition', (params: unknown) => {
     if (opts.emitProgressBeforeDefinition !== undefined) {
       server.sendNotification('$/progress', opts.emitProgressBeforeDefinition)

@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ServerSpawn } from './client.js'
 import { LanguageServerManager, LspManagerError } from './manager.js'
-import { DEFINITION, type FakeServerOptions, fakeServer, makePeerPair } from './peer.js'
+import { DEFINITION, type FakeServerOptions, fakeServer, INIT_RUST, makePeerPair } from './peer.js'
 import { parseServerRegistry } from './registry.js'
 
 const REGISTRY = parseServerRegistry(
@@ -164,6 +164,69 @@ describe('LanguageServerManager multi-root workspaces', () => {
       mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'x'),
     ).rejects.toBeInstanceOf(LspManagerError)
     expect(spawns).toHaveLength(0)
+  })
+})
+
+describe('LanguageServerManager dynamic workspace-folder reuse (grow-only)', () => {
+  const ROOT_B = '/project-b'
+  const ROOT_C = '/project-c'
+  const uriOf = (r: string) => pathToFileURL(r).toString()
+
+  it('grows a warm server in place when the new group is a SUPERSET (no fresh spawn)', async () => {
+    const added: Array<{ uri: string }> = []
+    const { spawn, spawns } = makeSpawn({
+      initialize: INIT_RUST(), // real RA advertises workspaceFolders.changeNotifications
+      onDidChangeWorkspaceFolders: (p) => {
+        const ev = (p as { event?: { added?: Array<{ uri: string }> } }).event
+        added.push(...(ev?.added ?? []))
+      },
+    })
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT, ROOT_B] })
+    await mgr.run(INPUT, async () => 'a') // group [ROOT]
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'b') // group [ROOT, ROOT_B]
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spawns).toHaveLength(1) // reused + grown, not respawned
+    expect(mgr.serverCount).toBe(1)
+    expect(added.map((f) => f.uri)).toEqual([uriOf(ROOT_B)]) // only the delta is added
+    expect(mgr.describe()[0]?.roots?.sort()).toEqual([ROOT, ROOT_B])
+  })
+
+  it('falls back to a fresh spawn when the server does NOT support change notifications (tsserver)', async () => {
+    const { spawn, spawns } = makeSpawn() // default INIT advertises no workspaceFolders cap
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT, ROOT_B] })
+    await mgr.run(INPUT, async () => 'a')
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'b')
+    expect(spawns).toHaveLength(2) // capability absent ⇒ no in-place grow
+    expect(mgr.serverCount).toBe(2)
+  })
+
+  it('extends the UNIQUELY-largest subset server, leaving smaller ones untouched', async () => {
+    const { spawn, spawns } = makeSpawn({ initialize: INIT_RUST() })
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT, ROOT_B, ROOT_C] })
+    // Create the larger group FIRST; the later [ROOT] query spawns fresh (grow-only never shrinks),
+    // so [ROOT] and [ROOT, ROOT_B] coexist as two distinct servers.
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'b') // [ROOT, ROOT_B]
+    await mgr.run(INPUT, async () => 'a') // [ROOT] — subset of the above, but we never shrink ⇒ fresh
+    expect(spawns).toHaveLength(2)
+    // [ROOT, ROOT_B, ROOT_C]: candidates [ROOT] (size 1) and [ROOT,ROOT_B] (size 2) — grow the larger.
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B, ROOT_C] }, async () => 'c')
+    expect(spawns).toHaveLength(2) // grown in place
+    expect(mgr.serverCount).toBe(2)
+    const roots = mgr.describe().map((d) => d.roots?.sort() ?? [d.projectRoot])
+    expect(roots).toContainEqual([ROOT]) // the single-root server is untouched
+    expect(roots).toContainEqual([ROOT, ROOT_B, ROOT_C]) // the larger one grew
+  })
+
+  it('spawns fresh when two subset servers TIE for largest (ambiguous — never guesses)', async () => {
+    const { spawn, spawns } = makeSpawn({ initialize: INIT_RUST() })
+    const { mgr } = makeManager(spawn, { allowedRoots: [ROOT, ROOT_B, ROOT_C] })
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B] }, async () => 'ab') // [ROOT, ROOT_B]
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_C] }, async () => 'ac') // [ROOT, ROOT_C]
+    expect(spawns).toHaveLength(2)
+    // [ROOT, ROOT_B, ROOT_C]: both size-2 servers are strict subsets — a tie ⇒ spawn fresh.
+    await mgr.run({ ...INPUT, workspaceRoots: [ROOT_B, ROOT_C] }, async () => 'abc')
+    expect(spawns).toHaveLength(3)
+    expect(mgr.serverCount).toBe(3)
   })
 })
 

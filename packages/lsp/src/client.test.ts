@@ -111,6 +111,35 @@ describe('LspClient.initialize (handshake)', () => {
   })
 })
 
+describe('LspClient dynamic workspace folders', () => {
+  it('detects workspace-folder change support from the server capability (real RA advertises it)', async () => {
+    const { client } = await connectedClient({ initialize: INIT_RUST() })
+    expect(client.supportsWorkspaceFolderChange).toBe(true)
+  })
+
+  it('reports NO change support when the server omits it (real tsserver capture)', async () => {
+    const { client } = await connectedClient()
+    expect(client.supportsWorkspaceFolderChange).toBe(false)
+  })
+
+  it('changeWorkspaceFolders sends workspace/didChangeWorkspaceFolders with the added/removed event', async () => {
+    let received: { event?: { added?: unknown[]; removed?: unknown[] } } | undefined
+    const { client } = await connectedClient({
+      initialize: INIT_RUST(),
+      onDidChangeWorkspaceFolders: (p) => {
+        received = p as typeof received
+      },
+    })
+    client.changeWorkspaceFolders(
+      [{ uri: 'file:///project/b', name: 'b' }],
+      [{ uri: 'file:///project/c', name: 'c' }],
+    )
+    await new Promise((r) => setTimeout(r, 20)) // let the notification traverse the paired streams
+    expect(received?.event?.added).toEqual([{ uri: 'file:///project/b', name: 'b' }])
+    expect(received?.event?.removed).toEqual([{ uri: 'file:///project/c', name: 'c' }])
+  })
+})
+
 describe('LspClient navigation (tri-state + normalization over recorded payloads)', () => {
   it('definition: normalizes a real LocationLink[] to ok with the symbol + full range', async () => {
     const { client } = await connectedClient({ onDefinition: () => DEFINITION() })

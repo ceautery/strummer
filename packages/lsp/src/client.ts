@@ -46,6 +46,7 @@ import {
   ConfigurationRequest,
   DefinitionRequest,
   DidChangeTextDocumentNotification,
+  DidChangeWorkspaceFoldersNotification,
   DidCloseTextDocumentNotification,
   DidOpenTextDocumentNotification,
   DocumentDiagnosticRequest,
@@ -292,6 +293,22 @@ export class LspClient {
   }
 
   /**
+   * Whether the server accepts `workspace/didChangeWorkspaceFolders` — the gate for the manager's
+   * grow-only warm-server reuse. Advertised by `ServerCapabilities.workspace.workspaceFolders`:
+   * `supported !== false` AND `changeNotifications` truthy (the spec allows `true` OR a string
+   * registration id). rust-analyzer advertises it; the captured tsserver 5.3.0 does NOT, so the
+   * manager falls back to spawning a fresh per-group server there.
+   */
+  get supportsWorkspaceFolderChange(): boolean {
+    const ws = this._capabilities.workspace as
+      | { workspaceFolders?: { supported?: boolean; changeNotifications?: boolean | string } }
+      | undefined
+    const wf = ws?.workspaceFolders
+    if (wf === undefined || wf.supported === false) return false
+    return wf.changeNotifications === true || typeof wf.changeNotifications === 'string'
+  }
+
+  /**
    * Handshake. Registers the deadlock-safe inbound handlers + the `$/progress` listener
    * BEFORE `listen()`, advertises the preferred encodings, then reads back the negotiated
    * encoding + capabilities + provenance and sends `initialized`.
@@ -516,6 +533,23 @@ export class LspClient {
     this.awaitingDiagnostics.delete(uri)
     this.conn.sendNotification(DidCloseTextDocumentNotification.method, {
       textDocument: { uri },
+    })
+  }
+
+  /**
+   * Notify the server that the workspace-folder set changed (`workspace/didChangeWorkspaceFolders`)
+   * — the wire primitive behind the manager's grow-only warm-server reuse. A fire-and-forget
+   * notification, so it is ordered on the single connection BEFORE any subsequent request: a query
+   * sent right after sees the new folder scope. Capability gating is the caller's job (the manager
+   * only calls this when {@link supportsWorkspaceFolderChange}); the folders are operator-allowlisted
+   * roots, never agent-supplied paths.
+   */
+  changeWorkspaceFolders(
+    added: { uri: string; name: string }[],
+    removed: { uri: string; name: string }[],
+  ): void {
+    this.conn.sendNotification(DidChangeWorkspaceFoldersNotification.method, {
+      event: { added, removed },
     })
   }
 
