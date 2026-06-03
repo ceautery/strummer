@@ -392,6 +392,78 @@ describe('strummer lsp CLI', () => {
     expect(seen?.workspaceRoots).toEqual([resolve('/proj-b')])
   })
 
+  it('rename HARD-REFUSES --allow-destructive-resource-ops without --allow-write (exit 1, rename not invoked)', async () => {
+    const c = capture()
+    let called = false
+    const code = await runLsp(
+      [
+        'rename',
+        'typescript',
+        'src/a.ts',
+        '1',
+        '7',
+        'renamed',
+        '--project',
+        '/proj',
+        '--allow-destructive-resource-ops',
+      ],
+      c.io,
+      {
+        rename: async () => {
+          called = true
+          return {
+            status: 'ok',
+            kind: 'rename',
+            applied: false,
+            newName: 'x',
+            fileCount: 0,
+            totalEditCount: 0,
+            encoding: 'utf-16',
+            edits: [],
+          }
+        },
+      },
+    )
+    expect(code).toBe(1)
+    expect(called).toBe(false)
+    expect(c.err()).toMatch(/allow-destructive-resource-ops requires --allow-write/i)
+  })
+
+  it('rename surfaces an `overwritten` destructive clobber prominently', async () => {
+    const result: LspRenameResult = {
+      status: 'ok',
+      kind: 'rename',
+      applied: true,
+      newName: 'renamed',
+      fileCount: 1,
+      totalEditCount: 0,
+      encoding: 'utf-16',
+      edits: [],
+      overwritten: ['moved.ts'],
+      digests: [{ file: 'index.ts → moved.ts', before: 'aaaaaaaaaaaa', after: 'bbbbbbbbbbbb' }],
+    }
+    const c = capture()
+    const code = await runLsp(
+      [
+        'rename',
+        'typescript',
+        'src/a.ts',
+        '1',
+        '7',
+        'renamed',
+        '--project',
+        '/proj',
+        '--allow-write',
+        '--allow-destructive-resource-ops',
+      ],
+      c.io,
+      { rename: async () => result },
+    )
+    expect(code).toBe(0)
+    expect(c.err()).toMatch(/overwr/i)
+    expect(c.err()).toMatch(/moved\.ts/)
+  })
+
   it('rename surfaces a refusal as exit 1', async () => {
     const c = capture()
     const code = await runLsp(

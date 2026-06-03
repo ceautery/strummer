@@ -88,6 +88,9 @@ const GATE_OPTIONS = {
   // Apply a rename the completeness guard flags `suspect` (open-files-scoped server → likely
   // partial). Deny-by-default: a suspect rename is refused for write without this.
   'allow-partial-rename': { type: 'boolean' },
+  // Apply a server `overwrite` on a Create/Rename (truncate-and-replace an EXISTING regular file).
+  // Deny-by-default; requires --allow-write. Symlink/dir targets + recursive delete stay refused.
+  'allow-destructive-resource-ops': { type: 'boolean' },
   'timeout-ms': { type: 'string' },
   json: { type: 'boolean' },
 } as const
@@ -117,6 +120,12 @@ interface Engines {
 function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps): Engines | null {
   const projectRoot = resolve((values.project as string) ?? process.cwd())
   const workspaceRoots = ((values['workspace-root'] as string[]) ?? []).map((r) => resolve(r))
+  // A destructive overwrite is meaningless without write-mode; refuse the contradiction HARD (not a
+  // silently-inert flag), uniformly for the stub + real paths.
+  if (values['allow-destructive-resource-ops'] && !values['allow-write']) {
+    io.err('--allow-destructive-resource-ops requires --allow-write\n')
+    return null
+  }
   if (deps.query || deps.rename || deps.describeServers) {
     return {
       query: deps.query ?? (async () => fail('query')),
@@ -156,6 +165,7 @@ function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps):
     allowedRoots,
     allowWrite: (values['allow-write'] as boolean) ?? false,
     allowPartialRename: (values['allow-partial-rename'] as boolean) ?? false,
+    allowDestructiveResourceOps: (values['allow-destructive-resource-ops'] as boolean) ?? false,
     // Wire the real walker so the partial-rename guard is active for the human CLI too.
     listFiles: defaultListFiles,
   })
@@ -469,6 +479,10 @@ function printRename(io: CliIO, r: LspRenameResult): void {
   for (const op of r.resourceOps ?? []) {
     io.out(`  ${op.kind} file: ${op.uris.join(' → ')}\n`)
   }
+  if (r.overwritten?.length)
+    io.err(
+      `warning: DESTRUCTIVELY overwrote ${r.overwritten.length} existing file(s): ${r.overwritten.join(', ')}\n`,
+    )
   if (r.partial)
     io.err(`warning: PARTIAL apply (no rollback — reconcile via VCS): ${r.partialError ?? ''}\n`)
   for (const d of r.digests ?? []) {

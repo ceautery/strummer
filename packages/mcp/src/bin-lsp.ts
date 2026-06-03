@@ -23,6 +23,10 @@ export interface LspBinConfig {
   /** Apply a rename even when the completeness guard flags it `suspect` (open-files-scoped server
    * → likely partial edit). Deny-by-default: a suspect rename is refused for write without this. */
   allowPartialRename: boolean
+  /** Apply a DESTRUCTIVE resource op — `overwrite` on a CreateFile/RenameFile (truncate-and-replace
+   * an existing regular file). Deny-by-default; requires allowWrite. Recursive/dir delete +
+   * symlink/dir targets stay refused even when set. */
+  allowDestructiveResourceOps: boolean
   /** Project roots a server may be initialized against (load-bearing even with allowRun). */
   allowedRoots: string[]
   /** Per-request wall-clock cap (ms), or undefined for the manager default. */
@@ -94,6 +98,11 @@ const detectToolchain: ToolchainDetector = (projectRoot, language) => {
  *   STRUMMER_LSP_ALLOW_PARTIAL_RENAME=1  # apply a rename the completeness guard flags `suspect`
  *                                # (an open-files-scoped server like pyright → likely partial edit);
  *                                # default off = a suspect rename is refused for write.
+ *   STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS=1  # apply a server `overwrite` on a Create/Rename
+ *                                # (truncate-and-replace an EXISTING regular file). Default off.
+ *                                # Requires STRUMMER_LSP_ALLOW_WRITE (hard startup error otherwise).
+ *                                # A symlink/directory target, recursive/dir delete, and `overwrite`
+ *                                # on a delete STAY refused even when set.
  *   STRUMMER_LSP_PROJECT_ROOTS=/abs/project,/abs/other
  *   STRUMMER_LSP_SERVERS='{"typescript":{"command":"typescript-language-server","args":["--stdio"]}}'
  *   STRUMMER_LSP_TIMEOUT_MS=15000
@@ -112,6 +121,7 @@ export function buildLspServerFromEnv(
     allowRun: bool(env.STRUMMER_LSP_ALLOW_RUN),
     allowWrite: bool(env.STRUMMER_LSP_ALLOW_WRITE),
     allowPartialRename: bool(env.STRUMMER_LSP_ALLOW_PARTIAL_RENAME),
+    allowDestructiveResourceOps: bool(env.STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS),
     allowedRoots: csv(env.STRUMMER_LSP_PROJECT_ROOTS),
     timeoutMs: num(env.STRUMMER_LSP_TIMEOUT_MS),
     registry,
@@ -124,6 +134,10 @@ export function buildLspServerFromEnv(
   // Reject the contradictory combination LOUDLY at startup rather than silently ignoring it.
   if (config.allowWrite && !config.allowRun) {
     throw new Error('STRUMMER_LSP_ALLOW_WRITE requires STRUMMER_LSP_ALLOW_RUN')
+  }
+  // A destructive overwrite is meaningless without write-mode; reject the contradiction loudly.
+  if (config.allowDestructiveResourceOps && !config.allowWrite) {
+    throw new Error('STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS requires STRUMMER_LSP_ALLOW_WRITE')
   }
 
   const artifacts =
@@ -153,6 +167,7 @@ export function buildLspServerFromEnv(
       allowedRoots: config.allowedRoots,
       allowWrite: config.allowWrite,
       allowPartialRename: config.allowPartialRename,
+      allowDestructiveResourceOps: config.allowDestructiveResourceOps,
       // Wire the real source-tree walker so the partial-rename guard is ACTIVE on this surface
       // (it is inert in the engine until a lister is provided — cf. the redactor).
       listFiles: defaultListFiles,
