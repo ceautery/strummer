@@ -81,15 +81,22 @@ $S lsp rename python greeter.py 9 7 Welcomer --project $P --allow-run --allow-wr
 Different language servers answer differently; the engine handles each over the same protocol.
 pyright's notable traits (all observed live against this project):
 
-- **`references` is scoped to open files + their import dependencies; `rename` is
-  whole-workspace.** `references` on the `Greeter` *declaration* (`greeter.py:9:7`) returns
-  only the declaration, because `main.py` (which imports `Greeter`) is not a dependency of the
-  open `greeter.py` and pyright does not scan reverse-dependencies for a plain reference search.
-  To get the cross-file uses, query `references` from a file that **uses** the symbol (e.g.
-  `main.py:3:11`). **`rename`, by contrast, forces a full-workspace scan** — the dry-run above
-  correctly edits both files — so a rename is safe and complete even from the declaration. This
-  is a pyright capability difference, not a Strummer limitation; cross-file *definition* and
-  *type-definition* resolve fine (module resolution).
+- **`references` AND `rename` are scoped to the OPEN files** (plus the queried file and
+  whatever pyright has already analyzed). pyright does **not** scan unopened workspace files for
+  uses of a symbol — a `references`/`rename` query on a *declaration* finds only the open file(s).
+  Verified: opening more files surfaces exactly those files' uses and **no more** (greeter alone →
+  1 ref; greeter + two importers open → 5; etc., scaling linearly with the open set), and a rename
+  on a 62-file project from the declaration edits **only the declaration**, missing every importer.
+  > **⚠️ This makes a pyright cross-file `rename` potentially INCOMPLETE.** Strummer applies
+  > exactly the edit the server returns, so a rename from a declaration can silently rewrite only
+  > some files and break the importers it didn't touch. **In this tiny 2-file example the rename IS
+  > complete** — but only because pyright auto-analyzes the entire (2-file) workspace; do **not**
+  > generalize that to a real project. For a complete cross-file rename with pyright you must have
+  > the referencing files open (which defeats "rename everywhere"), or use a server that does
+  > whole-project rename (tsserver, rust-analyzer, gopls). An **anchor file does not help** — it only
+  > extends coverage to the files you explicitly open, not to the ones you'd need to discover.
+  This is a pyright capability limitation, not a Strummer wire bug; cross-file *definition* and
+  *type-definition* resolve fine (single-target module resolution, unaffected by the scope).
 - **No `serverInfo`.** pyright does not report its name/version over LSP, so results carry a
   `versionWarning` (the answer cannot be attributed to a specific server version). pyright also
   sends no `positionEncoding`, so the engine uses the spec default **utf-16**.
@@ -102,5 +109,7 @@ pyright's notable traits (all observed live against this project):
 See the [greeter README](../greeter/README.md#cross-file-results--the-indexing-wait) — the
 tri-state (`ok` / `no_result` / `not_ready`), the cold-query indexing pause, `--timeout-ms`,
 multi-root (`--workspace-root`), and the exit-code contract all apply identically here. (One
-Python note: pyright signals status via `window/logMessage`, not `$/progress`, but it answers
-navigation requests completely once the program is loaded, so the wait is rarely observable.)
+Python note: pyright signals status via `window/logMessage`, not `$/progress`, so the engine's
+indexing-wait does not trigger for it; single-target answers — definition/hover/type-definition —
+are reliable, but the **whole-workspace** answers, `references` and `rename`, are bounded by the
+open-file scope described above, not by the wait.)

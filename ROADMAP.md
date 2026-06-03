@@ -788,11 +788,19 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `publishDiagnostics`. Ships `examples/lsp/pygreeter` (the Python counterpart of `greeter`:
         `greeter.py`+`main.py`) + an offline coordinate guard. **Verified live across every capability**
         (definition/references/hover/symbols/type-def/call-hierarchy/push-diagnostics + a
-        `--allow-write` rename that re-type-checks clean). Documented quirk (capability difference, no
-        code fix): pyright's `references` is open-files-scoped (misses cross-file uses from a
-        *declaration*) while `rename` forces a whole-workspace scan (complete + safe). Provenance:
-        python has **no** clean single-package toolchain map, so `bin-lsp.ts` deliberately maps none
-        (the `versionWarning` is the honest signal). See [[strummer-lsp-pyright]].
+        `--allow-write` rename that re-type-checks clean *in this 2-file example*). **Documented
+        pyright limitation (capability difference, deep-dived after a follow-up question, no code fix
+        yet):** pyright's `references` AND `rename` are scoped to the **open files** — it does not scan
+        unopened workspace files, so on a non-trivial project a references/rename from a *declaration*
+        misses unopened files (coverage scales linearly with the open set), and **a pyright cross-file
+        `rename` can be silently INCOMPLETE** (a 62-file repro renamed only the declaration). An anchor
+        file does NOT fix it (unlike `workspace/symbol`, where one anchor establishes the project and
+        the server searches its own index); server config (diagnosticMode/indexing) doesn't either. The
+        2-file example looks complete only because pyright auto-analyzes the whole tiny workspace.
+        **Possible follow-up (noted, undesigned): warn/guard the partial pyright rename, or prefer a
+        whole-project-rename server (tsserver/rust-analyzer/gopls) for Python.** Provenance: python has
+        **no** clean single-package toolchain map, so `bin-lsp.ts` deliberately maps none (the
+        `versionWarning` is the honest signal). See [[strummer-lsp-pyright]].
   - [ ] *(staged, not amputated)* the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
         delete (kept refused by design), full toolchain-version resolution.
 

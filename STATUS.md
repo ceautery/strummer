@@ -197,11 +197,17 @@ code): recorded `pyright-langserver` 1.1.410 payloads in the gate (object-form c
 ⇒ `versionWarning`, no `positionEncoding` ⇒ utf-16, no `diagnosticProvider` ⇒ push, flat-`Location`
 definition, a `documentChanges`+`version:null` multi-file rename — a REAL payload for the branch the
 synthesized fixture only guessed) + the `examples/lsp/pygreeter` quickstart (offline coordinate
-guard) + a documented pyright quirk (references is open-files-scoped while rename is whole-workspace —
-verified live across definition/references/hover/symbols/type-def/call-hierarchy/push-diagnostics and
-a live `--allow-write` rename that re-type-checks clean). Provenance: python has no clean single-pkg
-toolchain map, so `bin-lsp.ts` deliberately maps none (versionWarning is the honest signal). —
-**current count is 959 TS + 45 Py green**; see the Next-action block for the detail.**)_
+guard) + a documented pyright quirk. **Quirk (verified live, deep-dived after a follow-up question):
+pyright's `references` AND `rename` are scoped to the OPEN files** (+ queried file + whatever pyright
+auto-analyzed) — it does not scan unopened workspace files, so on a non-trivial project a
+references/rename from a *declaration* misses every unopened file; coverage scales linearly with the
+open set; **a pyright cross-file `rename` can therefore be silently INCOMPLETE** (a 62-file repro
+renamed only the declaration). An anchor file does NOT fix it (unlike `workspace/symbol`); server
+config (diagnosticMode/indexing) doesn't either. The 2-file example's complete rename is a
+small-workspace artifact. Single-target nav (definition/hover/type-def) is unaffected. Provenance:
+python has no clean single-pkg toolchain map, so `bin-lsp.ts` deliberately maps none (versionWarning
+is the honest signal). — **current count is 959 TS + 45 Py green**; see the Next-action block for the
+detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
 (item 34, ADR 0009) — firefox/webkit support via `engine.ts` (`resolveEngine` +
@@ -828,8 +834,11 @@ recursive/dir delete (refused by design), full toolchain-mismatch heuristic;
 mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems. _(DONE since: LSP
 pull-diagnostics, dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse — and the **LSP
 Python adapter** (pyright as a third real server: recorded payloads in the gate + the
-`examples/lsp/pygreeter` quickstart + the references-scope-vs-rename-scope quirk documented; no engine
-code — the engine is language-agnostic, verified live).)_
+`examples/lsp/pygreeter` quickstart; no engine code — the engine is language-agnostic, verified live.
+**Documented pyright limitation (found via a follow-up deep-dive): `references` AND `rename` are
+open-files-scoped, so a pyright cross-file rename can be silently INCOMPLETE on a real project — an
+anchor file does not fix it.** A possible follow-up — warn/guard on pyright's partial-rename, or
+prefer a whole-project-rename server for Python — is noted but undesigned.)_
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); `workspace/symbol` search
@@ -1039,9 +1048,11 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > staged (non-blocking) LSP tails:** the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
 > delete (kept refused by design); full toolchain-mismatch heuristic. _(DONE since: the **LSP Python
 > adapter** — pyright as a third real server, gate replays recorded `pyright-langserver` 1.1.410
-> payloads + the `examples/lsp/pygreeter` quickstart + the references-open-files-scope-vs-rename-whole-
-> workspace quirk documented; the engine is language-agnostic so NO engine code, verified live across
-> every capability incl. a `--allow-write` rename that re-type-checks clean — see
+> payloads + the `examples/lsp/pygreeter` quickstart; the engine is language-agnostic so NO engine
+> code, verified live. **Documented pyright limitation (deep-dived after a follow-up question): both
+> `references` AND `rename` are open-files-scoped — a pyright cross-file rename can be silently
+> INCOMPLETE on a real project (62-file repro renamed only the declaration); an anchor file does not
+> fix it. Possible follow-up: warn/guard the partial rename — noted, undesigned.** See
 > [[strummer-lsp-pyright]]. And dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse: a query whose root group
 > is a SUPERSET of a warm same-language server's folders extends that server in place via
 > `workspace/didChangeWorkspaceFolders` + re-keys it (capability-gated on
