@@ -128,9 +128,13 @@ write-mode rename), **resource-operation write-mode** (`lsp_rename` applies
 renames its backing file — verified live against rust-analyzer), and its **safe-subset v1 cuts**
 (`ignoreIfExists`/`ignoreIfNotExists` as no-ops + editing a file also renamed/deleted in one batch,
 via a per-file `Fate` projection; conflicting batches refused) have all landed. The resource-op
-work also generalized the readiness model to servers that signal not-ready via an error. Staged
-next: dynamic workspace-folder changes (`didChangeWorkspaceFolders`), the destructive resource-op
-options (`overwrite`) + recursive/dir delete (refused by design), and the full toolchain heuristic.
+work also generalized the readiness model to servers that signal not-ready via an error. Most
+recently, **dynamic workspace-folder changes** (`didChangeWorkspaceFolders`) landed as grow-only
+warm-server reuse — a query whose root group is a superset of a warm same-language server's folders
+extends that server in place (capability-gated; ambiguous-tie/no-cap ⇒ spawn fresh) instead of
+respawning and re-indexing; verified live against rust-analyzer. Staged next: the destructive
+resource-op options (`overwrite`) + recursive/dir delete (refused by design), the full toolchain
+heuristic, and an LSP Python adapter.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
