@@ -206,7 +206,7 @@ renamed only the declaration). An anchor file does NOT fix it (unlike `workspace
 config (diagnosticMode/indexing) doesn't either. The 2-file example's complete rename is a
 small-workspace artifact. Single-target nav (definition/hover/type-def) is unaffected. Provenance:
 python has no clean single-pkg toolchain map, so `bin-lsp.ts` deliberately maps none (versionWarning
-is the honest signal). — **current count is 959 TS + 45 Py green**; see the Next-action block for the
+is the honest signal). — **current count is 968 TS + 45 Py green**; see the Next-action block for the
 detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
@@ -1049,7 +1049,7 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > `welcome`) applied cross-file edits + the `RenameFile` to disk, AND the editing-a-renamed-file case
 > (a `crate::greeter::` self-reference in the module file) applied with the moved `welcome.rs` carrying
 > the EDITED content — the exact batch the old code refused (repro + the 30s-deadline gotcha in
-> [[strummer-lsp-rust-analyzer]]). **959 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> [[strummer-lsp-rust-analyzer]]). **968 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
 > staged (non-blocking) LSP tails:** the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
 > delete (kept refused by design); full toolchain-mismatch heuristic. _(DONE since: the **LSP Python
 > adapter** — pyright as a third real server, gate replays recorded `pyright-langserver` 1.1.410
