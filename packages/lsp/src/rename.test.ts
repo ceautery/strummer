@@ -816,6 +816,92 @@ describe('LspRenameEngine — destructive resource-ops: RenameFile overwrite (op
     expect(r.applied).toBe(false)
     expect(r.refused).toMatch(/created or edited in this same edit/i)
   })
+
+  it('4a: a landed clobbering rename surfaces its (overwritten) row even on a PARTIAL commit', async () => {
+    // [rename index->moved overwrite (clobbers moved.ts), delete extra.ts]; only the rename lands.
+    const partialWriter: RenameWriter = {
+      commit: (o) => ({ completed: o.slice(0, 1), partial: true, error: 'EIO after rename' }),
+    }
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          kind: 'rename',
+          oldUri: `${dir}/index.ts`,
+          newUri: `${dir}/moved.ts`,
+          options: { overwrite: true },
+        },
+        { kind: 'delete', uri: `${dir}/extra.ts` },
+      ]),
+    })
+    writeFileSync(join(root, 'moved.ts'), 'DEST')
+    writeFileSync(join(root, 'extra.ts'), 'EXTRA')
+    const r = await destructiveEngineFor(root, manager, partialWriter).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(r.partial).toBe(true)
+    const files = r.digests?.map((d) => d.file) ?? []
+    expect(files).toContain('index.ts → moved.ts')
+    expect(files).toContain('moved.ts (overwritten)') // attached to the LANDED rename op
+    expect(files).not.toContain('extra.ts (deleted)') // the un-landed delete is not audited
+    expect(r.overwritten).toContain('moved.ts')
+  })
+
+  it('4b: when the clobbering rename does NOT land, no (overwritten) row + the target is intact', async () => {
+    const noneWriter: RenameWriter = {
+      commit: () => ({ completed: [], partial: true, error: 'EIO before any op' }),
+    }
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          kind: 'rename',
+          oldUri: `${dir}/index.ts`,
+          newUri: `${dir}/moved.ts`,
+          options: { overwrite: true },
+        },
+      ]),
+    })
+    writeFileSync(join(root, 'moved.ts'), 'DEST')
+    const r = await destructiveEngineFor(root, manager, noneWriter).rename(renameInput(root))
+    expect(r.partial).toBe(true)
+    expect(r.digests?.some((d) => d.file === 'moved.ts (overwritten)')).toBe(false)
+    expect(r.overwritten).toBeUndefined()
+    expect(readFileSync(join(root, 'moved.ts'), 'utf8')).toBe('DEST') // not clobbered
+  })
+
+  it('5a: an overwrite of the QUERIED file that DRIFTED on disk since compute is refused', async () => {
+    // A stateful reader: the compute-time read of the queried file sees GREETER_TS; the apply-time
+    // drift re-read sees a different content => sha mismatch => refused (never reaches the writer).
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        {
+          kind: 'rename',
+          oldUri: `${dir}/index.ts`,
+          newUri: `${dir}/greeter.ts`, // the QUERIED file is the overwrite target
+          options: { overwrite: true },
+        },
+      ]),
+    })
+    const greeterAbs = join(root, 'greeter.ts')
+    let greeterReads = 0
+    const driftingRead = (p: string): string | undefined => {
+      if (p === greeterAbs) {
+        greeterReads += 1
+        return greeterReads === 1 ? GREETER_TS : `${GREETER_TS}// drifted\n`
+      }
+      return readFileSync(p, 'utf8')
+    }
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      allowDestructiveResourceOps: true,
+      readFile: driftingRead,
+      writer: THROWING_WRITER,
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/changed on disk since the rename was computed/i)
+  })
 })
 
 describe('LspRenameEngine — edit composed with rename/delete (safe-subset v1 cuts)', () => {
