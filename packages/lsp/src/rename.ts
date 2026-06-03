@@ -12,11 +12,13 @@
  * (CreateFile/RenameFile/DeleteFile) APPLY in `documentChanges` order interleaved with text edits;
  * the replay runs over a per-file `Fate` VFS keyed by ORIGINAL uri, so content flows through a
  * rename (an edit to a renamed file's new path composes onto the carried content) and net-no-op
- * batches (create-then-delete) drop out. The safe-subset v1 cuts are honored:
- * `ignoreIfExists`/`ignoreIfNotExists` are conditional no-ops; `overwrite`/recursive-delete stay
- * refused, as do genuinely ambiguous batches (a rename cycle, two renames into one target, editing
- * a renamed-away path, deleting a path that is also a rename/create target). A mid-commit fault is
- * terminal (`partial`).
+ * batches (create-then-delete) drop out. `ignoreIfExists`/`ignoreIfNotExists` are conditional
+ * no-ops. `overwrite` (Create/Rename truncate-and-replace of an EXISTING regular file) APPLIES only
+ * behind the separate operator `allowDestructiveResourceOps` gate, auditing the clobbered bytes and
+ * surfacing `overwritten[]`; a symlink/directory target, recursive/directory delete, `overwrite` on
+ * a delete, and genuinely ambiguous batches (a rename cycle, two renames into one target, editing a
+ * renamed-away path, deleting a path that is also a rename/create target) all stay refused. A
+ * mid-commit fault is terminal (`partial`).
  *
  * The adversarial corrections baked in here: oldText is sliced with absolute offsets (never
  * reconstructed from line:col); apply is staleness-guarded (the queried file vs its compute hash;
@@ -302,6 +304,18 @@ function isRegularFile(abs: string): boolean {
 function isOverwritableRegularFile(abs: string): boolean {
   try {
     return lstatSync(abs).isFile()
+  } catch {
+    return false
+  }
+}
+
+/** True if a path exists on disk (any kind), WITHOUT following a symlink. Used to detect an overwrite
+ * destination that `liveOccupied` (content-read-based) misses — notably a DIRECTORY, whose content
+ * read returns undefined so it would otherwise look unoccupied. */
+function existsLstat(abs: string): boolean {
+  try {
+    lstatSync(abs)
+    return true
   } catch {
     return false
   }
@@ -647,6 +661,9 @@ export class LspRenameEngine {
         // Destructive clobbers, keyed by the FINAL absolute path -> project-relative path, surfaced as
         // `overwritten` once we know which physical op actually landed (post-commit).
         const overwrites = new Map<string, string>()
+        // An overwrite-RENAME's destroyed destination, keyed by newUri -> prior disk bytes; drives the
+        // `(overwritten)` audit row attached to the rename PhysicalOp (no `order`/`diskBefore` entry).
+        const clobbered = new Map<string, string>()
         const diskCache = new Map<string, string | undefined>()
         const readDisk = (u: string): string | undefined => {
           if (!diskCache.has(u)) diskCache.set(u, this.readFile(abs.get(u) as string))
@@ -736,7 +753,37 @@ export class LspRenameEngine {
                 `cannot rename to ${rel(op.newUri)}: it is already a target in this edit`,
               )
             }
-            if (liveOccupied(op.newUri)) {
+            const newAbs = abs.get(op.newUri) as string
+            // An overwrite clobbers an EXISTING destination — detect it via liveOccupied (regular file
+            // / through-symlink) OR a raw lstat (catches a DIRECTORY, which reads as unoccupied).
+            if (
+              op.options?.overwrite === true &&
+              (liveOccupied(op.newUri) || existsLstat(newAbs))
+            ) {
+              // gate verified by the early-refusal loop. Clobber an EXISTING on-disk regular file only
+              // — refuse a target created/edited IN this same batch (structural two-into-one), a
+              // symlink/directory (no clobber-through-link audit lie), and a drifted open file.
+              if (vfs.get(op.newUri)?.kind === 'live') {
+                return refuse(
+                  `cannot overwrite ${rel(op.newUri)}: it is created or edited in this same edit (refused)`,
+                )
+              }
+              if (!isOverwritableRegularFile(newAbs)) {
+                return refuse(
+                  `cannot overwrite ${rel(op.newUri)}: not a regular file on disk (symlink/directory — refused)`,
+                )
+              }
+              if (op.newUri === queriedUri && sha256(readDisk(op.newUri) ?? '') !== sha256(text)) {
+                return refuse(
+                  'the file changed on disk since the rename was computed; re-query and retry',
+                )
+              }
+              // capture the destroyed bytes WITHOUT touching `order` (no phantom origin entry); the
+              // clobber digest row + `overwritten` are emitted post-plan / post-commit.
+              clobbered.set(op.newUri, readDisk(op.newUri) ?? '')
+              overwrites.set(newAbs, rel(op.newUri))
+              // fall through to normal rename bookkeeping.
+            } else if (liveOccupied(op.newUri)) {
               if (op.options?.ignoreIfExists === true) continue // safe no-op: skip; old stays
               return refuse(`cannot rename to ${rel(op.newUri)}: it already exists`)
             }
@@ -820,9 +867,25 @@ export class LspRenameEngine {
         const physical: PhysicalOp[] = []
         const digests: RenameDigest[] = []
         const digestForPhysical: number[] = []
-        const push = (p: PhysicalOp, d: number): void => {
+        // Extra digest rows carried by a physical op (e.g. an overwrite-rename's destroyed-target
+        // `(overwritten)` row attached to the rename) — ONE reconstruction rule for a partial commit.
+        const extraRowsForPhysical: number[][] = []
+        const push = (p: PhysicalOp, d: number, extra: number[] = []): void => {
           physical.push(p)
           digestForPhysical.push(d)
+          extraRowsForPhysical.push(extra)
+        }
+        // Build the `(overwritten)` clobber row for a rename whose destination is being clobbered,
+        // returning its digest index (to attach to the rename op) or `[]` when nothing was clobbered.
+        const clobberRow = (finalUri: string): number[] => {
+          if (!clobbered.has(finalUri)) return []
+          return [
+            digests.push({
+              file: `${rel(finalUri)} (overwritten)`,
+              before: sha256(clobbered.get(finalUri) as string),
+              after: '',
+            }) - 1,
+          ]
         }
         // TIER 1 — writes & renames, in first-touch order.
         for (const o of order) {
@@ -851,6 +914,7 @@ export class LspRenameEngine {
                 before,
                 after: sha256(f.content),
               }) - 1
+            // the destroyed-target row (if any) is attached to the RENAME op — the op that clobbers.
             push(
               {
                 kind: 'rename',
@@ -858,6 +922,7 @@ export class LspRenameEngine {
                 toAbs: abs.get(f.finalUri) as string,
               },
               d,
+              clobberRow(f.finalUri),
             )
             push({ kind: 'write', absPath: abs.get(f.finalUri) as string, newText: f.content }, d)
           } else {
@@ -871,6 +936,7 @@ export class LspRenameEngine {
                 toAbs: abs.get(f.finalUri) as string,
               },
               d,
+              clobberRow(f.finalUri),
             )
           }
         }
@@ -916,6 +982,10 @@ export class LspRenameEngine {
             // executes AFTER the rename, so a landed write always implies a landed rename; we never
             // tell the server a file moved when its origin still holds the bytes on disk.)
             if (landedRename(toAbs)) {
+              // An overwrite-rename clobbered the destination — close any open buffer for the OLD
+              // destination first (didFileRename blindly re-opens newUri; a stale dest buffer would
+              // otherwise linger). No-op if the destination was never open.
+              if (clobbered.has(f.finalUri)) client.didFileDelete(f.finalUri)
               // bytes now at finalUri = the edited content IFF the paired write landed; else pristine.
               const wl = landedWrite(toAbs)
               client.didFileRename(o, f.finalUri, wl ? f.content : (diskBefore.get(o) ?? ''))
@@ -933,9 +1003,11 @@ export class LspRenameEngine {
         const outDigests = res.partial
           ? [
               ...new Set(
-                physical
-                  .map((p, i) => (landed.has(p) ? (digestForPhysical[i] as number) : -1))
-                  .filter((i) => i >= 0),
+                physical.flatMap((p, i) =>
+                  landed.has(p)
+                    ? [digestForPhysical[i] as number, ...(extraRowsForPhysical[i] as number[])]
+                    : [],
+                ),
               ),
             ].map((i) => digests[i] as RenameDigest)
           : digests

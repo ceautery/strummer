@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -721,6 +722,99 @@ describe('LspRenameEngine — destructive resource-ops: CreateFile overwrite (op
     const r = await engine.rename(renameInput(root))
     expect(r.applied).toBe(false)
     expect(r.refused).toMatch(/overwrite requires.*destructive-resource-ops gate/i)
+  })
+})
+
+describe('LspRenameEngine — destructive resource-ops: RenameFile overwrite (operator-gated)', () => {
+  const docChanges =
+    (build: (dir: string) => unknown[]) =>
+    (params: unknown): unknown => {
+      const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+      const dir = uri.slice(0, uri.lastIndexOf('/'))
+      return { documentChanges: build(dir) }
+    }
+  const destructiveEngineFor = (
+    root: string,
+    manager: LanguageServerManager,
+    writer: RenameWriter,
+  ) =>
+    new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      allowDestructiveResourceOps: true,
+      writer,
+    })
+  // edit the queried file's symbol + rename index.ts onto an EXISTING moved.ts (overwrite).
+  const editAndRenameOverwrite = docChanges((dir) => [
+    {
+      textDocument: { uri: `${dir}/greeter.ts`, version: 1 },
+      edits: [{ newText: 'Greeter2', range: DECL_RANGE }],
+    },
+    {
+      kind: 'rename',
+      oldUri: `${dir}/index.ts`,
+      newUri: `${dir}/moved.ts`,
+      options: { overwrite: true },
+    },
+  ])
+
+  it('3a: rename onto an EXISTING regular file clobbers it (gated) + audits the destroyed bytes', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({ onRename: editAndRenameOverwrite })
+    writeFileSync(join(root, 'moved.ts'), 'DEST') // the file the rename will clobber
+    const r = await destructiveEngineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    expect(ops.some((o) => o.kind === 'rename' && o.toAbs === join(root, 'moved.ts'))).toBe(true)
+    // no stray write/delete AT the clobbered path — the rename op itself clobbers it (pure rename).
+    expect(
+      ops.some(
+        (o) =>
+          (o.kind === 'write' || o.kind === 'delete') &&
+          (o as { absPath?: string }).absPath === join(root, 'moved.ts'),
+      ),
+    ).toBe(false)
+    const main = r.digests?.find((d) => d.file === 'index.ts → moved.ts')
+    expect(main).toBeDefined()
+    const clob = r.digests?.find((d) => d.file === 'moved.ts (overwritten)')
+    expect(clob?.before).toBe(createHash('sha256').update('DEST').digest('hex'))
+    expect(clob?.after).toBe('')
+    expect(r.overwritten).toContain('moved.ts')
+  })
+
+  it('3b: rename + overwrite onto a DIRECTORY is refused (writer untouched)', async () => {
+    const { root, manager } = setup({ onRename: editAndRenameOverwrite })
+    mkdirSync(join(root, 'moved.ts')) // a directory at the destination path
+    const r = await destructiveEngineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/not a regular file.*(symlink|directory)/i)
+  })
+
+  it('3c: rename + overwrite onto a SYMLINK is refused (no clobber-through-link; target intact)', async () => {
+    const { root, manager } = setup({ onRename: editAndRenameOverwrite })
+    symlinkSync(join(root, 'greeter.ts'), join(root, 'moved.ts')) // symlink -> an in-root real file
+    const r = await destructiveEngineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/not a regular file.*(symlink|directory)/i)
+    expect(readFileSync(join(root, 'greeter.ts'), 'utf8')).toBe(GREETER_TS) // link target untouched
+  })
+
+  it('3d: rename + overwrite onto an IN-BATCH created target is refused (two-into-one)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/moved.ts` },
+        {
+          kind: 'rename',
+          oldUri: `${dir}/index.ts`,
+          newUri: `${dir}/moved.ts`,
+          options: { overwrite: true },
+        },
+      ]),
+    })
+    const r = await destructiveEngineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/created or edited in this same edit/i)
   })
 })
 
