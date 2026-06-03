@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
+  defaultListFiles,
   LanguageServerManager,
   LspGateError,
   LspQueryEngine,
@@ -84,6 +85,9 @@ const GATE_OPTIONS = {
   servers: { type: 'string' },
   'allow-run': { type: 'boolean' },
   'allow-write': { type: 'boolean' },
+  // Apply a rename the completeness guard flags `suspect` (open-files-scoped server → likely
+  // partial). Deny-by-default: a suspect rename is refused for write without this.
+  'allow-partial-rename': { type: 'boolean' },
   'timeout-ms': { type: 'string' },
   json: { type: 'boolean' },
 } as const
@@ -151,6 +155,9 @@ function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps):
     allowRun: (values['allow-run'] as boolean) ?? false,
     allowedRoots,
     allowWrite: (values['allow-write'] as boolean) ?? false,
+    allowPartialRename: (values['allow-partial-rename'] as boolean) ?? false,
+    // Wire the real walker so the partial-rename guard is active for the human CLI too.
+    listFiles: defaultListFiles,
   })
   return {
     query: (input) => query.query(input),
@@ -437,6 +444,17 @@ function printRename(io: CliIO, r: LspRenameResult): void {
   const mode = r.applied ? 'APPLIED to disk' : 'dry-run (not applied)'
   io.out(`status: ${r.status}  ${mode}  [${r.encoding}, ${info}]\n`)
   if (r.versionWarning) io.err(`warning: ${r.versionWarning}\n`)
+  if (r.completeness === 'suspect') {
+    const miss = r.suspectedMissedFiles ?? []
+    io.err(
+      `warning: rename may be INCOMPLETE — the symbol also appears in ${miss.length} same-language file(s) NOT in this edit: ${miss.join(', ')}\n`,
+    )
+    io.err(
+      '  the language server may scope rename to open files; re-run with --allow-partial-rename to apply anyway\n',
+    )
+  } else if (r.completeness === 'unknown') {
+    io.err('warning: rename completeness unverified (file scan was truncated)\n')
+  }
   if (r.refused) {
     io.err(`refused: ${r.refused}\n`)
     return

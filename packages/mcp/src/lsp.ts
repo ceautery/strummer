@@ -529,6 +529,12 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
             ...(result.digests ? { digests: result.digests } : {}),
             ...(result.partial ? { partial: true } : {}),
             ...(result.partialError ? { partialError: result.partialError } : {}),
+            // Partial-rename guard: the agent must see when an edit is likely incomplete (an
+            // open-files-scoped server). A `suspect` verdict refuses the WRITE deny-by-default.
+            ...(result.completeness ? { completeness: result.completeness } : {}),
+            ...(result.suspectedMissedFiles
+              ? { suspectedMissedFiles: result.suspectedMissedFiles }
+              : {}),
           }
           let structured: Record<string, unknown> = { ...head, edits: result.edits }
           // A large edit set is offloaded by handle (already redacted by the engine); the inline

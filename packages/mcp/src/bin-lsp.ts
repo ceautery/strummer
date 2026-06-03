@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ArtifactStore } from '@strummer/artifacts'
 import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
 import {
+  defaultListFiles,
   LanguageServerManager,
   LspQueryEngine,
   LspRenameEngine,
@@ -19,6 +20,9 @@ export interface LspBinConfig {
   allowRun: boolean
   /** Enable `lsp_rename` to WRITE edits to disk (deny-by-default). Requires allowRun. */
   allowWrite: boolean
+  /** Apply a rename even when the completeness guard flags it `suspect` (open-files-scoped server
+   * → likely partial edit). Deny-by-default: a suspect rename is refused for write without this. */
+  allowPartialRename: boolean
   /** Project roots a server may be initialized against (load-bearing even with allowRun). */
   allowedRoots: string[]
   /** Per-request wall-clock cap (ms), or undefined for the manager default. */
@@ -87,6 +91,9 @@ const detectToolchain: ToolchainDetector = (projectRoot, language) => {
  *   STRUMMER_LSP_ALLOW_RUN=1
  *   STRUMMER_LSP_ALLOW_WRITE=1   # lets lsp_rename WRITE edits to disk; default off = dry-run only.
  *                                # Requires STRUMMER_LSP_ALLOW_RUN (hard startup error otherwise).
+ *   STRUMMER_LSP_ALLOW_PARTIAL_RENAME=1  # apply a rename the completeness guard flags `suspect`
+ *                                # (an open-files-scoped server like pyright → likely partial edit);
+ *                                # default off = a suspect rename is refused for write.
  *   STRUMMER_LSP_PROJECT_ROOTS=/abs/project,/abs/other
  *   STRUMMER_LSP_SERVERS='{"typescript":{"command":"typescript-language-server","args":["--stdio"]}}'
  *   STRUMMER_LSP_TIMEOUT_MS=15000
@@ -104,6 +111,7 @@ export function buildLspServerFromEnv(
   const config: LspBinConfig = {
     allowRun: bool(env.STRUMMER_LSP_ALLOW_RUN),
     allowWrite: bool(env.STRUMMER_LSP_ALLOW_WRITE),
+    allowPartialRename: bool(env.STRUMMER_LSP_ALLOW_PARTIAL_RENAME),
     allowedRoots: csv(env.STRUMMER_LSP_PROJECT_ROOTS),
     timeoutMs: num(env.STRUMMER_LSP_TIMEOUT_MS),
     registry,
@@ -144,6 +152,10 @@ export function buildLspServerFromEnv(
       allowRun: config.allowRun,
       allowedRoots: config.allowedRoots,
       allowWrite: config.allowWrite,
+      allowPartialRename: config.allowPartialRename,
+      // Wire the real source-tree walker so the partial-rename guard is ACTIVE on this surface
+      // (it is inert in the engine until a lister is provided — cf. the redactor).
+      listFiles: defaultListFiles,
       // default stage-then-commit writer; LSP has no operator secret source (the only surfaced
       // content is the renamed identifier token), so the engine's identity redactor is used.
     })

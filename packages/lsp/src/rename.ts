@@ -33,13 +33,15 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, relative } from 'node:path'
+import { dirname, extname, join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { applyTextEdits, isPlausibleRenameName } from './apply.js'
 import type { NavResult, ServerInfo } from './client.js'
@@ -71,6 +73,125 @@ const defaultReadFile: FileReader = (p) => {
     return undefined
   }
 }
+
+/**
+ * Lists candidate source files (absolute paths) under the allowlisted root group to scan for the
+ * partial-rename completeness guard — same-language source only (`extension`, e.g. `.py`). Injected
+ * so the gate never walks a real tree; `truncated` ⇒ a cap was hit and the scan is not exhaustive.
+ */
+export type ProjectFileLister = (
+  roots: string[],
+  opts: { extension: string },
+) => { files: string[]; truncated: boolean }
+
+// Directories never worth scanning for source references (deps, VCS, caches, build output).
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  '.hg',
+  '.svn',
+  '__pycache__',
+  '.venv',
+  'venv',
+  'env',
+  '.env',
+  '.tox',
+  '.nox',
+  '.mypy_cache',
+  '.pytest_cache',
+  '.ruff_cache',
+  'dist',
+  'build',
+  'target',
+  '.idea',
+  '.vscode',
+])
+const MAX_SCAN_FILES = 5000
+
+/** Default lister: a bounded, symlink-safe recursive walk collecting `extension` files, skipping
+ * dependency/VCS/cache/build dirs and any dotdir. Stops (`truncated`) at {@link MAX_SCAN_FILES}.
+ * The partial-rename guard is OFF until a lister is wired (like `redact`, the surfaces wire this). */
+export const defaultListFiles: ProjectFileLister = (roots, { extension }) => {
+  const files: string[] = []
+  const seenDirs = new Set<string>()
+  let truncated = false
+  const walk = (dir: string): void => {
+    if (truncated) return
+    let real: string
+    try {
+      real = realpathSync(dir)
+    } catch {
+      return
+    }
+    if (seenDirs.has(real)) return // symlink-loop guard
+    seenDirs.add(real)
+    let entries: import('node:fs').Dirent[]
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (truncated) return
+      const full = join(dir, e.name)
+      if (e.isDirectory()) {
+        if (SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue
+        walk(full)
+      } else if (e.isFile() && extname(e.name) === extension) {
+        if (files.length >= MAX_SCAN_FILES) {
+          truncated = true
+          return
+        }
+        files.push(full)
+      }
+    }
+  }
+  for (const r of roots) walk(r)
+  return { files, truncated }
+}
+
+const realpathOrSelf = (p: string): string => {
+  try {
+    return realpathSync(p)
+  } catch {
+    return p
+  }
+}
+
+const ID_CHAR = /[\p{L}\p{N}_$]/u
+
+/** The identifier token (code-point aware) spanning a 1-based human `line`/`column` in `text`. */
+function identifierAt(text: string, line: number, column: number): string {
+  const lines = text.split(/\r\n|\r|\n/)
+  const ln = lines[line - 1]
+  if (ln === undefined) return ''
+  const cps = [...ln]
+  let i = column - 1
+  // The position may sit just past the token's end; step back onto it.
+  if (
+    (i < 0 || i >= cps.length || !ID_CHAR.test(cps[i] as string)) &&
+    i > 0 &&
+    ID_CHAR.test(cps[i - 1] as string)
+  ) {
+    i -= 1
+  }
+  if (i < 0 || i >= cps.length || !ID_CHAR.test(cps[i] as string)) return ''
+  let s = i
+  let e = i + 1
+  while (s > 0 && ID_CHAR.test(cps[s - 1] as string)) s -= 1
+  while (e < cps.length && ID_CHAR.test(cps[e] as string)) e += 1
+  return cps.slice(s, e).join('')
+}
+
+/** A whole-word matcher for `name` (not flanked by identifier chars). `name` is regex-escaped. */
+function wholeWordRegex(name: string): RegExp {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?<![\\p{L}\\p{N}_$])${esc}(?![\\p{L}\\p{N}_$])`, 'u')
+}
+
+/** How exhaustively the partial-rename guard could verify the edit covers every textual use. */
+export type RenameCompleteness = 'complete' | 'suspect' | 'unknown'
+const MAX_SUSPECTS = 50
 
 /**
  * One physical filesystem action in an apply commit. A `write` creates-or-overwrites a file's
@@ -190,7 +311,17 @@ export interface LspRenameEngineOptions {
   allowedRoots: string[]
   /** OPERATOR opt-in to WRITE the edit to disk. Distinct from allowRun; off ⇒ dry-run preview. */
   allowWrite: boolean
+  /**
+   * OPERATOR opt-in to APPLY a rename whose completeness verdict is `suspect` — i.e. the old
+   * identifier also appears in same-language files the server's edit does NOT touch (the hallmark
+   * of an open-files-scoped server like pyright, whose cross-file rename can be silently partial).
+   * Deny-by-default: a suspect rename is REFUSED for write unless this is set. Never an agent input.
+   */
+  allowPartialRename?: boolean
   readFile?: FileReader
+  /** Lists same-language source files to scan for the partial-rename guard. UNSET ⇒ the guard is
+   * inactive (no scan); the bin/CLI/MCP wire `defaultListFiles` to turn it on (cf. `redact`). */
+  listFiles?: ProjectFileLister
   writer?: RenameWriter
   /** Secret redaction over every surfaced hunk (default identity; the bin wires @strummer/safety). */
   redact?: (text: string) => string
@@ -259,6 +390,15 @@ export interface LspRenameResult {
    * rollback — reconcile via VCS). */
   partial?: boolean
   partialError?: string
+  /**
+   * The partial-rename guard verdict (omitted when the rename was not `ok`). `complete` — every
+   * same-language file mentioning the old name is in the edit; `suspect` — some are NOT (the edit
+   * may be partial, e.g. an open-files-scoped server); `unknown` — the scan was truncated.
+   */
+  completeness?: RenameCompleteness
+  /** Project-relative same-language files that mention the old identifier but are absent from the
+   * edit (capped). Populated when `completeness === 'suspect'`. */
+  suspectedMissedFiles?: string[]
   serverInfo?: ServerInfo
   toolchain?: { name: string; version: string | null }
   encoding: PositionEncoding
@@ -289,7 +429,10 @@ export class LspRenameEngine {
   private readonly allowRun: boolean
   private readonly allowedRoots: string[]
   private readonly allowWrite: boolean
+  private readonly allowPartialRename: boolean
   private readonly readFile: FileReader
+  /** When unset the partial-rename guard is inactive (the bin/CLI/MCP wire `defaultListFiles`). */
+  private readonly listFiles?: ProjectFileLister
   private readonly writer: RenameWriter
   private readonly redact: (text: string) => string
 
@@ -298,7 +441,9 @@ export class LspRenameEngine {
     this.allowRun = options.allowRun
     this.allowedRoots = options.allowedRoots
     this.allowWrite = options.allowWrite
+    this.allowPartialRename = options.allowPartialRename ?? false
     this.readFile = options.readFile ?? defaultReadFile
+    this.listFiles = options.listFiles
     this.writer = options.writer ?? defaultRenameWriter
     this.redact = options.redact ?? ((t) => t)
   }
@@ -346,19 +491,40 @@ export class LspRenameEngine {
       },
     )
 
+    // Partial-rename guard: scan the allowlisted root group for same-language files that mention
+    // the old identifier but are NOT in the server's edit. An open-files-scoped server (pyright)
+    // can return a too-narrow edit that, applied verbatim, would silently break the untouched uses.
+    const guard =
+      run.status === 'ok' && this.listFiles
+        ? this.assessCompleteness(run.edit, input, queriedAbs, text)
+        : undefined
+    const blockedByGuard = guard?.completeness === 'suspect' && !this.allowPartialRename
+
     // Apply is a SEPARATE phase (it may need more locks than the compute phase held — the
     // multi-URI lock). The queried file stays open from compute (open-once), so its post-write
-    // didChange still fires. Dry-run by default: only when allowWrite + ok do we touch disk.
+    // didChange still fires. Dry-run by default: only when allowWrite + ok do we touch disk — and
+    // a suspect verdict refuses the WRITE (deny-by-default) unless the operator set allowPartialRename.
     const apply =
-      run.status === 'ok' && this.allowWrite
+      run.status === 'ok' && this.allowWrite && !blockedByGuard
         ? await this.applyEdit(run.edit, input, queriedUri, text, run.encoding)
         : { applied: false }
+    const guardRefusal =
+      this.allowWrite && blockedByGuard
+        ? `rename may be INCOMPLETE: the symbol ${JSON.stringify(
+            guard?.oldName ?? '',
+          )} also appears in ${guard?.suspectFiles.length} same-language file(s) not in this edit (e.g. ${guard?.suspectFiles
+            .slice(0, 3)
+            .join(
+              ', ',
+            )}). The language server may scope rename to open files; nothing was written. Re-run with allowPartialRename to apply anyway.`
+        : undefined
 
     return this.shape(
       input,
-      { ...run, apply, refused: apply.refused ?? run.refused },
+      { ...run, apply, refused: guardRefusal ?? apply.refused ?? run.refused },
       queriedUri,
       text,
+      guard,
     )
   }
 
@@ -703,11 +869,69 @@ export class LspRenameEngine {
     )
   }
 
+  /**
+   * The partial-rename completeness guard. Extracts the old identifier at the queried position,
+   * then scans the allowlisted root group for same-language files that mention it as a whole word
+   * but are NOT covered by the server's edit (text edits + resource-op endpoints). Any such file is
+   * a SUSPECT — the edit is likely partial (an open-files-scoped server). `unknown` ⇒ the scan was
+   * truncated (cap hit). Server-agnostic: a whole-project-rename server covers every use ⇒ `complete`.
+   */
+  private assessCompleteness(
+    edit: NormalizedWorkspaceEdit,
+    input: LspRenameInput,
+    queriedAbs: string,
+    queriedText: string,
+  ): { completeness: RenameCompleteness; suspectFiles: string[]; oldName: string } {
+    const lister = this.listFiles
+    const oldName = identifierAt(queriedText, input.line, input.column)
+    const group = [input.projectRoot, ...(input.workspaceRoots ?? [])]
+    if (!lister || !oldName) return { completeness: 'complete', suspectFiles: [], oldName }
+    const covered = new Set<string>()
+    const cover = (uri: string): void => {
+      try {
+        covered.add(confineEditedUriToRoots(group, uri))
+      } catch {
+        // out of the root group — not scannable, not a "missed" in-project file
+      }
+    }
+    for (const f of edit.files) cover(f.uri)
+    for (const op of edit.operations) {
+      if (op.type === 'rename') {
+        cover(op.oldUri)
+        cover(op.newUri)
+      } else cover(op.uri)
+    }
+    const { files, truncated } = lister(group, { extension: extname(queriedAbs) })
+    const re = wholeWordRegex(oldName)
+    const suspectsAbs: string[] = []
+    for (const f of files) {
+      const real = realpathOrSelf(f)
+      if (covered.has(real)) continue
+      const t = this.readFile(real)
+      if (t === undefined) continue
+      if (re.test(t)) {
+        suspectsAbs.push(real)
+        if (suspectsAbs.length >= MAX_SUSPECTS) break
+      }
+    }
+    const completeness: RenameCompleteness = suspectsAbs.length
+      ? 'suspect'
+      : truncated
+        ? 'unknown'
+        : 'complete'
+    return {
+      completeness,
+      suspectFiles: suspectsAbs.map((p) => relative(input.projectRoot, p)),
+      oldName,
+    }
+  }
+
   private shape(
     input: LspRenameInput,
     run: RunOutcome,
     queriedUri: string,
     queriedText: string,
+    guard?: { completeness: RenameCompleteness; suspectFiles: string[] },
   ): LspRenameResult {
     const { edit, encoding, serverInfo } = run
     const totalEditCount = edit.files.reduce((n, f) => n + f.edits.length, 0)
@@ -744,6 +968,10 @@ export class LspRenameEngine {
       ...(run.apply.partialError ? { partialError: run.apply.partialError } : {}),
       ...(serverInfo ? { serverInfo } : {}),
       ...(input.toolchain ? { toolchain: input.toolchain } : {}),
+      ...(guard ? { completeness: guard.completeness } : {}),
+      ...(guard && guard.suspectFiles.length > 0
+        ? { suspectedMissedFiles: guard.suspectFiles }
+        : {}),
       encoding,
       ...(versionWarning ? { versionWarning } : {}),
     }

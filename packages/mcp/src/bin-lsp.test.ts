@@ -73,6 +73,23 @@ describe('buildLspServerFromEnv', () => {
     expect(await toolNames(built)).toContain('lsp_rename')
   })
 
+  it('parses STRUMMER_LSP_ALLOW_PARTIAL_RENAME (default off — suspect renames refused for write)', () => {
+    const off = buildLspServerFromEnv({
+      STRUMMER_LSP_ALLOW_RUN: '1',
+      STRUMMER_LSP_PROJECT_ROOTS: '/abs/project',
+      STRUMMER_LSP_SERVERS: SERVERS,
+    })
+    expect(off.config.allowPartialRename).toBe(false)
+    const on = buildLspServerFromEnv({
+      STRUMMER_LSP_ALLOW_RUN: '1',
+      STRUMMER_LSP_ALLOW_WRITE: '1',
+      STRUMMER_LSP_ALLOW_PARTIAL_RENAME: '1',
+      STRUMMER_LSP_PROJECT_ROOTS: '/abs/project',
+      STRUMMER_LSP_SERVERS: SERVERS,
+    })
+    expect(on.config.allowPartialRename).toBe(true)
+  })
+
   it('HARD-ERRORS when allowWrite is set without allowRun (cannot write without a live server)', () => {
     expect(() =>
       buildLspServerFromEnv({

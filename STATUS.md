@@ -837,8 +837,13 @@ Python adapter** (pyright as a third real server: recorded payloads in the gate 
 `examples/lsp/pygreeter` quickstart; no engine code — the engine is language-agnostic, verified live.
 **Documented pyright limitation (found via a follow-up deep-dive): `references` AND `rename` are
 open-files-scoped, so a pyright cross-file rename can be silently INCOMPLETE on a real project — an
-anchor file does not fix it.** A possible follow-up — warn/guard on pyright's partial-rename, or
-prefer a whole-project-rename server for Python — is noted but undesigned.)_
+anchor file does not fix it.** **GUARD SHIPPED:** `lsp_rename` now runs a server-agnostic
+partial-rename completeness guard — it scans the allowlisted root group for same-language files
+mentioning the old identifier that the edit does NOT cover; a `suspect` verdict is surfaced in the
+dry-run preview AND **refuses the WRITE deny-by-default** (overridable by the operator-only
+`allowPartialRename` / `--allow-partial-rename` / `STRUMMER_LSP_ALLOW_PARTIAL_RENAME`). Verified
+live: a 60-importer pyright project refuses the partial write (nothing lost), the override applies,
+and complete renames (tiny pygreeter, tsserver greeter) are NOT false-flagged.)_
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); `workspace/symbol` search
@@ -1052,7 +1057,9 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > code, verified live. **Documented pyright limitation (deep-dived after a follow-up question): both
 > `references` AND `rename` are open-files-scoped — a pyright cross-file rename can be silently
 > INCOMPLETE on a real project (62-file repro renamed only the declaration); an anchor file does not
-> fix it. Possible follow-up: warn/guard the partial rename — noted, undesigned.** See
+> fix it. GUARD SHIPPED — `lsp_rename` now scans for same-language files mentioning the old name
+> that the edit misses; a `suspect` verdict refuses the WRITE deny-by-default (operator override
+> `allowPartialRename`); verified live (60-importer pyright refused, complete renames not flagged).** See
 > [[strummer-lsp-pyright]]. And dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse: a query whose root group
 > is a SUPERSET of a warm same-language server's folders extends that server in place via
 > `workspace/didChangeWorkspaceFolders` + re-keys it (capability-gated on

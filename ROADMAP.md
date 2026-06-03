@@ -797,10 +797,20 @@ Two independent tracks, then the test-quality chain, then LSP last:
         file does NOT fix it (unlike `workspace/symbol`, where one anchor establishes the project and
         the server searches its own index); server config (diagnosticMode/indexing) doesn't either. The
         2-file example looks complete only because pyright auto-analyzes the whole tiny workspace.
-        **Possible follow-up (noted, undesigned): warn/guard the partial pyright rename, or prefer a
-        whole-project-rename server (tsserver/rust-analyzer/gopls) for Python.** Provenance: python has
-        **no** clean single-package toolchain map, so `bin-lsp.ts` deliberately maps none (the
-        `versionWarning` is the honest signal). See [[strummer-lsp-pyright]].
+        Provenance: python has **no** clean single-package toolchain map, so `bin-lsp.ts` deliberately
+        maps none (the `versionWarning` is the honest signal). See [[strummer-lsp-pyright]].
+  - [x] **Partial-rename completeness guard (`lsp_rename`).** Server-agnostic protection against the
+        open-files-scoped data-loss: after computing the edit, the engine extracts the old identifier
+        at the queried position and scans the allowlisted root group for same-language files that
+        mention it as a whole word but are NOT covered by the edit. The verdict — `complete` /
+        `suspect` / `unknown` (scan truncated) — is surfaced in the dry-run preview (with the capped
+        `suspectedMissedFiles`), AND a `suspect` verdict **refuses the WRITE deny-by-default**;
+        overridable by the operator-only `allowPartialRename` (`STRUMMER_LSP_ALLOW_PARTIAL_RENAME` /
+        `--allow-partial-rename`), never a tool input. The guard is inert until a `listFiles` lister
+        is wired (cf. `redact`); the bin/CLI/MCP wire the real bounded, skip-list, symlink-safe walker.
+        A whole-project-rename server (tsserver/rust-analyzer) covers every use ⇒ `complete` (no false
+        block). Verified live: a 60-importer pyright project refuses the partial write (nothing lost),
+        the override applies, and complete renames (pygreeter, tsserver greeter) are not flagged.
   - [ ] *(staged, not amputated)* the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
         delete (kept refused by design), full toolchain-version resolution.
 

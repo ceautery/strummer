@@ -103,12 +103,15 @@ export {
 } from './registry.js'
 export {
   type CommitResult,
+  defaultListFiles,
   defaultRenameWriter,
   LspRenameEngine,
   type LspRenameEngineOptions,
   type LspRenameInput,
   type LspRenameResult,
   type PhysicalOp,
+  type ProjectFileLister,
+  type RenameCompleteness,
   type RenameDigest,
   type RenamePreviewEdit,
   type RenamePreviewFile,

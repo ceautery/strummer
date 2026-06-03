@@ -331,6 +331,31 @@ describe('strummer lsp CLI', () => {
     expect(c.out()).toMatch(/foo.*renamed|renamed/)
   })
 
+  it('warns when the rename completeness verdict is suspect (partial-rename guard)', async () => {
+    const suspect: LspRenameResult = {
+      status: 'ok',
+      kind: 'rename',
+      applied: false,
+      newName: 'renamed',
+      fileCount: 1,
+      totalEditCount: 1,
+      encoding: 'utf-16',
+      edits: [{ uri: 'file:///proj/a.py', file: 'a.py', editCount: 1, hunks: [] }],
+      completeness: 'suspect',
+      suspectedMissedFiles: ['b.py', 'c.py'],
+    }
+    const c = capture()
+    const code = await runLsp(
+      ['rename', 'python', 'a.py', '1', '7', 'renamed', '--project', '/proj'],
+      c.io,
+      { rename: async () => suspect },
+    )
+    expect(code).toBe(0)
+    expect(c.err()).toMatch(/INCOMPLETE/i)
+    expect(c.err()).toMatch(/b\.py, c\.py/)
+    expect(c.err()).toMatch(/--allow-partial-rename/)
+  })
+
   it('rename threads --workspace-root through as resolved workspaceRoots (multi-root)', async () => {
     let seen: LspRenameInput | undefined
     const c = capture()

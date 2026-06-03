@@ -75,8 +75,8 @@ Semantic code navigation (LSP; single-shot; --servers <json> or STRUMMER_LSP_SER
   strummer lsp definition|type-definition|references|hover <lang> <file> <line> <col>  --project <dir> --allow-run [--servers <json>] [--timeout-ms <n>] [--json]
   strummer lsp symbols <lang> <file>                              --project <dir> --allow-run [--servers <json>] [--json]
   strummer lsp call-hierarchy <lang> <file> <line> <col>          --project <dir> --allow-run [--direction incoming|outgoing] [--json]
-  strummer lsp rename <lang> <file> <line> <col> <newName>        --project <dir> --allow-run [--allow-write] [--json]  (dry-run unless --allow-write)
-  (exit 2 = server still indexing, retry)
+  strummer lsp rename <lang> <file> <line> <col> <newName>        --project <dir> --allow-run [--allow-write] [--allow-partial-rename] [--json]  (dry-run unless --allow-write)
+  (exit 2 = server still indexing, retry; a "suspect" rename — an open-files-scoped server's likely-partial edit — is refused for write unless --allow-partial-rename)
 
 Global:
   -i, --index <file>   index to query (or set STRUMMER_INDEX)

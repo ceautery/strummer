@@ -42,6 +42,8 @@ interface ToolJson {
   callHierarchy?: Array<{ source: { name: string }; calls: Array<{ item: { name: string } }> }>
   languages?: string[]
   servers?: unknown
+  completeness?: string
+  suspectedMissedFiles?: string[]
 }
 
 /** Parse the first text block of an MCP content/contents array. */
@@ -403,6 +405,23 @@ describe('lsp navigation tools', () => {
       arguments: { ...RENAME_ARGS, workspaceRoots: ['/project', '/project-b'] },
     })
     expect(stub.last()?.workspaceRoots).toEqual(['/project', '/project-b'])
+  })
+
+  it('surfaces the partial-rename completeness verdict + suspected missed files', async () => {
+    const stub = stubRename({
+      ...previewResult,
+      completeness: 'suspect',
+      suspectedMissedFiles: ['src/index.ts', 'src/extra.ts'],
+    })
+    const client = await connect({
+      ...GATED,
+      query: stubQuery(okDefinition).query,
+      rename: stub.rename,
+    })
+    const res = await client.callTool({ name: 'lsp_rename', arguments: RENAME_ARGS })
+    const data = firstJson(res.content)
+    expect(data.completeness).toBe('suspect')
+    expect(data.suspectedMissedFiles).toEqual(['src/index.ts', 'src/extra.ts'])
   })
 
   it('passes through detected toolchain provenance', async () => {

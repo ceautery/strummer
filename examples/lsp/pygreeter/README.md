@@ -95,6 +95,12 @@ pyright's notable traits (all observed live against this project):
   > the referencing files open (which defeats "rename everywhere"), or use a server that does
   > whole-project rename (tsserver, rust-analyzer, gopls). An **anchor file does not help** — it only
   > extends coverage to the files you explicitly open, not to the ones you'd need to discover.
+  >
+  > **Strummer guards this for you.** `rename` runs a completeness check — it scans the project for
+  > same-language files that mention the old name but aren't in the edit. If any are found the
+  > verdict is `suspect`: the dry-run preview lists the missed files, and an actual write
+  > (`--allow-write`) is **refused** unless you also pass `--allow-partial-rename` (you accept a
+  > partial rename). A whole-project-rename server reports `complete` and is never blocked.
   This is a pyright capability limitation, not a Strummer wire bug; cross-file *definition* and
   *type-definition* resolve fine (single-target module resolution, unaffected by the scope).
 - **No `serverInfo`.** pyright does not report its name/version over LSP, so results carry a
