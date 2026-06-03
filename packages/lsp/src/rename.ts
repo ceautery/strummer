@@ -59,7 +59,6 @@ import type {
   NormalizedResourceOp,
   NormalizedWorkspaceEdit,
   QueryStatus,
-  ResourceOpOptions,
 } from './normalize.js'
 import type { HumanRange } from './query.js'
 
@@ -285,16 +284,6 @@ export const defaultRenameWriter: RenameWriter = {
   },
 }
 
-/**
- * The DESTRUCTIVE resource-op options that stay refused in v1 (`overwrite` replaces an existing
- * file's content; `recursive` enables directory deletes). The CONDITIONAL options
- * `ignoreIfExists`/`ignoreIfNotExists` are NOT refused — they are honored as safe no-ops (never more
- * destructive than the default), handled inline in the per-op replay.
- */
-function hasRefusedOptions(o?: ResourceOpOptions): boolean {
-  return o !== undefined && (o.overwrite === true || o.recursive === true)
-}
-
 function isRegularFile(abs: string): boolean {
   try {
     return statSync(abs).isFile()
@@ -318,6 +307,14 @@ export interface LspRenameEngineOptions {
    * Deny-by-default: a suspect rename is REFUSED for write unless this is set. Never an agent input.
    */
   allowPartialRename?: boolean
+  /**
+   * OPERATOR opt-in to APPLY a DESTRUCTIVE resource op — `overwrite: true` on a CreateFile
+   * (truncate-and-replace an existing file) or a RenameFile (clobber an existing REGULAR-FILE
+   * target). Deny-by-default; refused for write unless set. Recursive/dir delete + symlink/dir
+   * targets STAY refused even with this gate. Meaningless without `allowWrite` (the engine
+   * re-checks both before any destructive op); never an agent input.
+   */
+  allowDestructiveResourceOps?: boolean
   readFile?: FileReader
   /** Lists same-language source files to scan for the partial-rename guard. UNSET ⇒ the guard is
    * inactive (no scan); the bin/CLI/MCP wire `defaultListFiles` to turn it on (cf. `redact`). */
@@ -430,6 +427,7 @@ export class LspRenameEngine {
   private readonly allowedRoots: string[]
   private readonly allowWrite: boolean
   private readonly allowPartialRename: boolean
+  private readonly allowDestructiveResourceOps: boolean
   private readonly readFile: FileReader
   /** When unset the partial-rename guard is inactive (the bin/CLI/MCP wire `defaultListFiles`). */
   private readonly listFiles?: ProjectFileLister
@@ -442,6 +440,7 @@ export class LspRenameEngine {
     this.allowedRoots = options.allowedRoots
     this.allowWrite = options.allowWrite
     this.allowPartialRename = options.allowPartialRename ?? false
+    this.allowDestructiveResourceOps = options.allowDestructiveResourceOps ?? false
     this.readFile = options.readFile ?? defaultReadFile
     this.listFiles = options.listFiles
     this.writer = options.writer ?? defaultRenameWriter
@@ -566,13 +565,36 @@ export class LspRenameEngine {
       }
     }
 
-    // (b) Refuse the staged DESTRUCTIVE resource-op options EARLY (before any I/O). The other v1
-    // cuts (edit-of-a-renamed-file, ordering, cycles) are enforced inline in the replay below.
+    // (b) Refuse the DESTRUCTIVE / malformed resource-op options EARLY (before any I/O), per op
+    // type so the invariants are STRUCTURAL, not message-dependent: `recursive` is ALWAYS refused
+    // (no rm -rf from a server payload); `overwrite` on create/rename is gated; `overwrite` on a
+    // delete is malformed. The gate is SELF-ENFORCING — it re-requires `allowWrite` even though the
+    // bin throws without it (mirrors assertAllowed re-checking allowRun). The other v1 cuts
+    // (edit-of-a-renamed-file, ordering, cycles) are enforced inline in the replay below.
+    const destructiveAllowed = this.allowWrite && this.allowDestructiveResourceOps
     for (const op of ops) {
-      if (op.type !== 'edit' && hasRefusedOptions(op.options)) {
+      if (op.type === 'edit') continue
+      if (op.type === 'delete' && op.options?.recursive === true) {
         return {
           applied: false,
-          refused: 'resource-op options (overwrite/recursive) are unsupported in v1 (refused)',
+          refused: 'recursive/directory delete is unsupported (refused — not enabled by any gate)',
+        }
+      }
+      if (op.type === 'delete' && op.options?.overwrite === true) {
+        return {
+          applied: false,
+          refused: 'overwrite is not a valid option on a delete (malformed; refused)',
+        }
+      }
+      if (
+        (op.type === 'create' || op.type === 'rename') &&
+        op.options?.overwrite === true &&
+        !destructiveAllowed
+      ) {
+        return {
+          applied: false,
+          refused:
+            'resource-op overwrite requires the operator destructive-resource-ops gate (allowDestructiveResourceOps + allowWrite); previewed only',
         }
       }
     }

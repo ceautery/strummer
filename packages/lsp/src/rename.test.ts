@@ -415,7 +415,7 @@ describe('LspRenameEngine — resource operations (CreateFile/RenameFile/DeleteF
     expect(ops.some((o) => o.kind === 'delete' && o.absPath === join(root, 'index.ts'))).toBe(true)
   })
 
-  it('REFUSES a resource op carrying non-default options (overwrite/recursive — staged in v1)', async () => {
+  it('REFUSES an overwrite resource op without the destructive-resource-ops gate (previewed only)', async () => {
     const { root, manager } = setup({
       onRename: (params) => {
         const uri = (params as { textDocument: { uri: string } }).textDocument.uri
@@ -441,7 +441,7 @@ describe('LspRenameEngine — resource operations (CreateFile/RenameFile/DeleteF
     })
     const r = await engine.rename(renameInput(root))
     expect(r.applied).toBe(false)
-    expect(r.refused).toMatch(/options.*unsupported in v1/i)
+    expect(r.refused).toMatch(/overwrite requires.*destructive-resource-ops gate/i)
   })
 
   it('REFUSES to apply when a resource-op endpoint escapes every allowlisted root (zero writes)', async () => {
@@ -500,6 +500,20 @@ describe('LspRenameEngine — resource-op options (safe-subset ignoreIf*)', () =
     }
   const engineFor = (root: string, manager: LanguageServerManager, writer: RenameWriter) =>
     new LspRenameEngine({ manager, allowRun: true, allowedRoots: [root], allowWrite: true, writer })
+  /** Same, but with the operator destructive-resource-ops gate ON (overwrite may apply). */
+  const destructiveEngineFor = (
+    root: string,
+    manager: LanguageServerManager,
+    writer: RenameWriter,
+  ) =>
+    new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      allowDestructiveResourceOps: true,
+      writer,
+    })
 
   it('A1: create + ignoreIfExists SKIPS (not refuses) when the target already exists', async () => {
     const { root, manager } = setup({
@@ -570,7 +584,7 @@ describe('LspRenameEngine — resource-op options (safe-subset ignoreIf*)', () =
     expect(r.refused).toMatch(/cannot delete .*does not exist/i)
   })
 
-  it('A7: create + overwrite is STILL refused (destructive option, staged in v1)', async () => {
+  it('A7: create + overwrite is refused WITHOUT the destructive-resource-ops gate', async () => {
     const { root, manager } = setup({
       onRename: docChanges((dir) => [
         { kind: 'create', uri: `${dir}/new.ts`, options: { overwrite: true } },
@@ -578,18 +592,29 @@ describe('LspRenameEngine — resource-op options (safe-subset ignoreIf*)', () =
     })
     const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
     expect(r.applied).toBe(false)
-    expect(r.refused).toMatch(/options.*unsupported in v1/i)
+    expect(r.refused).toMatch(/overwrite requires.*destructive-resource-ops gate/i)
   })
 
-  it('A8: delete + recursive is STILL refused (destructive option, staged in v1)', async () => {
+  it('A8: delete + recursive is refused EVEN WITH the destructive gate on (never enabled)', async () => {
     const { root, manager } = setup({
       onRename: docChanges((dir) => [
         { kind: 'delete', uri: `${dir}/index.ts`, options: { recursive: true } },
       ]),
     })
-    const r = await engineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    const r = await destructiveEngineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
     expect(r.applied).toBe(false)
-    expect(r.refused).toMatch(/options.*unsupported in v1/i)
+    expect(r.refused).toMatch(/recursive.*delete.*(unsupported|refused)/i)
+  })
+
+  it('A8b: overwrite on a DELETE op is refused as a malformed option (even with the gate)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'delete', uri: `${dir}/index.ts`, options: { overwrite: true } },
+      ]),
+    })
+    const r = await destructiveEngineFor(root, manager, THROWING_WRITER).rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/overwrite is not a valid option on a delete/i)
   })
 
   it('A9: create + ignoreIfExists PROCEEDS when the target does NOT exist (no-op option)', async () => {
