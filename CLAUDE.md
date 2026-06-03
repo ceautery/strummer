@@ -165,9 +165,12 @@ vision and `ARCHITECTURE.md` for the technical design.
   Write-mode resource-ops DONE (`lsp_rename` applies Create/Rename/DeleteFile incl. cross-root),
   plus the resource-op SAFE-SUBSET v1 cuts (`ignoreIfExists`/`ignoreIfNotExists` no-ops + editing a
   file also renamed/deleted in one batch via a per-file `Fate` VFS; conflicting batches REFUSED).
-  `strummer lsp` CLI DONE. Staged: dynamic `didChangeWorkspaceFolders` (+ write-mode multi-root), the
-  DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete (refused by design), full
-  toolchain-mismatch heuristic),
+  `strummer lsp` CLI DONE. Dynamic `didChangeWorkspaceFolders` DONE (grow-only warm-server reuse: a
+  query whose root group is a SUPERSET of a warm same-language server's folders extends it in place +
+  re-keys it instead of respawning; capability-gated on `workspaceFolders.changeNotifications`;
+  ambiguous-tie/no-cap ⇒ spawn fresh; allowlist + write-mode confinement unchanged; live-verified vs
+  rust-analyzer). Staged: the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete
+  (refused by design), full toolchain-mismatch heuristic, an LSP Python adapter),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write

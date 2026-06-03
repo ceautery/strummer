@@ -186,8 +186,12 @@ rename landed; genuinely conflicting batches are REFUSED not reconciled (rename 
 edit-of-renamed-away-path, delete-of-a-rename/create-target = a data-loss guard). Designed via the
 `lsp-resource-op-safe-cuts-design` fan-out (2 proposals → synthesis → 3 adversarial critics, five
 holes folded in) + a recall-biased review fan-out. Then **LSP PULL-diagnostics**
-(`textDocument/diagnostic`, dispatched by `diagnosticProvider`; live-verified vs rust-analyzer) —
-**current count is 946 TS + 45 Py green**; see
+(`textDocument/diagnostic`, dispatched by `diagnosticProvider`; live-verified vs rust-analyzer), and
+now **LSP dynamic `didChangeWorkspaceFolders`** (grow-only warm-server reuse: a query whose root
+group is a SUPERSET of a warm same-language server's folders extends that server in place via
+`workspace/didChangeWorkspaceFolders` + re-keys it, instead of spawning a fresh server and re-paying
+indexing — capability-gated on the server advertising `workspaceFolders.changeNotifications`; live-
+verified vs rust-analyzer 0.3.2921) — **current count is 953 TS + 45 Py green**; see
 the Next-action block for the detail.**)_
 
 **Phase 3 — Browser/UI testing pillar: FEATURE-COMPLETE.** _(Latest: **multi-engine**
@@ -810,18 +814,18 @@ served by the multi-root server, and cross-root **definition** (b→a) resolves.
 (found live):** cross-root **references** depend on the server's indexing model — eager indexers
 (gopls/rust-analyzer) cover all folders, but tsserver loads a folder's project lazily on file open,
 so its reference search only spans roots whose files have been touched (documented in the greeter
-README). **Remaining non-blocking tails:** LSP pull-diagnostics (`textDocument/diagnostic`, for
-servers that advertise `diagnosticProvider`), dynamic `didChangeWorkspaceFolders` + write-mode
-multi-root, write-mode for resource ops + multi-file conflict reconciliation, full
-toolchain-mismatch heuristic; mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for
-PyPI/RubyGems.
+README). **Remaining non-blocking tails:** the DESTRUCTIVE resource-op options (`overwrite`) +
+recursive/dir delete (refused by design), full toolchain-mismatch heuristic, an LSP Python adapter;
+mutate cosmic-ray/`runMutmut` spawner; deps `changelog_diff` for PyPI/RubyGems. _(DONE since: LSP
+pull-diagnostics, and dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse.)_
 **NEXT MILESTONE is again open** — a Phase-5 boundary or one of these tails.
 **LSP staged tails (ADR 0011, not amputated):** `lsp_type_definition`/`lsp_document_symbols`/
 `lsp_call_hierarchy` (DONE); write-mode (`rename`, DONE — slices A–G); `workspace/symbol` search
 (DONE — `lsp_workspace_symbols` + CLI, optional anchor file); `diagnostics` (DONE — push-model
 `lsp_diagnostics` + CLI; pull-diagnostics `textDocument/diagnostic` still staged); multi-ROOT
-(DONE — `workspaceRoots[]` / `--workspace-root`, server keyed by the sorted root group; dynamic
-`didChangeWorkspaceFolders` + write-mode multi-root still staged); then
+(DONE — `workspaceRoots[]` / `--workspace-root`, server keyed by the sorted root group); dynamic
+`didChangeWorkspaceFolders` (DONE — grow-only warm-server reuse, capability-gated, live-verified vs
+rust-analyzer); then
 the full toolchain-version-resolution matrix (the richer warn-on-mismatch),
 write-mode resource-ops + multi-file conflict reconciliation, and a Python adapter posture. **Other
 Phase-4 staged tails:** `istanbul-lib-coverage` `CoverageMap` merging; a Python `run_scoped` (pytest
@@ -1019,12 +1023,16 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 > `welcome`) applied cross-file edits + the `RenameFile` to disk, AND the editing-a-renamed-file case
 > (a `crate::greeter::` self-reference in the module file) applied with the moved `welcome.rs` carrying
 > the EDITED content — the exact batch the old code refused (repro + the 30s-deadline gotcha in
-> [[strummer-lsp-rust-analyzer]]). **946 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
-> staged (non-blocking) LSP tails:** dynamic
-> `didChangeWorkspaceFolders`; the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir delete
-> (kept refused by design); full toolchain-mismatch heuristic. Other Phase-4 tails: `deps`
-> changelog_diff for PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open Phase 5 (needs a
-> design-pass/ADR first). The detailed historical slice log follows.
+> [[strummer-lsp-rust-analyzer]]). **953 TS + 45 Py green, Biome zero-warning, pushed.** No required work remains. **Remaining
+> staged (non-blocking) LSP tails:** the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
+> delete (kept refused by design); full toolchain-mismatch heuristic; an LSP Python adapter. _(DONE
+> since: dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse: a query whose root group
+> is a SUPERSET of a warm same-language server's folders extends that server in place via
+> `workspace/didChangeWorkspaceFolders` + re-keys it (capability-gated on
+> `workspaceFolders.changeNotifications`; ambiguous-tie/no-cap ⇒ spawn fresh; grow-only, never shrinks;
+> allowlist + write-mode confinement unchanged), live-verified vs rust-analyzer 0.3.2921.)_ Other
+> Phase-4 tails: `deps` changelog_diff for PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open
+> Phase 5 (needs a design-pass/ADR first). The detailed historical slice log follows.
 
 **Phase 3, Slice 1 (a11y-audit summarizer): DONE & committed** (`@strummer/browser`
 scaffolded; `ArtifactStore`/`summarizeA11y`/`auditA11y`, TDD against an offline

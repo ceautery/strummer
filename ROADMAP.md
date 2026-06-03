@@ -766,10 +766,19 @@ Two independent tracks, then the test-quality chain, then LSP last:
         cross-file edits + the `RenameFile`, and the editing-a-renamed-file case (a `crate::greeter::`
         self-reference) applied with the moved file carrying the edited content (the batch the old
         code refused).
-  - [ ] *(staged, not amputated)* dynamic
-        `didChangeWorkspaceFolders` (+ its write-mode interaction), the DESTRUCTIVE resource-op options
-        (`overwrite`) + recursive/dir delete (kept refused by design), full toolchain-version
-        resolution, Python adapter posture.
+  - [x] **Dynamic `didChangeWorkspaceFolders` — grow-only warm-server reuse.** A query whose root
+        group is a SUPERSET of a warm same-language server's folders extends that server in place
+        (`workspace/didChangeWorkspaceFolders`, sending only the delta) and re-keys it, instead of
+        spawning a fresh server and re-paying indexing. `client.supportsWorkspaceFolderChange` (reads
+        `workspaceFolders.changeNotifications`) + `client.changeWorkspaceFolders`; `manager.acquire`
+        `tryGrowExisting` picks the UNIQUELY-largest subset server (ambiguous tie or no-cap ⇒ spawn
+        fresh, never guesses), grow-only (never shrinks a larger server). Safety unchanged (every
+        folder allowlist-gated before the grow); write-mode unchanged (rename confinement is the query
+        group, independent of server folder state). Gate uses the real RA init fixture (advertises the
+        cap) + tsserver (does not). **Verified live vs rust-analyzer 0.3.2921** (superset query grows
+        the warm server in place, serverCount stays 1, post-grow query still resolves).
+  - [ ] *(staged, not amputated)* the DESTRUCTIVE resource-op options (`overwrite`) + recursive/dir
+        delete (kept refused by design), full toolchain-version resolution, Python adapter posture.
 
 ## Ongoing
 
