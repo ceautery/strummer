@@ -531,7 +531,16 @@ export class LspRenameEngine {
       run.status === 'ok' && this.listFiles
         ? this.assessCompleteness(run.edit, input, queriedAbs, text)
         : undefined
-    const blockedByGuard = guard?.completeness === 'suspect' && !this.allowPartialRename
+    // A DESTRUCTIVE batch (any overwrite) raises the bar: an `unknown` (truncated, hence
+    // unverifiable) completeness verdict is treated as blocking too — an irreversible clobber must
+    // not ride on a scan we could not finish. A `suspect` verdict always blocks (any batch).
+    const destructiveBatch =
+      run.status === 'ok' &&
+      run.edit.operations.some((o) => o.type !== 'edit' && o.options?.overwrite === true)
+    const blockedByGuard =
+      (guard?.completeness === 'suspect' ||
+        (destructiveBatch && guard?.completeness === 'unknown')) &&
+      !this.allowPartialRename
 
     // Apply is a SEPARATE phase (it may need more locks than the compute phase held — the
     // multi-URI lock). The queried file stays open from compute (open-once), so its post-write
@@ -541,8 +550,9 @@ export class LspRenameEngine {
       run.status === 'ok' && this.allowWrite && !blockedByGuard
         ? await this.applyEdit(run.edit, input, queriedUri, text, run.encoding)
         : { applied: false }
-    const guardRefusal =
-      this.allowWrite && blockedByGuard
+    const guardRefusal = !(this.allowWrite && blockedByGuard)
+      ? undefined
+      : guard?.completeness === 'suspect'
         ? `rename may be INCOMPLETE: the symbol ${JSON.stringify(
             guard?.oldName ?? '',
           )} also appears in ${guard?.suspectFiles.length} same-language file(s) not in this edit (e.g. ${guard?.suspectFiles
@@ -550,7 +560,9 @@ export class LspRenameEngine {
             .join(
               ', ',
             )}). The language server may scope rename to open files; nothing was written. Re-run with allowPartialRename to apply anyway.`
-        : undefined
+        : `rename completeness could not be verified: the same-language scan for ${JSON.stringify(
+            guard?.oldName ?? '',
+          )} was TRUNCATED, and this batch contains a DESTRUCTIVE overwrite — an unverifiable scan is treated as blocking; nothing was written. Re-run with allowPartialRename to apply anyway.`
 
     return this.shape(
       input,

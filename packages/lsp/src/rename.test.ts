@@ -723,6 +723,51 @@ describe('LspRenameEngine — destructive resource-ops: CreateFile overwrite (op
     expect(r.applied).toBe(false)
     expect(r.refused).toMatch(/overwrite requires.*destructive-resource-ops gate/i)
   })
+
+  it('6: a destructive batch with an UNKNOWN (truncated) completeness verdict blocks unless allowPartialRename', async () => {
+    const onRename = docChanges((dir) => [
+      { kind: 'create', uri: `${dir}/index.ts`, options: { overwrite: true } },
+    ])
+    // scan cap hit => `unknown` completeness
+    const truncatedLister = (): { files: string[]; truncated: boolean } => {
+      return { files: [], truncated: true }
+    }
+    // BLOCKED: gate on, but an irreversible clobber must not ride on an unverifiable scan.
+    {
+      const { root, manager } = setup({ onRename })
+      const engine = new LspRenameEngine({
+        manager,
+        allowRun: true,
+        allowedRoots: [root],
+        allowWrite: true,
+        allowDestructiveResourceOps: true,
+        listFiles: truncatedLister,
+        writer: THROWING_WRITER,
+      })
+      const r = await engine.rename(renameInput(root))
+      expect(r.completeness).toBe('unknown')
+      expect(r.applied).toBe(false)
+      expect(r.refused).toMatch(/truncated.*destructive|destructive.*blocking/i)
+    }
+    // OVERRIDDEN: the operator opts in via allowPartialRename ⇒ the clobber applies.
+    {
+      const { writer, ops } = capturingWriter()
+      const { root, manager } = setup({ onRename })
+      const engine = new LspRenameEngine({
+        manager,
+        allowRun: true,
+        allowedRoots: [root],
+        allowWrite: true,
+        allowDestructiveResourceOps: true,
+        allowPartialRename: true,
+        listFiles: truncatedLister,
+        writer,
+      })
+      const r = await engine.rename(renameInput(root))
+      expect(r.applied).toBe(true)
+      expect(writeOps(ops).map((w) => w.absPath)).toEqual([join(root, 'index.ts')])
+    }
+  })
 })
 
 describe('LspRenameEngine — destructive resource-ops: RenameFile overwrite (operator-gated)', () => {
