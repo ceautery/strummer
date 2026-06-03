@@ -31,6 +31,7 @@ import { createHash } from 'node:crypto'
 import {
   closeSync,
   fsyncSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -292,6 +293,20 @@ function isRegularFile(abs: string): boolean {
   }
 }
 
+/**
+ * A symlink-AWARE regular-file check for an OVERWRITE target. Refuses a symlink (no clobber THROUGH a
+ * link — the digest would read the link target's bytes while `renameSync`/atomic-write replaces the
+ * link itself, a silent audit lie + the real file survives) and refuses a directory. `lstatSync` does
+ * NOT follow the link, so a symlink ⇒ `isFile()` is false ⇒ refused. Used only on an overwrite target.
+ */
+function isOverwritableRegularFile(abs: string): boolean {
+  try {
+    return lstatSync(abs).isFile()
+  } catch {
+    return false
+  }
+}
+
 export interface LspRenameEngineOptions {
   manager: LanguageServerManager
   /** OPERATOR opt-in to run navigation (which requires a live indexing daemon). Deny-by-default. */
@@ -383,6 +398,9 @@ export interface LspRenameResult {
   resourceOps?: NormalizedResourceOp[]
   /** Per-file pre/post SHA-256 digests — the apply audit (only when applied). */
   digests?: RenameDigest[]
+  /** Project-relative paths whose prior content a DESTRUCTIVE overwrite clobbered (gated; landed
+   * only) — so a destructive clobber is always explicit in the envelope, not inferred from a digest. */
+  overwritten?: string[]
   /** True ⇒ an irreversible resource op faulted mid-commit; `digests` names what landed (no
    * rollback — reconcile via VCS). */
   partial?: boolean
@@ -408,6 +426,8 @@ interface ApplyOutcome {
   applied: boolean
   refused?: string
   digests?: RenameDigest[]
+  /** Project-relative paths whose prior content a DESTRUCTIVE overwrite clobbered (landed only). */
+  overwritten?: string[]
   partial?: boolean
   partialError?: string
 }
@@ -619,6 +639,14 @@ export class LspRenameEngine {
         const aliasMap = new Map<string, string>() // a rename target uri -> its origin uri
         const diskBefore = new Map<string, string>() // origin -> pre-batch disk content ('' if absent)
         const renamedOld = new Set<string>() // oldUris consumed by a rename (E-OLD + cycle guards)
+        // A create-overwrite on a PRE-EXISTING on-disk file. Kept SEPARATE from `created` because it
+        // is a real inode: a following delete must still emit a physical delete (blocker), so the
+        // TIER-2 delete + collision guards keep keying on `created`, while the "no prior on-disk
+        // identifier / always-write" checks treat it like a created file.
+        const overwroteExisting = new Set<string>()
+        // Destructive clobbers, keyed by the FINAL absolute path -> project-relative path, surfaced as
+        // `overwritten` once we know which physical op actually landed (post-commit).
+        const overwrites = new Map<string, string>()
         const diskCache = new Map<string, string | undefined>()
         const readDisk = (u: string): string | undefined => {
           if (!diskCache.has(u)) diskCache.set(u, this.readFile(abs.get(u) as string))
@@ -651,6 +679,28 @@ export class LspRenameEngine {
               return refuse(`cannot create ${rel(op.uri)}: conflicts with another operation`)
             }
             if (liveOccupied(op.uri)) {
+              if (op.options?.overwrite === true) {
+                // overwrite WINS over ignoreIfExists (LSP CreateFileOptions). The gate is already
+                // verified by the early-refusal loop. Refuse a symlink/directory target; clobber a
+                // regular file only. `touch` snapshots the prior disk bytes so the digest audits the
+                // destroyed content; `overwroteExisting` (NOT `created`) keeps a following delete real.
+                const a = abs.get(op.uri) as string
+                if (!isOverwritableRegularFile(a)) {
+                  return refuse(
+                    `cannot overwrite ${rel(op.uri)}: not a regular file on disk (symlink/directory — refused)`,
+                  )
+                }
+                if (op.uri === queriedUri && sha256(readDisk(op.uri) ?? '') !== sha256(text)) {
+                  return refuse(
+                    'the file changed on disk since the rename was computed; re-query and retry',
+                  )
+                }
+                touch(op.uri)
+                vfs.set(op.uri, { kind: 'live', finalUri: op.uri, content: '' })
+                overwroteExisting.add(op.uri)
+                overwrites.set(a, rel(op.uri))
+                continue
+              }
               if (op.options?.ignoreIfExists === true) continue // safe no-op: leave the file as-is
               return refuse(`cannot create ${rel(op.uri)}: it already exists`)
             }
@@ -729,7 +779,11 @@ export class LspRenameEngine {
         // file never trips it. Created files have no on-disk old identifier to match.
         if (expectedOld !== undefined) {
           for (const op of ops) {
-            if (op.type !== 'edit' || created.has(resolveOrig(op.uri))) continue
+            // A created OR overwrite-created file is intentionally truncate-and-replaced, so its
+            // on-disk old identifier is irrelevant — documented skip (no stale-symbol false positive).
+            if (op.type !== 'edit') continue
+            const oo = resolveOrig(op.uri)
+            if (created.has(oo) || overwroteExisting.has(oo)) continue
             const cur = readDisk(op.uri)
             if (cur === undefined) continue
             for (const e of op.edits) {
@@ -776,7 +830,10 @@ export class LspRenameEngine {
           if (f?.kind !== 'live') continue
           const moved = f.finalUri !== o
           const before = sha256(diskBefore.get(o) ?? '')
-          const contentChanged = created.has(o) || sha256(f.content) !== before
+          // A created OR overwrite-created file always emits its write (an intentional truncate-and-
+          // replace), even when the new bytes happen to equal the prior on-disk bytes.
+          const contentChanged =
+            created.has(o) || overwroteExisting.has(o) || sha256(f.content) !== before
           if (!moved) {
             if (contentChanged) {
               const d = digests.push({ file: rel(o), before, after: sha256(f.content) }) - 1
@@ -882,9 +939,16 @@ export class LspRenameEngine {
               ),
             ].map((i) => digests[i] as RenameDigest)
           : digests
+        // A destructive clobber is surfaced ONLY when the physical op that destroyed the prior bytes
+        // actually landed (a write at the path, or a rename onto it) — never on a previewed-but-aborted
+        // or partial-non-landed op.
+        const overwritten = [...overwrites]
+          .filter(([a]) => landedWrite(a) || landedRename(a))
+          .map(([, r]) => r)
         return {
           applied: true,
           digests: outDigests,
+          ...(overwritten.length ? { overwritten } : {}),
           ...(res.partial ? { partial: true, partialError: res.error } : {}),
         }
       },
@@ -986,6 +1050,7 @@ export class LspRenameEngine {
       edits,
       ...(resourceOps.length > 0 ? { resourceOps } : {}),
       ...(run.apply.digests ? { digests: run.apply.digests } : {}),
+      ...(run.apply.overwritten ? { overwritten: run.apply.overwritten } : {}),
       ...(run.apply.partial ? { partial: true } : {}),
       ...(run.apply.partialError ? { partialError: run.apply.partialError } : {}),
       ...(serverInfo ? { serverInfo } : {}),

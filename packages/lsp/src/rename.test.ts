@@ -631,6 +631,99 @@ describe('LspRenameEngine — resource-op options (safe-subset ignoreIf*)', () =
   })
 })
 
+describe('LspRenameEngine — destructive resource-ops: CreateFile overwrite (operator-gated)', () => {
+  const docChanges =
+    (build: (dir: string) => unknown[]) =>
+    (params: unknown): unknown => {
+      const uri = (params as { textDocument: { uri: string } }).textDocument.uri
+      const dir = uri.slice(0, uri.lastIndexOf('/'))
+      return { documentChanges: build(dir) }
+    }
+  const destructiveEngineFor = (
+    root: string,
+    manager: LanguageServerManager,
+    writer: RenameWriter,
+  ) =>
+    new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      allowDestructiveResourceOps: true,
+      writer,
+    })
+  const OVERWRITE_CONTENT = 'export const moved = 1\n'
+
+  it('2a: create + overwrite on an EXISTING file truncates-and-replaces it (gated), audits prior bytes', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/index.ts`, options: { overwrite: true } },
+        {
+          textDocument: { uri: `${dir}/index.ts`, version: 1 },
+          edits: [
+            {
+              newText: OVERWRITE_CONTENT,
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+            },
+          ],
+        },
+      ]),
+    })
+    const r = await destructiveEngineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    const w = writeOps(ops)
+    expect(w.map((x) => x.absPath)).toEqual([join(root, 'index.ts')])
+    expect(w[0]?.newText).toBe(OVERWRITE_CONTENT)
+    const d = r.digests?.find((x) => x.file === 'index.ts')
+    expect(d?.before).toBe(createHash('sha256').update(INDEX_TS).digest('hex')) // the CLOBBERED prior bytes
+    expect(d?.after).toBe(createHash('sha256').update(OVERWRITE_CONTENT).digest('hex'))
+    expect(r.overwritten).toContain('index.ts') // the destructive clobber is surfaced
+  })
+
+  it('2b: [create-overwrite(f), delete(f)] emits a PHYSICAL delete (not a silent net-no-op)', async () => {
+    const { writer, ops } = capturingWriter()
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/index.ts`, options: { overwrite: true } },
+        { kind: 'delete', uri: `${dir}/index.ts` },
+      ]),
+    })
+    const r = await destructiveEngineFor(root, manager, writer).rename(renameInput(root))
+    expect(r.applied).toBe(true)
+    // BLOCKER 2.1: an overwrite-create is a REAL on-disk inode, so a following delete MUST delete it.
+    expect(ops.some((o) => o.kind === 'delete' && o.absPath === join(root, 'index.ts'))).toBe(true)
+    expect(writeOps(ops)).toHaveLength(0) // the create-overwrite write is overridden by the delete
+  })
+
+  it('2c: create + overwrite that WOULD write is still refused without the gate (writer untouched)', async () => {
+    const { root, manager } = setup({
+      onRename: docChanges((dir) => [
+        { kind: 'create', uri: `${dir}/index.ts`, options: { overwrite: true } },
+        {
+          textDocument: { uri: `${dir}/index.ts`, version: 1 },
+          edits: [
+            {
+              newText: OVERWRITE_CONTENT,
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+            },
+          ],
+        },
+      ]),
+    })
+    const engine = new LspRenameEngine({
+      manager,
+      allowRun: true,
+      allowedRoots: [root],
+      allowWrite: true,
+      writer: THROWING_WRITER,
+    })
+    const r = await engine.rename(renameInput(root))
+    expect(r.applied).toBe(false)
+    expect(r.refused).toMatch(/overwrite requires.*destructive-resource-ops gate/i)
+  })
+})
+
 describe('LspRenameEngine — edit composed with rename/delete (safe-subset v1 cuts)', () => {
   const docChanges =
     (build: (dir: string) => unknown[]) =>
