@@ -171,8 +171,16 @@ MCP tool + `strummer verify run` CLI DRIVE the gated pillars (coverage/flake/mut
 contract) and fold them into one verdict in a single call. The gate contract is **"compose, never
 widen"** — `verify` reuses each pillar's *own* gate plus a separate `STRUMMER_VERIFY_ENABLE_RUN`
 opt-in ("both required"); a pillar whose gate is unmet is `skipped:gate-not-set`, never run; the
-orchestrator imports zero spawn-capable code. Staged (not amputated): diff-scoping the non-coverage
-pillars + wiring deps into the run path (5d), `verify` driving a live capture to produce the HAR (5e),
+orchestrator imports zero spawn-capable code. **5d — diff-scoping + deps run-wiring has since landed**:
+a shared zero-dependency **`@strummer/diff`** (`parseUnifiedDiff` + `changedFiles`) lets `verify_change`
+scope coverage/mutate/flake from ONE diff; a pure `changedDependencies(diff)` + a reusable
+`auditProjectDependencies` runner wire deps into the run path (`STRUMMER_DEPS_ALLOW_NETWORK` under
+`ENABLE_RUN`) + `strummer verify run --deps`. **5e — `verify` driving a LIVE capture has since landed**
+(ADR 0013 Addendum 3): `verify_change`'s `contract` input + `strummer verify run --flow` DRIVE an
+operator-authored browser flow → capture the HAR → validate it, behind the full browser gate; the shared
+`@strummer/browser` `driveBrowserFlowToHar` gates on **flow completeness, not HAR emptiness** (a
+partially-failed flow's HAR is never validated — absence stays non-passing), with a union redactor at
+both the archive and the findings. Staged (not amputated): **5f** — the API-runner capture path,
 request-body/param contract validation, extracting the shared `Severity` scale, and the Python second half.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
