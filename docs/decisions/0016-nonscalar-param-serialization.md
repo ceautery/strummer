@@ -207,3 +207,78 @@ Seams: `objectSerializationSupported` (the object half of `styleSupported`),
 `validateObjectParam`, `hasFractionalMultipleOf`, `escapeRegExp`. Signature, result shape,
 and finding kinds still unchanged. **Only remaining ADR 0016 tail: non-JSON request body
 schemas.**
+
+## Addendum 4 — non-JSON request BODY schemas (2026-06-04, Accepted)
+
+Closes the last ADR 0016 tail: validate `application/x-www-form-urlencoded` and
+`multipart/form-data` request bodies against the declared `requestBody.content[ct].schema`,
+converting the prior presence-only `unverified` skip (request-contract.ts body block) into
+real findings. Designed via a 2-stream research fan-out (OpenAPI form/multipart serialization
++ the `encoding` object; an adversarial false-positive-trap sweep); the human ratified the
+scope: **urlencoded + multipart text fields over the LIVE run + direct MCP/CLI**, with
+HAR-capture form bodies and per-property `encoding` handling explicitly STAGED.
+
+**The key insight — form bodies are MORE tractable than form *params*.** A form body is a
+flat field-name → string-value(s) map delivered by *discrete keys*. Under the default
+serialization (`style:form`, `explode:true`) an array property arrives as **repeated keys**
+(`tags=a&tags=b` → `["a","b"]`) — so even **string array items are sound** (there is no
+delimiter to over-split, unlike the param world's comma/space/pipe-joined arrays). The
+validation logic is therefore a near-clone of `validateObjectParam`'s coerce-declared-scalar-
+props-then-ajv pattern, plus sound scalar-item arrays.
+
+**The representation decision (load-bearing).** The highest-leverage mistake the adversarial
+sweep flagged is re-parsing the already-serialized body string (lossy on percent-encoding;
+impossible for multipart, which only carries a redaction-safe preview). Instead, a NEW
+authoritative structured channel on `RequestFacts` — `form?: Record<string, string | string[]>`
+(repeated keys → array) + `formFileFields?: string[]` (multipart file-part NAMES only, never
+bytes) — is populated at PREPARE time by the runner from the structured parts. File bytes
+never enter the channel; the `RequestValidationResult` shape and finding kinds are unchanged
+(reuse `request-body-schema`). This is the one intentional `RequestFacts` widening (the param
+work kept that shape fixed; body work legitimately needs the channel).
+
+**CHECKed (assemble + ajv) — only when soundly reversible:**
+- Scalar fields → `coerceScalar` to the declared type, ajv the assembled object.
+- Array props arriving as repeated keys → the discrete elements (string items included, no
+  split); a single occurrence wraps to `[v]` only when the schema carries NO cardinality
+  constraint (`minItems`/`maxItems`/`uniqueItems`).
+- Undeclared fields pass through as raw strings ONLY when `additionalProperties` is literal
+  `true`/`false`/absent (ajv then enforces `false` as an undocumented-field violation).
+- `required` is enforced via ajv on the assembled object when the caller is authoritative
+  about body presence; a required field absent from a NON-authoritative source ⇒ `unverified`.
+
+**REFUSE → `unverified` (never a false finding):**
+- ANY per-property `encoding` on the matched media type (re-introduces the full style/explode
+  ambiguity matrix inside the body — v1 permanently-out, staged).
+- The schema isn't a flat object with `properties`; a typed (object-form)
+  `additionalProperties`; a declared property that is a nested object, array-of-object, or
+  typeless (in multipart the default `contentType` for a non-scalar prop is `application/json`,
+  so it arrives as a JSON part, not a flat field).
+- A fractional `multipleOf` on any declared scalar prop / array item (the IEEE-754 float trap).
+- A scalar property arriving with repeated keys (an array on the wire).
+- A single-occurrence array prop carrying a cardinality constraint (count unprovable from one
+  occurrence).
+- An ambiguous empty value (`field=`) for a non-string, non-null scalar prop (the wire can't
+  distinguish empty / null / valueless-key).
+- A declared property satisfied by a multipart FILE part (bytes never inlined, unvalidatable).
+- A declared non-UTF-8 charset (the bytes→string decode may already be wrong).
+
+**Permanently out of scope:** per-property `encoding` overrides (delimited/JSON-encoded
+properties — the embedded-delimiter false-positive class); nested-object / array-of-object /
+binary-array properties; object/array properties serialized as a JSON string field.
+
+**Mechanics & invariants held.** New internal seams only (`validateFormBody`, a `formBase`
+helper distinguishing the two form media types; `selectContentSchema` now also surfaces the
+matched media base + its `encoding`). `validateOpenApiRequest`'s signature and
+`RequestValidationResult` shape are unchanged; ZERO new `ContractFindingKind` (reuse
+`request-body-schema`). Redaction: a coercion/schema finding echoes only the RAW field value
+(the run-resolved secrets are registered with the redactor before the structured channel is
+built, so a secret field value is scrubbed at the surface; the bridge already redacts
+message+path). Absence-is-never-a-pass: every refusal sets `unverified`, folded to `noSignal`
+by the capture bridge; the body block always ends in exactly one of {finding(s)} or
+{`unverified`}, never examined-found-nothing-clean. No real fetch in `pnpm gate` (pure
+validator + the existing in-process live-run test).
+
+**STAGED (honest, not amputated):** HAR-capture form bodies (`harEntriesToFacts` resolving
+`postData.params[]` — non-authoritative, redaction-incomplete, currently safely `unverified`);
+per-property `encoding` handling (would reuse the param splitter seams). With this addendum
+the ADR 0016 tail list is EMPTY.

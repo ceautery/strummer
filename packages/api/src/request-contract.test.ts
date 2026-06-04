@@ -1527,3 +1527,381 @@ describe('validateOpenApiRequest — slice 8c: form/explode=true object stays ou
     expect(r.unverified).toBe(true)
   })
 })
+
+// --- ADR 0016 Addendum 4: non-JSON request BODY schemas (form-urlencoded + multipart).
+// Form bodies arrive as a flat field-name → string-value(s) map on `req.form` (repeated
+// keys → array) + a `req.formFileFields` names-only list for multipart file parts.
+const formspec = {
+  openapi: '3.1.0',
+  paths: {
+    '/form': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                required: ['name', 'age'],
+                properties: {
+                  name: { type: 'string' },
+                  age: { type: 'integer', minimum: 0 },
+                  active: { type: 'boolean' },
+                },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        responses: { '201': { description: 'created' } },
+      },
+    },
+  },
+}
+
+const URLENC = { 'content-type': 'application/x-www-form-urlencoded' }
+
+describe('validateOpenApiRequest — Addendum 4 slice 1: form-urlencoded scalar fields', () => {
+  it('valid form body ⇒ valid, no findings, NOT unverified', () => {
+    const r = validateOpenApiRequest(
+      formspec,
+      {
+        method: 'POST',
+        path: '/form',
+        headers: URLENC,
+        form: { name: 'gizmo', age: '5', active: 'true' },
+      },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('field failing coercion ⇒ request-body-schema echoing the RAW value (never coerced)', () => {
+    const r = validateOpenApiRequest(
+      formspec,
+      { method: 'POST', path: '/form', headers: URLENC, form: { name: 'gizmo', age: 'abc' } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    const f = r.findings.find((x) => x.kind === 'request-body-schema')
+    expect(f?.path).toBe('age')
+    expect(f?.message).toContain('abc')
+    expect(f?.message).toContain('integer')
+  })
+
+  it('schema constraint past coercion is enforced (age minimum:0, "-1" fails)', () => {
+    const r = validateOpenApiRequest(
+      formspec,
+      { method: 'POST', path: '/form', headers: URLENC, form: { name: 'gizmo', age: '-1' } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('request-body-schema')
+  })
+
+  it('required field absent + authoritative ⇒ request-body-schema (ajv required)', () => {
+    const r = validateOpenApiRequest(
+      formspec,
+      { method: 'POST', path: '/form', headers: URLENC, form: { name: 'gizmo' } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('request-body-schema')
+  })
+
+  it('required field absent + NOT authoritative ⇒ unverified, no finding', () => {
+    const r = validateOpenApiRequest(formspec, {
+      method: 'POST',
+      path: '/form',
+      headers: URLENC,
+      form: { name: 'gizmo' },
+    })
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('undocumented field + additionalProperties:false ⇒ request-body-schema', () => {
+    const r = validateOpenApiRequest(
+      formspec,
+      {
+        method: 'POST',
+        path: '/form',
+        headers: URLENC,
+        form: { name: 'gizmo', age: '5', surprise: 'x' },
+      },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('request-body-schema')
+  })
+})
+
+// A form body with an ARRAY property (default form/explode=true ⇒ repeated keys) and a
+// scalar — exercising the sound array reconstruction.
+const arrformspec = {
+  openapi: '3.1.0',
+  paths: {
+    '/tagged': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                properties: {
+                  tags: { type: 'array', items: { type: 'string' } },
+                  ids: { type: 'array', items: { type: 'integer' }, minItems: 2 },
+                },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        responses: { '201': { description: 'created' } },
+      },
+    },
+  },
+}
+
+describe('validateOpenApiRequest — Addendum 4 slice 2: array fields (repeated keys)', () => {
+  it('≥2 repeated keys for a string array ⇒ the values ARE the array (no split), valid', () => {
+    const r = validateOpenApiRequest(
+      arrformspec,
+      { method: 'POST', path: '/tagged', headers: URLENC, form: { tags: ['a,b', 'c'] } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('bad element in an integer array ⇒ request-body-schema echoing the RAW element', () => {
+    const r = validateOpenApiRequest(
+      arrformspec,
+      { method: 'POST', path: '/tagged', headers: URLENC, form: { ids: ['1', 'two'] } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    const f = r.findings.find((x) => x.kind === 'request-body-schema')
+    expect(f?.path).toBe('ids')
+    expect(f?.message).toContain('two')
+  })
+
+  it('single occurrence of an array with a cardinality constraint ⇒ unverified (count unprovable)', () => {
+    const r = validateOpenApiRequest(
+      arrformspec,
+      { method: 'POST', path: '/tagged', headers: URLENC, form: { ids: '5' } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('single occurrence of an array with NO cardinality constraint ⇒ wrapped [v], valid', () => {
+    const r = validateOpenApiRequest(
+      arrformspec,
+      { method: 'POST', path: '/tagged', headers: URLENC, form: { tags: 'solo' } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('a SCALAR property arriving with repeated keys ⇒ unverified (never coerce one occurrence)', () => {
+    const r = validateOpenApiRequest(
+      formspec,
+      { method: 'POST', path: '/form', headers: URLENC, form: { name: ['a', 'b'], age: '5' } },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+})
+
+// Specs exercising each REFUSE → unverified branch.
+const refusespec = {
+  openapi: '3.1.0',
+  paths: {
+    // A per-property `encoding` block ⇒ skip the whole body.
+    '/enc': {
+      post: {
+        requestBody: {
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: { type: 'object', properties: { a: { type: 'string' } } },
+              encoding: { a: { style: 'form', explode: false } },
+            },
+          },
+        },
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    // A nested OBJECT property ⇒ skip.
+    '/nested': {
+      post: {
+        requestBody: {
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                properties: { inner: { type: 'object', properties: { x: { type: 'string' } } } },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    // A typed `additionalProperties` ⇒ skip (undeclared key left uncoerced could false-fail).
+    '/addprops': {
+      post: {
+        requestBody: {
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                properties: { a: { type: 'string' } },
+                additionalProperties: { type: 'integer' },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    // A fractional `multipleOf` on a number property ⇒ skip (IEEE-754 float trap).
+    '/frac': {
+      post: {
+        requestBody: {
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                properties: { ratio: { type: 'number', multipleOf: 0.1 } },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    // An integer scalar property (for the empty-value ambiguity test).
+    '/emptyamb': {
+      post: {
+        requestBody: {
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: { type: 'object', properties: { count: { type: 'integer' } } },
+            },
+          },
+        },
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+  },
+}
+
+describe('validateOpenApiRequest — Addendum 4 slice 2: refusal matrix (→ unverified, never a false finding)', () => {
+  const cases: Array<[string, string, Record<string, string | string[]>]> = [
+    ['per-property encoding present', '/enc', { a: 'x' }],
+    ['nested object property', '/nested', { inner: 'x' }],
+    ['typed additionalProperties', '/addprops', { a: 'x', other: '5' }],
+    ['fractional multipleOf property', '/frac', { ratio: '0.3' }],
+    ['ambiguous empty value for a non-string scalar', '/emptyamb', { count: '' }],
+  ]
+  for (const [label, path, form] of cases) {
+    it(`${label} ⇒ unverified, no finding`, () => {
+      const r = validateOpenApiRequest(
+        refusespec,
+        { method: 'POST', path, headers: URLENC, form },
+        { bodyPresenceAuthoritative: true },
+      )
+      expect(r.findings).toHaveLength(0)
+      expect(r.unverified).toBe(true)
+    })
+  }
+
+  it('a non-UTF-8 declared charset ⇒ unverified', () => {
+    const r = validateOpenApiRequest(
+      formspec,
+      {
+        method: 'POST',
+        path: '/form',
+        headers: { 'content-type': 'application/x-www-form-urlencoded; charset=iso-8859-1' },
+        form: { name: 'gizmo', age: 'abc' },
+      },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+})
+
+// A multipart body: text parts validated; file parts are names-only (req.formFileFields).
+const multispec = {
+  openapi: '3.1.0',
+  paths: {
+    '/upload': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['title'],
+                properties: {
+                  title: { type: 'string' },
+                  count: { type: 'integer' },
+                  avatar: { type: 'string', format: 'binary' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '201': { description: 'created' } },
+      },
+    },
+  },
+}
+
+const MULTI = { 'content-type': 'multipart/form-data' }
+
+describe('validateOpenApiRequest — Addendum 4 slice 2: multipart text fields + file parts', () => {
+  it('multipart text fields are validated like urlencoded (count="x" ⇒ finding)', () => {
+    const r = validateOpenApiRequest(
+      multispec,
+      {
+        method: 'POST',
+        path: '/upload',
+        headers: MULTI,
+        form: { title: 'hi', count: 'x' },
+      },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    const f = r.findings.find((x) => x.kind === 'request-body-schema')
+    expect(f?.path).toBe('count')
+    expect(f?.message).toContain('x')
+  })
+
+  it('a declared property satisfied by a FILE part ⇒ unverified (bytes never inlined)', () => {
+    const r = validateOpenApiRequest(
+      multispec,
+      {
+        method: 'POST',
+        path: '/upload',
+        headers: MULTI,
+        form: { title: 'hi' },
+        formFileFields: ['avatar'],
+      },
+      { bodyPresenceAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+})

@@ -37,6 +37,15 @@ export interface RequestFacts {
   query?: Record<string, string | string[]>
   /** Lower-cased header names → value. */
   headers?: Record<string, string>
+  /** Decoded fields of a `form`-style body (`application/x-www-form-urlencoded` or the
+   * text parts of `multipart/form-data`); repeated keys → array. The AUTHORITATIVE
+   * structured channel for non-JSON body validation (ADR 0016 addendum 4) — populated at
+   * prepare time from the structured parts, NEVER by re-parsing the serialized string.
+   * File-part bytes never enter this map. */
+  form?: Record<string, string | string[]>
+  /** Field NAMES of `multipart/form-data` FILE parts (bytes never inlined — redaction).
+   * A declared schema property satisfied by a file part is `unverified`-skipped. */
+  formFileFields?: string[]
 }
 
 export interface OpenApiRequestValidateOptions extends OpenApiValidateOptions {
@@ -618,19 +627,33 @@ function derefLocalComponent<T>(spec: OpenApiDoc, node: unknown): T | undefined 
   return cur as T
 }
 
-type ContentMap = Record<string, { schema?: unknown }>
+type ContentMap = Record<string, { schema?: unknown; encoding?: unknown }>
+
+/** `'urlencoded'`/`'multipart'` for the two form media bases, else `undefined`. Form
+ * bodies are validated by reconstructing the field map (ADR 0016 addendum 4). */
+function formBase(mb: string): 'urlencoded' | 'multipart' | undefined {
+  if (mb === 'application/x-www-form-urlencoded') return 'urlencoded'
+  if (mb === 'multipart/form-data') return 'multipart'
+  return undefined
+}
+
+type SelectedContent =
+  | { matched: true; schema: unknown; json: boolean; mediaBase: string; encoding: unknown }
+  | { matched: false }
 
 /**
  * Select the declared request-body schema for a concrete Content-Type. When a CT is
  * present, match the spec's `content` keys by specificity: exact `type/subtype`, then
  * the subtype range, then the catch-all range. When the CT is ABSENT (the capture
  * path), fall back to a JSON-family key (the bridge only resolves JSON bodies) — and
- * `matched:false` there must NEVER become `unsupported-media-type` (C1).
+ * `matched:false` there must NEVER become `unsupported-media-type` (C1). Also surfaces
+ * the matched media base + its `encoding` object (form-body validation refuses any
+ * per-property encoding — addendum 4).
  */
 function selectContentSchema(
   content: ContentMap | undefined,
   ct: string | undefined,
-): { matched: true; schema: unknown; json: boolean } | { matched: false } {
+): SelectedContent {
   if (!content) return { matched: false }
   const keys = Object.keys(content)
   if (ct) {
@@ -640,11 +663,176 @@ function selectContentSchema(
       keys.find((k) => mediaBase(k) === `${type}/*`) ??
       keys.find((k) => mediaBase(k) === '*/*')
     if (!key) return { matched: false }
-    return { matched: true, schema: content[key]?.schema, json: isJsonMediaType(key) }
+    return {
+      matched: true,
+      schema: content[key]?.schema,
+      json: isJsonMediaType(key),
+      mediaBase: mediaBase(key),
+      encoding: content[key]?.encoding,
+    }
   }
   const jsonKey = keys.find(isJsonMediaType)
   if (!jsonKey) return { matched: false }
-  return { matched: true, schema: content[jsonKey]?.schema, json: true }
+  return {
+    matched: true,
+    schema: content[jsonKey]?.schema,
+    json: true,
+    mediaBase: 'application/json',
+    encoding: content[jsonKey]?.encoding,
+  }
+}
+
+/** A declared scalar/array form-body property after classification. */
+type FormPropPlan =
+  | { kind: 'scalar'; types: string[] }
+  | { kind: 'array'; itemTypes: string[]; hasCard: boolean }
+
+/** UTF-8 / ASCII charsets we can soundly assume the bytes→string decode preserved. */
+const SOUND_CHARSETS = new Set(['utf-8', 'utf8', 'us-ascii', 'ascii'])
+
+/**
+ * Validate a `form`-style request body (`application/x-www-form-urlencoded` or the text
+ * parts of `multipart/form-data`) against its declared object schema, reconstructing
+ * typed values from the DISCRETE field map (`req.form`; repeated keys → array). Discrete
+ * keys make even STRING array items sound (no delimiter to over-split) — form bodies are
+ * more tractable than form *params*. Mirrors `validateObjectParam`'s coerce-then-ajv
+ * logic. Declared scalar props are coerced to the declared type; sound scalar-item array
+ * props are assembled from repeated keys; undeclared keys pass through as raw strings
+ * (ajv then enforces `additionalProperties`); the assembled object is ajv-validated.
+ *
+ * Returns whether the body was `unverified`-skipped. REFUSE → unverified (never a false
+ * finding) when reconstruction can't be sound: ANY per-property `encoding`; a non-UTF-8
+ * charset; the schema isn't a flat object with `properties`; an object-form (typed)
+ * `additionalProperties`; a non-scalar / typeless property, or an array property with
+ * non-scalar items; a fractional `multipleOf` (float trap); a declared property satisfied
+ * by a multipart FILE part; a scalar property arriving with repeated keys; a single-
+ * occurrence array property carrying a cardinality constraint; an ambiguous empty value
+ * for a non-string, non-null scalar property; or — when the caller is NOT authoritative —
+ * any required field absent from the captured map.
+ */
+function validateFormBody(
+  normSchema: Record<string, unknown>,
+  encoding: unknown,
+  req: RequestFacts,
+  opts: OpenApiRequestValidateOptions,
+  findings: ContractFinding[],
+): boolean {
+  // Per-property `encoding` re-introduces the full style/explode ambiguity matrix inside
+  // the body (delimited / JSON-encoded properties) — v1 permanently-out.
+  if (encoding !== undefined && encoding !== null) return true
+  // A non-UTF-8 declared charset means the bytes→string decode may already be wrong.
+  const rawCt = req.headers?.['content-type']
+  if (rawCt) {
+    const m = /;\s*charset=([^;]+)/i.exec(rawCt)
+    if (m?.[1] && !SOUND_CHARSETS.has(m[1].trim().toLowerCase())) return true
+  }
+
+  const props = normSchema.properties
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return true
+  const propEntries = Object.entries(props as Record<string, unknown>)
+  if (propEntries.length === 0) return true
+  // Only a literal true/false/absent `additionalProperties` is reasoned about; a typed
+  // one would false-fail an undeclared key we leave uncoerced.
+  const ap = normSchema.additionalProperties
+  if (ap !== undefined && typeof ap !== 'boolean') return true
+
+  const plan = new Map<string, FormPropPlan>()
+  for (const [name, sub] of propEntries) {
+    if (!sub || typeof sub !== 'object' || Array.isArray(sub)) return true
+    const s = sub as Record<string, unknown>
+    const st = scalarTypes(s)
+    if (st) {
+      if (hasFractionalMultipleOf(s)) return true
+      plan.set(name, { kind: 'scalar', types: st })
+      continue
+    }
+    const nst = nonScalarType(s)
+    if (nst === 'array') {
+      const items = s.items
+      if (!items || typeof items !== 'object' || Array.isArray(items)) return true
+      const it = scalarTypes(items as Record<string, unknown>)
+      if (!it || hasFractionalMultipleOf(items as Record<string, unknown>)) return true
+      plan.set(name, { kind: 'array', itemTypes: it, hasCard: hasCardinalityConstraint(s) })
+      continue
+    }
+    return true // nested object / array-of-object / typeless property
+  }
+
+  const form = (req.form ?? {}) as Record<string, string | string[]>
+  const fileFields = new Set(req.formFileFields ?? [])
+  // A declared property satisfied by a multipart file part can't be schema-checked.
+  for (const name of plan.keys()) if (fileFields.has(name)) return true
+
+  const required = Array.isArray(normSchema.required) ? (normSchema.required as string[]) : []
+  // Non-authoritative source: a required field absent from the captured map can't be
+  // distinguished from a dropped field → unverified (absence is never a finding here).
+  if (!opts.bodyPresenceAuthoritative) {
+    for (const rq of required) if (form[rq] === undefined) return true
+  }
+
+  const obj: Record<string, unknown> = {}
+  let anyBad = false
+  for (const [name, p] of plan) {
+    const raw = form[name]
+    if (raw === undefined) continue // absent: ajv enforces `required` (authoritative path)
+    if (p.kind === 'scalar') {
+      if (Array.isArray(raw)) return true // scalar prop arriving as repeated keys (array)
+      // `field=` can't be told apart from null / valueless-key; only string/null absorb it.
+      if (raw === '' && !p.types.includes('string') && !p.types.includes('null')) return true
+      const c = coerceScalar(raw, p.types)
+      if (!c.ok) {
+        anyBad = true
+        findings.push({
+          kind: 'request-body-schema',
+          severity: 'error',
+          path: name,
+          // Echo only the RAW field value (redaction); never the coerced value.
+          message: `request body field '${name}' value '${raw}' is not a valid ${p.types.filter((t) => t !== 'null').join('|')}`,
+        })
+      } else obj[name] = c.value
+    } else {
+      const occ = Array.isArray(raw) ? raw : [raw]
+      // A single occurrence can't prove a count bound (it might be an explode-disagreement).
+      if (occ.length === 1 && p.hasCard) return true
+      const arr: unknown[] = []
+      for (const el of occ) {
+        if (el === '' && !p.itemTypes.includes('string') && !p.itemTypes.includes('null')) {
+          return true // ambiguous empty element
+        }
+        const c = coerceScalar(el, p.itemTypes)
+        if (!c.ok) {
+          anyBad = true
+          findings.push({
+            kind: 'request-body-schema',
+            severity: 'error',
+            path: name,
+            message: `request body field '${name}' value '${el}' is not a valid ${p.itemTypes.filter((t) => t !== 'null').join('|')}`,
+          })
+        } else arr.push(c.value)
+      }
+      if (!anyBad) obj[name] = arr
+    }
+  }
+  // Undeclared fields pass through raw (ajv enforces `additionalProperties`); file parts
+  // are never schema-checked, so they don't enter the assembled object.
+  for (const [key, val] of Object.entries(form)) {
+    if (plan.has(key) || fileFields.has(key)) continue
+    obj[key] = val
+  }
+  if (anyBad) return false // a value-level finding was raised; don't double-report via ajv
+
+  const { valid, errors } = validateSchema(normSchema, obj)
+  if (!valid) {
+    for (const err of errors) {
+      findings.push({
+        kind: 'request-body-schema',
+        severity: 'error',
+        ...(err.instancePath ? { path: err.instancePath } : {}),
+        message: err.message,
+      })
+    }
+  }
+  return false
 }
 
 export function validateOpenApiRequest(
@@ -672,7 +860,7 @@ export function validateOpenApiRequest(
   const requestBodyRaw = operation.requestBody
   const requestBodyDeclared = requestBodyRaw !== undefined
   const requestBody = derefLocalComponent<RequestBodyObject>(spec, requestBodyRaw)
-  const hasBody = req.body !== undefined
+  const hasBody = req.body !== undefined || req.form !== undefined
   const reqCt = req.headers?.['content-type'] ? mediaBase(req.headers['content-type']) : undefined
 
   if (requestBodyDeclared && (!requestBody || typeof requestBody !== 'object')) {
@@ -708,9 +896,14 @@ export function validateOpenApiRequest(
         }
         // CT-absent + no JSON content key ⇒ unverified only, NEVER unsupported-media-type (C1).
         unverified = true
+      } else if (formBase(sel.mediaBase) && req.form !== undefined && sel.schema !== undefined) {
+        // A `form`-style body with a structured field map (addendum 4): reconstruct +
+        // validate the fields; any unsound case folds to `unverified`.
+        const normSchema = normalizeOpenApiSchema(sel.schema, spec, opts)
+        if (validateFormBody(normSchema, sel.encoding, req, opts, findings)) unverified = true
       } else if (!sel.json || sel.schema === undefined) {
-        // Matched a non-JSON media type (or a media type with no schema) — v1 is
-        // presence-only for non-JSON bodies.
+        // Matched a non-JSON media type (or a media type with no schema) — presence-only
+        // for non-form, non-JSON bodies (e.g. a form body with no structured field map).
         unverified = true
       } else {
         const compiled = normalizeOpenApiSchema(sel.schema, spec, opts)
