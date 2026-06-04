@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ContractResult } from '@strummer/api'
+import type { HarSummary } from '@strummer/browser'
 import type { DiffCoverageReport } from '@strummer/coverage'
 import type { DependencyAudit } from '@strummer/deps'
 import { changedFiles as changedFilesFromDiff } from '@strummer/diff'
@@ -69,10 +70,21 @@ export interface RunDrivingOptions {
   deps?: (
     ctx: RunDrivingContext,
   ) => Promise<{ audits: DependencyAudit[]; osvSnapshotLoaded: boolean }>
-  /** Consume-only capture→contract bridge, wired only behind the existing capture gate. */
-  contract?: (ctx: ContractCaptureContext) => Promise<ContractResult[]>
+  /** The capture→contract bridge (consume a stored HAR, or PRODUCE one by driving a
+   * browser flow — 5e), wired only behind the capture gate. Returns the contract results
+   * plus, for produce mode, the stored HAR handle so the capture is auditable. */
+  contract?: (ctx: ContractCaptureContext) => Promise<ContractRunResult>
   /** Operator redactor applied to an errored pillar's message before it enters the verdict. */
   redact?: (value: string) => string
+}
+
+/** What the contract runner returns: the validation results (folded into the verdict) +,
+ * for a verify-DRIVEN capture (5e), the stored HAR handle + summary for auditability. */
+export interface ContractRunResult {
+  results: ContractResult[]
+  /** `strummer://verify/<runId>/har` — the produced (redacted) HAR, by handle. */
+  harHandle?: string
+  summary?: HarSummary
 }
 
 export interface VerifyToolsOptions {
@@ -257,6 +269,9 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
         if (wants('deps')) request.deps = { run: spawnRun(rd.deps, 'deps') }
         if (wants('flake')) request.flake = { run: spawnRun(rd.flake, 'flake') }
         if (wants('mutate')) request.mutate = { run: spawnRun(rd.mutate, 'mutate') }
+        // A verify-DRIVEN capture (produce mode) reports its stored HAR handle out via the
+        // wrapped runner so the capture is auditable; populated by the time orchestrate resolves.
+        let capture: { harHandle: string; summary?: HarSummary } | undefined
         if (args.contract) {
           const a = args.contract
           const inputs: ContractInputs = {
@@ -277,7 +292,13 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
           const crun = rd.contract
           request.contract = {
             source: 'capture-from-HAR',
-            run: crun ? () => crun(ccx) : denied('contract'),
+            run: crun
+              ? async () => {
+                  const out = await crun(ccx)
+                  if (out.harHandle) capture = { harHandle: out.harHandle, summary: out.summary }
+                  return out.results
+                }
+              : denied('contract'),
           }
         }
 
@@ -294,7 +315,11 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
             'application/json',
           )
         }
-        const out = { ...verdict, ...(detailHandle ? { detailHandle } : {}) }
+        const out = {
+          ...verdict,
+          ...(detailHandle ? { detailHandle } : {}),
+          ...(capture ? { capture } : {}),
+        }
         return { content: [text(out)], structuredContent: out }
       },
     )

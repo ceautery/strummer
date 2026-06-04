@@ -215,7 +215,9 @@ export function buildVerifyServerFromEnv(
         if (ctx.mode === 'consume') {
           const har = store.get(ctx.harHandle)?.body
           if (!har) throw new Error(`no stored HAR for ${ctx.harHandle}`)
-          return validateCapturedTraffic(har, buildCaptureContract(ctx), { redact }).results
+          return {
+            results: validateCapturedTraffic(har, buildCaptureContract(ctx), { redact }).results,
+          }
         }
         // PRODUCE: drive a live browser capture. Gate-deny (⇒ gate-not-set) before any
         // spawn when the browser gate is unmet.
@@ -238,7 +240,7 @@ export function buildVerifyServerFromEnv(
         for (const [name, value] of verifySecrets) union.register(name, value)
         const unionRedact = (s: string) => union.redact(s)
 
-        const { harHandle } = await driveBrowserFlowToHar(ctx, {
+        const { harHandle, summary } = await driveBrowserFlowToHar(ctx, {
           runtimeFactory: () => buildBrowserRuntimeFromEnv(env),
           store,
           flowsDir,
@@ -246,8 +248,10 @@ export function buildVerifyServerFromEnv(
         })
         const har = store.get(harHandle)?.body
         if (!har) throw new Error('no HAR was captured for the driven flow')
-        return validateCapturedTraffic(har, buildCaptureContract(ctx), { redact: unionRedact })
-          .results
+        const { results } = validateCapturedTraffic(har, buildCaptureContract(ctx), {
+          redact: unionRedact,
+        })
+        return { results, harHandle, summary }
       }
     }
 

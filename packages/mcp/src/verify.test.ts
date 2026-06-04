@@ -155,7 +155,7 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
     const contract = vi.fn(async (ctx: { mode: string; harHandle?: string }) => {
       expect(ctx.mode).toBe('consume')
       expect(ctx.harHandle).toBe('strummer://browser/run/x/har')
-      return [contractError as never]
+      return { results: [contractError as never] }
     })
     const c = await connect({ runDriving: { contract } })
     const res = await c.callTool({
@@ -177,12 +177,17 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
     expect(sc.status).toBe('fail')
   })
 
-  it('builds a PRODUCE ctx (mode:produce + flow/vars) for the live-capture path (5e slice 2)', async () => {
+  it('drives a PRODUCE capture (flow/vars) and SURFACES the stored HAR handle (5e slice 7)', async () => {
     const contract = vi.fn(async (ctx: { mode: string; flow?: string; vars?: unknown }) => {
       expect(ctx.mode).toBe('produce')
       expect(ctx.flow).toBe('login')
       expect(ctx.vars).toEqual({ user: 'alice' })
-      return [contractError as never]
+      // produce mode returns the contract results + the stored HAR handle for auditability
+      return {
+        results: [contractError as never],
+        harHandle: 'strummer://verify/cap-9/har',
+        summary: { handle: 'strummer://verify/cap-9/har', byteSize: 5, entryCount: 2 } as never,
+      }
     })
     const c = await connect({ runDriving: { contract } })
     const res = await c.callTool({
@@ -192,9 +197,14 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
         contract: { flow: 'login', vars: { user: 'alice' } },
       },
     })
-    const sc = res.structuredContent as { status: string }
+    const sc = res.structuredContent as {
+      status: string
+      capture?: { harHandle: string; summary?: { entryCount: number } }
+    }
     expect(contract).toHaveBeenCalledOnce()
     expect(sc.status).toBe('fail') // the contract error dominates
+    expect(sc.capture?.harHandle).toBe('strummer://verify/cap-9/har') // surfaced for audit
+    expect(sc.capture?.summary?.entryCount).toBe(2)
   })
 
   it('derives changedFiles from a diff so one diff scopes the file-scoped pillars (slice 5d-3)', async () => {
