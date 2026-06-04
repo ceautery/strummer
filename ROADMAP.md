@@ -472,9 +472,15 @@ stage `reportlog`. Pure/zero-spawn slices first.
       else → Pending (ambiguity ⇒ never a phantom survivor). `summarizeMutation`/`fromMutationSummary`
       unchanged. Real dump fixture captured out-of-gate from cosmic-ray 8.4.6 (provenance +
       synthesized rare-outcome records in `test/fixtures/README.md`).
-- [ ] **Slice 4 — flake `runAndRecordPytest`** (gated runner) — near-clone of vitest's
-      `runAndRecord`; `pytest --json-report`, loop the whole suite N times (NOT `pytest-repeat`),
-      ingest via the existing `parsePytestJson`. MCP `flake_run` gains `framework`; CLI `--framework`.
+- [x] **Slice 4 — flake `runAndRecordPytest`** (gated runner). Refactored `runAndRecord` onto a
+      framework-agnostic core (`runAndRecordWith` + a `FrameworkAdapter` of default-runner/buildArgv/
+      ingest); `runAndRecord` (vitest) is behavior-preserving, `runAndRecordPytest` spawns
+      `pytest --json-report --json-report-file=<f>` and ingests via the existing `parsePytestJson`
+      (unchanged). Repeats re-run the WHOLE suite N times (NOT `pytest-repeat` — its `[i-N]` nodeid
+      suffix fragments the one-history-per-nodeid invariant). Shares the paired `allowRun`+allowlist
+      gate. MCP `flake_run` gains `framework: vitest|pytest` (agent-supplied — picks the tool, not a
+      security knob; the gate still governs whether to spawn at all); CLI `flake run --framework`.
+      Injected runner ⇒ no real spawn in the gate.
 - [ ] **Slice 5 — mutate Python mutation runner** (cosmic-ray primary + mutmut, `--tool`) —
       stdout-fed parse branch, `reportPath` optional; cosmic-ray TOML synth from `changedFiles` +
       `session.sqlite`; transport-completeness guard (pending/null → inconclusive). *(Depends on slice 3.)*

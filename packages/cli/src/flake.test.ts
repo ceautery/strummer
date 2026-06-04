@@ -124,6 +124,34 @@ describe('strummer flake CLI', () => {
     expect(c.out()).toMatch(/recorded 2/)
   })
 
+  it('run --framework pytest drives the pytest runner + ingests its json-report', async () => {
+    const runner: TestRunner = async (argv) => {
+      // Proves the pytest argv path (no vitest `run`/`--outputFile`).
+      expect(argv).toContain('--json-report')
+      expect(argv[0]).not.toBe('run')
+      const outFile = argv.find((a) => a.startsWith('--json-report-file='))?.split('=')[1] as string
+      writeFileSync(
+        outFile,
+        JSON.stringify({ tests: [{ nodeid: 'tests/test_a.py::test_works', outcome: 'passed' }] }),
+      )
+      return { exitCode: 0, stdout: '', stderr: '' }
+    }
+    const c = capture()
+    const code = await runFlake(
+      ['run', dir, '--db', db, '--allow-run', '--framework', 'pytest'],
+      c.io,
+      { runner },
+    )
+    expect(code).toBe(0)
+    expect(c.out()).toMatch(/recorded 1/)
+  })
+
+  it('run rejects an unknown --framework', async () => {
+    const c = capture()
+    expect(await runFlake(['run', dir, '--db', db, '--framework', 'jest'], c.io)).toBe(1)
+    expect(c.err()).toMatch(/unknown framework/i)
+  })
+
   it('quarantine is refused without the operator gate', async () => {
     const c = capture()
     const expiresAt = new Date(Date.now() + 86_400_000).toISOString()

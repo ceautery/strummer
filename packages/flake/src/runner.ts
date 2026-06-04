@@ -20,7 +20,8 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { FlakeVerdict } from './classify.js'
-import type { VitestJsonReport } from './report.js'
+import type { PytestJsonReport } from './pytest.js'
+import type { ParseReportOptions, VitestJsonReport } from './report.js'
 import type { HistoryStore } from './store.js'
 
 /** Thrown when the paired operator gate denies a run. */
@@ -73,30 +74,70 @@ export interface RunAndRecordResult {
   verdicts: FlakeVerdict[]
 }
 
-/** Build the argv for one suite run with the JSON reporter writing to `outFile`. */
-function runArgv(files: string[], outFile: string): string[] {
+/** Build the argv for one vitest suite run with the JSON reporter writing to `outFile`. */
+function vitestArgv(files: string[], outFile: string): string[] {
   return ['run', ...files, '--reporter=json', `--outputFile=${outFile}`]
 }
 
+/**
+ * Build the argv for one pytest run with the `pytest-json-report` plugin writing to `outFile`
+ * (ADR 0010 addendum: json-report now, `pytest-reportlog` staged). No `run` subcommand — pytest
+ * takes positional file filters directly. The plugin is an operator-installed dev dependency.
+ */
+function pytestArgv(files: string[], outFile: string): string[] {
+  return ['--json-report', `--json-report-file=${outFile}`, ...files]
+}
+
+/** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
+function spawnRunner(command: string): TestRunner {
+  return (argv, opts) =>
+    new Promise((res) => {
+      execFile(
+        command,
+        argv,
+        { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
+        (err, stdout, stderr) => {
+          // The tool exits non-zero on a test failure — surface the code, don't reject.
+          const code =
+            err && typeof (err as { code?: unknown }).code === 'number'
+              ? (err as { code: number }).code
+              : err
+                ? 1
+                : 0
+          res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
+        },
+      )
+    })
+}
+
 /** Default live runner: spawn the local `vitest` as a subprocess (used by the bin, not the gate). */
-export const defaultVitestRunner: TestRunner = (argv, opts) =>
-  new Promise((res) => {
-    execFile(
-      'vitest',
-      argv,
-      { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        // vitest exits non-zero on test failure — surface the code, don't reject.
-        const code =
-          err && typeof (err as { code?: unknown }).code === 'number'
-            ? (err as { code: number }).code
-            : err
-              ? 1
-              : 0
-        res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
-      },
-    )
-  })
+export const defaultVitestRunner: TestRunner = spawnRunner('vitest')
+
+/** Default live runner: spawn the local `pytest` as a subprocess (used by the bin, not the gate). */
+export const defaultPytestRunner: TestRunner = spawnRunner('pytest')
+
+/**
+ * A test framework's runner specifics: the default subprocess runner, how to build its argv with
+ * a per-iteration report file, and how to ingest the parsed report into the store. Everything else
+ * (gate, repeat loop, report-file plumbing, classification) is framework-agnostic.
+ */
+interface FrameworkAdapter {
+  defaultRunner: TestRunner
+  buildArgv(files: string[], outFile: string): string[]
+  ingest(store: HistoryStore, parsed: unknown, opts: ParseReportOptions): number
+}
+
+const VITEST: FrameworkAdapter = {
+  defaultRunner: defaultVitestRunner,
+  buildArgv: vitestArgv,
+  ingest: (store, parsed, opts) => store.ingestReport(parsed as VitestJsonReport, opts),
+}
+
+const PYTEST: FrameworkAdapter = {
+  defaultRunner: defaultPytestRunner,
+  buildArgv: pytestArgv,
+  ingest: (store, parsed, opts) => store.ingestPytestReport(parsed as PytestJsonReport, opts),
+}
 
 function assertAllowed(config: RunHistoryConfig): void {
   if (!config.allowRun) {
@@ -110,7 +151,57 @@ function assertAllowed(config: RunHistoryConfig): void {
 }
 
 /**
- * Run the suite `repeat` times behind the operator gate, recording every outcome into the
+ * Run a test suite `repeat` times behind the operator gate via the given {@link FrameworkAdapter},
+ * recording every outcome into the store, then classify. The actual invocation is the injected
+ * `runner` (default = the adapter's subprocess runner); no real spawn in the green gate.
+ */
+async function runAndRecordWith(
+  fw: FrameworkAdapter,
+  store: HistoryStore,
+  config: RunHistoryConfig,
+  input: RunAndRecordInput,
+  deps: { runner?: TestRunner; reportDir?: string },
+): Promise<RunAndRecordResult> {
+  assertAllowed(config)
+
+  const repeat = input.repeat ?? 1
+  if (repeat <= 0) {
+    return { ran: false, iterations: 0, recorded: 0, results: [], verdicts: store.classify() }
+  }
+
+  const runner = deps.runner ?? fw.defaultRunner
+  const reportDir = deps.reportDir ?? mkdtempSync(join(tmpdir(), 'strummer-flake-'))
+  const files = input.files ?? []
+  const results: { exitCode: number; passed: boolean }[] = []
+  let recorded = 0
+
+  for (let i = 0; i < repeat; i++) {
+    const outFile = join(reportDir, `report-${i}.json`)
+    const { exitCode } = await runner(fw.buildArgv(files, outFile), {
+      cwd: config.projectRoot,
+      timeoutMs: config.timeoutMs,
+    })
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(readFileSync(outFile, 'utf8'))
+    } catch {
+      throw new Error(
+        `flake run did not produce a JSON report at ${outFile} (exit code ${exitCode})`,
+      )
+    }
+    recorded += fw.ingest(store, parsed, {
+      at: new Date().toISOString(),
+      projectRoot: config.projectRoot,
+      runGroup: input.runGroup !== undefined ? `${input.runGroup}#${i}` : undefined,
+    })
+    results.push({ exitCode, passed: exitCode === 0 })
+  }
+
+  return { ran: true, iterations: repeat, recorded, results, verdicts: store.classify() }
+}
+
+/**
+ * Run the vitest suite `repeat` times behind the operator gate, recording every outcome into the
  * store, then classify. The actual `vitest` invocation is the injected `runner` (default
  * {@link defaultVitestRunner}).
  */
@@ -120,40 +211,20 @@ export async function runAndRecord(
   input: RunAndRecordInput,
   deps: { runner?: TestRunner; reportDir?: string } = {},
 ): Promise<RunAndRecordResult> {
-  assertAllowed(config)
+  return runAndRecordWith(VITEST, store, config, input, deps)
+}
 
-  const repeat = input.repeat ?? 1
-  if (repeat <= 0) {
-    return { ran: false, iterations: 0, recorded: 0, results: [], verdicts: store.classify() }
-  }
-
-  const runner = deps.runner ?? defaultVitestRunner
-  const reportDir = deps.reportDir ?? mkdtempSync(join(tmpdir(), 'strummer-flake-'))
-  const files = input.files ?? []
-  const results: { exitCode: number; passed: boolean }[] = []
-  let recorded = 0
-
-  for (let i = 0; i < repeat; i++) {
-    const outFile = join(reportDir, `report-${i}.json`)
-    const { exitCode } = await runner(runArgv(files, outFile), {
-      cwd: config.projectRoot,
-      timeoutMs: config.timeoutMs,
-    })
-    let report: VitestJsonReport
-    try {
-      report = JSON.parse(readFileSync(outFile, 'utf8')) as VitestJsonReport
-    } catch {
-      throw new Error(
-        `flake run did not produce a JSON report at ${outFile} (exit code ${exitCode})`,
-      )
-    }
-    recorded += store.ingestReport(report, {
-      at: new Date().toISOString(),
-      projectRoot: config.projectRoot,
-      runGroup: input.runGroup !== undefined ? `${input.runGroup}#${i}` : undefined,
-    })
-    results.push({ exitCode, passed: exitCode === 0 })
-  }
-
-  return { ran: true, iterations: repeat, recorded, results, verdicts: store.classify() }
+/**
+ * The pytest sibling of {@link runAndRecord} (ADR 0010 addendum): spawn `pytest --json-report`
+ * `repeat` times, ingest via the existing `parsePytestJson` (unchanged), classify. Repeats re-run
+ * the WHOLE suite — never `pytest-repeat`, whose `[i-N]` nodeid suffix would fragment the
+ * one-history-per-nodeid invariant the classifier relies on.
+ */
+export async function runAndRecordPytest(
+  store: HistoryStore,
+  config: RunHistoryConfig,
+  input: RunAndRecordInput,
+  deps: { runner?: TestRunner; reportDir?: string } = {},
+): Promise<RunAndRecordResult> {
+  return runAndRecordWith(PYTEST, store, config, input, deps)
 }

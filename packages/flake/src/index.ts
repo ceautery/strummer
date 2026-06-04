@@ -32,12 +32,14 @@ export {
   type VitestJsonReport,
 } from './report.js'
 export {
+  defaultPytestRunner,
   defaultVitestRunner,
   FlakeGateError,
   type RunAndRecordInput,
   type RunAndRecordResult,
   type RunHistoryConfig,
   runAndRecord,
+  runAndRecordPytest,
   type TestRunner,
 } from './runner.js'
 export {

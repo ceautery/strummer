@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { FlakeGateError, runAndRecord, type TestRunner } from './runner.js'
+import { FlakeGateError, runAndRecord, runAndRecordPytest, type TestRunner } from './runner.js'
 import { HistoryStore } from './store.js'
 
 const ROOT = '/abs/project'
@@ -122,8 +122,83 @@ describe('runAndRecord', () => {
   })
 })
 
-// Guard: the default runner exists and is a function (the live subprocess path; not spawned here).
-it('exposes a default vitest runner', async () => {
+/** A fake runner that writes a pytest-json-report to the requested --json-report-file. */
+function fakePytestRunner(reportFor: (iteration: number) => unknown): {
+  runner: TestRunner
+  argvs: string[][]
+} {
+  const argvs: string[][] = []
+  let iteration = 0
+  const runner: TestRunner = async (argv, _opts) => {
+    argvs.push(argv)
+    const outArg = argv.find((a) => a.startsWith('--json-report-file='))
+    const report = reportFor(iteration++)
+    if (outArg) writeFileSync(outArg.slice('--json-report-file='.length), JSON.stringify(report))
+    const failed = JSON.stringify(report).includes('"outcome":"failed"')
+    return { exitCode: failed ? 1 : 0, stdout: '', stderr: '' }
+  }
+  return { runner, argvs }
+}
+
+function pytestReport(shakyPassed: boolean): unknown {
+  return {
+    tests: [
+      { nodeid: 'tests/test_a.py::test_always_ok', outcome: 'passed' },
+      { nodeid: 'tests/test_b.py::test_sometimes', outcome: shakyPassed ? 'passed' : 'failed' },
+    ],
+  }
+}
+
+describe('runAndRecordPytest', () => {
+  it('denies through the same paired gate', async () => {
+    const store = HistoryStore.memory()
+    await expect(
+      runAndRecordPytest(store, cfg({ allowRun: false }), {}, {}),
+    ).rejects.toBeInstanceOf(FlakeGateError)
+    store.close()
+  })
+
+  it('runs pytest `repeat` times, ingests the json-report, and classifies (nodeid verbatim)', async () => {
+    const store = HistoryStore.memory()
+    try {
+      const { runner, argvs } = fakePytestRunner((i) => pytestReport(i % 2 === 1)) // fail, pass, fail
+      const result = await runAndRecordPytest(store, cfg(), { repeat: 3 }, { runner })
+
+      expect(result.ran).toBe(true)
+      expect(result.iterations).toBe(3)
+      expect(result.recorded).toBe(6) // 2 tests × 3 runs
+      expect(result.results.map((r) => r.passed)).toEqual([false, true, false])
+
+      // argv carries the pytest-json-report plugin flags + a per-iteration report file.
+      expect(argvs[0]).toContain('--json-report')
+      expect(argvs.every((a) => a.some((t) => t.startsWith('--json-report-file=')))).toBe(true)
+      // No vitest `run` subcommand leaks into the pytest argv.
+      expect(argvs[0]?.[0]).not.toBe('run')
+
+      // pytest's nodeid is used verbatim (no ancestorTitles reconstruction).
+      const shaky = store.history('tests/test_b.py::test_sometimes')
+      expect(shaky.runs.map((r) => r.passed)).toEqual([false, true, false])
+      expect(result.verdicts.find((v) => v.id === shaky.id)?.state).toBe('flaky')
+    } finally {
+      store.close()
+    }
+  })
+
+  it('passes positional file filters through to pytest', async () => {
+    const store = HistoryStore.memory()
+    try {
+      const { runner, argvs } = fakePytestRunner(() => pytestReport(true))
+      await runAndRecordPytest(store, cfg(), { files: ['tests/test_b.py'] }, { runner })
+      expect(argvs[0]).toContain('tests/test_b.py')
+    } finally {
+      store.close()
+    }
+  })
+})
+
+// Guard: the default runners exist and are functions (the live subprocess path; not spawned here).
+it('exposes default vitest + pytest runners', async () => {
   const mod = await import('./runner.js')
   expect(typeof mod.defaultVitestRunner).toBe('function')
+  expect(typeof mod.defaultPytestRunner).toBe('function')
 })

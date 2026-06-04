@@ -9,6 +9,7 @@ import {
   QuarantineGateError,
   quarantineCandidates,
   runAndRecord,
+  runAndRecordPytest,
   type TestRunner,
 } from '@strummer/flake'
 import type { CliIO } from './index.js'
@@ -225,6 +226,7 @@ async function cmdRun(
     allowPositionals: true,
     options: {
       db: { type: 'string' },
+      framework: { type: 'string' },
       repeat: { type: 'string' },
       file: { type: 'string', multiple: true },
       'run-group': { type: 'string' },
@@ -238,8 +240,14 @@ async function cmdRun(
     io.err('flake run needs a <project-root>\n')
     return 1
   }
+  const framework = values.framework ?? 'vitest'
+  if (framework !== 'vitest' && framework !== 'pytest') {
+    io.err(`unknown framework: ${framework} (expected vitest|pytest)\n`)
+    return 1
+  }
   try {
-    const result = await runAndRecord(
+    const run = framework === 'pytest' ? runAndRecordPytest : runAndRecord
+    const result = await run(
       store,
       {
         projectRoot,

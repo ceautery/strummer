@@ -7,6 +7,7 @@ import {
   quarantineCandidates,
   type RunHistoryConfig,
   runAndRecord,
+  runAndRecordPytest,
   type TestRunner,
   type VitestJsonReport,
 } from '@strummer/flake'
@@ -223,9 +224,14 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
         description:
           'Run the suite `repeat` times (default 1) with the JSON reporter, recording every ' +
           'outcome into the history store, then classify. Operator-gated and confined to ' +
-          'allowlisted project roots. Optional positional `files` filters and a `runGroup`.',
+          'allowlisted project roots. Optional `framework` (vitest|pytest, default vitest), ' +
+          'positional `files` filters and a `runGroup`.',
         inputSchema: {
           projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
+          framework: z
+            .enum(['vitest', 'pytest'])
+            .optional()
+            .describe('test framework (default vitest)'),
           repeat: z.number().int().positive().optional(),
           files: z.array(z.string()).optional(),
           runGroup: z.string().optional(),
@@ -238,7 +244,8 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
           allowRun: true,
           timeoutMs,
         }
-        const result = await runAndRecord(
+        const run = args.framework === 'pytest' ? runAndRecordPytest : runAndRecord
+        const result = await run(
           store,
           config,
           { repeat: args.repeat, files: args.files, runGroup: args.runGroup },
