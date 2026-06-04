@@ -161,8 +161,13 @@ load-bearing rule: **absence is never a pass** — a missing/no-signal pillar yi
 `inconclusive`, never `pass`; there is no baked-in severity threshold (the caller declares the
 cut). Surfaced as the `request_verdict` MCP tool + `strummer-verify-mcp` bin + a `strummer verify`
 CLI. The shared `@strummer/artifacts` store also gained prefix-qualified, hardened cross-prefix
-rehydration so one pillar can resolve another's by-handle artifact. Staged (not amputated):
-GraphQL-drift-over-capture, orchestration/run-driving `verify`, and the Python second half.
+rehydration so one pillar can resolve another's by-handle artifact. **A Phase-5 tail since landed —
+GraphQL drift over captured traffic**: `validateCapturedTraffic`'s contract is now the discriminated
+`CaptureContract { openapi?, graphql?: {endpointPath, sdl} }`, GraphQL entries route to the shipped
+`validateGraphqlOperation` (never the OpenAPI validator), and absence stays non-passing (GraphQL with
+no SDL ⇒ no-signal); backed by a real Playwright `content:'attach'` capture fixture. Staged (not
+amputated): orchestration/run-driving `verify`, `verify` driving a live capture, request-body/param
+contract validation, extracting the shared `Severity` scale, and the Python second half.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 

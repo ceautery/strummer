@@ -36,7 +36,7 @@ routed through the operator `Redactor`**; (slice 6) the gated MCP `validate_capt
 registered only when a HAR resolver is wired, refuses without `STRUMMER_VERIFY_ALLOW_CAPTURE`,
 detail by handle under the `verify` prefix) + the human `strummer api validate-capture <har.zip>
 --openapi <spec>` CLI. Verified vs a real captured HAR (schema drift + base-path + redaction).
-**Phase-5 tail LANDED — GraphQL drift over captured traffic (1050 TS + 45 Py green):** the
+**Phase-5 tail LANDED — GraphQL drift over captured traffic (1053 TS + 45 Py green, incl. the real-capture fixture):** the
 capture→contract bridge now validates GraphQL traffic, not just REST. `harEntriesToFacts` resolves
 the **request** body (`postData._file` attach → inline `text` → JSON-parse) into `req.body` — the
 GraphQL `query` lives in the request, not the response. `validateCapturedTraffic`'s 2nd arg is now
