@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { join, sep } from 'node:path'
 
 export interface Artifact {
@@ -15,6 +24,29 @@ export interface Artifact {
    * `application/octet-stream` — never a silent failure (ADR 0013 §4).
    */
   contentTypeInferred?: boolean
+}
+
+/**
+ * Bounds on a store's own `<baseDir>/<prefix>` subtree (ADR 0017). All optional; an
+ * unset dimension is not enforced, and a policy with no dimension set is a no-op (so
+ * a store with no retention NEVER deletes — fully backward-compatible).
+ */
+export interface RetentionPolicy {
+  /** Evict `<id>` dirs whose mtime is older than `now - maxAgeMs`. */
+  maxAgeMs?: number
+  /** Keep at most this many `<id>` dirs (newest by mtime). */
+  maxEntries?: number
+  /** Keep the subtree's total bytes at or under this cap (evict oldest-first). */
+  maxBytes?: number
+}
+
+export interface ArtifactStoreOptions {
+  /** Retention bounds; absent ⇒ the store is append-only (no GC). */
+  retention?: RetentionPolicy
+  /** Clock injection (testing / determinism). Default `Date.now`. */
+  now?: () => number
+  /** Minimum ms between opportunistic `put()`-triggered sweeps. Default 0 (every put). */
+  sweepIntervalMs?: number
 }
 
 /** A handle parsed into its on-disk-addressing parts. */
@@ -68,12 +100,21 @@ export class ArtifactStore {
    * @param prefix the handle namespace between `strummer://` and `/<id>/<kind>`
    *   (may contain `/`, e.g. `browser/run`); each segment must be a safe segment.
    */
+  private readonly retention?: RetentionPolicy
+  private readonly now: () => number
+  private readonly sweepIntervalMs: number
+  private lastSweepAt = Number.NEGATIVE_INFINITY
+
   constructor(
     private readonly baseDir: string,
     private readonly prefix: string,
+    opts: ArtifactStoreOptions = {},
   ) {
     for (const seg of prefix.split('/')) assertSafeSegment(seg, 'prefix')
     mkdirSync(baseDir, { recursive: true })
+    this.retention = opts.retention
+    this.now = opts.now ?? Date.now
+    this.sweepIntervalMs = opts.sweepIntervalMs ?? 0
   }
 
   /** The handle a (`runId`, `kind`) pair maps to — reconstruct without re-storing. */
@@ -101,7 +142,102 @@ export class ArtifactStore {
       byteSize: buf.byteLength,
       sha256: createHash('sha256').update(buf).digest('hex'),
     })
+    this.maybeSweep()
     return handle
+  }
+
+  private hasPolicy(): boolean {
+    const r = this.retention
+    return (
+      !!r && (r.maxAgeMs !== undefined || r.maxEntries !== undefined || r.maxBytes !== undefined)
+    )
+  }
+
+  /** Opportunistic, THROTTLED sweep after a write (ADR 0017): at most once per
+   * `sweepIntervalMs` so a hot write loop doesn't re-scan the subtree every put. */
+  private maybeSweep(): void {
+    if (!this.hasPolicy()) return
+    const t = this.now()
+    if (t - this.lastSweepAt < this.sweepIntervalMs) return
+    this.lastSweepAt = t
+    this.sweep(t)
+  }
+
+  /**
+   * Evict `<id>` dirs under THIS store's own `<baseDir>/<prefix>` subtree per the
+   * `RetentionPolicy` — age (`maxAgeMs`) then count (`maxEntries`) then size
+   * (`maxBytes`), oldest-first by dir mtime (so a just-written run is evicted last).
+   * Disk-based (a cold process's in-process map is empty), confinement-checked before
+   * every delete (never deletes THROUGH a symlink escaping `baseDir`), and a no-op when
+   * no policy is set. Returns the evicted ids. Public so a bin can sweep on startup.
+   */
+  sweep(nowMs: number = this.now()): string[] {
+    if (!this.hasPolicy()) return []
+    const root = join(this.baseDir, this.prefix)
+    if (!existsSync(root)) return []
+    const r = this.retention as RetentionPolicy
+
+    interface Entry {
+      id: string
+      dir: string
+      mtimeMs: number
+      bytes: number
+    }
+    const entries: Entry[] = []
+    for (const d of readdirSync(root, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue
+      const dir = join(root, d.name)
+      try {
+        const st = statSync(dir)
+        let bytes = 0
+        for (const f of readdirSync(dir, { withFileTypes: true })) {
+          if (f.isFile()) bytes += statSync(join(dir, f.name)).size
+        }
+        entries.push({ id: d.name, dir, mtimeMs: st.mtimeMs, bytes })
+      } catch {
+        // a racing delete / unreadable entry — skip it this pass
+      }
+    }
+
+    const evict = new Set<string>()
+    if (r.maxAgeMs !== undefined) {
+      const cut = nowMs - r.maxAgeMs
+      for (const e of entries) if (e.mtimeMs < cut) evict.add(e.id)
+    }
+    // Newest-first survivors drive the count + size caps (oldest evicted first).
+    let kept = entries.filter((e) => !evict.has(e.id)).sort((a, b) => b.mtimeMs - a.mtimeMs)
+    if (r.maxEntries !== undefined && kept.length > r.maxEntries) {
+      for (const e of kept.slice(r.maxEntries)) evict.add(e.id)
+      kept = kept.slice(0, r.maxEntries)
+    }
+    if (r.maxBytes !== undefined) {
+      let total = 0
+      for (const e of kept) {
+        total += e.bytes
+        if (total > r.maxBytes) evict.add(e.id)
+      }
+    }
+
+    const evicted: string[] = []
+    for (const e of entries) {
+      if (!evict.has(e.id)) continue
+      try {
+        this.assertConfined(e.dir) // never delete THROUGH a symlink escaping baseDir
+      } catch {
+        continue
+      }
+      rmSync(e.dir, { recursive: true, force: true })
+      this.dropHandles(e.id)
+      evicted.push(e.id)
+    }
+    return evicted
+  }
+
+  /** Forget the in-process handles of an evicted id, so a later `get()` misses → disk
+   * (also gone) → `undefined`, never a read of a deleted path. */
+  private dropHandles(id: string): void {
+    const p = `strummer://${this.prefix}/${id}/`
+    for (const key of this.artifacts.keys()) if (key.startsWith(p)) this.artifacts.delete(key)
   }
 
   /**
