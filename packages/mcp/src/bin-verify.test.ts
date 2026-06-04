@@ -1,7 +1,20 @@
+import { mkdtempSync } from 'node:fs'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { describe, expect, it } from 'vitest'
+import { ArtifactStore } from '@strummer/artifacts'
+import { strFromU8, unzipSync } from 'fflate'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type BuiltVerifyServer, buildVerifyServerFromEnv } from './bin-verify.js'
+
+const API_SAMPLE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../api/test/fixtures/sample',
+)
 
 async function toolNames(built: BuiltVerifyServer): Promise<string[]> {
   const [ct, st] = InMemoryTransport.createLinkedPair()
@@ -138,5 +151,111 @@ describe('5e live-capture (produce) gate — the full browser gate composes on t
       STRUMMER_BROWSER_FLOWS_DIR: '/tmp/flows',
     })
     expect(await toolNames(built)).toContain('verify_change')
+  })
+})
+
+describe('5f produce-api capture — the api pillar gate composes on top', () => {
+  let server: Server
+  let baseUrl: string
+  let artifactsRoot: string
+  beforeAll(async () => {
+    server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    })
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    artifactsRoot = mkdtempSync(join(tmpdir(), 'strummer-verify-5f-'))
+  })
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()))
+  })
+
+  async function call(env: Record<string, string>, args: Record<string, unknown>) {
+    const built = buildVerifyServerFromEnv(env)
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    const c = new Client({ name: 'test', version: '0.0.0' })
+    await Promise.all([built.server.connect(st), c.connect(ct)])
+    return c.callTool({ name: 'verify_change', arguments: { projectRoot: '/repo', ...args } })
+  }
+
+  const baseEnv = () => ({
+    STRUMMER_VERIFY_ENABLE_RUN: '1',
+    STRUMMER_ARTIFACTS_ROOT: artifactsRoot,
+    STRUMMER_VERIFY_ALLOW_CAPTURE: '1',
+  })
+
+  it('gate-denies a produce-api request (no fetch) when STRUMMER_API_COLLECTIONS_DIR is unset', async () => {
+    const res = await call(baseEnv(), {
+      pillars: ['contract'],
+      contract: { request: 'get-health' },
+    })
+    const sc = res.structuredContent as {
+      status: string
+      pillars: { pillar: string; status: string; skipReason?: string }[]
+    }
+    expect(sc.pillars.find((p) => p.pillar === 'contract')).toMatchObject({
+      status: 'no-signal',
+      skipReason: 'gate-not-set',
+    })
+    expect(sc.status).toBe('inconclusive')
+  })
+
+  it('a MUTATING request without STRUMMER_ALLOW_UNSAFE dry-runs ⇒ inconclusive (no HAR, no fetch)', async () => {
+    const res = await call(
+      { ...baseEnv(), STRUMMER_API_COLLECTIONS_DIR: API_SAMPLE },
+      { pillars: ['contract'], contract: { request: 'create-thing', vars: { baseUrl } } },
+    )
+    const sc = res.structuredContent as {
+      status: string
+      pillars: { pillar: string; status: string; errorReason?: string }[]
+      capture?: unknown
+    }
+    const contract = sc.pillars.find((p) => p.pillar === 'contract')
+    expect(contract?.status).toBe('no-signal') // the driver threw (withheld) ⇒ errored no-signal
+    expect(sc.status).toBe('inconclusive')
+    expect(sc.capture).toBeUndefined() // nothing produced
+  })
+
+  it('drives a safe GET, produces + validates a stored HAR, surfaces the handle (loopback)', async () => {
+    const res = await call(
+      {
+        ...baseEnv(),
+        STRUMMER_API_COLLECTIONS_DIR: API_SAMPLE,
+        STRUMMER_ALLOWED_HOSTS: '127.0.0.1',
+      },
+      {
+        pillars: ['contract'],
+        contract: {
+          request: 'get-health',
+          vars: { baseUrl },
+          openapiSpec: {
+            openapi: '3.1.0',
+            paths: {
+              '/health': {
+                get: {
+                  responses: {
+                    '200': { content: { 'application/json': { schema: { type: 'object' } } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    )
+    const sc = res.structuredContent as {
+      pillars: { pillar: string; status: string }[]
+      capture?: { harHandle: string }
+    }
+    expect(sc.pillars.find((p) => p.pillar === 'contract')?.status).toBe('pass')
+    expect(sc.capture?.harHandle).toMatch(/^strummer:\/\/verify\/.+\/har$/)
+    // The produced HAR is stored + resolvable, and carries the real captured exchange.
+    const har = new ArtifactStore(artifactsRoot, 'verify').get(sc.capture?.harHandle ?? '')?.body
+    expect(har).toBeDefined()
+    const harJson = Object.entries(unzipSync(new Uint8Array(har as Buffer))).find(([n]) =>
+      n.endsWith('.har'),
+    )
+    expect(strFromU8(harJson?.[1] as Uint8Array)).toContain('/health')
   })
 })

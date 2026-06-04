@@ -1,8 +1,15 @@
 #!/usr/bin/env node
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { type CaptureContract, validateCapturedTraffic } from '@strummer/api'
+import {
+  type CaptureContract,
+  loadCollection,
+  runRequestToHar,
+  StaticSecretStore,
+  validateCapturedTraffic,
+} from '@strummer/api'
 import { ArtifactStore } from '@strummer/artifacts'
 import { runScoped } from '@strummer/coverage'
 import { changedDependencies } from '@strummer/deps'
@@ -211,6 +218,20 @@ export function buildVerifyServerFromEnv(
       const flowsDir = env.STRUMMER_BROWSER_FLOWS_DIR
       const produceEnabled = browserHosts.length > 0 && Boolean(harDir) && Boolean(flowsDir)
 
+      // PRODUCE-API is an API-PILLAR run, so it composes the api pillar's OWN gate (the
+      // same envs the api server reads — allowUnsafe/allowedHosts/allowPrivate + the
+      // {{secret:NAME}} store) on top of ENABLE_RUN + the capture gate, PLUS the by-name
+      // collections dir. No new env beyond the collections dir; no tool input sets a gate.
+      const collectionsDir = env.STRUMMER_API_COLLECTIONS_DIR
+      const apiAllowUnsafe = bool(env.STRUMMER_ALLOW_UNSAFE)
+      const apiAllowedHosts = csv(env.STRUMMER_ALLOWED_HOSTS)
+      const apiAllowPrivate = !bool(env.STRUMMER_BLOCK_PRIVATE)
+      const apiSecrets: Record<string, string> = {}
+      for (const [key, value] of Object.entries(env)) {
+        const m = /^STRUMMER_SECRET_(.+)$/.exec(key)
+        if (m?.[1] && value) apiSecrets[m[1]] = value
+      }
+
       rd.contract = async (ctx) => {
         if (ctx.mode === 'consume') {
           const har = store.get(ctx.harHandle)?.body
@@ -220,12 +241,43 @@ export function buildVerifyServerFromEnv(
           const verdict = validateCapturedTraffic(har, buildCaptureContract(ctx), { redact })
           return { results: verdict.results, verdict }
         }
-        // PRODUCE-API: drive the @strummer/api runner. Wired in slice 8 behind the api
-        // gate + STRUMMER_API_COLLECTIONS_DIR; until then it is gate-not-set (never run).
+        // PRODUCE-API: drive the @strummer/api runner for an operator-authored request,
+        // synthesize + validate its HAR. Gate-deny (⇒ gate-not-set) when no collections
+        // dir is set. A mutating request without STRUMMER_ALLOW_UNSAFE dry-runs ⇒ the
+        // driver's non-sent guard throws ⇒ inconclusive — the api server's posture, reused.
         if (ctx.mode === 'produce-api') {
-          throw gateDenied(
-            'api-runner capture is not enabled (needs STRUMMER_API_COLLECTIONS_DIR + the api gate)',
+          if (!collectionsDir) {
+            throw gateDenied(
+              'api-runner capture is not enabled (needs STRUMMER_API_COLLECTIONS_DIR)',
+            )
+          }
+          // The agent supplies a NAME, never a path — refuse any traversal/separator.
+          if (ctx.collection && /[/\\]|\.\./.test(ctx.collection)) {
+            throw new Error('collection must be a name, not a path')
+          }
+          const colDir = ctx.collection ? join(collectionsDir, ctx.collection) : collectionsDir
+          // The UNION redactor (verify secrets ∪ the run-resolved {{secret:NAME}} pairs the
+          // driver folds in from the runner) at BOTH chokepoints (synthesize + validate).
+          const union = new Redactor()
+          for (const [name, value] of verifySecrets) union.register(name, value)
+          const out = await runRequestToHar(
+            loadCollection(colDir),
+            ctx.request,
+            {
+              vars: ctx.vars,
+              allowUnsafe: apiAllowUnsafe,
+              allowedHosts: apiAllowedHosts,
+              allowPrivate: apiAllowPrivate,
+              secrets: new StaticSecretStore(apiSecrets),
+            },
+            { store, redactor: union, contract: buildCaptureContract(ctx) },
           )
+          return {
+            results: out.verdict.results,
+            verdict: out.verdict,
+            harHandle: out.harHandle,
+            summary: out.summary,
+          }
         }
         // PRODUCE: drive a live browser capture. Gate-deny (⇒ gate-not-set) before any
         // spawn when the browser gate is unmet.
