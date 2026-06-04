@@ -828,7 +828,7 @@ Two independent tracks, then the test-quality chain, then LSP last:
         resolution matrix (server↔toolchain); the residual confine→commit parent-dir-swap TOCTOU
         (documented terminal-partial-but-confined).
 
-## Phase 5 — Cross-pillar verification  *(5a–5d COMPLETE; make the pillars COMPOSE; design = ADR 0013 + Addendum, Accepted; only 5e staged)*
+## Phase 5 — Cross-pillar verification  *(5a–5d COMPLETE; 5e UNDERWAY (live capture); design = ADR 0013 + Addenda, Accepted)*
 
 The Phase-4 pillars each emit a pure, structured verdict that nothing composes. Phase 5 makes
 them compose: a captured browser/API run's traffic is validated against the API contract, and
@@ -990,11 +990,37 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         scopes the audit to `changedDependencies`. The fetcher is the same SSRF-pinned
         `makeFetcher(registriesFrom(values))` the `strummer deps` CLI uses (`--osv-db`/`--registry`/
         `--allow-private`); the runner is injectable so the suite never fetches.
-- [ ] *(staged, not amputated — ADR 0013 §5 + Addendum)* **5e** `verify` driving a live capture to
-      *produce* the HAR (browser-spawn behind the browser gate; and/or an API-runner capture path once
-      the runner records redirect hops + request bodies); request-body/param contract validation;
-      extracting the shared `Severity` scale out of deps; artifact GC/TTL/refcounting; the Python
-      second half (pytest / coverage.py / pyright capture).
+- [ ] **Milestone 5e — `verify` driving a LIVE capture to *produce* the HAR (browser-spawn): UNDERWAY**
+      *(design = ADR 0013 Addendum 3, forged via the `verify-live-capture-design` fan-out — 5 research
+      streams → synthesis → 3 adversarial critics, all `sound-with-fixes`; human-ratified forks).* Turns
+      the consume-only bridge into a verify-DRIVEN one: one gated call drives a browser flow → captures
+      the HAR → validates it against the contract. **Browser-spawn ONLY** (API-runner staged to 5f);
+      `@strummer/verify` core untouched (the injected contract-runner seam is opaque to consume-vs-produce);
+      all new code in `packages/mcp`. The critics' load-bearing correction: **gate on FLOW COMPLETENESS,
+      not HAR emptiness** (`runFlow` swallows step errors → a partial HAR could validate to a PASS;
+      `driveBrowserFlowToHar` throws if `flow.passed===false` or any step `ok:false`). Egress safety via a
+      single-source `buildBrowserRuntimeFromEnv()` (proxy started + hardening args + gate installed) +
+      `proxy.stop()` in `finally`; gate model "both required, no new env"; one union redactor at both
+      `finalizeHar` and `validateCapturedTraffic`; verify-prefix HAR handle; lazy `@strummer/browser`
+      import. Ordered slices:
+  - [ ] **Slice 1 — brand the browser `GateError`** (`Symbol.for('strummer.gate-denial')`; consistency
+        nicety for the pre-`runFlow` `checkNavigation` path).
+  - [ ] **Slice 2 — `ContractCaptureContext` → `mode:'consume'|'produce'` discriminated union** (surface
+        types) + handler normalization; re-run the `orchestrate.test.ts` import-scan (core invariant).
+  - [ ] **Slice 3 — extract `buildBrowserRuntimeFromEnv()`** from `bin-browser.ts` (manager+gate+proxy
+        STARTED+hardening args+redactor), single-source; `bin-browser` refactored to consume it.
+  - [ ] **Slice 4 — `driveBrowserFlowToHar` + the FLOW-COMPLETENESS guard** (injected runtime; flow by
+        NAME; STORED verify-prefix redacted artifact; incomplete flow ⇒ throw ⇒ inconclusive;
+        `proxy.stop()` in `finally`; lazy import).
+  - [ ] **Slice 5 — union redactor + the attach-body redaction test** (Fork 2: registered secret in an
+        attach-mode response body must not survive; widen `finalizeHar` by `mimeType` iff it leaks).
+  - [ ] **Slice 6 — `bin-verify` produce-branch wiring** behind the full gate (env-matrix tests).
+  - [ ] **Slice 7 — `verify_change` MCP input** (`contract:{flow,vars}`) + surface the verify HAR handle.
+  - [ ] **Slice 8 — `strummer verify run --flow <name>` CLI** + the milestone tail (notes + push).
+- [ ] *(staged, not amputated — ADR 0013 Addendum 3)* **5f** the API-runner capture path (per-hop HAR
+      entries + request-body capture for GraphQL + a `finalizeHar`-style redaction pass). Plus the older
+      tails: request-body/param contract validation; extracting the shared `Severity` scale out of deps;
+      artifact GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture).
 
 ## Ongoing
 

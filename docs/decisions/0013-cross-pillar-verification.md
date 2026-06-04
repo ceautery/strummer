@@ -235,3 +235,140 @@ The draft proposed extending `PillarStatus` with `'errored'`/`'skipped'`. **The 
 - **Deny-by-default registration, not just runtime** — `verify_change` registers only when run-driving is enabled. *(§ gate-composition (c).)*
 - **`idFactory` default `randomUUID`, not content-hash** — content-hash clobbers identical verdicts in the store. *(§ execution.)*
 - **The research + adversarial transcript** is the `verify-orchestration-design-research` + `verify-orchestration-adversarial-critics` workflows; this addendum is their durable distillation.
+
+---
+
+## Addendum 3 (2026-06-04): Milestone 5e — verify-driven LIVE capture (browser-spawn)
+
+Forged via the `verify-live-capture-design` fan-out (5 research streams reading the real code →
+synthesis → 3 adversarial critics; all three returned **sound-with-fixes**, browser-spawn endorsed).
+The human ratified the forks. This addendum is the durable distillation; the workflow transcript is the
+research record.
+
+5e turns the **consume-only** capture→contract bridge (5a/5b: the agent produces a HAR, verify validates
+it by handle) into a **verify-DRIVEN** one: a single gated call drives a browser flow, captures the HAR,
+and validates it against the contract. The `@strummer/verify` **core is untouched** — the injected
+contract-runner seam (`OrchestrateRequest.contract.run: () => Promise<ContractResult[]>`) is opaque to
+whether the runner consumes a stored HAR or drives a live one. All new code lives in `packages/mcp`
+(surface) — invariant 1 (core `.mjs` imports only `node:crypto` + `@strummer/verdict`) holds trivially
+(the source-scan only covers `packages/verify/src/`).
+
+### Ratified forks
+
+1. **Capture engine — browser-spawn ONLY for 5e; API-runner staged to 5f.** Browser-spawn reuses the
+   shipped, redaction-complete HAR production (`finalizeHar`) + flow driving (`runFlow`) + the existing
+   `validateCapturedTraffic`, so it ships full **REST + GraphQL** parity on day one. The API-runner path
+   is GraphQL-broken until net-new work (the runner's `RunResponse` carries no request body, so the
+   GraphQL half of `validateCapturedTraffic` is dead on a synthesized HAR) and has no blanket-redaction
+   pass — so it is staged, not dropped (5f: emit per-hop HAR entries in the redirect loop, capture the
+   prepared request body as `postData`, extract a `finalizeHar`-style redaction pass).
+
+2. **Attach-body redaction — test-first, widen if it leaks.** `finalizeHar` blanket-redacts only the
+   `.har` JSON + text-extension entries; Playwright `content:'attach'` can store a body as a separate
+   entry with a non-text filename that passes through untouched. Invariant 5 for **registered** secrets is
+   non-negotiable, so a slice adds the test (a registered secret in an attach-mode RESPONSE body must not
+   survive the stored artifact); **if it leaks**, widen `finalizeHar` to redact attach entries by their
+   HAR-declared `mimeType` (not filename extension), guarded by the browser suite. (The pre-existing
+   registered-secret-only posture — unregistered dynamic tokens are never scrubbed — is inherited and is
+   exactly why the HAR stays operator-gated.)
+
+3. **`source` provenance — keep `'capture-from-HAR'`** (zero core change). Adding `'capture-from-browser'`
+   would be the *only* thing touching `packages/verify/src/`; not worth it for 5e — revisit if operators
+   need to distinguish produced-live from consumed-handle in the verdict.
+
+### The load-bearing correction the critics forced (all three, independently)
+
+**`runFlow` SWALLOWS step errors** (`packages/browser/src/flow.ts:293-297`): on a step failure (e.g. an
+SSRF-allowlist denial mid-flow) it records `ok:false`, `break`s, and returns `{passed:false}` — it
+**never re-throws**. Therefore:
+- Branding the browser `GateError` is **inert** for the in-flow case (the error never reaches
+  `orchestrate` as a rejection) — kept only as a consistency nicety for the pre-`runFlow`
+  `createSession`→`checkNavigation` path that *does* reject.
+- An "empty HAR ⇒ no-signal" guard is **insufficient**: a *partially*-denied flow produces a **non-empty**
+  HAR, which `validateCapturedTraffic` can validate to a clean **PASS** — "absence rendered as a pass,"
+  invariant 3 broken.
+
+**The fix (load-bearing): gate on FLOW COMPLETENESS, not HAR emptiness.** The capture runner inspects the
+`FlowResult`: if `flow.passed === false` OR any step `ok:false`, it **throws** (→ `inconclusive`, never
+validates the HAR). A flow that did not run to clean completion never produces a validatable HAR. This
+guard ships in its own slice with a dedicated red test (a fake flow with one `ok:false` step ⇒
+`inconclusive`) — without that test an implementer can land every slice green with the hole intact.
+
+### Egress safety (critic-mandated): one wired runtime, single-source
+
+The egress boundary is **three interlocking mechanisms**, each omissible (each omission a full SSRF
+bypass): (1) `createSsrfProxy({allowPrivate})` **started** and threaded into the launch spec as
+`proxyServer`; (2) the Chromium hardening launch args (`--proxy-bypass-list=<-loopback>` +
+`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`) via `engineLaunchOptions`; (3) the
+`BrowserGate` allowlist, which only governs egress because `installSafetyRoutes(context, gate)` runs —
+and that runs only when the manager has `gate` set. So 5e **extracts a shared
+`buildBrowserRuntimeFromEnv()`** from `bin-browser.ts` returning `{manager, gate, proxy, redact}` fully
+wired (proxy started, hardening args applied, gate installed); BOTH `bin-browser` and the verify capture
+module consume it (single-source, mirroring `depsNetworkConfig`). The proxy is a long-lived listener — the
+capture runner `await proxy.stop()` in the **same `finally`** that closes the session, or each single-shot
+verify run leaks a listening SSRF proxy.
+
+### Gate model — "both required, no umbrella, no new env"
+
+A verify-driven browser capture **is a browser-pillar run**, so it composes the **full browser operator
+gate** (the consume-only capture gate carries zero egress safety — no allowlist, no proxy). The produce
+path is wired iff ALL of these operator-set envs hold (all already exist — **no new env**, which would be
+the verify-scoped-rename footgun the ADR rejected): `STRUMMER_VERIFY_ENABLE_RUN` (server may drive runs) ∧
+`STRUMMER_VERIFY_ALLOW_CAPTURE` + artifacts root (the capture sub-gate) ∧ `STRUMMER_BROWSER_ALLOWED_HOSTS`
+(egress scope + the mandatory DNS-pinning SSRF proxy) ∧ `STRUMMER_BROWSER_HAR_DIR` (the HAR sink) ∧
+`STRUMMER_BROWSER_FLOWS_DIR` (by-name flow source). Deny-by-default REGISTRATION: unmet ⇒ the produce
+thunk is not wired ⇒ a requested produce capture surfaces `skipReason:'gate-not-set'` ⇒ `inconclusive`,
+never run. **Agent-unsettable:** every safety input (`allowedHosts`, proxy, `allowUnsafe`, `allowPrivate`,
+all `STRUMMER_BROWSER_*`). The agent supplies only the **target**: a `flow` NAME (resolved server-side
+against the operator flows dir — no path, no traversal) + non-secret `vars`. A flow name selects *which*
+operator-authored flow; the allowlist bounds the HOST (not the path/query — stated explicitly).
+
+### Redaction — one union redactor at both chokepoints; verify-prefix store
+
+- **One union `Redactor`** = `STRUMMER_VERIFY_SECRET_*` ∪ `STRUMMER_BROWSER_SECRET_*` ∪ HTTP creds,
+  passed to **both** `finalizeHar` (the archive) **and** `validateCapturedTraffic` (the findings) — else a
+  browser-registered secret survives in a finding even after the archive scrubbed it. Registering more
+  secret *values* only makes redaction more aggressive — it grants no run capability, so this does not
+  violate "compose, never widen."
+- **Drive → `finalizeHar` (redact) → store → read the STORED artifact → validate.** Never read the raw
+  temp `.zip` (`harEntriesToFacts` parses but does not redact).
+- **Store under the verify prefix** (`strummer://verify/<runId>/har`, the existing `bin-verify` store) —
+  never route through the browser bin's browser-prefixed `onClosed`. The verify run id (injected
+  `idFactory`) owns the artifact for auditability; surface the handle + `HarSummary` alongside the
+  contract sub-verdict (an unsurfaced HAR handle is unauditable).
+
+### Lazy import — keep the heaviest gate out of everyone else's critical path
+
+`bin-verify` importing `@strummer/browser`/`playwright-core` does **not** break invariant 1 (the core is
+clean), and `bin-verify` already imports the coverage/flake/mutate spawners. But to avoid making *every*
+verify deployment (incl. `request_verdict`-only / API-only operators) carry a browser-binary cold-start,
+the capture module **`await import('@strummer/browser')` lazily** — only when the produce branch is
+actually wired and invoked.
+
+### TDD slice plan (each `pnpm gate`-green; no real browser in the gate)
+
+1. **Brand the browser `GateError`** with `Symbol.for('strummer.gate-denial')` (consistency with
+   coverage/flake/mutate; nicety, not load-bearing). Browser suite stays green.
+2. **`ContractCaptureContext` → discriminated union** (`mode:'consume'|'produce'`) in `mcp/verify.ts` +
+   handler normalization (bare `harHandle` ⇒ `consume`). Re-run the `orchestrate.test.ts` import-scan to
+   prove the core invariant still holds.
+3. **Extract `buildBrowserRuntimeFromEnv()`** from `bin-browser.ts` (manager + gate + proxy STARTED +
+   hardening args + redactor); `bin-browser` refactored to consume it (its tests are the regression guard).
+4. **`driveBrowserFlowToHar` + the FLOW-COMPLETENESS guard** (injected runtime/launch). Red tests:
+   resolves a flow by NAME; reads the STORED redacted artifact (handle starts `strummer://verify/`); a
+   flow with any `ok:false` step ⇒ **throws** (⇒ inconclusive); empty HAR ⇒ throws; `proxy.stop()` in the
+   `finally`. Lazy `@strummer/browser` import.
+5. **Union redactor + the attach-body redaction test** (Fork 2): a registered secret in an attach-mode
+   response body must not survive the stored HAR; widen `finalizeHar` by `mimeType` iff it leaks. Assert
+   the same union redactor scrubs both a `STRUMMER_BROWSER_SECRET_*` and an HTTP-creds password.
+6. **`bin-verify` produce-branch wiring** behind the full gate (env-matrix tests: any missing env ⇒
+   requested produce ⇒ `gate-not-set` ⇒ inconclusive).
+7. **`verify_change` MCP input** (`contract:{flow,vars}`) + surface the verify HAR handle + `HarSummary`.
+8. **`strummer verify run --flow <name>` CLI** + the milestone tail (STATUS/ROADMAP/memories/CLAUDE.md
+   repo-map + this ADR marked done; commit to `main`; push at the boundary).
+
+**Invariant audit (all five survive):** (1) core `.mjs` untouched — all wiring in `packages/mcp`; (2)
+compose-never-widen — no new env, both-required, operator-only gate inputs; (3) absence-never-a-pass —
+unmet gate ⇒ `gate-not-set`, incomplete flow ⇒ throw ⇒ inconclusive; (4) no real spawn in `pnpm gate` —
+injected runtime/launch; (5) redaction before the verdict, inline AND stored — union redactor at both
+`finalizeHar` and `validateCapturedTraffic`.
