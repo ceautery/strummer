@@ -262,6 +262,9 @@ importers:
       '@strummer/deps':
         specifier: workspace:*
         version: link:../deps
+      '@strummer/diff':
+        specifier: workspace:*
+        version: link:../diff
       '@strummer/embed':
         specifier: workspace:*
         version: link:../embed

@@ -37,6 +37,7 @@
     "@strummer/core": "workspace:*",
     "@strummer/coverage": "workspace:*",
     "@strummer/deps": "workspace:*",
+    "@strummer/diff": "workspace:*",
     "@strummer/embed": "workspace:*",
     "@strummer/flake": "workspace:*",
     "@strummer/lsp": "workspace:*",

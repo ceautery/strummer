@@ -3,6 +3,7 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import type { ContractResult } from '@strummer/api'
 import type { DiffCoverageReport } from '@strummer/coverage'
 import type { DependencyAudit } from '@strummer/deps'
+import { changedFiles as changedFilesFromDiff } from '@strummer/diff'
 import type { FlakeVerdict } from '@strummer/flake'
 import type { MutationSummary } from '@strummer/mutate'
 import {
@@ -195,9 +196,14 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
         },
       },
       async (args) => {
+        // One diff scopes every pillar: derive the changed-file set from the diff when
+        // the agent didn't enumerate it explicitly (explicit wins). The file scope feeds
+        // coverage (`vitest related`), mutate (`mutateFiles`), and flake (`files`); the
+        // deps runner scopes itself from `ctx.diff` (it owns the ecosystem). "Compose,
+        // never widen" — scoping only narrows what runs, it cannot widen the gate.
         const ctx: RunDrivingContext = {
           projectRoot: args.projectRoot,
-          changedFiles: args.changedFiles ?? [],
+          changedFiles: args.changedFiles ?? (args.diff ? changedFilesFromDiff(args.diff) : []),
           diff: args.diff,
         }
         // Default: attempt every WIRED spawn pillar. An explicitly-requested pillar that

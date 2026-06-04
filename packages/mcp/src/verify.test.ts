@@ -176,6 +176,56 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
     expect(sc.status).toBe('fail')
   })
 
+  it('derives changedFiles from a diff so one diff scopes the file-scoped pillars (slice 5d-3)', async () => {
+    let seen: string[] | undefined
+    const c = await connect({
+      runDriving: {
+        coverage: async (ctx) => {
+          seen = ctx.changedFiles
+          return uncoveredReport as never
+        },
+      },
+    })
+    const diff = `diff --git a/src/x.ts b/src/x.ts
+--- a/src/x.ts
++++ b/src/x.ts
+@@ -1 +1,2 @@
+ a
++b
+diff --git a/src/y.ts b/src/y.ts
+--- a/src/y.ts
++++ b/src/y.ts
+@@ -1 +1,2 @@
+ c
++d
+`
+    await c.callTool({ name: 'verify_change', arguments: { projectRoot: '/repo', diff } })
+    expect(seen).toEqual(['src/x.ts', 'src/y.ts'])
+  })
+
+  it('an explicit changedFiles wins over the diff-derived set', async () => {
+    let seen: string[] | undefined
+    const c = await connect({
+      runDriving: {
+        coverage: async (ctx) => {
+          seen = ctx.changedFiles
+          return uncoveredReport as never
+        },
+      },
+    })
+    const diff = `--- a/src/x.ts
++++ b/src/x.ts
+@@ -1 +1,2 @@
+ a
++b
+`
+    await c.callTool({
+      name: 'verify_change',
+      arguments: { projectRoot: '/repo', changedFiles: ['explicit.ts'], diff },
+    })
+    expect(seen).toEqual(['explicit.ts'])
+  })
+
   it('stores the run-driven verdict by handle', async () => {
     const store = new Map<string, string>()
     const c = await connect({

@@ -965,9 +965,13 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         value (which also *looks* like a version) is never mistaken for a dependency. Under-scopes
         (never invents a dep) when a deep dependency's block header is outside the diff context —
         documented; the caller falls back to a whole-project audit.
-  - [ ] **Slice 3 — `verify_change` scopes each pillar from one diff** (coverage `changedFiles`→related,
-        mutate `mutateFiles`, flake `files`, deps `changedDependencies`); flake's `files` already on its
-        own MCP tool.
+  - [x] **Slice 3 — `verify_change` scopes the file-scoped pillars from one diff.** When the agent
+        supplies a `diff` but no explicit `changedFiles`, derive the set via `@strummer/diff`
+        `changedFiles` so coverage (`vitest related`), mutate (`mutateFiles`), and flake (`files`) are
+        all scoped from ONE diff (explicit `changedFiles` still wins). Deps scoping is delegated to its
+        runner (slice 4), which owns the ecosystem and computes `changedDependencies(ctx.diff, …)`
+        itself. flake's `files` is already on its own `flake_run` MCP tool. "Compose, never widen":
+        scoping only narrows what runs, never widens the gate.
   - [ ] **Slice 4 — factor `audit_project`'s per-package pipeline into a reusable deps runner.**
   - [ ] **Slice 5 — `bin-verify` `rd.deps`** gated by `STRUMMER_DEPS_ALLOW_NETWORK` composed under
         `ENABLE_RUN` (compose, never widen).
