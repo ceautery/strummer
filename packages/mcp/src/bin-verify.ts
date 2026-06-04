@@ -190,8 +190,10 @@ export function buildVerifyServerFromEnv(
     // Deps run-driving: its OWN gate is NETWORK (deps fetches packuments, it does not
     // run project code), so it is wired under ENABLE_RUN iff STRUMMER_DEPS_ALLOW_NETWORK
     // is set — the same single source as the deps server bin. The diff scopes the audit
-    // to the changed packages (`changedDependencies`); a diff that changed no deps (or an
-    // ecosystem whose lockfile diff is staged) falls back to the whole project.
+    // to the changed packages (`changedDependencies`); a diff that changed no deps falls
+    // back to the whole project. (This bin's audit is npm-only — its packument fetcher is
+    // npm; PyPI/RubyGems verify-run wiring is a separate slice, though the scoping primitive
+    // now supports all three. The `strummer verify run --deps` CLI threads the ecosystem.)
     const deps = depsNetworkConfig(env)
     if (deps.allowNetwork && deps.fetchPackument) {
       const fetchPackument = deps.fetchPackument

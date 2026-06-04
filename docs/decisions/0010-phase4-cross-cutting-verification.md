@@ -147,3 +147,90 @@ Two design consequences this firms up:
   `summarizeMutation` reads the stable **mutation-testing-elements report schema**
   (`schemaVersion`, `files[path].mutants[].status`) that Stryker emits as
   `mutation-report.json`, so it carries no `@stryker-mutator/*` import at all.
+
+## Addendum — 2026-06-04: the Python (+Ruby) half of the verification pillars
+
+Forged via the `polyglot-python-half-design` fan-out (5 research streams → synthesis;
+the human ratified four forks). The Phase-4 pillars shipped TS-first with the Python
+half staged. This addendum records how that half lands. **It introduces no new
+architectural boundary** — see the verdict below.
+
+### Boundary verdict: spawn-and-parse, not a §1 boundary and not the LSP fence
+
+`coverage/src/run.ts`, `flake/src/runner.ts`, and `mutate/src/run.ts` each already
+`execFile` a foreign-ecosystem tool (vitest / stryker) through an **injected runner
+seam** (`TestRunner`/`MutationRunner`) behind the paired `allowRun`+`allowedRoots`+
+timeout gate, read its report **once**, and feed a **pure adapter**. Spawning
+`pytest` / `coverage.py` / `mutmut` / `cosmic-ray` is byte-for-byte the same pattern
+with a different `argv0`. ARCHITECTURE §1's no-live-RPC rule governs only the
+docs-indexing Python→SQLite→TS boundary; the LSP live subprocess is the single fenced
+exception (ADR 0011) precisely *because* it is long-lived RPC. One-shot spawn-and-parse
+is neither. **The Python verification runners are the established spawn-and-parse
+pattern — no new boundary.** One genuinely new *result-shape* note: the Python mutation
+tools emit to **stdout** (`mutmut results`, `cosmic-ray dump`), not to a disk report
+file like Stryker, so `RunMutationResult.reportPath` becomes optional and the runner
+gains a stdout-fed parse branch. That is a shape note, not a boundary.
+
+The Python *pure adapters* already landed and are green (`flake/src/pytest.ts`
+`parsePytestJson`, `mutate/src/mutmut.ts` `parseMutmutResults`, `coverage/src/coveragepy.ts`
+`coveragePyToIstanbul`), with committed fixtures. What remains is the gated spawn
+runners + pure deps diff-scoping.
+
+### Ratified forks
+
+1. **Primary Python mutation tool = cosmic-ray, authoritative; keep mutmut.** cosmic-ray
+   `dump` gives structured per-mutant records with a real `module_path` / `start_pos.line` /
+   `operator_name` / `test_outcome` enum → survivors carry actionable file:line:operator
+   matching the MTE Survivor shape and the verdict. mutmut 3.x has no JSON (dropped
+   junitxml); its text results carry no path/line. mutmut stays the lightweight option;
+   the operator picks via `--tool`.
+2. **Coverage impact-scoping fallback = BOTH modes, operator-visible, default = report-gap.**
+   When a changed source file maps to no confident test (pytest has no `vitest related`),
+   the operator chooses *widen-to-full-suite* (safest) vs *report the gap as unverified*
+   (honest, fast, matches the no-signal posture); the default is report-gap. **testmon is
+   staged behind an explicit opt-in flag, never the default** — a stale/cold `.testmondata`
+   silently deselects tests → false clean, violating absence-is-never-a-pass, and the runner
+   can't verify the DB's freshness from outside.
+3. **Ruby = deps lockfile-diff only this arc.** Ruby mutation (`mutant` is commercial/
+   license-gated with a weak machine-readable story; `mutest` may be the safer OSS target)
+   + coverage (SimpleCov) are STAGED as a next slice reusing the injected-runner seam, gated
+   on a licensing investigation first.
+4. **pytest report format = pytest-json-report now; stage `pytest-reportlog`.** The committed
+   `parsePytestJson` + fixture already consume pytest-json-report's `.report.json`, so the
+   pytest flake slice is purely the gated spawn loop. The pytest-dev-official `reportlog`
+   (JSONL, no third-party dep, but 3 `TestReport` lines/test → needs an aggregating parser
+   taking the first non-passed phase) is staged, not amputated.
+
+### Invariants held (the Python-specific traps)
+
+- **absence-is-never-a-pass:** a cosmic-ray session with pending/null `WorkResult`s, or
+  `pytest` exit 5 (no tests collected), maps to **inconclusive/unverified, never `passed`**
+  (a transport-completeness guard mirroring the capture/HAR paths + a pytest-specific
+  exit-code map: 5=no-tests, 2=usage, 4=internal — plain `exitCode===0` is insufficient).
+- **ambiguity ⇒ unverified-skip:** `parseCosmicRayDump` sends any unrecognized outcome and
+  any null `WorkResult` to `Pending` (neutral, excluded from valid), never coerces to
+  Survived/Killed. deps diff-walking under-scopes (never invents a dep); a PEP 751
+  `pylock.toml` entry with an omitted version folds to no-signal downstream.
+- **one-history-per-nodeid (flake):** repeats are produced by re-running the whole suite N
+  times from the TS loop (stable nodeid), **not** `pytest-repeat` (its `[i-N]` nodeid suffix
+  fragments history).
+- **no real spawn/fetch in `pnpm gate`:** every new runner is reached only through the
+  injected seam used by the bin; unit tests pass a fake runner returning committed fixtures.
+  `pytest-json-report`/`coverage.py`/`mutmut`/`cosmic-ray` are `uv` dev-deps used **once** to
+  capture fixtures (out-of-gate, provenance in `test/fixtures/README.md` per the LSP
+  convention), never gate dependencies.
+- **redaction-before-verdict:** cosmic-ray's generated TOML config + `session.sqlite` path and
+  pytest report paths can leak absolute filesystem paths; keep config/session under a temp dir
+  and redact before the verdict, same posture as the existing runners.
+
+### Slice sequence (pure/zero-spawn first)
+
+1. **deps diff-scoping (PyPI + RubyGems)** — pure, no spawn/network/new fixture; flips the
+   `changed.ts` non-npm short-circuit + the staged `changed.test.ts` placeholder.
+2. **deps changelog derivation (PyPI + RubyGems)** — pure + injected fetcher; repo URL from
+   registry metadata, reuse `sliceChangelog` with the ecosystem comparator.
+3. **mutate `parseCosmicRayDump`** (pure) — needs a real cosmic-ray dump fixture (out-of-gate).
+4. **flake `runAndRecordPytest`** (gated runner) — parser already green.
+5. **mutate Python mutation runner** (cosmic-ray primary + mutmut) — depends on slice 3.
+6. **coverage `runScopedPython`** (pytest + coverage.py) — needs a coverage.json fixture
+   (out-of-gate).

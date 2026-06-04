@@ -426,6 +426,50 @@ explicit pins / no transitive imports; paired deny-by-default operator gate; TS-
 with Python staged), and the per-candidate corrections the adversarial pass forced.
 Two independent tracks, then the test-quality chain, then LSP last:
 
+### Python (+Ruby) second half — the polyglot push *(UNDERWAY; ADR 0010 addendum 2026-06-04)*
+
+The Phase-4 pillars shipped TS-first; the pure Python adapters (`parsePytestJson`,
+`parseMutmutResults`, `coveragePyToIstanbul`) already landed. This arc adds the gated
+spawn runners + pure deps diff-scoping that complete the Python half. **No new
+boundary** — one-shot spawn-and-parse of a Python tool is the established vitest/stryker
+runner pattern (ADR 0010 addendum). Four forks ratified by the human: cosmic-ray primary
+(keep mutmut); coverage scoping fallback = both modes operator-visible, default report-gap
+(testmon opt-in only); Ruby = deps lockfile-diff only this arc; pytest = json-report now,
+stage `reportlog`. Pure/zero-spawn slices first.
+
+- [x] **Slice 1 — deps `changedDependencies` for PyPI + RubyGems.** Generalized the npm
+      block-aware diff walker into a per-file *classifier* selected by basename, unioning names.
+      PyPI: `pyproject.toml` (PEP 621 `dependencies`/`optional-dependencies` arrays — `]`-outside-
+      quotes close detection so `coverage[toml]` parses — + Poetry `[tool.poetry…dependencies]`
+      tables, `python` skipped), `requirements*.txt`, TOML lockfiles (`uv.lock`/`poetry.lock`/
+      `pylock.toml` `[[package]]` named-block, name from a context line + any changed line touches
+      it), all PEP 503-normalized so manifest+lockfile dedupe. RubyGems: `Gemfile` (`gem "x"`) +
+      `Gemfile.lock` (4-space concrete-version spec rows; transitive `(= …)`/`DEPENDENCIES`
+      operator rows excluded by the digit-after-`(` anchor). Under-scope-safe (never invents).
+      Pure, fixture-only; the `strummer verify run --deps` CLI already threads the ecosystem.
+      *(Staged within: `Pipfile.lock`/`Pipfile`; the MCP `bin-verify` deps audit stays npm-only —
+      separate registry-fetcher wiring.)*
+- [ ] **Slice 2 — deps `changelog_diff` for PyPI + RubyGems.** Pure `repoUrlFromMetadata`
+      (PyPI `info.project_urls`, RubyGems `source_code_uri`/`homepage_uri` via a second
+      changelog-only fetch), reuse `sliceChangelog` with `comparatorFor(ecosystem)`. *(Staged:
+      ecosystem-aware heading-token regex — PEP 440/Gem versions won't all match `SEMVER_TOKEN`.)*
+- [ ] **Slice 3 — mutate `parseCosmicRayDump`** (pure) — `cosmic-ray dump` JSON-lines → MTE
+      `MutationReport`; unrecognized/null outcome → `Pending` (ambiguity rule). Real dump
+      fixture captured out-of-gate (provenance in `test/fixtures/README.md`).
+- [ ] **Slice 4 — flake `runAndRecordPytest`** (gated runner) — near-clone of vitest's
+      `runAndRecord`; `pytest --json-report`, loop the whole suite N times (NOT `pytest-repeat`),
+      ingest via the existing `parsePytestJson`. MCP `flake_run` gains `framework`; CLI `--framework`.
+- [ ] **Slice 5 — mutate Python mutation runner** (cosmic-ray primary + mutmut, `--tool`) —
+      stdout-fed parse branch, `reportPath` optional; cosmic-ray TOML synth from `changedFiles` +
+      `session.sqlite`; transport-completeness guard (pending/null → inconclusive). *(Depends on slice 3.)*
+- [ ] **Slice 6 — coverage `runScopedPython`** (pytest + coverage.py) — mirror `runScoped`;
+      `--cov=<target> --cov-report=json`; `coveragePyToIstanbul`→`uncoveredInDiff` (unchanged);
+      pytest exit-code map (5=no-tests → inconclusive); scoping = diff path-heuristic with the
+      ratified both-modes fallback. coverage.json fixture captured out-of-gate. *(Staged: testmon
+      opt-in fast path.)*
+- [ ] *(staged, this arc defers)* Ruby coverage (SimpleCov) + mutation (`mutant`/`mutest`) runners,
+      gated on a `mutant` licensing investigation; a Python `pytest-reportlog` aggregating parser.
+
 - [x] **Dependency/version intelligence** (`@strummer/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
       Cleanest architectural fit: pure offline verdict core + an operator-provisioned
       on-disk OSV advisory snapshot (file-as-data); extends shipped
