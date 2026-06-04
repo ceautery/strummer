@@ -1059,10 +1059,19 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       critic proved: a present-but-uncheckable body / uncapturable required param can't ride to a pass) +
       direct MCP `validate_request` / CLI `api validate-request` (authoritative; GraphQL-envelope refused).
       Fork-1: `pushResult` redacts finding `path` too (request bodies/params are secret-bearing). Verdict
-      shape UNCHANGED (compose-never-widen). One surface STAGED: live `api run --openapi` inline request
-      validation (needs the runner to surface the un-redacted sent request).
-- [ ] *(staged, not amputated)* the older tails: live `api run --openapi` request validation (the deferred
-      surface above); non-scalar/advanced OpenAPI parameter serializations (deepObject/pipeDelimited/CSV/
+      shape UNCHANGED (compose-never-widen).
+- [x] **Live `api run --openapi` request validation: COMPLETE** (1207 TS + 45 Py green; closes the ONE
+      surface ADR 0014 staged). A new out-of-band channel **`runRequestForContract`** → `{ result, capture:
+      { request: RequestFacts, registeredSecrets } }` (sibling of `runRequestForHar`, populated at PREPARE time
+      so it works on a withheld dry-run; `RunResult` byte-identical) surfaces the un-redacted request facts
+      WITHOUT widening the agent-facing result. CLI `api run --openapi` drives `validateOpenApiRequest`
+      (authoritative) alongside the existing response check, redacts findings (message+path) via a `Redactor`
+      rebuilt from `registeredSecrets`, folds request-contract validity into the exit code, surfaces
+      `requestContract`. A present non-JSON/binary body routes to the validator's presence-only `unverified`
+      path (never a false `missing-required-body`); a GraphQL envelope skips OpenAPI request validation.
+      Ratified forks: validate even on a dry-run (request known at prepare time; exit code unchanged); CLI-only
+      (MCP `run_request` keeps run/validate as separate tools).
+- [ ] *(staged, not amputated)* the older tails: non-scalar/advanced OpenAPI parameter serializations (deepObject/pipeDelimited/CSV/
       explode arrays, object-valued, content-typed, cookie params) + `label`/`matrix`/multi-param path
       templates + non-local `$ref` + non-JSON body schemas + GraphQL-request variable validation; artifact
       GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture); `changedDependencies`

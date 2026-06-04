@@ -93,11 +93,22 @@ HAR; surfaces inject runners).
 
 ## Consequences / staged (scheduled, not amputated)
 
-- Folding request validation into the live `api run --openapi` is deferred: `RunResult`
-  exposes only the REDACTED `PreparedRequest` by design, so validating the actually-sent
-  body/params there needs the runner to surface the un-redacted request (the existing
-  `runRequestForHar` out-of-band channel is the natural seam). Request validation is
-  already reachable via `validate_request` (direct) and the capture→verify bridge.
+- **Live `api run --openapi` request validation — DONE (2026-06-04).** `RunResult` still
+  exposes only the REDACTED `PreparedRequest` by design, so a new out-of-band channel —
+  `runRequestForContract` → `{ result, capture: { request: RequestFacts, registeredSecrets } }`
+  (sibling of `runRequestForHar`, populated at PREPARE time so it works even on a withheld
+  dry-run) — surfaces the un-redacted request facts WITHOUT widening `RunResult`. The CLI
+  `api run --openapi` drives `validateOpenApiRequest` (authoritative — it holds the real
+  request) over those facts, redacts findings (message+path) via a `Redactor` rebuilt from
+  `registeredSecrets`, and folds request-contract validity into the exit code alongside the
+  existing response check. A GraphQL request envelope skips OpenAPI request validation
+  (consistent with `validate_request`). Decided forks (human-ratified): request validation
+  runs even on a dry-run (the request is fully known at prepare time — catches drift before
+  unlocking `--unsafe`; exit code unchanged — a dry-run still exits non-zero); CLI-only
+  (the MCP `run_request` does no inline validation at all — it keeps run/validate as
+  separate tools, so an inline-validating MCP `run_request` would be a different shape, left
+  unstaged here). A non-JSON / binary request body (multipart/file/urlencoded/xml) is routed
+  to the validator's presence-only `unverified` path, never a false `missing-required-body`.
 - Non-scalar / advanced serializations (`deepObject`, `pipeDelimited`, CSV/explode arrays,
   object-valued, content-typed, cookie params), `label`/`matrix` and multi-param-per-segment
   path templates, non-local/cross-document `$ref`, non-JSON body schemas (XML/multipart/

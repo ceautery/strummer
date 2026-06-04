@@ -5,7 +5,30 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: REQUEST-BODY/PARAM contract validation LANDED (v1 feature-complete) — a new `validateOpenApiRequest` sibling threaded into the capture→contract bridge + verdict + direct MCP/CLI surfaces; design = ADR 0014 (the `request-contract-validation-design` fan-out, all 4 forks human-ratified); 1202 TS + 45 Py green. Next: pivot to a new phase, or the remaining older staged tails (live `api run --openapi` request validation [the one deferred surface — needs the runner to expose the un-redacted sent request]; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: LIVE `api run --openapi` REQUEST validation LANDED — the one surface ADR 0014 staged is now closed; gate green (1207 TS + 45 Py). Before that: REQUEST-BODY/PARAM contract validation (v1, ADR 0014) and the `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining older staged tails (non-scalar OpenAPI param serializations / non-JSON body schemas / GraphQL-request variable validation; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**LIVE `api run --openapi` REQUEST validation — COMPLETE** (2026-06-04, all TDD red→green; gate green at
+1207 TS + 45 Py; design + 2 forks human-ratified). Closes the ONE surface ADR 0014 explicitly staged.
+`RunResult` still exposes only the REDACTED `PreparedRequest` by design, so a new out-of-band channel —
+**`runRequestForContract`** → `{ result, capture: { request: RequestFacts, registeredSecrets } }` (sibling of
+`runRequestForHar`, populated at PREPARE time so it works even on a withheld dry-run; `RunResult` UNCHANGED) —
+surfaces the un-redacted request facts (method, pathname, decoded query, lower-cased headers, JSON-parsed
+body). **Slice 1:** the channel + `buildRequestFacts` (a present non-JSON/binary body — multipart/file/
+urlencoded/xml — is routed to the validator's presence-only `unverified` path, NEVER a false
+`missing-required-body`; multipart's undici-set Content-Type is synthesized as bare `multipart/form-data` so
+that routing is correct). **Slice 2:** CLI `api run --openapi` now drives `validateOpenApiRequest`
+(authoritative — both presence flags true, it holds the real request) over those facts ALONGSIDE the existing
+response check, redacts findings (message+path) via a `Redactor` rebuilt from `registeredSecrets`, folds
+request-contract validity into the exit code, and prints/JSON-surfaces it as `requestContract`. A GraphQL
+request envelope skips OpenAPI request validation (consistent with `validate_request`). **Ratified forks:**
+(1) request validation runs even on a dry-run — the request is fully known at prepare time, catching drift
+before unlocking `--unsafe`; exit code unchanged (a dry-run still exits non-zero). (2) CLI-only — the MCP
+`run_request` does NO inline validation (it keeps run/validate as separate tools), so an inline-validating
+MCP `run_request` would be a different shape, left unstaged. Invariants held: `RunResult` byte-identical
+(the seam is a separate out-of-band channel, never attached to the agent-facing result), redaction-before-
+output (findings scrubbed via the run's resolved secrets — verified by a test that a secret echoed in a
+failing param finding becomes `[redacted:API_TOKEN]`, never the raw value), absence-never-a-pass (non-JSON
+bodies → `unverified`, never a false missing/pass), no real fetch in `pnpm gate` (in-process server, same as
+the existing run tests). 5 tests added (2 runner + 3 CLI)._
 _**REQUEST-BODY/PARAM CONTRACT VALIDATION — COMPLETE (v1)** (2026-06-04, all TDD red→green; design = ADR
 0014, the `request-contract-validation-design` fan-out: 4 research streams → synthesis → 3 adversarial
 critics → corrected design; human ratified all 4 forks). The contract pillar now validates the REQUEST half

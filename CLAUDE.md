@@ -98,7 +98,10 @@ vision and `ARCHITECTURE.md` for the technical design.
   `validateGraphqlOperation`) AND request (`validateOpenApiRequest` in
   `request-contract.ts`, ADR 0014: body + path/query/header params over the shared
   `resolveOpenApiOperation`/`normalizeOpenApiSchema` seams; the `unverified` flag the
-  capture bridge folds into `noSignal` so a present-but-uncheckable request can't pass),
+  capture bridge folds into `noSignal` so a present-but-uncheckable request can't pass;
+  ALSO wired into live `api run --openapi` via `runRequestForContract` — an out-of-band
+  channel surfacing the un-redacted sent request facts at prepare time, `RunResult`
+  UNCHANGED, findings redacted via the run's resolved secrets, authoritative),
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that
