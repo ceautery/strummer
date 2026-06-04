@@ -8,6 +8,7 @@ import { changedFiles as changedFilesFromDiff } from '@strummer/diff'
 import type { FlakeVerdict } from '@strummer/flake'
 import type { MutationSummary } from '@strummer/mutate'
 import {
+  type CaptureVerdictFacts,
   type ComposeInputs,
   composeVerdict,
   fromContractResults,
@@ -82,6 +83,11 @@ export interface RunDrivingOptions {
  * for a verify-DRIVEN capture (5e), the stored HAR handle + summary for auditability. */
 export interface ContractRunResult {
   results: ContractResult[]
+  /** The FULL capture verdict facts (clean/noSignal/unresolvedBodies/entriesValidated)
+   * so the fold can hold "absence is never a pass" on the contract dimension via
+   * `fromCaptureVerdict` (5f). When present it is folded in preference to `results`; the
+   * consume + both produce runners populate it from `validateCapturedTraffic`. */
+  verdict?: CaptureVerdictFacts
   /** `strummer://verify/<runId>/har` — the produced (redacted) HAR, by handle. */
   harHandle?: string
   summary?: HarSummary
@@ -296,7 +302,9 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
               ? async () => {
                   const out = await crun(ccx)
                   if (out.harHandle) capture = { harHandle: out.harHandle, summary: out.summary }
-                  return out.results
+                  // Fold the FULL capture verdict when present (clean-aware ⇒ a not-clean
+                  // capture is inconclusive, never a pass); fall back to bare results (5f).
+                  return out.verdict ?? out.results
                 }
               : denied('contract'),
           }

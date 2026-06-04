@@ -5,6 +5,8 @@ import type { FlakeVerdict } from '@strummer/flake'
 import type { MutationSummary } from '@strummer/mutate'
 import { describe, expect, it } from 'vitest'
 import {
+  type CaptureVerdictFacts,
+  fromCaptureVerdict,
   fromContractResults,
   fromDependencyAudits,
   fromDiffCoverage,
@@ -55,6 +57,70 @@ describe('fromContractResults + fromDiffCoverage + fromDependencyAudits (slice 8
 
   it('zero contract entries ⇒ no-signal, never pass', () => {
     expect(fromContractResults([]).status).toBe('no-signal')
+  })
+
+  // 5f: the FULL capture verdict carries `clean` — a valid entry must NOT ride a sibling
+  // no-signal/unresolved entry to a pass (the latent hole `fromContractResults` left,
+  // because no-signal/unresolved entries push NO ContractResult). fromCaptureVerdict folds
+  // `clean===false` to inconclusive (absence is never a pass), errors still win as fail.
+  const validRest: ContractResult = { valid: true, findings: [] }
+  const facts = (over: Partial<CaptureVerdictFacts>): CaptureVerdictFacts => ({
+    results: [validRest],
+    clean: true,
+    noSignal: 0,
+    unresolvedBodies: 0,
+    entriesValidated: 1,
+    ...over,
+  })
+
+  it('a clean capture with only valid entries ⇒ pass', () => {
+    expect(fromCaptureVerdict(facts({})).status).toBe('pass')
+  })
+
+  it('a VALID entry alongside a no-signal entry (clean=false) ⇒ no-signal, NEVER pass', () => {
+    const p = fromCaptureVerdict(facts({ clean: false, noSignal: 1, entriesValidated: 1 }))
+    expect(p.status).toBe('no-signal')
+    expect(p.severity).toBe('none')
+  })
+
+  it('an unresolved captured body (clean=false) ⇒ no-signal', () => {
+    expect(fromCaptureVerdict(facts({ clean: false, unresolvedBodies: 1 })).status).toBe(
+      'no-signal',
+    )
+  })
+
+  it('zero validated entries ⇒ no-signal', () => {
+    expect(
+      fromCaptureVerdict({
+        results: [],
+        clean: false,
+        noSignal: 0,
+        unresolvedBodies: 0,
+        entriesValidated: 0,
+      }).status,
+    ).toBe('no-signal')
+  })
+
+  it('an error finding ⇒ fail even if also not-clean (a real breach beats inconclusive)', () => {
+    const p = fromCaptureVerdict({
+      results: [contractError],
+      clean: false,
+      noSignal: 1,
+      unresolvedBodies: 0,
+      entriesValidated: 2,
+    })
+    expect(p.status).toBe('fail')
+    expect(p.severity).toBe('high')
+  })
+
+  it('a warning on an otherwise clean capture ⇒ warn', () => {
+    const warnRes: ContractResult = {
+      valid: false,
+      findings: [
+        { kind: 'undocumented-status', message: 'status 503 not documented', severity: 'warning' },
+      ],
+    }
+    expect(fromCaptureVerdict(facts({ results: [warnRes] })).status).toBe('warn')
   })
 
   it('an uncovered new line ⇒ coverage fail', () => {

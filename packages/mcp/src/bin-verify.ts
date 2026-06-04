@@ -215,9 +215,10 @@ export function buildVerifyServerFromEnv(
         if (ctx.mode === 'consume') {
           const har = store.get(ctx.harHandle)?.body
           if (!har) throw new Error(`no stored HAR for ${ctx.harHandle}`)
-          return {
-            results: validateCapturedTraffic(har, buildCaptureContract(ctx), { redact }).results,
-          }
+          // Surface the FULL verdict (not just .results) so the fold honors `clean`
+          // (a no-signal/unresolved capture is inconclusive, never a pass — 5f).
+          const verdict = validateCapturedTraffic(har, buildCaptureContract(ctx), { redact })
+          return { results: verdict.results, verdict }
         }
         // PRODUCE: drive a live browser capture. Gate-deny (⇒ gate-not-set) before any
         // spawn when the browser gate is unmet.
@@ -251,10 +252,10 @@ export function buildVerifyServerFromEnv(
         )
         const har = store.get(harHandle)?.body
         if (!har) throw new Error('no HAR was captured for the driven flow')
-        const { results } = validateCapturedTraffic(har, buildCaptureContract(ctx), {
+        const verdict = validateCapturedTraffic(har, buildCaptureContract(ctx), {
           redact: unionRedact,
         })
-        return { results, harHandle, summary }
+        return { results: verdict.results, verdict, harHandle, summary }
       }
     }
 

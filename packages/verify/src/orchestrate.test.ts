@@ -55,6 +55,27 @@ describe('orchestrate — drives requested pillars + folds via the from* adapter
     expect(contract).toMatchObject({ status: 'no-signal', source: 'capture-from-HAR' })
   })
 
+  it('folds the FULL capture verdict: a valid entry alongside a no-signal entry is inconclusive, never pass (5f)', async () => {
+    // A produce/consume thunk returns the full CaptureContractVerdict facts; clean===false
+    // (a no-signal GraphQL-no-SDL entry) must NOT ride the valid REST entry to a pass.
+    const { verdict } = await orchestrate({
+      contract: {
+        run: async () => ({
+          results: [{ valid: true, findings: [] }],
+          clean: false,
+          noSignal: 1,
+          unresolvedBodies: 0,
+          entriesValidated: 1,
+        }),
+        source: 'capture-from-HAR',
+      },
+    })
+    const contract = verdict.pillars.find((p) => p.pillar === 'contract')
+    expect(contract?.status).toBe('no-signal')
+    expect(verdict.status).toBe('inconclusive')
+    expect(verdict.ok).toBe(false)
+  })
+
   it('mints the verdict id via the injected idFactory (deterministic in tests)', async () => {
     const { id } = await orchestrate(
       { deps: { run: async () => ({ audits: [cleanAudit], osvSnapshotLoaded: true }) } },

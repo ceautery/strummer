@@ -5,9 +5,11 @@ import type { DependencyAudit } from '@strummer/deps'
 import type { FlakeVerdict } from '@strummer/flake'
 import type { MutationSummary } from '@strummer/mutate'
 import {
+  type CaptureVerdictFacts,
   type ComposeInputs,
   type CompositeVerdict,
   composeVerdict,
+  fromCaptureVerdict,
   fromContractResults,
   fromDependencyAudits,
   fromDiffCoverage,
@@ -28,7 +30,14 @@ import { isGateDenial } from './gate.js'
  * to `skipReason:'gate-not-set'`; any other rejection to a redacted `errorReason`.
  */
 export interface OrchestrateRequest {
-  contract?: { run: () => Promise<ContractResult[]>; source?: 'run' | 'capture-from-HAR' }
+  /** The contract thunk returns EITHER the bare results (compose path — folded by
+   * `fromContractResults`) OR the FULL capture verdict facts (consume / produce paths —
+   * folded by `fromCaptureVerdict` so a not-`clean` capture is inconclusive, never a pass;
+   * 5f, ADR 0013 Addendum 4). */
+  contract?: {
+    run: () => Promise<ContractResult[] | CaptureVerdictFacts>
+    source?: 'run' | 'capture-from-HAR'
+  }
   coverage?: { run: () => Promise<DiffCoverageReport> }
   deps?: { run: () => Promise<{ audits: DependencyAudit[]; osvSnapshotLoaded: boolean }> }
   flake?: { run: () => Promise<FlakeVerdict[]> }
@@ -92,7 +101,11 @@ export async function orchestrate(
 
   if (request.contract) {
     const { run, source } = request.contract
-    add('contract', () => run().then((r) => fromContractResults(r, source)))
+    add('contract', () =>
+      run().then((r) =>
+        Array.isArray(r) ? fromContractResults(r, source) : fromCaptureVerdict(r, source),
+      ),
+    )
   }
   if (request.coverage) {
     const { run } = request.coverage

@@ -69,6 +69,80 @@ export function fromContractResults(
   }
 }
 
+/**
+ * The capture-verdict facts a contract sub-verdict needs to fold WITHOUT laundering an
+ * unverifiable entry into a pass (5f, ADR 0013 Addendum 4). A superset of
+ * `@strummer/api`'s `CaptureContractVerdict` — its no-signal/unresolved entries push NO
+ * `ContractResult`, so `fromContractResults` (results-only) can't see them. `clean` is
+ * the load-bearing flag (`entriesValidated>0 ∧ unresolvedBodies===0 ∧ noSignal===0 ∧ all
+ * valid`).
+ */
+export interface CaptureVerdictFacts {
+  results: ContractResult[]
+  clean: boolean
+  noSignal: number
+  unresolvedBodies: number
+  entriesValidated: number
+}
+
+/**
+ * Fold the FULL capture verdict (clean-aware): an error finding is a real breach (`fail`);
+ * else a NOT-clean capture (no-signal / unresolved / zero validated) is `no-signal`
+ * (inconclusive) — NEVER a pass riding on a sibling valid entry (ADR 0013 §1, the latent
+ * hole this closes in the shipped 5e produce + consume paths); else a warning is `warn`;
+ * else `pass`. Used by the verify orchestrator for the consume + both produce capture paths.
+ */
+export function fromCaptureVerdict(
+  v: CaptureVerdictFacts,
+  source: 'run' | 'capture-from-HAR' = 'capture-from-HAR',
+): PillarVerdict {
+  let errors = 0
+  let warnings = 0
+  for (const r of v.results) {
+    for (const f of r.findings) {
+      if (f.severity === 'error') errors++
+      else warnings++
+    }
+  }
+  if (errors > 0) {
+    return {
+      pillar: 'contract',
+      status: 'fail',
+      severity: 'high',
+      headline: `${errors} contract error(s) across ${v.entriesValidated} response(s)`,
+      counts: { errors, warnings, entries: v.entriesValidated },
+      source,
+    }
+  }
+  if (!v.clean) {
+    const headline =
+      v.entriesValidated === 0
+        ? 'no contract entries validated'
+        : v.unresolvedBodies > 0
+          ? `${v.unresolvedBodies} captured body(ies) could not be resolved`
+          : `${v.noSignal} captured entr(ies) had no matching contract`
+    return { pillar: 'contract', status: 'no-signal', severity: 'none', headline, source }
+  }
+  if (warnings > 0) {
+    return {
+      pillar: 'contract',
+      status: 'warn',
+      severity: 'low',
+      headline: `${warnings} contract warning(s)`,
+      counts: { errors, warnings, entries: v.entriesValidated },
+      source,
+    }
+  }
+  return {
+    pillar: 'contract',
+    status: 'pass',
+    severity: 'none',
+    headline: `${v.entriesValidated} response(s) match the contract`,
+    counts: { errors, warnings, entries: v.entriesValidated },
+    source,
+  }
+}
+
 /** Coverage of a diff — the forgotten-assertion catch. */
 export function fromDiffCoverage(report: DiffCoverageReport): PillarVerdict {
   const { summary, uncovered } = report

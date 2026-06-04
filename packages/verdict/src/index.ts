@@ -1,4 +1,6 @@
 export {
+  type CaptureVerdictFacts,
+  fromCaptureVerdict,
   fromContractResults,
   fromDependencyAudits,
   fromDiffCoverage,
