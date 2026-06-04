@@ -24,8 +24,12 @@ structured, token-efficient output. Humans drive the same core through a CLI.
 Cross-cutting verification tools (see [`ROADMAP.md`](./ROADMAP.md)): dependency/version
 intelligence, coverage-aware impact-scoped test runs, flaky-test detection & quarantine,
 mutation testing, and semantic code navigation via an LSP bridge have **all shipped** —
-**Phase 4 is complete** (all five pillars: engine + agent surface). (Visual-regression
-diffing and API contract/schema testing already shipped inside the browser and API pillars.)
+**Phase 4 is complete** (all five pillars: engine + agent surface). **Phase 5 (cross-pillar
+verification) is complete too** — the pillars now *compose*: a captured run's traffic is
+validated against the API contract (the capture→contract bridge) and folds with the four
+Phase-4 signals into one change verdict ([ADR 0013](./docs/decisions/0013-cross-pillar-verification.md)).
+(Visual-regression diffing and API contract/schema testing already shipped inside the browser
+and API pillars.)
 
 ## Status
 
@@ -141,6 +145,24 @@ an overwrite-create that silently no-op'd a following delete), so symlink/dir ta
 the completeness guard escalates on a destructive batch. A conservative toolchain-mismatch warning
 also lands. Staged-as-refused-by-design: recursive/dir delete (the least-reversible op) and the full
 toolchain cross-version resolution matrix.
+
+**Phase 5 (cross-pillar verification) is complete** — the pillars now compose
+([ADR 0013](./docs/decisions/0013-cross-pillar-verification.md)). Two milestones, both
+compose-only / zero-spawn. **5a — the capture→contract bridge**: `harEntriesToFacts` +
+`validateCapturedTraffic` in `@strummer/api` turn a stored browser/API HAR into facts the
+*already-shipped* `validateOpenApiResponse` consumes (attach-body resolution, JSON/origin
+filter, server-base-path reconciliation, an exercised-operations drift walk) — no request is
+re-run; surfaced as the gated `validate_capture` MCP tool (a HAR is operator-gated bytes, so
+resolving one needs `STRUMMER_VERIFY_ALLOW_CAPTURE`; every finding message + captured path is
+redacted) + the `strummer api validate-capture` CLI. **5b — the unified change verdict**: a new
+pure **`@strummer/verdict`** package folds the four Phase-4 signals + the contract sub-verdict
+into one `CompositeVerdict` (type-only pillar imports, *zero runtime pillar deps*). The
+load-bearing rule: **absence is never a pass** — a missing/no-signal pillar yields
+`inconclusive`, never `pass`; there is no baked-in severity threshold (the caller declares the
+cut). Surfaced as the `request_verdict` MCP tool + `strummer-verify-mcp` bin + a `strummer verify`
+CLI. The shared `@strummer/artifacts` store also gained prefix-qualified, hardened cross-prefix
+rehydration so one pillar can resolve another's by-handle artifact. Staged (not amputated):
+GraphQL-drift-over-capture, orchestration/run-driving `verify`, and the Python second half.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
