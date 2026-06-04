@@ -164,3 +164,74 @@ The bridge is the high-leverage cross-pillar **win** (it reuses 100% shipped val
 - **No baked-in `failAtOrAbove` default** — the rollup must not silently encode a value judgment across non-commensurable risks; `worstPillar` + per-pillar breakdown stay the primary output (slice 10).
 - **Do not pre-wire per-pillar `ALLOW_RUN` env reads** into the v1 bin — an operator's per-pillar grant must not be silently inherited by a future verify code path sharing the env name (§3c, slice 10).
 - **First milestone split** into 5a (bridge, the cross-pillar win) and 5b (reducer), de-risking the artifacts plumbing from the reducer's value question.
+
+---
+
+## Addendum (2026-06-04) — Milestone 5c: run-driving / orchestration `verify`
+
+- **Status:** Accepted (2026-06-04) — the human ratified this addendum as-is, including the gate-env "both required" contract. Distilled from the `verify-orchestration-design-research` fan-out (6 research streams) → human ratification of 4 forks → the `verify-orchestration-adversarial-critics` fan-out (3 distinct-lens critics), whose corrections **materially changed the gate-env mechanism and the status model** and are recorded below rather than trusted-as-proposed (the ADR 0010/0013 method).
+- **Relates to:** §3c/§3d/§5 of the body above (this addendum implements the "Orchestration / run-driving `verify`" staged item); ADR 0010 (the paired deny-by-default gate, injected-runner seam, "no real spawn in the gate"); ADR 0011 (LSP write-mode's separate-gate precedent).
+
+### Context
+
+5a/5b shipped a **compose-only** verify: `request_verdict` folds per-pillar *results the caller already produced*. The agent must drive each pillar (coverage/flake/mutate/deps + the capture bridge) itself, gather five outputs, and hand them over. Milestone 5c closes that loop: a **`verify_change`** surface that DRIVES the gated pillars itself and folds them into one `CompositeVerdict` in a **single agent call** — the "is this change safe?" one-shot. The first cut runs the pillars **unscoped** (whole project); diff-scoping is 5d.
+
+The whole design turns on one rule from §3d — **"compose, never widen"**: verify reuses each pillar's *existing* paired deny-by-default gate and never invents an umbrella gate that bypasses it; a verify-level flag can never satisfy a pillar's gate; safety is operator-set, never an agent input.
+
+### Decisions (4 forks, human-ratified 2026-06-04)
+
+1. **Placement — a NEW runtime package `@strummer/verify`.** A run-driving orchestrator must import the runtime engines, so it **cannot** live in the pure, type-only `@strummer/verdict` (which must keep its zero-import `.mjs` so it never drags in `better-sqlite3`/`playwright-core`). `@strummer/verify` houses a gated `orchestrate()` over `Promise.allSettled`, its opts/config types, and the per-pillar result→`PillarVerdict` mapping; it depends on `@strummer/verdict` (pure fold) + the engine packages **for types and the injected-seam interfaces only**. `packages/mcp/src/verify.ts` and `packages/cli/src/verify.ts` are thin wrappers over it. *(Mirrors the project's "engine in a package, thin surfaces" shape and ADR 0013 §2's accepted package-count-for-isolation tradeoff.)*
+
+2. **Surface — a NEW sibling MCP tool `verify_change`,** alongside the unchanged compose-only `request_verdict`. Registered **only when run-driving is enabled** (deny-by-default registration, mirroring `run_scoped`/`flake_run`/`mutate_run`). CLI: `strummer verify run <root>`; bare `strummer verify` stays compose-only. *(Mirrors deps' `audit_dependency`/`audit_project` dual-tool split; keeps the three ADR-0013 milestones as distinct code paths.)*
+
+3. **Scope — run-driving FIRST (unscoped), diff-scoping is 5d.** The novel/risky part is the gated orchestration + provenance + failure isolation; scoping is purely additive (coverage already scopes; flake `runAndRecord` already accepts `files`; mutate already has `mutateFiles`/`--incremental`; only deps needs a net-new pure `changedDependencies(diff, ecosystem)`).
+
+4. **Capture — consume-only for this arc.** The agent produces the HAR via the browser pillar; verify bridges it via the *shipped* `validateCapturedTraffic` (pure, no spawn) behind the **existing** capture gate. **`verify` driving a live browser/API capture stays staged** (5e): the browser path pulls the heaviest gate into verify's critical path, and the API-runner-synth path has correctness gaps (collapsed redirect chains, lost request body ⇒ no GraphQL, lossy redaction).
+
+### The gate-composition contract (the load-bearing safety decision)
+
+**"Compose, never widen" is enforced at three layers:**
+
+**(a) Gate INPUTS come only from the operator, never the agent.** The orchestrator constructs each pillar's own `{allowRun, allowedRoots, timeoutMs}` (deps: network fetcher + OSV dir) **from the verify run-driving bin's operator env**. The agent's `verify_change` input selects only *which* pillars to attempt, the project root (operator-auto-allowed), and `failAtOrAbove`. No agent input can set `allowRun`/`allowedRoots`/timeout — guarded by a dedicated test.
+
+**(b) Env model — "both required", NOT verify-scoped renames (adversarial correction).** The initial draft proposed verify-scoped env names (`STRUMMER_VERIFY_COVERAGE_ALLOW_RUN`, …). **The safety critic rejected this:** it spawns a *second, independent* grant vector that drifts out of sync with the standalone pillar server's gate — a worse footgun, and it does not actually close §3c's silent-inheritance hole. The ratified model:
+  - verify reads the pillar's **own** gate inputs (`STRUMMER_COVERAGE_ALLOW_RUN` + `_PROJECT_ROOTS` + `_TIMEOUT_MS`, etc.) as the **single source of truth** — no drift, the same grant the standalone server honors; **and**
+  - verify requires a **separate, explicit `STRUMMER_VERIFY_ENABLE_RUN`** opt-in before it will drive *any* pillar run.
+  - So verify runs pillar P **iff** (P's own run-gate is satisfied) **AND** (`STRUMMER_VERIFY_ENABLE_RUN` is set). This **composes** the existing per-pillar grant (verify can never run P when P's run is disabled — never widens it) and adds a conscious, server-level "this server may drive runs" switch that closes §3c's "silently grant a future verify code path an operator's per-pillar grant" hazard. There is **no** umbrella that turns on all spawning pillars at once.
+  - This is consistent with §3c read correctly: §3c forbade *pre-reading* per-pillar `ALLOW_RUN` in the **compose-only** bin (where nothing spawns). The run-driving bin reads them precisely because it now spawns — exactly §3c's "read only in the slice that actually spawns" — and gates that read behind `STRUMMER_VERIFY_ENABLE_RUN`. The compose-only `bin-verify.ts` path stays **env-identical** (its red test that it reads no per-pillar env must keep passing); only the new run-driving entrypoint reads the pillar gates.
+
+**(c) Deny-by-default REGISTRATION.** `verify_change` is registered **only** when `STRUMMER_VERIFY_ENABLE_RUN` is set and at least one pillar's gate is satisfiable — not merely a runtime check (mirrors `coverage.ts`'s `allowRun && allowedRoots.length>0` registration gate). A requested pillar whose own gate is unmet ⇒ `skipped: gate-not-set`, surfaced, never run.
+
+**(d) No NEW egress; errors are redacted (adversarial correction).** Runner failures leak temp paths (e.g. `coverage/run.ts` throws "did not produce a coverage report at `${coveragePath}`"). `orchestrate()` takes a **`redact` callback** (mirroring the HAR bridge's `ValidateCaptureOptions.redact`); every `errorReason` is run through it before entering the `CompositeVerdict` (inline **and** stored bytes). The consume-only contract path keeps the §3b redaction it already has.
+
+**(e) `@strummer/verify` imports ZERO spawn-capable code (adversarial correction).** No module-level import of `defaultVitestRunner`/`defaultStrykerRunner`/`HistoryStore`/the capture bridge. Runners, the flake history store, and the capture validator are **all required-injected**; engine packages are `external` in tsdown. The bin/CLI wires the real implementations; the gate test injects fakes (incl. a fake/in-memory history store), so `better-sqlite3`/`playwright-core` never load in `pnpm gate`. Verified by inspecting the built `.mjs` for inline native requires.
+
+### Verdict model: provenance fields, NOT new statuses (adversarial correction)
+
+The draft proposed extending `PillarStatus` with `'errored'`/`'skipped'`. **The verdict-semantics critic rejected this:** `compose.ts` and `cli/verify.ts` switch exhaustively on `status`, and `failsByPolicy` only guards `'warn'|'fail'` — new enum values silently corrupt the fold. Ratified instead:
+- `PillarStatus` is **unchanged** (`'pass'|'warn'|'fail'|'no-signal'|'missing'`).
+- `PillarVerdict` gains optional **provenance** fields: `skipReason?: 'gate-not-set' | 'not-requested'` and `errorReason?: string` (redacted).
+- A pillar that was gate-blocked or crashed gets `status: 'no-signal'` (a requested-but-no-usable-signal outcome) + the provenance field; a pillar the agent did not request stays `'missing'` (the existing omitted-pillar shape) + optional `skipReason:'not-requested'`. **Both already fold to `inconclusive`** — so "absence is never a pass" extends to gate-blocked/errored/not-requested **for free**, with no change to the fold's status switch. The `inconclusive` predicate is widened only to *also* recognize a present `skipReason`/`errorReason` (defensive; `no-signal`/`missing` already trigger it).
+- A genuine `fail` from a pillar that *did* run still wins over a sibling's `skipped`/`no-signal` (a real failure is worse than absence) — `{coverage:fail, flake:skipped} ⇒ fail`, tested.
+
+### Execution, determinism, failure isolation
+
+- **Parallel via `Promise.allSettled`** — one pillar's crash/timeout never sinks the verdict. Per-pillar wall-clock reuses each runner's own `timeoutMs`; an **aggregate deadline is staged**.
+- **Gate-denial vs error are distinguishable without importing spawn-capable code.** A pillar's own `assertAllowed` denial ⇒ `skipped: gate-not-set`; any other rejection ⇒ `errored` (redacted). Mechanism (to settle in the first slice): a small **structural brand** on the four `*GateError` classes that `@strummer/verify` can detect without `instanceof`-importing each class (preferred — reuses the real gate), or the bin pre-validating each gate and passing only runnable pillars to `orchestrate()` (fallback). deps' "absent fetcher" and flake's "absent DB" are gate-ish and must map to `skipped: gate-not-set`, not `errored`.
+- **Injected `idFactory`, default `randomUUID` (adversarial correction).** A content-hash id collides-and-clobbers in the artifact store (no dedup ⇒ last-write-wins). Keep `randomUUID` in production (collision-safe per write); tests inject a deterministic stub to assert handle equality.
+
+### What stays staged (5d/5e and beyond)
+
+- **5d — diff-scoping the non-coverage pillars:** a shared changed-set primitive (extend coverage's `parseUnifiedDiff` or extract `@strummer/diff`); expose flake's existing `files`; pure `changedDependencies(diff, ecosystem)` for deps; mutate already done.
+- **5e — `verify` driving a live capture** to *produce* the HAR (browser-spawn behind the browser gate; and/or an API-runner capture path once the runner records redirect hops + request bodies).
+- Request-body/param contract validation; extracting the shared `Severity` scale out of deps; artifact GC/TTL; the Python second half.
+
+### Corrections the adversarial pass forced (recorded, not trusted-as-proposed)
+
+- **Verify-scoped env names are the WRONG guard** — they create a second grant vector that drifts. Replaced with the "reuse the pillar's own gate as the single source of truth + a separate `STRUMMER_VERIFY_ENABLE_RUN` opt-in" model (both required). *(§ gate-composition (b).)*
+- **Do NOT extend `PillarStatus`** — exhaustive switches + `failsByPolicy`'s `warn|fail` guard would silently mishandle new values. Use optional provenance fields + `status:'no-signal'`/`'missing'`. *(§ verdict model.)*
+- **`@strummer/verify` must import zero spawn-capable code** — a runtime dep on the engines does not by itself break the spawn-free gate, but importing `defaultVitestRunner`/`HistoryStore`/etc. would. All injected; engines `external`; verify the built `.mjs`. *(§ gate-composition (e).)*
+- **Mandatory error redaction** — runner errors echo temp paths; `orchestrate()` redacts every `errorReason`. *(§ gate-composition (d).)*
+- **Deny-by-default registration, not just runtime** — `verify_change` registers only when run-driving is enabled. *(§ gate-composition (c).)*
+- **`idFactory` default `randomUUID`, not content-hash** — content-hash clobbers identical verdicts in the store. *(§ execution.)*
+- **The research + adversarial transcript** is the `verify-orchestration-design-research` + `verify-orchestration-adversarial-critics` workflows; this addendum is their durable distillation.
