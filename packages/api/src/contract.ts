@@ -29,7 +29,7 @@ interface OpenApiOperation {
   responses?: Record<string, OpenApiResponse>
   [key: string]: unknown
 }
-interface OpenApiDoc {
+export interface OpenApiDoc {
   paths?: Record<string, Record<string, OpenApiOperation> | undefined>
   components?: { schemas?: Record<string, unknown> }
   [key: string]: unknown
@@ -208,6 +208,63 @@ export interface OpenApiValidateOptions {
   baseDir?: string
 }
 
+/** A resolved OpenAPI operation: the operation object, its path template, and the
+ * raw path-item (its method keys plus any path-level `parameters`). */
+export interface ResolvedOperation {
+  operation: OpenApiOperation
+  template: string
+  pathItem: Record<string, unknown>
+}
+
+/**
+ * Resolve `METHOD path` to its OpenAPI operation via path-template matching (shared
+ * by the response AND request validators — extracted so both resolve operations the
+ * same way). Returns `undefined` when no path template / method matches.
+ */
+export function resolveOpenApiOperation(
+  spec: OpenApiDoc,
+  method: string,
+  path: string,
+): ResolvedOperation | undefined {
+  const matched = spec.paths ? matchPath(spec.paths, path) : undefined
+  const operation = matched?.item[method.toLowerCase()]
+  if (!matched || !operation) return undefined
+  return {
+    operation,
+    template: matched.template,
+    pathItem: matched.item as Record<string, unknown>,
+  }
+}
+
+/**
+ * Normalize an OpenAPI schema for ajv (2020-12) and return a self-contained schema
+ * with component schemas merged into `$defs`. Shared by the response AND request
+ * (body + parameter) validators so every schema gets the same treatment: external
+ * local-file `$ref` inlining (when `baseDir` is set), the OpenAPI 3.0 `nullable`→
+ * type-union shim, and the `#/components/schemas/X`→`#/$defs/X` rewrite. A schema's
+ * own local `$defs` win over component defs on a name clash.
+ */
+export function normalizeOpenApiSchema(
+  schema: unknown,
+  spec: OpenApiDoc,
+  opts: OpenApiValidateOptions = {},
+): Record<string, unknown> {
+  const is30 = String(spec.openapi ?? '').startsWith('3.0')
+  const cache = new Map<string, unknown>()
+  const normalize = (sub: unknown) => {
+    const inlined = opts.baseDir
+      ? inlineExternalRefs(sub, opts.baseDir, cache, undefined, new Set())
+      : sub
+    return rewriteRefs(is30 ? shimNullable(inlined) : inlined)
+  }
+  const componentDefs = Object.fromEntries(
+    Object.entries(spec.components?.schemas ?? {}).map(([name, sub]) => [name, normalize(sub)]),
+  )
+  const rewritten = normalize(schema) as Record<string, unknown>
+  const localDefs = (rewritten.$defs as Record<string, unknown> | undefined) ?? {}
+  return { ...rewritten, $defs: { ...componentDefs, ...localDefs } }
+}
+
 export function validateOpenApiResponse(
   spec: OpenApiDoc,
   req: { method: string; path: string },
@@ -217,9 +274,8 @@ export function validateOpenApiResponse(
   const findings: ContractFinding[] = []
   const method = req.method.toLowerCase()
 
-  const matched = spec.paths ? matchPath(spec.paths, req.path) : undefined
-  const operation = matched?.item[method]
-  if (!matched || !operation) {
+  const resolved = resolveOpenApiOperation(spec, method, req.path)
+  if (!resolved) {
     findings.push({
       kind: 'missing-operation',
       severity: 'error',
@@ -228,38 +284,21 @@ export function validateOpenApiResponse(
     return { valid: false, findings }
   }
 
-  const op = { method, path: matched.template }
-  const responses = operation.responses ?? {}
+  const op = { method, path: resolved.template }
+  const responses = resolved.operation.responses ?? {}
   const response = findResponse(responses, res.status)
   if (!response) {
     findings.push({
       kind: 'undocumented-status',
       severity: 'error',
-      message: `status ${res.status} is not documented for ${method.toUpperCase()} ${matched.template}`,
+      message: `status ${res.status} is not documented for ${method.toUpperCase()} ${resolved.template}`,
     })
     return { valid: false, findings, operation: op }
   }
 
   const schema = pickJsonSchema(response)
   if (schema !== undefined) {
-    // OpenAPI 3.0 needs the nullable→type-union shim before ajv (2020-12) sees it;
-    // external local-file $refs are inlined first (when a baseDir is supplied).
-    const is30 = String(spec.openapi ?? '').startsWith('3.0')
-    const cache = new Map<string, unknown>()
-    const normalize = (sub: unknown) => {
-      const inlined = opts.baseDir
-        ? inlineExternalRefs(sub, opts.baseDir, cache, undefined, new Set())
-        : sub
-      return rewriteRefs(is30 ? shimNullable(inlined) : inlined)
-    }
-    const componentDefs = Object.fromEntries(
-      Object.entries(spec.components?.schemas ?? {}).map(([name, sub]) => [name, normalize(sub)]),
-    )
-    const rewritten = normalize(schema) as Record<string, unknown>
-    // Merge component schemas into `$defs` without clobbering any the response
-    // schema already declares (its own local `$defs` win on a name clash).
-    const localDefs = (rewritten.$defs as Record<string, unknown> | undefined) ?? {}
-    const compiled = { ...rewritten, $defs: { ...componentDefs, ...localDefs } }
+    const compiled = normalizeOpenApiSchema(schema, spec, opts)
     const { valid, errors } = validateSchema(compiled, res.body)
     if (!valid) {
       for (const err of errors) {
