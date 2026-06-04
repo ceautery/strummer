@@ -260,6 +260,10 @@ function buildRequestFacts(
   if (body !== undefined) facts.body = body
   if (Object.keys(query).length > 0) facts.query = query
   if (Object.keys(headers).length > 0) facts.headers = headers
+  // The authoritative structured form-field channel for non-JSON body validation
+  // (ADR 0016 addendum 4) — never re-parsed from `content`.
+  if (prepared.body?.formFields) facts.form = prepared.body.formFields
+  if (prepared.body?.formFileFields) facts.formFileFields = prepared.body.formFileFields
   return facts
 }
 

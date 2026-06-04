@@ -23,6 +23,21 @@ export interface PreparedBody {
   /** A redaction-safe textual rendering of the body for agent-facing output
    * (binary/file content is summarized, never inlined). */
   preview: string
+  /** For `form`-style bodies (form-urlencoded / multipart): the decoded TEXT fields
+   * (repeated keys → array) — the AUTHORITATIVE structured channel for non-JSON body
+   * contract validation (ADR 0016 addendum 4). Built from the structured parts at
+   * prepare time, NEVER by re-parsing `content`; file bytes never enter it. */
+  formFields?: Record<string, string | string[]>
+  /** For multipart bodies: the NAMES of FILE parts (bytes are never inlined). */
+  formFileFields?: string[]
+}
+
+/** Append a field into a repeated-keys-→-array map (the form-field channel shape). */
+function appendField(map: Record<string, string | string[]>, name: string, value: string): void {
+  const cur = map[name]
+  if (cur === undefined) map[name] = value
+  else if (Array.isArray(cur)) cur.push(value)
+  else map[name] = [cur, value]
 }
 
 /** A request prepared for the wire — these strings carry REAL secret values. */
@@ -84,9 +99,19 @@ async function materializeBody(
   if (!body || body.type === 'none') return undefined
   if (body.type === 'form-urlencoded') {
     const params = new URLSearchParams()
-    for (const p of body.params ?? []) params.append(p.name, fill(p.value))
+    const formFields: Record<string, string | string[]> = {}
+    for (const p of body.params ?? []) {
+      const value = fill(p.value)
+      params.append(p.name, value)
+      appendField(formFields, p.name, value)
+    }
     const content = params.toString()
-    return { contentType: 'application/x-www-form-urlencoded', content, preview: content }
+    return {
+      contentType: 'application/x-www-form-urlencoded',
+      content,
+      preview: content,
+      formFields,
+    }
   }
   if (body.type === 'graphql') {
     const content = materializeGraphql(body.graphql, fill)
@@ -121,8 +146,11 @@ async function materializeMultipart(
 ): Promise<PreparedBody> {
   const form = new FormData()
   const lines = ['multipart/form-data:']
+  const formFields: Record<string, string | string[]> = {}
+  const fileFields = new Set<string>()
   for (const part of body.parts ?? []) {
     if (part.kind === 'file') {
+      fileFields.add(part.name) // NAME only — bytes never enter the structured channel
       for (const rawPath of part.filePaths ?? []) {
         const filled = fill(rawPath)
         const buf = await readFile(resolve(baseDir ?? '', filled))
@@ -133,10 +161,16 @@ async function materializeMultipart(
     } else {
       const value = fill(part.value ?? '')
       form.append(part.name, value)
+      appendField(formFields, part.name, value)
       lines.push(`  ${part.name} (text): ${value}`)
     }
   }
-  return { content: form, preview: lines.join('\n') }
+  return {
+    content: form,
+    preview: lines.join('\n'),
+    formFields,
+    ...(fileFields.size > 0 ? { formFileFields: [...fileFields] } : {}),
+  }
 }
 
 /**

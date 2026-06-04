@@ -484,5 +484,39 @@ describe('runRequest (offline, in-process server)', () => {
       // The JSON body is parsed to its value (so schema validation is meaningful).
       expect(capture.request.body).toEqual({ name: 'Widget' })
     })
+
+    it('surfaces a form-urlencoded body as the structured `form` field map (ADR 0016 add.4)', async () => {
+      const token = 'form-field-secret-789'
+      const { capture } = await runRequestForContract(
+        loadCollection(FIXTURE),
+        'create-thing-form',
+        {
+          vars: { baseUrl, thingName: 'widget' },
+          secrets: new StaticSecretStore({ API_TOKEN: token }),
+        },
+      )
+      // The structured field map (post-fill wire values), NOT a re-parsed serialized string.
+      expect(capture.request.form).toEqual({ name: 'widget', token })
+      expect(capture.request.formFileFields).toBeUndefined()
+      // The secret is registered so a finding echoing it is redacted at the surface.
+      expect(capture.registeredSecrets).toContainEqual({ name: 'API_TOKEN', value: token })
+    })
+
+    it('surfaces multipart TEXT parts as `form`; FILE parts as names-only `formFileFields`', async () => {
+      const token = 'mp-field-secret-321'
+      const { capture } = await runRequestForContract(
+        loadCollection(FIXTURE),
+        'create-thing-multipart',
+        {
+          vars: { baseUrl, thingName: 'widget' },
+          secrets: new StaticSecretStore({ API_TOKEN: token }),
+        },
+      )
+      expect(capture.request.form).toEqual({ name: 'widget', token })
+      // The file part's NAME only — bytes never enter the structured channel (redaction).
+      expect(capture.request.formFileFields).toEqual(['attachment'])
+      // multipart Content-Type is synthesized as the bare base for media-type routing.
+      expect(capture.request.headers?.['content-type']).toBe('multipart/form-data')
+    })
   })
 })
