@@ -45,8 +45,10 @@ one server serves many collections):
   type-check the request variables against the operation's declared types) → contract findings.
 - **`validate_request`** — validate a request's **body + path/query/header params**
   against an OpenAPI 3.1 operation (`openapiSpec`,`method`,`path`,`body?`,`query?`,
-  `headers?`) → contract findings (message + path redacted). A GraphQL envelope is
-  refused, not schema-failed.
+  `headers?`) → contract findings (message + path redacted). Scalar params plus query
+  `form` ARRAYS (`explode=true`); other array/object serializations are skipped as
+  uncheckable (never a false finding — ADR 0016). A GraphQL envelope is refused, not
+  schema-failed.
 - Resource **`strummer://run/{runId}/body`** — fetch a stored response body by
   its handle (bodies are never inlined).
 

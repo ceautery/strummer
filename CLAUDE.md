@@ -101,12 +101,20 @@ vision and `ARCHITECTURE.md` for the technical design.
   → `unverified` folded into the bridge's `noSignal`; wired through the capture bridge + MCP
   `validate_response.variables` + CLI `api validate --variables` + live `api run --graphql`) AND
   request (`validateOpenApiRequest` in
-  `request-contract.ts`, ADR 0014: body + path/query/header params over the shared
+  `request-contract.ts`, ADR 0014: body + path/query/header SCALAR params over the shared
   `resolveOpenApiOperation`/`normalizeOpenApiSchema` seams; the `unverified` flag the
   capture bridge folds into `noSignal` so a present-but-uncheckable request can't pass;
   ALSO wired into live `api run --openapi` via `runRequestForContract` — an out-of-band
   channel surfacing the un-redacted sent request facts at prepare time, `RunResult`
-  UNCHANGED, findings redacted via the run's resolved secrets, authoritative),
+  UNCHANGED, findings redacted via the run's resolved secrets, authoritative; ADR 0016
+  added NON-SCALAR params v1 — query `form` ARRAYS explode=true via `validateQueryArray`
+  (≥2 occ = the array, sound count; single occ wrapped only when comma-free + no
+  cardinality, else `unverified`; `nonScalarType`/`array-values` `ParamLookup` state, a
+  scalar param that gets repeated keys folds to `unverified`) + undocumented-param
+  SUPPRESSION around object query params (form/explode object ⇒ suppress whole pass;
+  deepObject ⇒ exclude `name[...]` keys; unresolved `$ref` ⇒ suppress); rest of the
+  style/explode matrix [explode=false comma-arrays, path/header arrays, object
+  reconstruction] STAGED, no new finding kind, signature unchanged),
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that

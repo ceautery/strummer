@@ -110,6 +110,23 @@ installed version Z" and get a precise, cited answer over MCP.
       3.1-style type union; **`operationName`-scoped GraphQL** drift. CLI `--openapi`
       passes the spec dir as the deref base; `validate --operation`; MCP
       `validate_response.operationName`.
+- [x] **Non-scalar request-param serialization, v1 (ADR 0016)** — `validateOpenApiRequest`
+      now validates **query `form` arrays, `explode=true`** (≥2 occurrences = the array,
+      sound count; single occurrence wrapped only when comma-free + no cardinality
+      constraint, else `unverified`) — coerce each element + ajv the assembled array, no
+      new finding kind. Plus the mandatory **undocumented-param suppression** around object
+      query params (form/explode object ⇒ suppress the whole pass; deepObject ⇒ exclude
+      `name[...]` keys; unresolved `$ref` ⇒ suppress). Reaches the capture bridge + live
+      `api run --openapi` with no surface change. Designed via a research→synthesis→2-critic
+      fan-out; the cardinal invariant: ambiguous/unsupported ⇒ `unverified`-skip, never a
+      false finding.
+  - [ ] *(staged, parseable — ADR 0016)* query `form/explode:false` comma-arrays (dropped
+        from v1: embedded-delimiter false-positive class); `spaceDelimited`/`pipeDelimited`
+        arrays; path arrays (`simple`/`label`/`matrix`) + header arrays (`simple`); object
+        *reconstruction* (`form/explode:false` + `deepObject`, flat scalar props). Each ships
+        with its own tested splitter + guards.
+  - [ ] *(staged)* non-JSON request **body** schemas (form-urlencoded / multipart fields
+        against their declared object schema), today presence-only `unverified`.
 
 ## Phase 3 — Browser / UI testing pillar  *(FEATURE-COMPLETE — engine + safety + artifacts + MCP + CLI + multi-engine; live-view dropped per ADR 0008; only the explicitly-aspirational bucket remains; design = ADR 0006/0008/0009 + ARCHITECTURE §10)*
 

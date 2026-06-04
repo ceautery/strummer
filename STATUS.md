@@ -5,7 +5,35 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: GRAPHQL-REQUEST VARIABLE validation LANDED (contract-pillar deepening, ADR 0015) — `validateGraphqlOperation` now validates the runtime `variables` against the operation's declared types, wired through the capture bridge + direct surfaces + live `api run --graphql`; gate green (1228 TS + 45 Py). Before that: live `api run --openapi` REQUEST validation (ADR 0014 close-out), REQUEST-BODY/PARAM contract validation (v1, ADR 0014), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (non-scalar OpenAPI param serializations / non-JSON body schemas; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM serialization v1 LANDED (contract-pillar deepening, ADR 0016) — `validateOpenApiRequest` now validates query `form` arrays (explode=true) + suppresses undocumented-param around object query params; gate green (1248 TS + 45 Py). Before that: GRAPHQL-REQUEST VARIABLE validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), REQUEST-BODY/PARAM contract validation (v1, ADR 0014), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (the rest of the non-scalar param matrix [explode=false comma-arrays, path/header arrays, object reconstruction] + non-JSON body schemas — all ADR 0016; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**NON-SCALAR request-PARAM serialization v1 — COMPLETE** (2026-06-04, all TDD red→green; gate green at
+1248 TS + 45 Py; design = ADR 0016, a fan-out: 3 research streams → synthesis (CHECK-vs-SKIP decision
+matrix + slice plan) → 2 adversarial critics [both ship-with-fixes, converging on the same tightening,
+every blocker folded in]; the one scope fork human-ratified). The contract pillar now validates the
+soundly-reversible non-scalar parameter cells, converting prior `unverified`-skips into real findings.
+**Shipped CHECK set (exactly):** query `form` ARRAYS, `explode=true`. ≥2 wire occurrences = the array
+(coerce each element via `coerceScalar` to the item scalar type, assemble, ajv the whole array — count
+is known so minItems/maxItems/uniqueItems are all sound). Single occurrence wrapped to `[v]` ONLY when
+it carries no `,` AND the schema has no cardinality constraint (else `unverified` — a single occurrence
+can't disambiguate a 1-element array from an explode=false disagreement, nor prove a cardinality bound:
+critics FP-1/FP-3). Non-scalar items / `prefixItems` tuples / typeless → `unverified`. **Mandatory
+undocumented-param suppression (lands now even though object VALIDATION stays staged):** a form/explode
+OBJECT query param shares the top-level namespace irreducibly (critic FP-4) ⇒ suppress the ENTIRE
+undoc-param pass + `unverified`; a `deepObject` param's `name[...]` bracket keys are excluded (plain
+undeclared keys still flag); an unresolved non-local `$ref` param ⇒ suppress (could be an object,
+critic H1). **Wiring fix (the blocker both critics independently caught):** a SCALAR param that receives
+a repeated key now folds to `unverified` via an explicit new `array-values` `ParamLookup` state — never
+a fall-through into `coerceScalar` on an absent `.value`. **Engine-only:** new internal seams
+(`nonScalarType`, `hasCardinalityConstraint`, `validateQueryArray`, the `array-values` state;
+`styleSupported` takes the normalized schema, `normSchema` computed once per param); `validateOpenApiRequest`
+signature + `RequestValidationResult` shape UNCHANGED; ZERO new `ContractFindingKind` (reuse param-schema/
+missing-required-param/undocumented-param). Reaches the capture bridge + live `api run --openapi` with NO
+surface change. Invariants held: ambiguity/unsupported ⇒ `unverified`-skip never a false finding (the
+cardinal sin), absence-never-a-pass (every skip → noSignal fold), redaction (findings echo the RAW
+element only), no real fetch in `pnpm gate`. **STAGED (parseable, deferred — ADR 0016):** query
+`form/explode:false` comma-arrays (DROPPED from v1: embedded-delimiter false-positive class), space/pipe-
+Delimited arrays, path/header arrays (simple/label/matrix), object reconstruction (form/explode:false +
+deepObject flat scalar props); plus non-JSON body schemas. 20 tests added (14 slice-4 + 6 slice-5)._
 _**GRAPHQL-REQUEST VARIABLE VALIDATION — COMPLETE** (2026-06-04, all TDD red→green; gate green at 1228 TS +
 45 Py; design = ADR 0015, a design fan-out — 3 research streams → synthesis → 1 adversarial critic [found 4
 holes, all folded in]; both forks human-ratified). The contract-pillar deepening: `validateGraphqlOperation`

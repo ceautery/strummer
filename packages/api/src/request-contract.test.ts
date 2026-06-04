@@ -374,3 +374,368 @@ describe('validateOpenApiRequest — slice 3: noise rules, media-type, $ref dere
     expect(r.findings).toHaveLength(0)
   })
 })
+
+// --- slice 4: NON-SCALAR query array params, form/explode=true ONLY (ADR 0014 tail).
+// explode=false comma-arrays + path/header/spaceDelimited/pipeDelimited are STAGED.
+const arrspec = {
+  openapi: '3.1.0',
+  paths: {
+    '/tags': {
+      get: {
+        parameters: [
+          { name: 't', in: 'query', schema: { type: 'array', items: { type: 'string' } } },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/ids': {
+      get: {
+        parameters: [
+          { name: 'id', in: 'query', schema: { type: 'array', items: { type: 'integer' } } },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/min2': {
+      get: {
+        parameters: [
+          {
+            name: 'id',
+            in: 'query',
+            schema: { type: 'array', items: { type: 'integer' }, minItems: 2 },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/max1': {
+      get: {
+        parameters: [
+          {
+            name: 'id',
+            in: 'query',
+            schema: { type: 'array', items: { type: 'integer' }, maxItems: 1 },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/uniq': {
+      get: {
+        parameters: [
+          {
+            name: 'u',
+            in: 'query',
+            schema: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/objitems': {
+      get: {
+        parameters: [
+          { name: 'o', in: 'query', schema: { type: 'array', items: { type: 'object' } } },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/tuple': {
+      get: {
+        parameters: [
+          {
+            name: 'p',
+            in: 'query',
+            schema: { type: 'array', prefixItems: [{ type: 'integer' }, { type: 'string' }] },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/req': {
+      get: {
+        parameters: [
+          {
+            name: 'r',
+            in: 'query',
+            required: true,
+            schema: { type: 'array', items: { type: 'string' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    // a SCALAR query param — used for the repeated-key wiring regression.
+    '/scalar': {
+      get: {
+        parameters: [{ name: 's', in: 'query', schema: { type: 'string' } }],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+  },
+}
+
+describe('validateOpenApiRequest — slice 4: query array params (form/explode=true)', () => {
+  it('≥2 occurrences of a string-array param ⇒ valid (the values ARE the array)', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/tags', query: { t: ['a', 'b'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('≥2 occurrences of an integer-array param ⇒ each element coerced + validated', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/ids', query: { id: ['1', '2'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('bad element in an integer array ⇒ param-schema echoing the RAW element', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/ids', query: { id: ['1', 'x'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    const f = r.findings.find((x) => x.kind === 'param-schema')
+    expect(f?.path).toBe('id')
+    expect(f?.message).toContain('x')
+  })
+
+  it('single occurrence, no comma, no cardinality ⇒ wrapped [v] and validated', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/tags', query: { t: 'a' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('single occurrence containing a comma ⇒ unverified (explode-disagreement ambiguity)', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/tags', query: { t: 'a,b' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('single occurrence + cardinality constraint ⇒ unverified (can not prove count from 1 occ)', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/min2', query: { id: '5' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('≥2 occurrences satisfying minItems ⇒ valid (true count is known)', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/min2', query: { id: ['1', '2'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('≥2 occurrences violating maxItems ⇒ param-schema (count is known and sound)', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/max1', query: { id: ['1', '2'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+
+  it('≥2 occurrences violating uniqueItems ⇒ param-schema', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/uniq', query: { u: ['a', 'a'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+
+  it('non-scalar array items ⇒ unverified (no element splitter)', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/objitems', query: { o: ['a', 'b'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('prefixItems (tuple) array ⇒ unverified (heterogeneous, staged)', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/tuple', query: { p: ['1', 'a'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('required array param absent + authoritative ⇒ missing-required-param', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/req', query: {} },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    const f = r.findings.find((x) => x.kind === 'missing-required-param')
+    expect(f?.path).toBe('r')
+  })
+
+  it('required array param absent + NOT authoritative ⇒ unverified', () => {
+    const r = validateOpenApiRequest(arrspec, { method: 'GET', path: '/req', query: {} })
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('WIRING: a SCALAR query param with a repeated key ⇒ unverified, no false finding', () => {
+    const r = validateOpenApiRequest(
+      arrspec,
+      { method: 'GET', path: '/scalar', query: { s: ['x', 'y'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+})
+
+// --- slice 5: undocumented-param suppression around OBJECT query params.
+// Object-param VALIDATION stays staged (unverified); the suppression must land now
+// so exploded-object/deepObject property keys never false-fire undocumented-param.
+const objspec = {
+  openapi: '3.1.0',
+  components: {
+    parameters: {
+      ExtRef: { $ref: 'external.yaml#/components/parameters/X' },
+    },
+  },
+  paths: {
+    '/obj': {
+      get: {
+        parameters: [
+          {
+            name: 'color',
+            in: 'query',
+            style: 'form',
+            explode: true,
+            schema: {
+              type: 'object',
+              properties: { R: { type: 'integer' }, G: { type: 'integer' } },
+              additionalProperties: false,
+            },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/deep': {
+      get: {
+        parameters: [
+          {
+            name: 'color',
+            in: 'query',
+            style: 'deepObject',
+            schema: { type: 'object', properties: { R: { type: 'integer' } } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/scalar': {
+      get: {
+        parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/extref': {
+      get: {
+        parameters: [{ $ref: 'external.yaml#/components/parameters/X' }],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+  },
+}
+
+describe('validateOpenApiRequest — slice 5: object-param undocumented suppression', () => {
+  it('form/explode=true object ⇒ unverified, and its property keys are NOT undocumented', () => {
+    const r = validateOpenApiRequest(
+      objspec,
+      { method: 'GET', path: '/obj', query: { R: '100', G: '200' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('form/explode=true object present ⇒ ENTIRE undoc pass suppressed (shared namespace)', () => {
+    const r = validateOpenApiRequest(
+      objspec,
+      { method: 'GET', path: '/obj', query: { R: '100', G: '200', surprise: '1' } },
+      { paramsAuthoritative: true },
+    )
+    // `surprise` cannot be told apart from an object property ⇒ NOT flagged.
+    expect(r.findings.map((f) => f.kind)).not.toContain('undocumented-param')
+    expect(r.unverified).toBe(true)
+  })
+
+  it('deepObject ⇒ unverified, and name[prop] bracket keys are NOT undocumented', () => {
+    const r = validateOpenApiRequest(
+      objspec,
+      { method: 'GET', path: '/deep', query: { 'color[R]': '100' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings.map((f) => f.kind)).not.toContain('undocumented-param')
+    expect(r.unverified).toBe(true)
+  })
+
+  it('deepObject + a plain extra key ⇒ the plain key IS flagged, bracket keys are not', () => {
+    const r = validateOpenApiRequest(
+      objspec,
+      { method: 'GET', path: '/deep', query: { 'color[R]': '100', surprise: '1' } },
+      { paramsAuthoritative: true },
+    )
+    const f = r.findings.find((x) => x.kind === 'undocumented-param')
+    expect(f?.path).toBe('surprise')
+    expect(r.unverified).toBe(true)
+  })
+
+  it('REGRESSION: scalar param + an undeclared key still flags exactly the undeclared key', () => {
+    const r = validateOpenApiRequest(
+      objspec,
+      { method: 'GET', path: '/scalar', query: { q: 'x', surprise: '1' } },
+      { paramsAuthoritative: true },
+    )
+    const f = r.findings.find((x) => x.kind === 'undocumented-param')
+    expect(f?.path).toBe('surprise')
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('unresolved non-local $ref query param ⇒ undoc pass suppressed (could be an object)', () => {
+    const r = validateOpenApiRequest(
+      objspec,
+      { method: 'GET', path: '/extref', query: { anything: '1' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings.map((f) => f.kind)).not.toContain('undocumented-param')
+    expect(r.unverified).toBe(true)
+  })
+})

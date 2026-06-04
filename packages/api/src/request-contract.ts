@@ -127,11 +127,45 @@ function scalarTypes(schema: Record<string, unknown>): string[] | undefined {
   return undefined
 }
 
-/** v1 supports only the DEFAULT scalar serialization per location (path/header
- * `simple`, query `form`); anything else (deepObject/pipeDelimited/cookie/
- * content-typed) is STAGED → inconclusive-skip. */
-function styleSupported(param: ParamObject): boolean {
+/** `'array'`/`'object'` for a (normalized) non-scalar schema, else `undefined`. A
+ * `'null'`-augmented union (3.0 nullable shim) is tolerated; a union mixing
+ * array/object with a scalar (or with each other) is ambiguous → `undefined`
+ * (handled as a typeless skip, never a false validation). */
+function nonScalarType(schema: Record<string, unknown>): 'array' | 'object' | undefined {
+  const t = schema.type
+  if (typeof t === 'string') return t === 'array' || t === 'object' ? t : undefined
+  if (Array.isArray(t)) {
+    const nonNull = t.filter((x) => x !== 'null')
+    if (nonNull.length > 0 && nonNull.every((x) => x === 'array')) return 'array'
+    if (nonNull.length > 0 && nonNull.every((x) => x === 'object')) return 'object'
+  }
+  return undefined
+}
+
+/** A serialized array param cannot soundly prove its element COUNT from a single
+ * wire occurrence (it might be an explode-disagreement). When the array schema
+ * constrains cardinality, a single-occurrence value is `unverified`-skipped. */
+function hasCardinalityConstraint(schema: Record<string, unknown>): boolean {
+  return (
+    schema.minItems !== undefined || schema.maxItems !== undefined || schema.uniqueItems === true
+  )
+}
+
+/**
+ * Which (location, style, type) serializations the validator can soundly check.
+ * SCALARS: the default per location (path/header `simple`, query `form`). ARRAYS:
+ * only query `form` (explode resolved later — explode=false comma-arrays are
+ * `unverified`-skipped in the handler). OBJECTS and every other style/location
+ * (deepObject/pipeDelimited/path-array/cookie/content-typed) are STAGED →
+ * inconclusive-skip. `schema` is the NORMALIZED param schema (so the array/scalar
+ * decision sees the 3.0 nullable shim). */
+function styleSupported(param: ParamObject, schema: Record<string, unknown> | undefined): boolean {
   if (param.content) return false
+  const nonScalar = schema ? nonScalarType(schema) : undefined
+  if (nonScalar === 'array') {
+    return param.in === 'query' && (param.style === undefined || param.style === 'form')
+  }
+  if (nonScalar === 'object') return false // object reconstruction is STAGED
   switch (param.in) {
     case 'query':
       return param.style === undefined || param.style === 'form'
@@ -194,7 +228,11 @@ function extractPathParams(
   return { values, skipped }
 }
 
-type ParamLookup = { state: 'present'; value: string } | { state: 'absent' } | { state: 'multi' } // array/repeated/embedded → STAGED skip
+type ParamLookup =
+  | { state: 'present'; value: string }
+  | { state: 'absent' }
+  | { state: 'array-values'; values: string[] } // ≥2 query occurrences (an exploded array)
+  | { state: 'multi' } // composite path segment / unsupported repetition → STAGED skip
 
 function lookupParamValue(
   param: ParamObject,
@@ -213,7 +251,7 @@ function lookupParamValue(
     if (Array.isArray(q))
       return q.length === 1 && q[0] !== undefined
         ? { state: 'present', value: q[0] }
-        : { state: 'multi' }
+        : { state: 'array-values', values: q } // ≥2 occurrences (queryRecord only arrays >1)
     return { state: 'present', value: q }
   }
   if (param.in === 'header') {
@@ -221,6 +259,74 @@ function lookupParamValue(
     return h === undefined ? { state: 'absent' } : { state: 'present', value: h }
   }
   return { state: 'absent' }
+}
+
+/**
+ * Validate a query `form` ARRAY param against its declared schema. ONLY explode=true
+ * is checked in v1 (explode=false comma-arrays are STAGED — embedded delimiters in a
+ * string element are an irreducible false-positive class). The element COUNT is sound
+ * only from ≥2 wire occurrences; a single occurrence is wrapped as a 1-element array
+ * ONLY when it carries no comma (no explode-disagreement) and the schema has no
+ * cardinality constraint — otherwise `unverified`. Appends `param-schema` findings;
+ * returns whether the param was `unverified`-skipped.
+ */
+function validateQueryArray(
+  param: ParamObject,
+  normSchema: Record<string, unknown>,
+  lk: ParamLookup,
+  findings: ContractFinding[],
+): boolean {
+  if ((param.explode ?? true) === false) return true // explode=false comma-array: STAGED
+  // Tuple/heterogeneous or non-scalar items carry no element splitter we can coerce.
+  const itemSchema = normSchema.items
+  const itemTypes =
+    itemSchema && typeof itemSchema === 'object' && !Array.isArray(itemSchema)
+      ? scalarTypes(itemSchema as Record<string, unknown>)
+      : undefined
+  if (normSchema.prefixItems !== undefined || !itemTypes) return true
+
+  let elements: string[]
+  if (lk.state === 'array-values') {
+    elements = lk.values
+  } else if (lk.state === 'present') {
+    // Single occurrence: ambiguous unless it carries no delimiter AND no cardinality.
+    if (lk.value.includes(',') || hasCardinalityConstraint(normSchema)) return true
+    elements = [lk.value]
+  } else {
+    return true // 'multi' (composite path) — not reachable for query, skip defensively
+  }
+
+  const want = itemTypes.filter((t) => t !== 'null').join('|')
+  const coerced: unknown[] = []
+  let anyBad = false
+  for (const el of elements) {
+    const c = coerceScalar(el, itemTypes)
+    if (!c.ok) {
+      anyBad = true
+      findings.push({
+        kind: 'param-schema',
+        severity: 'error',
+        path: param.name as string,
+        // Echo the RAW captured element, never the coerced value (redaction).
+        message: `${param.in} parameter '${param.name}' value '${el}' is not a valid ${want}`,
+      })
+    } else {
+      coerced.push(c.value)
+    }
+  }
+  if (anyBad) return false // a finding was raised; the array can't be assembled for ajv
+  const { valid, errors } = validateSchema(normSchema, coerced)
+  if (!valid) {
+    for (const err of errors) {
+      findings.push({
+        kind: 'param-schema',
+        severity: 'error',
+        path: param.name as string,
+        message: `${param.in} parameter '${param.name}' ${err.message}`,
+      })
+    }
+  }
+  return false
 }
 
 /**
@@ -363,8 +469,14 @@ export function validateOpenApiRequest(
     unverified = true
   }
 
-  // --- parameters (path / query / header; scalars only in v1) ---
+  // --- parameters (path / query / header; scalars + query form arrays in v1) ---
   const pathVals = extractPathParams(template, req.path)
+  // Metadata for the undocumented-param pass, collected during the param loop:
+  const declaredQuery = new Set<string>() // scalar + array query param names
+  const deepObjectPrefixes: string[] = [] // `name[` keys belonging to a deepObject param
+  // When set, the whole undoc pass is unsound (an object's properties share the
+  // top-level query namespace) and is suppressed.
+  let suppressUndoc = false
   // Deref `$ref` params first; a non-local ref we can't resolve ⇒ inconclusive-skip.
   const params: ParamObject[] = []
   for (const rp of mergeParameters(resolved.pathItem, operation)) {
@@ -372,6 +484,9 @@ export function validateOpenApiRequest(
       const d = derefLocalComponent<ParamObject>(spec, rp)
       if (!d || typeof d.name !== 'string' || typeof d.in !== 'string') {
         unverified = true
+        // The dropped param could be a query OBJECT whose properties land as
+        // top-level keys; suppress the undoc pass rather than risk a false positive.
+        suppressUndoc = true
         continue
       }
       params.push(d)
@@ -383,25 +498,36 @@ export function validateOpenApiRequest(
 
   for (const param of params) {
     if (typeof param.name !== 'string' || typeof param.in !== 'string') continue
-    // Unsupported location / serialization / content-typed param → STAGED skip.
-    if (!styleSupported(param)) {
-      unverified = true
-      continue
-    }
     const normSchema =
       param.schema !== undefined ? normalizeOpenApiSchema(param.schema, spec, opts) : undefined
     const types = normSchema ? scalarTypes(normSchema) : undefined
-    if (!normSchema || !types) {
-      // No schema, or a non-scalar (array/object) param → STAGED skip.
+    const nonScalar = normSchema ? nonScalarType(normSchema) : undefined
+
+    // Record query-param presence for the undoc pass BEFORE any validation skip, so a
+    // STAGED object param still suppresses/excludes its keys (its properties are on the
+    // wire regardless of whether we validate the object).
+    if (param.in === 'query') {
+      if (nonScalar === 'object') {
+        if (param.style === 'deepObject') deepObjectPrefixes.push(`${param.name}[`)
+        else suppressUndoc = true // form/explode object → shared top-level namespace
+      } else {
+        declaredQuery.add(param.name) // scalar + array params (the array key == its name)
+      }
+    }
+
+    // Unsupported location / serialization / object / content-typed param → STAGED skip.
+    if (!styleSupported(param, normSchema)) {
+      unverified = true
+      continue
+    }
+    if (!normSchema || (!types && nonScalar !== 'array')) {
+      // No schema, or a typeless/object param → STAGED skip. (Arrays have no scalar
+      // `types` but are handled below.)
       unverified = true
       continue
     }
 
     const lk = lookupParamValue(param, req, pathVals)
-    if (lk.state === 'multi') {
-      unverified = true // array/repeated/embedded value → STAGED skip
-      continue
-    }
     if (lk.state === 'absent') {
       const required = param.in === 'path' || param.required === true
       if (required) {
@@ -416,6 +542,19 @@ export function validateOpenApiRequest(
           unverified = true
         }
       }
+      continue
+    }
+
+    // Query form array (the only non-scalar param we validate in v1).
+    if (nonScalar === 'array' && normSchema) {
+      if (validateQueryArray(param, normSchema, lk, findings)) unverified = true
+      continue
+    }
+
+    // Scalar path. A repeated/composite value for a SCALAR param can't be coerced —
+    // fold to unverified (never fall through to coerce an absent `.value`).
+    if (lk.state === 'multi' || lk.state === 'array-values' || !types) {
+      unverified = true
       continue
     }
 
@@ -446,21 +585,20 @@ export function validateOpenApiRequest(
   }
 
   // Undocumented QUERY params (headers excluded — infra/trace headers saturate
-  // captures). A declared-but-skipped param is still DECLARED (its name is in
-  // `params`), so it is never flagged here (H3).
-  if (req.query) {
-    const declaredQuery = new Set(
-      params.filter((p) => p.in === 'query' && typeof p.name === 'string').map((p) => p.name),
-    )
+  // captures). Suppressed entirely when an object query param shares the top-level
+  // namespace (or an unresolved $ref param might). A deepObject's `name[prop]` keys
+  // are excluded (bracket namespace), and a declared-but-skipped param is still
+  // DECLARED (its name is in `declaredQuery`), so neither is flagged.
+  if (req.query && !suppressUndoc) {
     for (const key of Object.keys(req.query)) {
-      if (!declaredQuery.has(key)) {
-        findings.push({
-          kind: 'undocumented-param',
-          severity: 'warning',
-          path: key,
-          message: `undocumented query parameter '${key}' for ${method.toUpperCase()} ${template}`,
-        })
-      }
+      if (declaredQuery.has(key)) continue
+      if (deepObjectPrefixes.some((p) => key.startsWith(p))) continue
+      findings.push({
+        kind: 'undocumented-param',
+        severity: 'warning',
+        path: key,
+        message: `undocumented query parameter '${key}' for ${method.toUpperCase()} ${template}`,
+      })
     }
   }
 
