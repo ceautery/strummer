@@ -20,6 +20,7 @@
  * RubyGems=Gem), so the caller passes the matching comparator; it defaults to semver (npm).
  */
 
+import { QUALITATIVE_RANK, type QualitativeSeverity } from '@strummer/severity'
 import { semverComparator, type VersionComparator } from './comparator.js'
 import { cvssV3BaseScore } from './cvss.js'
 
@@ -63,8 +64,14 @@ export interface OsvAdvisory {
   database_specific?: { severity?: string }
 }
 
-/** A fixed, bucketed severity scale so output is stable across snapshots and source schemas. */
-export type SeverityBucket = 'critical' | 'high' | 'moderate' | 'low' | 'unknown'
+/**
+ * A fixed, bucketed severity scale so output is stable across snapshots and source
+ * schemas. Built on the shared `@strummer/severity` qualitative base: the four common
+ * buckets plus deps' own `'unknown'` (severity indeterminable). `'unknown'` is
+ * DELIBERATELY distinct from the verdict scale's `'none'` — it maps to a `no-signal`
+ * pillar, never to `low`/`none` (the absence-is-never-a-pass invariant).
+ */
+export type SeverityBucket = QualitativeSeverity | 'unknown'
 
 export interface VulnerabilityMatch {
   id: string
@@ -102,11 +109,10 @@ function severityFromScore(score: number): SeverityBucket {
   return 'unknown'
 }
 
-const BUCKET_RANK: Record<SeverityBucket, number> = {
-  critical: 4,
-  high: 3,
-  moderate: 2,
-  low: 1,
+/** Ordinal rank; higher = worse. Derived from the shared base so the four common
+ * buckets can't drift from the verdict scale, with `unknown` as the zero sentinel. */
+export const BUCKET_RANK: Record<SeverityBucket, number> = {
+  ...QUALITATIVE_RANK,
   unknown: 0,
 }
 

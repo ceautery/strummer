@@ -5,7 +5,22 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Milestone 5f (verify driving the @strummer/api RUNNER to PRODUCE the HAR — the second produce source after 5e's browser) LANDED in full — all 9 slices, design = ADR 0013 Addendum 4 (forged via the `verify-api-capture-5f-design` fan-out: 4 research streams → synthesis → 3 adversarial critics → corrected design; human ratified both open forks); 1160 TS + 45 Py green, HEAD pushed to main. Next: pivot to a new phase, or the older staged tails (request-body/param contract validation; extract the shared `Severity` scale out of deps; artifact GC/TTL; the Python second half).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: the `@strummer/severity` extraction tail LANDED — the shared qualitative severity scale lifted out of deps into its own pure zero-dep leaf (behavior-preserving); 1164 TS + 45 Py green. Next: pivot to a new phase, or the remaining older staged tails (request-body/param contract validation; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**TAIL — `@strummer/severity` extraction — COMPLETE** (2026-06-04, behavior-preserving, gate green at
+1164 TS + 45 Py; the human ratified the "unify the qualitative base" depth fork). A new pure ZERO-dependency
+leaf `@strummer/severity` (mirrors `@strummer/diff`/`assert`/`artifacts`) owns the shared severity vocabulary:
+`QualitativeSeverity` ('critical'|'high'|'moderate'|'low') + `QUALITATIVE_RANK` (single source of truth) + the
+verdict scale `Severity` (= `QualitativeSeverity | 'none'`) + `SEVERITY_RANK` (DERIVED from `QUALITATIVE_RANK`,
+not re-typed, so the common buckets can't drift) + `maxSeverity`/`atLeast`. **`@strummer/verdict`'s
+`severity.ts` is now a thin re-export shim** — its public surface AND every internal `./severity.js` import are
+unchanged (verdict suite = the regression guard); verdict gains exactly ONE runtime workspace import (the pure
+leaf — no heavy dep dragged in; the tsdown comment updated to say so). **`@strummer/deps` builds `SeverityBucket`
+(= `QualitativeSeverity | 'unknown'`) + `BUCKET_RANK` (= `{...QUALITATIVE_RANK, unknown:0}`) on the same base**,
+and `audit.ts` now imports `BUCKET_RANK` from `osv.ts` (killed the byte-identical duplicate rank map that lived
+in both osv.ts and audit.ts). **The load-bearing `none` ≠ `unknown` distinction is PRESERVED** — deps' `'unknown'`
+stays a deliberately separate member that maps to a `no-signal` pillar, never to `none`/`low`
+(absence-is-never-a-pass). New `@strummer/severity` alias in `vitest.config.ts`; runtime dep of verdict + deps. 4
+new severity tests (incl. a no-drift lock: `SEVERITY_RANK`'s qualitative entries === `QUALITATIVE_RANK`)._
 _**MILESTONE 5f — verify-driven API-RUNNER capture — COMPLETE** (2026-06-04, all TDD red→green; design =
 ADR 0013 Addendum 4, the `verify-api-capture-5f-design` fan-out; human ratified 2 forks: ADD
 `STRUMMER_API_COLLECTIONS_DIR`, and the DEEPER `@strummer/verdict` fix). Adds a SECOND verify-driven

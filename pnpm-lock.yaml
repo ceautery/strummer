@@ -207,6 +207,9 @@ importers:
       '@strummer/diff':
         specifier: workspace:*
         version: link:../diff
+      '@strummer/severity':
+        specifier: workspace:*
+        version: link:../severity
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -314,7 +317,13 @@ importers:
         specifier: ^2.2.0
         version: 2.4.0
 
+  packages/severity: {}
+
   packages/verdict:
+    dependencies:
+      '@strummer/severity':
+        specifier: workspace:*
+        version: link:../severity
     devDependencies:
       '@strummer/api':
         specifier: workspace:*

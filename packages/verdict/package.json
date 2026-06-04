@@ -18,6 +18,9 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@strummer/severity": "workspace:*"
+  },
   "devDependencies": {
     "@strummer/api": "workspace:*",
     "@strummer/coverage": "workspace:*",

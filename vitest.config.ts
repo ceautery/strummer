@@ -24,6 +24,9 @@ export default defineConfig({
         new URL('./packages/browser/src/index.ts', import.meta.url),
       ),
       '@strummer/safety': fileURLToPath(new URL('./packages/safety/src/index.ts', import.meta.url)),
+      '@strummer/severity': fileURLToPath(
+        new URL('./packages/severity/src/index.ts', import.meta.url),
+      ),
       '@strummer/verdict': fileURLToPath(
         new URL('./packages/verdict/src/index.ts', import.meta.url),
       ),

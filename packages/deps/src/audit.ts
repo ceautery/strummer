@@ -13,6 +13,7 @@
 import { semverComparator, type VersionComparator } from './comparator.js'
 import { auditDeprecation, type DeprecationVerdict, type Packument } from './deprecation.js'
 import {
+  BUCKET_RANK,
   matchVulnerabilities,
   type OsvAdvisory,
   type SeverityBucket,
@@ -88,14 +89,6 @@ export interface AuditDependencyInput {
   snapshotDate?: string
   /** Version algebra for this ecosystem (ADR 0012); defaults to semver (npm). */
   comparator?: VersionComparator
-}
-
-const SEVERITY_RANK: Record<SeverityBucket, number> = {
-  critical: 4,
-  high: 3,
-  moderate: 2,
-  low: 1,
-  unknown: 0,
 }
 
 /** Stable (non-prerelease), valid version strings present in the packument. */
@@ -195,7 +188,7 @@ function lowestSafeVersion(
 function worstOf(vulnerabilities: VulnerabilityMatch[]): SeverityBucket | 'none' {
   if (vulnerabilities.length === 0) return 'none'
   return vulnerabilities.reduce<SeverityBucket>(
-    (worst, v) => (SEVERITY_RANK[v.severity] > SEVERITY_RANK[worst] ? v.severity : worst),
+    (worst, v) => (BUCKET_RANK[v.severity] > BUCKET_RANK[worst] ? v.severity : worst),
     'unknown',
   )
 }

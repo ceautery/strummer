@@ -118,7 +118,12 @@ vision and `ARCHITECTURE.md` for the technical design.
   pure, ZERO-dependency `parseUnifiedDiff` (per-file new-side added lines) + `changedFiles`
   (all non-deleted touched paths, the scope primitive); extracted out of `coverage` the moment
   a 2nd consumer appeared, mirroring safety/assert/artifacts — its zero deps are what let
-  `verify` consume it without dragging in spawn code), `deps` (Phase-4 dependency/version
+  `verify` consume it without dragging in spawn code), `severity` (the shared, pure
+  ZERO-dependency severity scale — `QualitativeSeverity`/`QUALITATIVE_RANK` + the verdict
+  scale `Severity`(=`|'none'`)/`SEVERITY_RANK`/`maxSeverity`/`atLeast`; extracted out of
+  `deps` so `verdict` (a re-export shim) and `deps` (`SeverityBucket`=`|'unknown'`,
+  `BUCKET_RANK`=`{...QUALITATIVE_RANK,unknown:0}`) build on ONE base — the load-bearing
+  `none`≠`unknown` distinction kept, deps' `unknown`→no-signal pillar), `deps` (Phase-4 dependency/version
   intelligence: deprecation/vuln/freshness for the *installed* version; pure offline
   core + on-disk OSV snapshot + `audit_dependency`/`audit_project` MCP surface; plus the
   Phase-5d pure `changedDependencies(diff, ecosystem)` block-aware npm manifest diff over `diff`),

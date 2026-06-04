@@ -1033,11 +1033,23 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       `STRUMMER_API_COLLECTIONS_DIR` → `strummer verify run --request`. Invariants held (compose-never-widen,
       absence-never-a-pass, redaction before the verdict, no real fetch in `pnpm gate`, core `.mjs`
       untouched).
-- [ ] *(staged, not amputated)* the older tails: request-body/param contract validation; extracting the
-      shared `Severity` scale out of deps; artifact GC/TTL/refcounting; the Python second half (pytest /
-      coverage.py / pyright capture); `changedDependencies` for PyPI/Gem lockfiles; deps `changelog_diff`
-      for PyPI/RubyGems; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + the full
-      toolchain cross-version matrix.
+- [x] **Tail — extract the shared `Severity` scale into `@strummer/severity`: COMPLETE** (1164 TS + 45 Py
+      green; behavior-preserving). A new pure ZERO-dependency leaf (mirrors `@strummer/diff`/`assert`/
+      `artifacts`) owning the qualitative vocabulary: `QualitativeSeverity` ('critical'|'high'|'moderate'|
+      'low') + `QUALITATIVE_RANK` (the single source of truth) + the verdict scale `Severity` (=
+      `QualitativeSeverity | 'none'`) + `SEVERITY_RANK` (derived from `QUALITATIVE_RANK`, never re-typed) +
+      `maxSeverity`/`atLeast`. `@strummer/verdict`'s `severity.ts` is now a thin re-export shim (public
+      surface + internal `./severity.js` imports unchanged); `@strummer/deps` builds `SeverityBucket` (=
+      `QualitativeSeverity | 'unknown'`) + `BUCKET_RANK` (= `{...QUALITATIVE_RANK, unknown:0}`) on the same
+      base, and `audit.ts` now imports `BUCKET_RANK` from `osv.ts` (killed the byte-identical duplicate rank
+      map). **The load-bearing `none` ≠ `unknown` distinction is preserved** — deps' `'unknown'` stays a
+      separate member that maps to a `no-signal` pillar, never to `none`/`low` (absence-is-never-a-pass).
+      verdict gains one runtime workspace import (the pure leaf), dragging in no heavy deps. New
+      `@strummer/severity` alias in `vitest.config.ts`; runtime dep of verdict + deps.
+- [ ] *(staged, not amputated)* the older tails: request-body/param contract validation; artifact
+      GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture);
+      `changedDependencies` for PyPI/Gem lockfiles; deps `changelog_diff` for PyPI/RubyGems; a mutate
+      cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + the full toolchain cross-version matrix.
 
 ## Ongoing
 
