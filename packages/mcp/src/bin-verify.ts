@@ -220,6 +220,13 @@ export function buildVerifyServerFromEnv(
           const verdict = validateCapturedTraffic(har, buildCaptureContract(ctx), { redact })
           return { results: verdict.results, verdict }
         }
+        // PRODUCE-API: drive the @strummer/api runner. Wired in slice 8 behind the api
+        // gate + STRUMMER_API_COLLECTIONS_DIR; until then it is gate-not-set (never run).
+        if (ctx.mode === 'produce-api') {
+          throw gateDenied(
+            'api-runner capture is not enabled (needs STRUMMER_API_COLLECTIONS_DIR + the api gate)',
+          )
+        }
         // PRODUCE: drive a live browser capture. Gate-deny (⇒ gate-not-set) before any
         // spawn when the browser gate is unmet.
         if (!produceEnabled || !flowsDir) {

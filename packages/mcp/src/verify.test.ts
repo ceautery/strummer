@@ -177,6 +177,62 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
     expect(sc.status).toBe('fail')
   })
 
+  it('drives a PRODUCE-API capture (request/collection/vars) and folds the full verdict (5f slice 7)', async () => {
+    const contract = vi.fn(
+      async (ctx: { mode: string; request?: string; collection?: string; vars?: unknown }) => {
+        expect(ctx.mode).toBe('produce-api')
+        expect(ctx.request).toBe('create-widget')
+        expect(ctx.collection).toBe('widgets')
+        expect(ctx.vars).toEqual({ name: 'gizmo' })
+        // produce-api surfaces the FULL verdict facts (clean-aware) + the HAR handle
+        return {
+          results: [{ valid: true, findings: [] } as never],
+          verdict: {
+            results: [{ valid: true, findings: [] }],
+            clean: false,
+            noSignal: 1,
+            unresolvedBodies: 0,
+            entriesValidated: 1,
+          } as never,
+          harHandle: 'strummer://verify/api-7/har',
+          summary: { handle: 'strummer://verify/api-7/har', byteSize: 9, entryCount: 1 } as never,
+        }
+      },
+    )
+    const c = await connect({ runDriving: { contract } })
+    const res = await c.callTool({
+      name: 'verify_change',
+      arguments: {
+        projectRoot: '/repo',
+        contract: { request: 'create-widget', collection: 'widgets', vars: { name: 'gizmo' } },
+      },
+    })
+    const sc = res.structuredContent as {
+      status: string
+      pillars: { pillar: string; status: string }[]
+      capture?: { harHandle: string }
+    }
+    expect(contract).toHaveBeenCalledOnce()
+    // clean===false ⇒ contract is no-signal (NOT pass), so the run is inconclusive (5f).
+    expect(sc.pillars.find((p) => p.pillar === 'contract')?.status).toBe('no-signal')
+    expect(sc.status).toBe('inconclusive')
+    expect(sc.capture?.harHandle).toBe('strummer://verify/api-7/har')
+  })
+
+  it('rejects a contract input with more than one target (request + harHandle)', async () => {
+    const contract = vi.fn(async () => ({ results: [] }))
+    const c = await connect({ runDriving: { contract } })
+    const res = await c.callTool({
+      name: 'verify_change',
+      arguments: {
+        projectRoot: '/repo',
+        contract: { request: 'r', harHandle: 'strummer://browser/run/x/har' },
+      },
+    })
+    expect(res.isError).toBe(true)
+    expect(contract).not.toHaveBeenCalled()
+  })
+
   it('drives a PRODUCE capture (flow/vars) and SURFACES the stored HAR handle (5e slice 7)', async () => {
     const contract = vi.fn(async (ctx: { mode: string; flow?: string; vars?: unknown }) => {
       expect(ctx.mode).toBe('produce')

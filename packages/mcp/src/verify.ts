@@ -50,9 +50,26 @@ export interface ContractProduceContext extends ContractInputs {
   vars?: Record<string, string>
 }
 
+/** PRODUCE-API mode (5f): verify DRIVES the `@strummer/api` runner for an operator-authored
+ * request (by NAME), synthesizes its HAR, and validates it. The agent supplies only the
+ * target — a `request` name (+ optional `collection` name, resolved server-side under the
+ * operator's `STRUMMER_API_COLLECTIONS_DIR`, never a path) + non-secret `vars`; the api
+ * pillar's own gate (allowUnsafe/allowedHosts/SSRF) stays operator-set ("compose, never widen"). */
+export interface ContractProduceApiContext extends ContractInputs {
+  mode: 'produce-api'
+  request: string
+  /** Collection NAME (a direct child of the operator collections dir); omitted ⇒ the dir itself. */
+  collection?: string
+  vars?: Record<string, string>
+}
+
 /** The agent-supplied capture inputs for the contract sub-verdict — consume a stored HAR
- * (5a/5b) or drive a live browser capture (5e). Discriminated by `mode`. */
-export type ContractCaptureContext = ContractConsumeContext | ContractProduceContext
+ * (5a/5b), drive a live browser capture (5e), or drive the api runner (5f). Discriminated
+ * by `mode` / which target the agent supplied. */
+export type ContractCaptureContext =
+  | ContractConsumeContext
+  | ContractProduceContext
+  | ContractProduceApiContext
 
 /**
  * The operator-wired, ALREADY-GATED pillar runners for the run-driving `verify_change`
@@ -224,20 +241,32 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
                 .string()
                 .optional()
                 .describe(
-                  'PRODUCE: an operator-authored flow NAME to DRIVE + capture, then validate',
+                  'PRODUCE: an operator-authored flow NAME to DRIVE + capture (browser), then validate',
+                ),
+              request: z
+                .string()
+                .optional()
+                .describe(
+                  'PRODUCE-API: an operator-authored request NAME to DRIVE via the api runner, then validate',
+                ),
+              collection: z
+                .string()
+                .optional()
+                .describe(
+                  'PRODUCE-API: collection NAME under the operator collections dir (no path); omitted ⇒ the dir itself',
                 ),
               vars: z
                 .record(z.string(), z.string())
                 .optional()
-                .describe('non-secret vars for the driven flow (PRODUCE mode)'),
+                .describe('non-secret vars for the driven flow/request (PRODUCE modes)'),
               openapiSpec: z.unknown().optional(),
               graphqlSchema: z.string().optional(),
               graphqlEndpoint: z.string().optional(),
             })
             .optional()
             .describe(
-              'capture→contract inputs behind the capture gate: supply EITHER `harHandle` ' +
-                '(consume a stored HAR) OR `flow` (verify drives a live browser capture).',
+              'capture→contract inputs behind the capture gate: supply EXACTLY ONE of `harHandle` ' +
+                '(consume a stored HAR), `flow` (drive a browser capture), or `request` (drive the api runner).',
             ),
           failAtOrAbove: z
             .enum(SEVERITIES)
@@ -285,14 +314,28 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
             graphqlSchema: a.graphqlSchema,
             graphqlEndpoint: a.graphqlEndpoint,
           }
-          // Discriminated by which target the agent supplied: a `flow` to DRIVE (produce)
-          // or a stored `harHandle` to validate (consume). Exactly one is required.
-          let cc: ContractCaptureContext | undefined
-          if (a.flow !== undefined) cc = { mode: 'produce', flow: a.flow, vars: a.vars, ...inputs }
-          else if (a.harHandle !== undefined)
-            cc = { mode: 'consume', harHandle: a.harHandle, ...inputs }
-          if (cc === undefined) {
-            throw new Error('contract needs either `harHandle` (consume) or `flow` (produce)')
+          // Discriminated by which target the agent supplied: a `request` to DRIVE via the
+          // api runner (produce-api), a `flow` to DRIVE via the browser (produce), or a stored
+          // `harHandle` to validate (consume). EXACTLY ONE is required.
+          const targets = [a.request, a.flow, a.harHandle].filter((t) => t !== undefined)
+          if (targets.length !== 1) {
+            throw new Error(
+              'contract needs EXACTLY ONE of `request` (produce-api), `flow` (produce), or `harHandle` (consume)',
+            )
+          }
+          let cc: ContractCaptureContext
+          if (a.request !== undefined) {
+            cc = {
+              mode: 'produce-api',
+              request: a.request,
+              collection: a.collection,
+              vars: a.vars,
+              ...inputs,
+            }
+          } else if (a.flow !== undefined) {
+            cc = { mode: 'produce', flow: a.flow, vars: a.vars, ...inputs }
+          } else {
+            cc = { mode: 'consume', harHandle: a.harHandle as string, ...inputs }
           }
           const ccx = cc
           const crun = rd.contract
