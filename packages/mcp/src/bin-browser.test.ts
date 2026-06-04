@@ -2,7 +2,11 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { type BuiltBrowserServer, buildBrowserServerFromEnv } from './bin-browser.js'
+import {
+  type BuiltBrowserServer,
+  buildBrowserRuntimeFromEnv,
+  buildBrowserServerFromEnv,
+} from './bin-browser.js'
 
 describe('strummer-browser-mcp bin config (operator env)', () => {
   const built: BuiltBrowserServer[] = []
@@ -18,6 +22,25 @@ describe('strummer-browser-mcp bin config (operator env)', () => {
 
   afterEach(async () => {
     for (const b of built.splice(0)) await b.shutdown()
+  })
+
+  it('buildBrowserRuntimeFromEnv exposes the egress-safe runtime (proxy started + gate + manager) for reuse', async () => {
+    // The single-source egress wiring the 5e verify-driven capture reuses (ADR 0013
+    // Addendum 3): the proxy is STARTED, the gate is built, and the manager + config carry
+    // the hardening launch args — so the verify path can't re-implement and omit one.
+    const rt = await buildBrowserRuntimeFromEnv({
+      STRUMMER_BROWSER_ARTIFACTS_DIR: mkdtempSync(join(tmpdir(), 'strummer-rt-')),
+      STRUMMER_BROWSER_ALLOWED_HOSTS: 'app.test',
+    })
+    try {
+      expect(rt.proxy.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+      expect(rt.gate.isHostAllowed('https://app.test/x')).toBe(true)
+      expect(rt.gate.isHostAllowed('https://evil.test/x')).toBe(false)
+      expect(rt.manager).toBeDefined()
+      expect(rt.config.launchArgs).toContain('--proxy-bypass-list=<-loopback>')
+    } finally {
+      await rt.shutdown()
+    }
   })
 
   it('reads namespaced STRUMMER_BROWSER_* safety env, with NO fallback to the api vars', async () => {

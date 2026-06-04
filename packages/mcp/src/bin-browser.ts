@@ -110,14 +110,35 @@ export interface BuiltBrowserServer {
 }
 
 /**
- * Build (but do not connect/serve) the browser MCP server from operator env.
- * Exported so the wiring — namespaced safety env, the mandatory proxy, the
- * loopback-bypass launch arg, capture defaults — is unit-testable without
- * launching Chromium or attaching a transport.
+ * The egress-safe browser RUNTIME built from operator env — the manager, the gate, the
+ * STARTED DNS-pinning proxy (threaded into the launch spec + the chromium hardening args),
+ * the operator redactor/secret map, the artifact store, and a `shutdown`. This is the ONE
+ * place that wires the three interlocking egress mechanisms (proxy `proxyServer` +
+ * `--proxy-bypass-list`/WebRTC args + the `BrowserGate` installed on the manager); a caller
+ * that re-implemented them could silently omit one and open an SSRF bypass (ADR 0013
+ * Addendum 3, critic-mandated single-source). Consumed by BOTH `buildBrowserServerFromEnv`
+ * (the standalone bin) AND the verify-driven live-capture path (5e) — the latter
+ * lazy-imports this module so the playwright cold-start stays off everyone else's path.
  */
-export async function buildBrowserServerFromEnv(
+export interface BrowserRuntime {
+  manager: BrowserManager
+  gate: BrowserGate
+  proxy: SsrfProxy
+  store: ArtifactStore
+  engine: BrowserEngine
+  /** The operator redactor (so a consumer can register MORE secrets — the 5e union). */
+  redactor: Redactor
+  redact: (value: string) => string
+  resolveSecret: (name: string) => string | undefined
+  runPerfAudit: (url: string, runId: string) => ReturnType<typeof auditPerf>
+  config: BrowserBinConfig
+  /** Tear down the manager (and browser) then close the proxy. */
+  shutdown: () => Promise<void>
+}
+
+export async function buildBrowserRuntimeFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-): Promise<BuiltBrowserServer> {
+): Promise<BrowserRuntime> {
   // Secrets: STRUMMER_BROWSER_SECRET_<NAME>=value — register NAME→value; values
   // are never logged or surfaced (only the NAME appears anywhere).
   const redactor = new Redactor()
@@ -270,28 +291,6 @@ export async function buildBrowserServerFromEnv(
     videoDir,
     videoSize,
   })
-  const server = createBrowserServer({
-    manager,
-    gate,
-    artifacts: store,
-    redact,
-    resolveSecret,
-    allowStorageState,
-    allowScreenshots,
-    allowVision,
-    downloadDir,
-    uploadDir,
-    harDir,
-    replayDir,
-    flowsDir,
-    videoDir,
-    baselineDir,
-    allowBaselineUpdate,
-    runPerfAudit,
-    capture,
-    maxNodes,
-  })
-
   const config: BrowserBinConfig = {
     allowUnsafe,
     allowedHosts,
@@ -335,7 +334,63 @@ export async function buildBrowserServerFromEnv(
     await manager.shutdown()
     await proxy.close()
   }
-  return { server, manager, proxy, config, resolveSecret, redact, shutdown }
+  return {
+    manager,
+    gate,
+    proxy,
+    store,
+    engine,
+    redactor,
+    redact,
+    resolveSecret,
+    runPerfAudit,
+    config,
+    shutdown,
+  }
+}
+
+/**
+ * Build (but do not connect/serve) the browser MCP server from operator env. A thin
+ * wrapper over {@link buildBrowserRuntimeFromEnv} (the egress-safe runtime) that adds the
+ * MCP tool surface. Exported so the wiring — namespaced safety env, the mandatory proxy,
+ * the loopback-bypass launch arg, capture defaults — is unit-testable without launching
+ * Chromium or attaching a transport.
+ */
+export async function buildBrowserServerFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<BuiltBrowserServer> {
+  const rt = await buildBrowserRuntimeFromEnv(env)
+  const { config } = rt
+  const server = createBrowserServer({
+    manager: rt.manager,
+    gate: rt.gate,
+    artifacts: rt.store,
+    redact: rt.redact,
+    resolveSecret: rt.resolveSecret,
+    allowStorageState: config.allowStorageState,
+    allowScreenshots: config.allowScreenshots,
+    allowVision: config.allowVision,
+    downloadDir: config.downloadDir,
+    uploadDir: config.uploadDir,
+    harDir: config.harDir,
+    replayDir: config.replayDir,
+    flowsDir: config.flowsDir,
+    videoDir: config.videoDir,
+    baselineDir: config.baselineDir,
+    allowBaselineUpdate: config.allowBaselineUpdate,
+    runPerfAudit: rt.runPerfAudit,
+    capture: config.capture,
+    maxNodes: config.maxNodes,
+  })
+  return {
+    server,
+    manager: rt.manager,
+    proxy: rt.proxy,
+    config,
+    resolveSecret: rt.resolveSecret,
+    redact: rt.redact,
+    shutdown: rt.shutdown,
+  }
 }
 
 // Run as a server only when invoked directly (not when imported by a test).
