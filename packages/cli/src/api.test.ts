@@ -430,3 +430,131 @@ describe('cli api validate-capture', () => {
     expect(c.out()).toContain('graphql-validation')
   })
 })
+
+describe('cli api validate-request', () => {
+  const SPEC = {
+    openapi: '3.1.0',
+    paths: {
+      '/widgets': {
+        post: {
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['name'],
+                  properties: { name: { type: 'string' } },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: { '201': { description: 'created' } },
+        },
+      },
+      '/search': {
+        get: {
+          parameters: [{ name: 'q', in: 'query', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'ok' } },
+        },
+      },
+    },
+  }
+
+  function specFile(): string {
+    const d = mkdtempSync(join(tmpdir(), 'strummer-vreq-'))
+    const specPath = join(d, 'openapi.json')
+    writeFileSync(specPath, JSON.stringify(SPEC))
+    return specPath
+  }
+
+  it('exits 0 on a valid request body', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'strummer-vreq-'))
+    const specPath = join(d, 'openapi.json')
+    writeFileSync(specPath, JSON.stringify(SPEC))
+    const bodyPath = join(d, 'body.json')
+    writeFileSync(bodyPath, JSON.stringify({ name: 'gizmo' }))
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'validate-request',
+        '--openapi',
+        specPath,
+        '--method',
+        'POST',
+        '--path',
+        '/widgets',
+        '--body',
+        bodyPath,
+      ],
+      c.io,
+    )
+    expect(code).toBe(0)
+    expect(c.out()).toContain('valid: true')
+  })
+
+  it('exits 1 on a request-body schema violation', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'strummer-vreq-'))
+    const specPath = join(d, 'openapi.json')
+    writeFileSync(specPath, JSON.stringify(SPEC))
+    const bodyPath = join(d, 'body.json')
+    writeFileSync(bodyPath, JSON.stringify({ wrong: 1 }))
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'validate-request',
+        '--openapi',
+        specPath,
+        '--method',
+        'POST',
+        '--path',
+        '/widgets',
+        '--body',
+        bodyPath,
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out()).toContain('request-body-schema')
+  })
+
+  it('validates query params (missing required q ⇒ exit 1, present ⇒ exit 0)', async () => {
+    const specPath = specFile()
+    const miss = capture()
+    expect(
+      await run(
+        ['api', 'validate-request', '--openapi', specPath, '--method', 'GET', '--path', '/search'],
+        miss.io,
+      ),
+    ).toBe(1)
+    expect(miss.out()).toContain('missing-required-param')
+
+    const ok = capture()
+    expect(
+      await run(
+        [
+          'api',
+          'validate-request',
+          '--openapi',
+          specPath,
+          '--method',
+          'GET',
+          '--path',
+          '/search',
+          '--query',
+          'q=hello',
+        ],
+        ok.io,
+      ),
+    ).toBe(0)
+  })
+
+  it('needs --openapi/--method/--path', async () => {
+    const c = capture()
+    expect(await run(['api', 'validate-request'], c.io)).toBe(1)
+    expect(c.err()).toContain('validate-request')
+  })
+})

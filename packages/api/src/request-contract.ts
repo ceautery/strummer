@@ -55,6 +55,15 @@ export interface RequestValidationResult extends ContractResult {
   unverified?: boolean
 }
 
+/** True when a parsed body looks like a GraphQL-over-HTTP envelope (`{query: string,
+ * …}`). A direct surface uses this to refuse running OpenAPI body validation on a
+ * GraphQL request (which has no REST requestBody shape) — H4. */
+export function isGraphqlEnvelope(body: unknown): boolean {
+  return (
+    !!body && typeof body === 'object' && typeof (body as { query?: unknown }).query === 'string'
+  )
+}
+
 /** Lower-cased media-type base (sans parameters), e.g. `application/json`. */
 function mediaBase(ct: string): string {
   return (ct.split(';')[0] ?? '').trim().toLowerCase()

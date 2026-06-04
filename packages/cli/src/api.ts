@@ -6,6 +6,7 @@ import {
   type ContractResult,
   type ImportFormat,
   importToCollection,
+  isGraphqlEnvelope,
   loadCollection,
   resolveSecretStore,
   runRequest,
@@ -13,6 +14,7 @@ import {
   type SecretStore,
   validateCapturedTraffic,
   validateGraphqlOperation,
+  validateOpenApiRequest,
   validateOpenApiResponse,
 } from '@strummer/api'
 import type { CliIO } from './index.js'
@@ -64,6 +66,8 @@ export async function runApi(args: string[], io: CliIO): Promise<number> {
       return cmdRunCollection(rest, io)
     case 'validate':
       return cmdValidate(rest, io)
+    case 'validate-request':
+      return cmdValidateRequest(rest, io)
     case 'validate-capture':
       return cmdValidateCapture(rest, io)
     case 'import':
@@ -357,6 +361,83 @@ function cmdValidate(args: string[], io: CliIO): number {
   const sdl = readFileSync(values.graphql, 'utf8')
   const query = readFileSync(values.query, 'utf8')
   const contract = validateGraphqlOperation(sdl, query, { operationName: values.operation })
+
+  if (values.json) {
+    io.out(`${JSON.stringify(contract, null, 2)}\n`)
+    return contract.valid ? 0 : 1
+  }
+  io.out(`valid: ${contract.valid}\n`)
+  for (const f of contract.findings) {
+    io.out(`  ${f.severity.toUpperCase()} ${f.kind}: ${f.message}${f.path ? ` (${f.path})` : ''}\n`)
+  }
+  return contract.valid ? 0 : 1
+}
+
+/**
+ * `api validate-request --openapi <spec.json> --method <M> --path </p> [--body <file>]
+ * [--query k=v]…` — a preflight: validate a request's body + params against an OpenAPI
+ * operation BEFORE sending it. The human supplies the real request, so body presence
+ * and params are authoritative. (A GraphQL envelope is refused, not schema-failed.)
+ */
+function cmdValidateRequest(args: string[], io: CliIO): number {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      openapi: { type: 'string' },
+      method: { type: 'string' },
+      path: { type: 'string' },
+      body: { type: 'string' },
+      query: { type: 'string', multiple: true },
+      header: { type: 'string', multiple: true },
+      json: { type: 'boolean' },
+    },
+  })
+  if (!values.openapi || !values.method || !values.path) {
+    io.err('api validate-request needs --openapi <spec.json> --method <M> --path </p>\n')
+    return 1
+  }
+  const spec = JSON.parse(readFileSync(values.openapi, 'utf8'))
+  const body = values.body !== undefined ? JSON.parse(readFileSync(values.body, 'utf8')) : undefined
+  if (isGraphqlEnvelope(body)) {
+    io.err(
+      'the request body is a GraphQL envelope ({query}); use `api validate --graphql` instead\n',
+    )
+    return 1
+  }
+  // `--query name=value` (repeatable; repeated names collect into an array).
+  const query: Record<string, string | string[]> = {}
+  for (const kv of values.query ?? []) {
+    const eq = kv.indexOf('=')
+    if (eq < 0) continue
+    const k = kv.slice(0, eq)
+    const v = kv.slice(eq + 1)
+    const cur = query[k]
+    query[k] = cur === undefined ? v : Array.isArray(cur) ? [...cur, v] : [cur, v]
+  }
+  // `--header name:value` (repeatable), lower-cased.
+  const headers: Record<string, string> = {}
+  for (const hv of values.header ?? []) {
+    const c = hv.indexOf(':')
+    if (c < 0) continue
+    headers[hv.slice(0, c).trim().toLowerCase()] = hv.slice(c + 1).trim()
+  }
+
+  const contract = validateOpenApiRequest(
+    spec,
+    {
+      method: values.method,
+      path: values.path,
+      body,
+      ...(Object.keys(query).length > 0 ? { query } : {}),
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    },
+    {
+      baseDir: dirname(values.openapi),
+      bodyPresenceAuthoritative: true,
+      paramsAuthoritative: true,
+    },
+  )
 
   if (values.json) {
     io.out(`${JSON.stringify(contract, null, 2)}\n`)

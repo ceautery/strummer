@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
   ArtifactStore,
+  isGraphqlEnvelope,
   loadCollection,
   type RequestEntry,
   runRequest,
@@ -9,6 +10,7 @@ import {
   type SecretStore,
   validateCapturedTraffic,
   validateGraphqlOperation,
+  validateOpenApiRequest,
   validateOpenApiResponse,
 } from '@strummer/api'
 import { z } from 'zod'
@@ -277,6 +279,66 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
       return { content: [text(result)], structuredContent: { ...result } }
     },
   )
+
+  // validate_request — the REQUEST half of contract validation (sibling of
+  // validate_response). A DIRECT surface: the caller holds the real request, so body
+  // presence + params are authoritative. Findings (message AND path) are redacted via
+  // the operator redactor when wired. A GraphQL envelope is refused (H4), not failed.
+  {
+    const redact = opts.verifyRedact ?? ((v: string) => v)
+    server.registerTool(
+      'validate_request',
+      {
+        title: 'Validate a request against an OpenAPI contract',
+        description:
+          'Validate a request (body + path/query/header params) against an OpenAPI 3.1 operation. ' +
+          'Body presence and params are treated as authoritative (this surface holds the real request). ' +
+          'Returns structured ContractFindings; a GraphQL request envelope is refused, not schema-failed.',
+        inputSchema: {
+          openapiSpec: z.unknown().describe('a parsed OpenAPI 3.1 document'),
+          method: z.string().describe('HTTP method for the operation'),
+          path: z.string().describe('request path (pathname) for the operation'),
+          body: z.unknown().optional().describe('parsed request body to validate'),
+          query: z
+            .record(z.string(), z.union([z.string(), z.array(z.string())]))
+            .optional()
+            .describe('decoded query parameters'),
+          headers: z
+            .record(z.string(), z.string())
+            .optional()
+            .describe('lower-cased request header names → value'),
+        },
+      },
+      (args) => {
+        if (isGraphqlEnvelope(args.body)) {
+          throw new Error(
+            'The request body is a GraphQL envelope ({query}); use a GraphQL schema with validate_response, not OpenAPI request validation.',
+          )
+        }
+        const raw = validateOpenApiRequest(
+          args.openapiSpec as Parameters<typeof validateOpenApiRequest>[0],
+          {
+            method: args.method,
+            path: args.path,
+            body: args.body,
+            query: args.query as Record<string, string | string[]> | undefined,
+            headers: args.headers as Record<string, string> | undefined,
+          },
+          { bodyPresenceAuthoritative: true, paramsAuthoritative: true },
+        )
+        // Redact every finding message AND path (request bodies/params are secret-bearing).
+        const result = {
+          ...raw,
+          findings: raw.findings.map((f) => ({
+            ...f,
+            message: redact(f.message),
+            ...(f.path !== undefined ? { path: redact(f.path) } : {}),
+          })),
+        }
+        return { content: [text(result)], structuredContent: { ...result } }
+      },
+    )
+  }
 
   // validate_capture — the capture→contract bridge (ADR 0013 §3, milestone 5a).
   // Registered ONLY when the bin injected a HAR resolver (i.e. an artifacts root is

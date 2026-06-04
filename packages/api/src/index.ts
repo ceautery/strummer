@@ -69,6 +69,7 @@ export type {
 } from './model.js'
 export { type Prepared, type PreparedBody, prepareRequest } from './prepare.js'
 export {
+  isGraphqlEnvelope,
   type OpenApiRequestValidateOptions,
   type RequestFacts,
   type RequestValidationResult,

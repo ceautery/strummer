@@ -359,3 +359,109 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
     expect(res.isError).toBe(true)
   })
 })
+
+describe('validate_request — the request half of contract validation (sibling)', () => {
+  const SPEC = {
+    openapi: '3.1.0',
+    paths: {
+      '/widgets': {
+        post: {
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['name'],
+                  properties: { name: { type: 'string' } },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: { '201': { description: 'created' } },
+        },
+      },
+    },
+  }
+
+  async function connect(opts: ApiToolsOptions = {}): Promise<Client> {
+    const api = createApiServer(opts)
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    const c = new Client({ name: 'test', version: '0.0.0' })
+    await Promise.all([api.connect(st), c.connect(ct)])
+    return c
+  }
+
+  it('is always registered (a free, read-only direct surface)', async () => {
+    const c = await connect()
+    const names = (await c.listTools()).tools.map((t) => t.name)
+    expect(names).toContain('validate_request')
+  })
+
+  it('validates a good request body (authoritative)', async () => {
+    const c = await connect()
+    const res = await c.callTool({
+      name: 'validate_request',
+      arguments: { openapiSpec: SPEC, method: 'POST', path: '/widgets', body: { name: 'g' } },
+    })
+    expect((res.structuredContent as { valid: boolean }).valid).toBe(true)
+  })
+
+  it('flags a request body schema violation', async () => {
+    const c = await connect()
+    const res = await c.callTool({
+      name: 'validate_request',
+      arguments: { openapiSpec: SPEC, method: 'POST', path: '/widgets', body: { wrong: 1 } },
+    })
+    const sc = res.structuredContent as { valid: boolean; findings: { kind: string }[] }
+    expect(sc.valid).toBe(false)
+    expect(sc.findings.map((f) => f.kind)).toContain('request-body-schema')
+  })
+
+  it('refuses a GraphQL envelope rather than schema-failing it (H4)', async () => {
+    const c = await connect()
+    const res = await c.callTool({
+      name: 'validate_request',
+      arguments: {
+        openapiSpec: SPEC,
+        method: 'POST',
+        path: '/widgets',
+        body: { query: '{ widgets { id } }' },
+      },
+    })
+    expect(res.isError).toBe(true)
+  })
+
+  it('redacts a secret-bearing finding path AND message via the operator redactor', async () => {
+    const c = await connect({ verifyRedact: (s) => s.split('apikey').join('‹redacted›') })
+    const specKeys = {
+      openapi: '3.1.0',
+      paths: {
+        '/keys': {
+          post: {
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['apikey'],
+                    properties: { apikey: { type: 'string' } },
+                  },
+                },
+              },
+            },
+            responses: { '201': { description: 'created' } },
+          },
+        },
+      },
+    }
+    const res = await c.callTool({
+      name: 'validate_request',
+      arguments: { openapiSpec: specKeys, method: 'POST', path: '/keys', body: { apikey: 12345 } },
+    })
+    const inline = JSON.stringify(res.structuredContent)
+    expect(inline).not.toContain('apikey')
+  })
+})
