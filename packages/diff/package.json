@@ -1,5 +1,5 @@
 {
-  "name": "@strummer/coverage",
+  "name": "@strummer/diff",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,8 +17,5 @@
   "scripts": {
     "build": "tsdown src/index.ts --dts",
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@strummer/diff": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseUnifiedDiff } from './diff.js'
+import { changedFiles, parseUnifiedDiff } from './diff.js'
 
 /** Find the entry for a path (paths are returned sorted). */
 const lines = (out: { path: string; addedLines: number[] }[], path: string) =>
@@ -117,5 +117,72 @@ deleted file mode 100644
 +b
 `
     expect(parseUnifiedDiff(diff)).toEqual([{ path: 'z.ts', addedLines: [1, 2] }])
+  })
+})
+
+describe('changedFiles — the new-side paths a change touched (the scope primitive)', () => {
+  it('returns every touched file across a multi-file diff, deduped and sorted', () => {
+    const diff = `diff --git a/src/b.ts b/src/b.ts
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -1 +1,2 @@
+ a
++b
+diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -5,2 +5,2 @@
+ c
++d
+-e
+`
+    expect(changedFiles(diff)).toEqual(['src/a.ts', 'src/b.ts'])
+  })
+
+  it('includes a file modified by removals only (unlike parseUnifiedDiff)', () => {
+    const diff = `diff --git a/src/trim.ts b/src/trim.ts
+--- a/src/trim.ts
++++ b/src/trim.ts
+@@ -1,3 +1,2 @@
+ keep
+-drop
+ stay
+`
+    // No new-side lines gained, so parseUnifiedDiff omits it...
+    expect(parseUnifiedDiff(diff)).toEqual([])
+    // ...but it is still a changed file whose tests should re-run.
+    expect(changedFiles(diff)).toEqual(['src/trim.ts'])
+  })
+
+  it('includes a brand-new file and excludes a deleted file', () => {
+    const diff = `diff --git a/new.ts b/new.ts
+new file mode 100644
+--- /dev/null
++++ b/new.ts
+@@ -0,0 +1,2 @@
++one
++two
+diff --git a/gone.ts b/gone.ts
+deleted file mode 100644
+--- a/gone.ts
++++ /dev/null
+@@ -1,1 +0,0 @@
+-bye
+`
+    expect(changedFiles(diff)).toEqual(['new.ts'])
+  })
+
+  it('is not fooled by a hunk-body line beginning with "+++ "', () => {
+    const diff = `--- a/doc.md
++++ b/doc.md
+@@ -1,1 +1,2 @@
+ title
++++ not a header, just markdown
+`
+    expect(changedFiles(diff)).toEqual(['doc.md'])
+  })
+
+  it('returns [] for an empty diff', () => {
+    expect(changedFiles('')).toEqual([])
   })
 })

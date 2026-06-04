@@ -184,7 +184,11 @@ importers:
         specifier: ^7.7.1
         version: 7.7.1
 
-  packages/coverage: {}
+  packages/coverage:
+    dependencies:
+      '@strummer/diff':
+        specifier: workspace:*
+        version: link:../diff
 
   packages/deps:
     dependencies:
@@ -204,6 +208,8 @@ importers:
       '@types/semver':
         specifier: ^7.7.1
         version: 7.7.1
+
+  packages/diff: {}
 
   packages/embed:
     dependencies:

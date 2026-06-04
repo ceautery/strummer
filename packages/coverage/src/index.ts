@@ -1,10 +1,10 @@
+export { changedFiles, type DiffFile, parseUnifiedDiff } from '@strummer/diff'
 export {
   type CoveragePyFile,
   type CoveragePyReport,
   coveragePyToIstanbul,
   fileCoverageFromCoveragePy,
 } from './coveragepy.js'
-export { type DiffFile, parseUnifiedDiff } from './diff.js'
 export {
   type DiffCoverageFile,
   type DiffCoverageReport,

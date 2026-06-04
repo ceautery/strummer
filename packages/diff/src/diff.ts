@@ -1,12 +1,18 @@
 /**
- * Unified-diff parsing — the input half of the coverage pillar's forgotten-assertion
- * catch. Given a unified diff (`git diff` / `diff -u` output), extract the set of lines
- * each file *gained* on the new side, so {@link uncoveredNewLines} can be asked "of the
- * lines this change introduced, which executable ones were never hit by a test".
+ * Unified-diff parsing — the shared changed-set primitive. Given a unified diff
+ * (`git diff` / `diff -u` output), two pure derivations:
+ *
+ * - {@link parseUnifiedDiff} — the set of lines each file *gained* on the new side
+ *   (feeds the coverage pillar's forgotten-assertion catch: "of the lines this change
+ *   introduced, which executable ones were never hit by a test").
+ * - {@link changedFiles} — the set of non-deleted files a change touched (the scope
+ *   primitive: which tests to re-run, which files to mutate, which packages to audit).
  *
  * Pure and offline: producing the diff (shelling out to `git`) and matching its
- * repo-relative paths to the absolute keys in a `coverage-final.json` are bin-layer
- * concerns. Keeping the parse pure is what lets the green gate stay deterministic.
+ * repo-relative paths to absolute keys / package manifests are caller concerns.
+ * Keeping the parse pure is what lets every consuming gate stay deterministic — and
+ * what lets `@strummer/verify` runtime-import this without dragging in a pillar's
+ * spawn-capable code (this package has zero dependencies).
  *
  * The parser is a state machine that tracks each hunk's declared line counts (from its
  * `@@ -a,b +c,d @@` header) and ends the hunk exactly when those are consumed. That is
@@ -98,4 +104,60 @@ export function parseUnifiedDiff(diff: string): DiffFile[] {
   return [...added.entries()]
     .map(([path, set]) => ({ path, addedLines: [...set].sort((a, b) => a - b) }))
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+}
+
+/**
+ * The new-side paths a change touched, deduped and sorted — the scope primitive.
+ *
+ * Distinct from {@link parseUnifiedDiff}, which omits any file that did not *gain*
+ * a line: `changedFiles` also includes a file that was modified by removals only
+ * (its tests should still re-run). It excludes a deleted file (`+++ /dev/null`) —
+ * a gone file is not a test/mutation/audit target. New files are included.
+ *
+ * Uses the same hunk state machine so a body line beginning with `+++ ` is never
+ * mistaken for a file header.
+ */
+export function changedFiles(diff: string): string[] {
+  const files = new Set<string>()
+  let remainingOld = 0
+  let remainingNew = 0
+  const inHunk = () => remainingOld > 0 || remainingNew > 0
+
+  for (const rawLine of diff.split('\n')) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+
+    if (line.startsWith('diff --git')) {
+      remainingOld = 0
+      remainingNew = 0
+      continue
+    }
+    const hunk = HUNK.exec(line)
+    if (hunk) {
+      remainingOld = hunk[1] === undefined ? 1 : Number(hunk[1])
+      remainingNew = hunk[3] === undefined ? 1 : Number(hunk[3])
+      continue
+    }
+
+    if (inHunk()) {
+      const marker = line[0]
+      if (marker === '+') {
+        remainingNew--
+      } else if (marker === '-') {
+        remainingOld--
+      } else if (marker === '\\') {
+        // no-op
+      } else {
+        remainingNew--
+        remainingOld--
+      }
+      continue
+    }
+
+    if (line.startsWith('+++ ')) {
+      const path = cleanPath(line.slice(4))
+      if (path !== '/dev/null') files.add(path)
+    }
+  }
+
+  return [...files].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 }
