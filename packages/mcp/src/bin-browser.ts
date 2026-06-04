@@ -45,6 +45,52 @@ function num(v: string | undefined, dflt: number): number {
   return Number.isFinite(n) ? n : dflt
 }
 
+/** The operator redaction surface from `STRUMMER_BROWSER_*` env: registered secret values
+ * + origin-scoped HTTP Basic creds. Extracted (Fork 4) so it is the SINGLE source the
+ * browser bin AND the 5e verify-driven capture's union redactor both build from — no
+ * drift on which secrets register. Values never leave this function except via `redact`. */
+export function buildBrowserRedactorFromEnv(env: NodeJS.ProcessEnv = process.env): {
+  redactor: Redactor
+  redact: (value: string) => string
+  resolveSecret: (name: string) => string | undefined
+  secretNames: string[]
+  httpCredentials?: { username: string; password: string; origin?: string }
+} {
+  // STRUMMER_BROWSER_SECRET_<NAME>=value — register NAME→value; values are never logged
+  // or surfaced (only the NAME appears anywhere).
+  const redactor = new Redactor()
+  const secrets = new Map<string, string>()
+  for (const [key, value] of Object.entries(env)) {
+    const m = /^STRUMMER_BROWSER_SECRET_(.+)$/.exec(key)
+    if (m?.[1] && value) {
+      redactor.register(m[1], value)
+      secrets.set(m[1], value)
+    }
+  }
+  // Origin-scoped HTTP Basic auth (operator-set). Built only when BOTH username +
+  // password are present; the password is registered with the redactor so it never
+  // leaks via an artifact, and it never appears in the returned config.
+  const httpUsername = env.STRUMMER_BROWSER_HTTP_USERNAME
+  const httpPassword = env.STRUMMER_BROWSER_HTTP_PASSWORD
+  const httpOrigin = env.STRUMMER_BROWSER_HTTP_ORIGIN
+  let httpCredentials: { username: string; password: string; origin?: string } | undefined
+  if (httpUsername && httpPassword) {
+    redactor.register('http-credentials', httpPassword)
+    httpCredentials = {
+      username: httpUsername,
+      password: httpPassword,
+      ...(httpOrigin ? { origin: httpOrigin } : {}),
+    }
+  }
+  return {
+    redactor,
+    redact: (s: string) => redactor.redact(s),
+    resolveSecret: (name: string) => secrets.get(name),
+    secretNames: [...secrets.keys()],
+    httpCredentials,
+  }
+}
+
 export interface BrowserBinConfig {
   allowUnsafe: boolean
   allowedHosts: string[]
@@ -139,36 +185,8 @@ export interface BrowserRuntime {
 export async function buildBrowserRuntimeFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<BrowserRuntime> {
-  // Secrets: STRUMMER_BROWSER_SECRET_<NAME>=value — register NAME→value; values
-  // are never logged or surfaced (only the NAME appears anywhere).
-  const redactor = new Redactor()
-  const secrets = new Map<string, string>()
-  for (const [key, value] of Object.entries(env)) {
-    const m = /^STRUMMER_BROWSER_SECRET_(.+)$/.exec(key)
-    if (m?.[1] && value) {
-      redactor.register(m[1], value)
-      secrets.set(m[1], value)
-    }
-  }
-  const secretNames = [...secrets.keys()]
-  const resolveSecret = (name: string) => secrets.get(name)
-
-  // Origin-scoped HTTP Basic auth (operator-set). Built only when BOTH username +
-  // password are present; the password is registered with the redactor so it never
-  // leaks via an artifact, and it never appears in the returned config.
-  const httpUsername = env.STRUMMER_BROWSER_HTTP_USERNAME
-  const httpPassword = env.STRUMMER_BROWSER_HTTP_PASSWORD
-  const httpOrigin = env.STRUMMER_BROWSER_HTTP_ORIGIN
-  let httpCredentials: { username: string; password: string; origin?: string } | undefined
-  if (httpUsername && httpPassword) {
-    redactor.register('http-credentials', httpPassword)
-    httpCredentials = {
-      username: httpUsername,
-      password: httpPassword,
-      ...(httpOrigin ? { origin: httpOrigin } : {}),
-    }
-  }
-  const redact = (s: string) => redactor.redact(s)
+  const { redactor, redact, resolveSecret, secretNames, httpCredentials } =
+    buildBrowserRedactorFromEnv(env)
 
   const allowUnsafe = bool(env.STRUMMER_BROWSER_ALLOW_UNSAFE)
   const allowedHosts = (env.STRUMMER_BROWSER_ALLOWED_HOSTS ?? '')

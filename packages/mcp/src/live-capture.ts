@@ -37,6 +37,9 @@ export interface LiveCaptureDeps {
   store: ArtifactStore
   /** Operator flows dir — by-NAME resolution, never a caller path. */
   flowsDir: string
+  /** Redactor for the finalized HAR (the 5e union = browser ∪ verify secrets). Defaults
+   * to the runtime's own redactor; the verify bin overrides with the union. */
+  redact?: (value: string) => string
   /** Deterministic id in tests; defaults to `randomUUID`. */
   idFactory?: () => string
   loadCollection?: (dir: string) => { flows: Map<string, BrowserFlow> }
@@ -124,7 +127,7 @@ export async function driveBrowserFlowToHar(
       harPath: harPath(harDir, id),
       runId: id,
       store: deps.store,
-      redact: runtime.redact,
+      redact: deps.redact ?? runtime.redact,
     })
     if (!summary) throw new Error('no HAR was captured for the driven flow')
     return { harHandle: summary.handle, summary }

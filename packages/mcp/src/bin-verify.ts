@@ -9,6 +9,7 @@ import { changedDependencies } from '@strummer/deps'
 import { HistoryStore, runAndRecord } from '@strummer/flake'
 import { runMutation } from '@strummer/mutate'
 import { Redactor } from '@strummer/safety'
+import { gateDenied } from '@strummer/verify'
 import { depsNetworkConfig } from './bin-deps.js'
 import { auditProjectDependencies } from './deps.js'
 import { createVerifyServer } from './index.js'
@@ -88,11 +89,16 @@ export function buildVerifyServerFromEnv(
   }
 
   // The operator redactor (registered secret values) — applied to capture findings AND
-  // an errored pillar's surfaced message before it enters the verdict.
+  // an errored pillar's surfaced message before it enters the verdict. The (name,value)
+  // pairs are also folded into the 5e produce-mode UNION redactor (verify ∪ browser).
   const redactor = new Redactor()
+  const verifySecrets = new Map<string, string>()
   for (const [key, value] of Object.entries(env)) {
     const m = /^STRUMMER_VERIFY_SECRET_(.+)$/.exec(key)
-    if (m?.[1] && value) redactor.register(m[1], value)
+    if (m?.[1] && value) {
+      redactor.register(m[1], value)
+      verifySecrets.set(m[1], value)
+    }
   }
   const redact = (v: string) => redactor.redact(v)
 
@@ -191,21 +197,57 @@ export function buildVerifyServerFromEnv(
 
     // The capture→contract bridge: its OWN gate is the capture gate (allowCapture + a
     // shared artifacts root to resolve a HAR by handle). CONSUME mode validates an
-    // already-produced stored HAR; PRODUCE mode (5e, wired in slice 6) DRIVES a browser
-    // flow to capture the HAR first. Both share the validate back half.
+    // already-produced stored HAR; PRODUCE mode (5e) DRIVES a browser flow to capture the
+    // HAR first — behind the FULL browser gate (it makes live egress). Both share the
+    // validate back half.
     if (config.allowCapture && harStore) {
       const store = harStore
+      // Produce mode is a BROWSER-PILLAR run, so it composes the full browser gate on top
+      // of ENABLE_RUN + the capture gate: a host allowlist (+ the mandatory SSRF proxy),
+      // a HAR sink, and a by-name flows dir. Unmet ⇒ a produce request is gate-denied
+      // (skipReason:'gate-not-set'), never spawns. No new env ("compose, never widen").
+      const browserHosts = csv(env.STRUMMER_BROWSER_ALLOWED_HOSTS)
+      const harDir = env.STRUMMER_BROWSER_HAR_DIR
+      const flowsDir = env.STRUMMER_BROWSER_FLOWS_DIR
+      const produceEnabled = browserHosts.length > 0 && Boolean(harDir) && Boolean(flowsDir)
+
       rd.contract = async (ctx) => {
-        let har: Buffer | undefined
         if (ctx.mode === 'consume') {
-          har = store.get(ctx.harHandle)?.body
+          const har = store.get(ctx.harHandle)?.body
           if (!har) throw new Error(`no stored HAR for ${ctx.harHandle}`)
-        } else {
-          // PRODUCE mode wiring lands in slice 6 (driveBrowserFlowToHar behind the
-          // browser gate). Until then a produce request is not enabled here.
-          throw new Error('live browser capture (produce mode) is not enabled')
+          return validateCapturedTraffic(har, buildCaptureContract(ctx), { redact }).results
         }
-        return validateCapturedTraffic(har, buildCaptureContract(ctx), { redact }).results
+        // PRODUCE: drive a live browser capture. Gate-deny (⇒ gate-not-set) before any
+        // spawn when the browser gate is unmet.
+        if (!produceEnabled || !flowsDir) {
+          throw gateDenied(
+            'live browser capture is not enabled (needs STRUMMER_BROWSER_ALLOWED_HOSTS + _HAR_DIR + _FLOWS_DIR)',
+          )
+        }
+        // Lazy: only pull @strummer/browser (playwright-core) when a produce capture
+        // actually runs — compose-only / API-only / consume-only operators never load it.
+        const [
+          { buildBrowserRuntimeFromEnv, buildBrowserRedactorFromEnv },
+          { driveBrowserFlowToHar },
+        ] = await Promise.all([import('./bin-browser.js'), import('./live-capture.js')])
+        // The UNION redactor (browser secrets + HTTP creds ∪ verify secrets), used at BOTH
+        // chokepoints — finalizeHar (the archive) and validateCapturedTraffic (the findings)
+        // — so a browser-registered secret never survives in either. More aggressive
+        // redaction grants no run capability, so this does not widen the gate.
+        const union = buildBrowserRedactorFromEnv(env).redactor
+        for (const [name, value] of verifySecrets) union.register(name, value)
+        const unionRedact = (s: string) => union.redact(s)
+
+        const { harHandle } = await driveBrowserFlowToHar(ctx, {
+          runtimeFactory: () => buildBrowserRuntimeFromEnv(env),
+          store,
+          flowsDir,
+          redact: unionRedact,
+        })
+        const har = store.get(harHandle)?.body
+        if (!har) throw new Error('no HAR was captured for the driven flow')
+        return validateCapturedTraffic(har, buildCaptureContract(ctx), { redact: unionRedact })
+          .results
       }
     }
 

@@ -99,3 +99,44 @@ describe('the "both required" run-driving gate (§3c / §gate(b))', () => {
     expect(await toolNames(built)).toContain('verify_change')
   })
 })
+
+describe('5e live-capture (produce) gate — the full browser gate composes on top', () => {
+  async function call(env: Record<string, string>, args: Record<string, unknown>) {
+    const built = buildVerifyServerFromEnv(env)
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    const c = new Client({ name: 'test', version: '0.0.0' })
+    await Promise.all([built.server.connect(st), c.connect(ct)])
+    return c.callTool({ name: 'verify_change', arguments: { projectRoot: '/repo', ...args } })
+  }
+
+  const CAPTURE_ENV = {
+    STRUMMER_VERIFY_ENABLE_RUN: '1',
+    STRUMMER_ARTIFACTS_ROOT: '/tmp/strummer-artifacts-5e',
+    STRUMMER_VERIFY_ALLOW_CAPTURE: '1',
+  }
+
+  it('a PRODUCE request is gate-denied (no spawn) when the browser gate is unmet', async () => {
+    // ENABLE_RUN + capture gate are set, but NOT the browser gate (hosts/HAR/flows), so a
+    // live-capture request must NOT spawn — it surfaces skipReason:'gate-not-set' ⇒ inconclusive.
+    const res = await call(CAPTURE_ENV, { contract: { flow: 'login' } })
+    const sc = res.structuredContent as {
+      status: string
+      ok: boolean
+      pillars: { pillar: string; status: string; skipReason?: string }[]
+    }
+    const contract = sc.pillars.find((p) => p.pillar === 'contract')
+    expect(contract).toMatchObject({ status: 'no-signal', skipReason: 'gate-not-set' })
+    expect(sc.status).toBe('inconclusive')
+    expect(sc.ok).toBe(false)
+  })
+
+  it('registers verify_change with the full produce gate set (hosts + HAR + flows)', async () => {
+    const built = buildVerifyServerFromEnv({
+      ...CAPTURE_ENV,
+      STRUMMER_BROWSER_ALLOWED_HOSTS: 'app.test',
+      STRUMMER_BROWSER_HAR_DIR: '/tmp/har',
+      STRUMMER_BROWSER_FLOWS_DIR: '/tmp/flows',
+    })
+    expect(await toolNames(built)).toContain('verify_change')
+  })
+})
