@@ -31,7 +31,9 @@ interface OpenApiOperation {
 }
 export interface OpenApiDoc {
   paths?: Record<string, Record<string, OpenApiOperation> | undefined>
-  components?: { schemas?: Record<string, unknown> }
+  // `requestBodies`/`parameters`/etc. are navigated by the request validator's local
+  // `$ref` deref, so allow any component bucket — not just `schemas`.
+  components?: { schemas?: Record<string, unknown>; [key: string]: unknown }
   [key: string]: unknown
 }
 

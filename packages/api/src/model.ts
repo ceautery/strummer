@@ -118,6 +118,27 @@ export type ContractFindingKind =
   // A captured request matched the GraphQL endpoint but carried no extractable
   // `query` — a hard finding (never an empty pass), used by the capture bridge.
   | 'graphql-no-query'
+  // --- Request-side (OpenAPI) drift. See `request-contract.ts`. ---
+  // The request body violates the declared requestBody schema (error).
+  | 'request-body-schema'
+  // A `required: true` requestBody was absent and the caller is authoritative
+  // about body presence (direct surfaces); never emitted on the capture path,
+  // which cannot distinguish "no body" from "dropped a non-JSON body" (error).
+  | 'missing-required-body'
+  // A body was sent to an operation that declares no requestBody (warning —
+  // frequently client-side noise the server ignored; see the taxonomy note).
+  | 'undocumented-body'
+  // A body was sent with a Content-Type matching no declared `content` media
+  // type (warning; only when a Content-Type is actually present).
+  | 'unsupported-media-type'
+  // A `required` parameter (path always; query/header when `required: true`) was
+  // absent and the caller is authoritative about params (error).
+  | 'missing-required-param'
+  // A parameter value violates its declared schema (error).
+  | 'param-schema'
+  // An undocumented QUERY parameter was present (warning; headers excluded —
+  // infra/trace headers saturate captures).
+  | 'undocumented-param'
 
 /** A single contract discrepancy between a response and its declared shape. */
 export interface ContractFinding {

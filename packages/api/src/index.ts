@@ -2,8 +2,12 @@ export { type Artifact, ArtifactStore } from './artifacts.js'
 export { evaluateAssertions, extractCaptures, type ResponseContext } from './assert.js'
 export { loadCollection } from './collection.js'
 export {
+  normalizeOpenApiSchema,
+  type OpenApiDoc,
   type OpenApiValidateOptions,
+  type ResolvedOperation,
   type ResponseFacts,
+  resolveOpenApiOperation,
   validateOpenApiResponse,
 } from './contract.js'
 export { type GraphqlValidateOptions, validateGraphqlOperation } from './graphql.js'
@@ -64,6 +68,12 @@ export type {
   SecretStore,
 } from './model.js'
 export { type Prepared, type PreparedBody, prepareRequest } from './prepare.js'
+export {
+  type OpenApiRequestValidateOptions,
+  type RequestFacts,
+  type RequestValidationResult,
+  validateOpenApiRequest,
+} from './request-contract.js'
 export { type HarCapture, type RunOptions, runRequest, runRequestForHar } from './runner.js'
 export { checkGate, isMutating, type SafetyDecision, type SafetyOptions } from './safety.js'
 export { type SchemaError, type SchemaValidation, validateSchema } from './schema.js'
