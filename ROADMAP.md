@@ -939,9 +939,8 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         the suite never spawns). Exit codes `0 pass / 1 fail|warn / 2 inconclusive`; a gate-blocked
         pillar ⇒ `2` (absence, not misconfig). Then STATUS/ROADMAP/memory updates; push at the
         milestone boundary.
-- [ ] **Milestone 5d — diff-scoping the non-coverage pillars + deps run-wiring** *(staged; ADR 0013 §5
-      + Addendum).* A shared changed-set primitive (extend coverage's `parseUnifiedDiff` or extract
-      `@strummer/diff`); expose flake's existing `files` input in MCP; a pure
+- [ ] **Milestone 5d — diff-scoping the non-coverage pillars + deps run-wiring** *(UNDERWAY; ADR 0013 §5
+      + Addendum).* A shared changed-set primitive; expose flake's existing `files` input in MCP; a pure
       `changedDependencies(diff, ecosystem)` for deps (npm `package.json` first, PyPI/Gem lockfiles
       staged); mutate already supports `mutateFiles`/`--incremental`. `verify_change` then scopes each
       pillar from one diff. **Also wire deps into the verify run path** (carried from 5c): factor
@@ -949,7 +948,26 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       fetch → OSV snapshot → `auditDependency`) into a reusable runner, then add `rd.deps` to
       `bin-verify` (gated by `STRUMMER_DEPS_ALLOW_NETWORK`, composed under `ENABLE_RUN`) + a `--deps`
       flag to `strummer verify run`. Naturally paired with `changedDependencies` so a PR audits only the
-      changed packages.
+      changed packages. Ordered slices:
+  - [x] **Slice 1 — extract `@strummer/diff` (the human-ratified placement fork).** Move coverage's
+        pure `parseUnifiedDiff` into a new **zero-dependency** `@strummer/diff` package + add
+        `changedFiles(diff)` (all non-deleted touched paths — the scope primitive; includes
+        removal-only modifications `parseUnifiedDiff` omits). Coverage re-exports for back-compat +
+        consumes via `report.ts` (behavior-preserving; coverage suite is the regression guard). Chosen
+        over keeping it in coverage because `@strummer/verify` must RUNTIME-call the parser to scope
+        pillars and its source-scanned "imports zero spawn-capable code" invariant forbids a runtime
+        import from the engine-listed coverage (re-exports `runScoped`→`child_process`); a pure shared
+        package keeps that invariant provable. Mirrors the safety/assert/artifacts extractions.
+  - [ ] **Slice 2 — `changedDependencies(diff, ecosystem)` in `@strummer/deps`** (pure; npm
+        `package.json` dependency-name diff first; PyPI/Gem lockfiles staged) over `@strummer/diff`.
+  - [ ] **Slice 3 — `verify_change` scopes each pillar from one diff** (coverage `changedFiles`→related,
+        mutate `mutateFiles`, flake `files`, deps `changedDependencies`); flake's `files` already on its
+        own MCP tool.
+  - [ ] **Slice 4 — factor `audit_project`'s per-package pipeline into a reusable deps runner.**
+  - [ ] **Slice 5 — `bin-verify` `rd.deps`** gated by `STRUMMER_DEPS_ALLOW_NETWORK` composed under
+        `ENABLE_RUN` (compose, never widen).
+  - [ ] **Slice 6 — `--deps` flag on `strummer verify run`** + STATUS/ROADMAP/memory updates; push at
+        the milestone boundary.
 - [ ] *(staged, not amputated — ADR 0013 §5 + Addendum)* **5e** `verify` driving a live capture to
       *produce* the HAR (browser-spawn behind the browser gate; and/or an API-runner capture path once
       the runner records redirect hops + request bodies); request-body/param contract validation;
