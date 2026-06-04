@@ -1455,7 +1455,14 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 
 ## Next action
 
-> **CURRENT (2026-06-03).** Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
+> **The LIVE current phase + next action are in the top block of this file** ("Current
+> phase" above) — Phase 5 is COMPLETE (5a–5f) and the contract pillar has since been
+> deepened through ADR 0016 (request body/param validation, GraphQL variables, the full
+> non-scalar param array+object serialization matrix, slice 8). **The only remaining ADR
+> 0016 tail is non-JSON request BODY schemas.** Everything below in this section is retained
+> as **Phase 3/4 historical context** and is no longer "current".
+>
+> _(historical, 2026-06-03)_ Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
 > and the Python adapters + LSP capability-gated reads + LSP write-mode (`lsp_rename`, incl. multi-root
 > AND resource ops) + the LSP tails (cold-load fix, `workspace/symbol`, push- AND pull-`diagnostics`,
 > multi-root nav, resource-op safe-subset cuts) all landed. **Latest: LSP PULL-diagnostics**
@@ -1768,10 +1775,11 @@ See `py/strummer_ingest/README.md` and `packages/mcp/README.md`.
 ## How to resume cold
 
 1. Read `CLAUDE.md` (how we work).
-2. Read this file (current phase + next action).
+2. Read this file — the **top block** ("Current phase") is the live phase + next action.
 3. Read `ROADMAP.md` (the plan) and `docs/decisions/` (why).
 4. Skim project memories and `git log --oneline -15`.
-5. Continue from **Next action** above.
+5. Continue from the **top-block "Current phase"** (the lower "## Next action" section is
+   Phase 3/4 historical context).
 
 ## Known open questions
 
