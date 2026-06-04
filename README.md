@@ -180,8 +180,15 @@ scope coverage/mutate/flake from ONE diff; a pure `changedDependencies(diff)` + 
 operator-authored browser flow → capture the HAR → validate it, behind the full browser gate; the shared
 `@strummer/browser` `driveBrowserFlowToHar` gates on **flow completeness, not HAR emptiness** (a
 partially-failed flow's HAR is never validated — absence stays non-passing), with a union redactor at
-both the archive and the findings. Staged (not amputated): **5f** — the API-runner capture path,
-request-body/param contract validation, extracting the shared `Severity` scale, and the Python second half.
+both the archive and the findings. **5f — `verify` driving the `@strummer/api` RUNNER to *produce* the HAR
+has since landed** (ADR 0013 Addendum 4): the SECOND produce source — `verify_change`'s `contract.request`
++ `strummer verify run --request` DRIVE the api runner for an operator-authored request (by NAME) →
+synthesize a HAR (`@strummer/api` `har-synth.ts`: per-hop entries, the real request body for GraphQL, a
+shared `redactHarZip` pass `finalizeHar` now delegates to) → validate it, behind the api pillar's own gate
++ `STRUMMER_API_COLLECTIONS_DIR`; transport-completeness guards throw ⇒ inconclusive, and the new
+`@strummer/verdict` `fromCaptureVerdict` folds a not-`clean` capture to inconclusive (closing a latent
+absence-as-pass hole across the consume + both produce paths). Staged (not amputated): request-body/param
+contract validation, extracting the shared `Severity` scale, and the Python second half.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
