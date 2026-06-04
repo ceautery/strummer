@@ -5,7 +5,38 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: the `@strummer/severity` extraction tail LANDED — the shared qualitative severity scale lifted out of deps into its own pure zero-dep leaf (behavior-preserving); 1164 TS + 45 Py green. Next: pivot to a new phase, or the remaining older staged tails (request-body/param contract validation; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: REQUEST-BODY/PARAM contract validation LANDED (v1 feature-complete) — a new `validateOpenApiRequest` sibling threaded into the capture→contract bridge + verdict + direct MCP/CLI surfaces; design = ADR 0014 (the `request-contract-validation-design` fan-out, all 4 forks human-ratified); 1202 TS + 45 Py green. Next: pivot to a new phase, or the remaining older staged tails (live `api run --openapi` request validation [the one deferred surface — needs the runner to expose the un-redacted sent request]; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**REQUEST-BODY/PARAM CONTRACT VALIDATION — COMPLETE (v1)** (2026-06-04, all TDD red→green; design = ADR
+0014, the `request-contract-validation-design` fan-out: 4 research streams → synthesis → 3 adversarial
+critics → corrected design; human ratified all 4 forks). The contract pillar now validates the REQUEST half
+of an exchange, not just responses — so the cross-pillar verdict catches request-side drift too. 6 slices:
+(0) extract `resolveOpenApiOperation` + `normalizeOpenApiSchema` shared helpers out of the response validator
+(pure refactor, response suite = regression guard) — request body/param schemas now reuse the SAME treatment
+(3.0 `nullable` shim, local + external-local-file `$ref` deref, `$defs` merge); (1) `validateOpenApiRequest`
+requestBody: required+schema + the load-bearing `bodyPresenceAuthoritative` flag (a required-but-absent body
+is `missing-required-body` ONLY when the caller is authoritative — direct surfaces; else `unverified`);
+(2) parameters (SCALARS ONLY): merged path-item+operation params, positional path extraction
+(multi-param-per-segment ⇒ inconclusive-skip), strict whole-string scalar coercion then ajv,
+`missing-required-param` (authoritative) else `unverified`; (3) media-type-aware body selection (CT
+specificity; CT present + no match ⇒ `unsupported-media-type` warning; CT ABSENT + no JSON key ⇒ `unverified`,
+NEVER unsupported-media-type), local `$ref` deref for requestBody/params (non-local ⇒ inconclusive-skip, never
+`undocumented-body`), `undocumented-param` (query only; declared-but-skipped never flagged), 3.0 `nullable` on
+PARAMS; (4a) `harEntriesToFacts` now captures `req.query`+`req.headers` so param validation is REACHABLE from
+the capture/verify path; (4b) the bridge's REST branch drives `validateOpenApiRequest` over each entry
+(non-authoritative), merges findings (drops the duplicate `missing-operation`), and **folds `unverified` →
+`noSignal++`** (out-of-band `request-unverified`, kept OUT of `results[]`) so a present-but-uncheckable body /
+uncapturable required param forces `clean:false` ⇒ no-signal, NEVER pass — closing the absence-as-pass leak a
+critic proved; (5) MCP `validate_request` (authoritative; refuses a GraphQL envelope via the exported
+`isGraphqlEnvelope`; message+path redacted) + CLI `api validate-request`. **Fork-1 (ratified):** `pushResult`
+now redacts finding `path` too (request bodies/params are secret-bearing) — one chokepoint, request+response.
+New `ContractFindingKind`s: request-body-schema/missing-required-body/undocumented-body/unsupported-media-type/
+missing-required-param/param-schema/undocumented-param. `RequestValidationResult.unverified` is additive — the
+verdict shape + `fromCaptureVerdict` + `orchestrate` are UNCHANGED (compose-never-widen). Invariants held:
+absence-never-a-pass (the unverified→noSignal fold), redaction-before-verdict (message+path; coerced values
+never echoed — only the raw substring), no-real-fetch-in-gate (pure validator; bridge reads a stored HAR).
+**One surface STAGED (honest, not amputated):** the live `api run --openapi` inline request check — `RunResult`
+exposes only the REDACTED `PreparedRequest`, so it needs the runner to surface the un-redacted sent request
+(pairs with the existing `runRequestForHar` channel). 9 surface + 38 engine/bridge tests added._
 _**TAIL — `@strummer/severity` extraction — COMPLETE** (2026-06-04, behavior-preserving, gate green at
 1164 TS + 45 Py; the human ratified the "unify the qualitative base" depth fork). A new pure ZERO-dependency
 leaf `@strummer/severity` (mirrors `@strummer/diff`/`assert`/`artifacts`) owns the shared severity vocabulary:

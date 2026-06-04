@@ -1046,10 +1046,28 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       separate member that maps to a `no-signal` pillar, never to `none`/`low` (absence-is-never-a-pass).
       verdict gains one runtime workspace import (the pure leaf), dragging in no heavy deps. New
       `@strummer/severity` alias in `vitest.config.ts`; runtime dep of verdict + deps.
-- [ ] *(staged, not amputated)* the older tails: request-body/param contract validation; artifact
-      GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture);
-      `changedDependencies` for PyPI/Gem lockfiles; deps `changelog_diff` for PyPI/RubyGems; a mutate
-      cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + the full toolchain cross-version matrix.
+- [x] **Request-body & parameter contract validation: COMPLETE (v1)** (1202 TS + 45 Py green; design =
+      ADR 0014, the `request-contract-validation-design` fan-out → all 4 forks human-ratified). The contract
+      pillar now validates the REQUEST half of an exchange. New `validateOpenApiRequest` SIBLING (placement
+      fork: not a unified `validateOpenApiExchange`), reusing slice-0 shared helpers (`resolveOpenApiOperation`
+      / `normalizeOpenApiSchema`) lifted out of the response validator so body+param schemas get the same 3.0
+      `nullable` shim + local/external-local-file `$ref` deref. v1 scope (scalars only): requestBody JSON
+      schema + required presence, scalar path/query/header params (default serializations) with strict
+      whole-string coercion, media-type-aware body selection, local `$ref` deref, undocumented-query-param.
+      Threaded into the capture→contract bridge (driving request validation per entry, NON-authoritative) +
+      the verdict via the **`unverified`→`noSignal` fold** (the load-bearing absence-is-never-a-pass fix a
+      critic proved: a present-but-uncheckable body / uncapturable required param can't ride to a pass) +
+      direct MCP `validate_request` / CLI `api validate-request` (authoritative; GraphQL-envelope refused).
+      Fork-1: `pushResult` redacts finding `path` too (request bodies/params are secret-bearing). Verdict
+      shape UNCHANGED (compose-never-widen). One surface STAGED: live `api run --openapi` inline request
+      validation (needs the runner to surface the un-redacted sent request).
+- [ ] *(staged, not amputated)* the older tails: live `api run --openapi` request validation (the deferred
+      surface above); non-scalar/advanced OpenAPI parameter serializations (deepObject/pipeDelimited/CSV/
+      explode arrays, object-valued, content-typed, cookie params) + `label`/`matrix`/multi-param path
+      templates + non-local `$ref` + non-JSON body schemas + GraphQL-request variable validation; artifact
+      GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture); `changedDependencies`
+      for PyPI/Gem lockfiles; deps `changelog_diff` for PyPI/RubyGems; a mutate cosmic-ray/`runMutmut` adapter;
+      LSP recursive/dir delete + the full toolchain cross-version matrix.
 
 ## Ongoing
 

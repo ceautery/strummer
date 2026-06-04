@@ -94,7 +94,12 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `docs/decisions/` — Architecture Decision Records (ADRs).
 - `packages/` — TS workspace: `core` (docs domain + SQLite), `embed` (query
   embedding), `api` (API-testing engine: `.bru`, runner, assertions, secrets,
-  safety, scripts, contract validation, SSRF + redirect re-check, import
+  safety, scripts, contract validation — response (`validateOpenApiResponse`/
+  `validateGraphqlOperation`) AND request (`validateOpenApiRequest` in
+  `request-contract.ts`, ADR 0014: body + path/query/header params over the shared
+  `resolveOpenApiOperation`/`normalizeOpenApiSchema` seams; the `unverified` flag the
+  capture bridge folds into `noSignal` so a present-but-uncheckable request can't pass),
+  SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that
   `@strummer/browser` `finalizeHar` now delegates to) + `synthesizeRedactedHarZip`
