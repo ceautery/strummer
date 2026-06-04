@@ -140,9 +140,23 @@ installed version Z" and get a precise, cited answer over MCP.
         fractional `multipleOf` (IEEE-754 FP trap, confirmed pre-existing in scalar+array number
         paths) ⇒ `unverified` everywhere. `form/explode=true` objects stay permanently out
         (shared namespace; undoc-suppression only). **Non-scalar param ARRAY+OBJECT matrix complete.**
-  - [ ] *(staged)* non-JSON request **body** schemas (form-urlencoded / multipart fields
-        against their declared object schema), today presence-only `unverified`. *(The only
-        remaining ADR 0016 tail.)*
+  - [x] **non-JSON request BODY schemas (ADR 0016 addendum 4)** — validate
+        `application/x-www-form-urlencoded` + `multipart/form-data` (text parts) bodies against
+        the declared object schema. Form bodies arrive as a flat field→value(s) map on a NEW
+        authoritative `RequestFacts.form`/`formFileFields` channel (file bytes never inlined,
+        never re-parsed from the serialized string); `validateFormBody` mirrors
+        `validateObjectParam`'s coerce-then-ajv logic, and discrete repeated keys make even
+        STRING array items sound. REFUSE → `unverified`: any per-property `encoding`; non-UTF-8
+        charset; non-flat-object schema; typed `additionalProperties`; nested/typeless/
+        array-of-object props; fractional `multipleOf`; scalar-with-repeats; single-occurrence
+        array + cardinality; ambiguous empty value; a prop satisfied by a multipart FILE part.
+        Reaches the LIVE `api run --openapi` (via `runRequestForContract`) + direct MCP
+        `validate_request` (`form`/`formFileFields`) + CLI `api validate-request --form`/
+        `--form-file`. Signature + result shape + finding kinds UNCHANGED (reuse
+        `request-body-schema`). **The ADR 0016 tail list is now EMPTY.**
+  - [ ] *(staged)* HAR-CAPTURE form bodies (`harEntriesToFacts` resolving `postData.params[]` —
+        non-authoritative, redaction-incomplete, currently safely `unverified`) + per-property
+        `encoding` overrides (would reuse the param splitter seams).
 
 ## Phase 3 — Browser / UI testing pillar  *(FEATURE-COMPLETE — engine + safety + artifacts + MCP + CLI + multi-engine; live-view dropped per ADR 0008; only the explicitly-aspirational bucket remains; design = ADR 0006/0008/0009 + ARCHITECTURE §10)*
 

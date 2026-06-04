@@ -5,7 +5,37 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM OBJECT reconstruction + multipleOf guard LANDED (slice 8, ADR 0016 addendum 3) — query deepObject + form/explode=false objects now validated, plus a cross-cutting fractional-multipleOf false-positive guard; gate green (1287 TS + 45 Py). The non-scalar param ARRAY+OBJECT matrix is now COMPLETE (only form/explode=true objects stay permanently out — shared namespace). Before that: path label/matrix arrays (slice 7), delimited arrays (slice 6), non-scalar param v1 (slice 4/5), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (non-JSON request BODY schemas — the only remaining ADR 0016 tail; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-JSON request BODY schema validation LANDED (ADR 0016 addendum 4) — `application/x-www-form-urlencoded` + `multipart/form-data` (text parts) bodies are now validated against the declared object schema over a NEW authoritative `RequestFacts.form`/`formFileFields` channel (live `api run --openapi` + direct MCP `validate_request` + CLI `api validate-request --form`); gate green (1311 TS + 45 Py). This closes the LAST ADR 0016 tail — the contract pillar's request-side serialization matrix (params + body) is now COMPLETE. Before that: non-scalar param OBJECT reconstruction + multipleOf guard (slice 8), path label/matrix arrays (slice 7), delimited arrays (slice 6), non-scalar param v1 (slice 4/5), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (HAR-capture form bodies + per-property `encoding` overrides — the new ADR 0016 staged pair; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**NON-JSON request BODY schema validation (ADR 0016 addendum 4) — COMPLETE** (2026-06-04, all TDD
+red→green; gate green at 1311 TS + 45 Py; design = a 2-stream research fan-out — OpenAPI form/multipart
+serialization + the `encoding` object, and an adversarial false-positive-trap sweep; the human ratified
+the scope: urlencoded + multipart text fields over the LIVE run + direct MCP/CLI). Converts the prior
+presence-only `unverified` skip for `application/x-www-form-urlencoded` + `multipart/form-data` bodies into
+real `request-body-schema` findings. **The key insight:** form bodies arrive as a flat field→value(s) map
+via DISCRETE keys, so even STRING array items are sound (no delimiter to over-split) — `validateFormBody`
+mirrors `validateObjectParam`'s coerce-declared-scalar-props-then-ajv logic plus scalar-item arrays.
+**Representation (load-bearing, both research streams flagged it):** a NEW authoritative
+`RequestFacts.form` (`Record<string,string|string[]>`, repeated keys → array) + `formFileFields` (multipart
+FILE part NAMES only — bytes NEVER inlined), populated at PREPARE time by the runner from the structured
+parts (post-secret-fill wire values, secrets registered with the redactor), NEVER by re-parsing the
+serialized string (lossy/impossible for multipart). **REFUSE → `unverified` (never a false finding):** any
+per-property `encoding`; non-UTF-8 charset; non-flat-object schema; typed `additionalProperties`; nested/
+typeless/array-of-object props; fractional `multipleOf`; a scalar prop arriving with repeated keys; a
+single-occurrence array + cardinality constraint; an ambiguous empty value (non-string/non-null scalar); a
+declared prop satisfied by a multipart FILE part. **Slices:** (1+2) the validator core —
+`RequestFacts.form`/`formFileFields`, `validateFormBody`, `selectContentSchema` now surfaces matched media
+base + `encoding`, `hasBody` counts `req.form`, the body-block routing (19 tests); (3) the runner —
+`PreparedBody.formFields`/`formFileFields`, `materializeBody`(urlencoded) + `materializeMultipart`(text +
+file names) populate them, `buildRequestFacts` copies into `RequestFacts` so live `api run --openapi`
+reaches it via `runRequestForContract`, `RunResult` UNCHANGED (2 tests); (4) surfaces — MCP
+`validate_request` `form`/`formFileFields` inputs, CLI `api validate-request --form`/`--form-file`, a live
+form-urlencoded run test (3 tests). Signature + `RequestValidationResult` shape + finding kinds UNCHANGED
+(reuse `request-body-schema`); zero new `ContractFindingKind`. Invariants held: ambiguity ⇒
+`unverified`-skip never a false finding, absence-never-a-pass (every refusal sets `unverified`, folded to
+`noSignal` by the bridge), redaction-before-verdict (findings echo only the raw field value; run-resolved
+secrets pre-registered), no real fetch in `pnpm gate` (pure validator + the existing in-process live-run
+test). **This closes the LAST ADR 0016 tail.** STAGED: HAR-capture form bodies (`postData.params[]`,
+non-authoritative); per-property `encoding` overrides._
 _**NON-SCALAR PARAM — OBJECT reconstruction + multipleOf guard (slice 8) — COMPLETE** (2026-06-04, all TDD
 red→green; gate green at 1287 TS + 45 Py; design = ADR 0016 addendum 3, a 2-critic adversarial fan-out
 over a drafted design [both ship-with-fixes; every blocker folded in]; the comprehensive-multipleOf-scope

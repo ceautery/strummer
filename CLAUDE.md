@@ -123,8 +123,18 @@ vision and `ARCHITECTURE.md` for the technical design.
   objects permanently out (shared namespace, undoc-SUPPRESSION only — explicit-explode 3-way
   metadata branch). Plus a cross-cutting `hasFractionalMultipleOf` guard: a fractional
   `multipleOf` (IEEE-754 FP trap) ⇒ `unverified` at scalar/array-item/object-prop coercion.
-  STAGED: non-JSON request BODY schemas (the only remaining ADR 0016 tail); no new finding
-  kind, signature unchanged),
+  ADR 0016 addendum 4 added NON-JSON request BODY validation via `validateFormBody` — form
+  bodies (`application/x-www-form-urlencoded` + `multipart/form-data` text parts) arrive as a
+  flat field→value(s) map on a NEW authoritative `RequestFacts.form`/`formFileFields` channel
+  (`PreparedBody.formFields`/`formFileFields` populated at prepare time, file bytes never
+  inlined, never re-parsed from the serialized string); discrete repeated keys make string
+  array items sound; reuses the param coercion machinery + refuses (→ `unverified`) any
+  per-property `encoding`/non-UTF-8 charset/typed-additionalProperties/non-scalar prop/
+  fractional-multipleOf/scalar-with-repeats/single-occ-cardinality/ambiguous-empty/file-part.
+  Reaches live `api run --openapi` (via `runRequestForContract`) + MCP `validate_request`
+  (`form`/`formFileFields`) + CLI `api validate-request --form`/`--form-file`; no new finding
+  kind, signature/result shape unchanged. STAGED: HAR-capture form bodies + per-property
+  `encoding` overrides — the ADR 0016 tail list is now EMPTY),
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that
