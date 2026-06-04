@@ -5,7 +5,7 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slices 1–4 of 6 LANDED at 1078 TS + 45 Py green.**
+**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slices 1–5 of 6 LANDED at 1082 TS + 45 Py green.**
 _Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
 contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
 structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new
@@ -115,15 +115,27 @@ consume-only `contract:{harHandle,...}` + `failAtOrAbove` (no default). Each pil
 detail by `strummer://verify/{id}/{kind}`. Contract sub-verdict folds in behind the injected capture
 runner (`source:'capture-from-HAR'`). (`@strummer/verify` added to mcp deps + the vitest alias map; tests
 inject fake runners so the suite never spawns.)
-**Next action: slice 5 — `bin-verify.ts` run-driving entrypoint: the "both required" env gate.** The
-run-driving path requires BOTH `STRUMMER_VERIFY_ENABLE_RUN` AND each pillar's OWN
-`STRUMMER_<PILLAR>_ALLOW_RUN`(+`_PROJECT_ROOTS`/`_TIMEOUT_MS`); wire each pillar's runner into
-`runDriving` ONLY when its gate is satisfied (so an unmet pillar ⇒ `skipReason:'gate-not-set'`, and with
-`ENABLE_RUN` unset `verify_change` is not registered). The COMPOSE-ONLY path stays env-identical — the
-existing `bin-verify` red test (reads no per-pillar `ALLOW_RUN`) MUST keep passing; only the new
-run-driving wiring reads them, behind `ENABLE_RUN`. Wire the consume-only contract runner from the
-existing capture gate (`resolveHar` + `validateCapturedTraffic`). Then slice 6 (CLI) closes the milestone.
-See ROADMAP milestone 5c (slice 5) + the ADR 0013 Addendum § gate-composition (b)._
+**Slice 5 of 6 LANDED (1082 TS + 45 Py green) — `bin-verify.ts` run-driving entrypoint, the "both
+required" env gate.** Run-driving wires ONLY when `STRUMMER_VERIFY_ENABLE_RUN` is set; THEN each pillar's
+runner is wired ONLY when its OWN gate is satisfied (`STRUMMER_<PILLAR>_ALLOW_RUN` + `_PROJECT_ROOTS`
+[+`_TIMEOUT_MS`], the single source of truth shared with the standalone server — coverage→`runScoped`,
+flake→`runAndRecord` [needs `STRUMMER_FLAKE_DB`], mutate→`runMutation`; consume-only contract→
+`validateCapturedTraffic` behind the EXISTING capture gate, resolving the foreign-prefix browser HAR by
+handle). `verify_change` registers only when ≥1 runner is wired. The §3c guard HOLDS and is STRENGTHENED:
+with `ENABLE_RUN` unset, per-pillar `*_ALLOW_RUN` envs are IGNORED and `verify_change` is not registered
+(tested). The bin builds the operator `Redactor` (`STRUMMER_VERIFY_SECRET_*`) for both capture findings +
+errored-pillar messages. Runners are closures invoked only at call time, so `pnpm gate` never spawns.
+**KNOWN GAP (staged, not amputated): deps run-driving is NOT yet wired** — `audit_project`'s per-package
+pipeline (manifest names → detect installed → SSRF-pinned packument fetch → OSV snapshot → `auditDependency`)
+has no single exported runner; factoring it out is a clean follow-up, naturally paired with 5d's deps
+`changedDependencies` diff-scoping. Until then, deps is reachable via the deps server's `audit_project` →
+fed to `request_verdict` (compose path).
+**Next action: slice 6 — `strummer verify run <root>` CLI (closes milestone 5c).** Thin human wrapper over
+`@strummer/verify` `orchestrate`; gates as straight-through flags (`--enable-run` + per-pillar
+`--allow-*`/`--project-root`); runners injectable so the suite never spawns. Exit codes `0 pass / 1
+fail|warn / 2 inconclusive`; a gate-blocked pillar ⇒ `2`. Then update ROADMAP (check off 5c slices + the
+deps-run-wiring/5d note), refresh memories, run the green gate, and PUSH at the milestone boundary. See
+ROADMAP milestone 5c (slice 6) + the ADR 0013 Addendum._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now
