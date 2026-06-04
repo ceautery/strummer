@@ -7,7 +7,12 @@ import { ArtifactStore } from '@strummer/artifacts'
 import type { OsvAdvisory, Packument } from '@strummer/deps'
 import { strToU8, zipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type ChangelogFetcher, createDepsServer, type PackumentFetcher } from './deps.js'
+import {
+  auditProjectDependencies,
+  type ChangelogFetcher,
+  createDepsServer,
+  type PackumentFetcher,
+} from './deps.js'
 
 // ---- fixtures -------------------------------------------------------------
 
@@ -269,6 +274,44 @@ describe('strummer deps MCP surface', () => {
     const tiny = sc.dependencies.find((d) => d.package === 'tiny')
     expect(tiny?.hasFindings).toBe(false)
     expect(sc.errors).toEqual([])
+  })
+
+  // ---- the reusable per-package pipeline (slice 5d-4) --------------------
+
+  it('auditProjectDependencies audits every declared dependency and reports osvSnapshotLoaded', async () => {
+    const r = await auditProjectDependencies({
+      project,
+      ecosystem: 'npm',
+      osvDir,
+      fetchPackument,
+    })
+    expect(r.osvSnapshotLoaded).toBe(true)
+    expect(r.audits.map((a) => a.package).sort()).toEqual(['left-pad', 'lodash', 'tiny'])
+    expect(r.errors).toEqual([])
+    expect(r.audits.find((a) => a.package === 'lodash')?.worstSeverity).toBe('high')
+  })
+
+  it('auditProjectDependencies scopes to an explicit names list (diff-changed deps)', async () => {
+    const r = await auditProjectDependencies({ project, names: ['lodash'], osvDir, fetchPackument })
+    expect(r.audits.map((a) => a.package)).toEqual(['lodash'])
+    expect(r.errors).toEqual([])
+  })
+
+  it('auditProjectDependencies isolates a per-package error (undetectable package)', async () => {
+    const r = await auditProjectDependencies({
+      project,
+      names: ['lodash', 'ghost'],
+      osvDir,
+      fetchPackument,
+    })
+    expect(r.audits.map((a) => a.package)).toEqual(['lodash'])
+    expect(r.errors.map((e) => e.package)).toEqual(['ghost'])
+  })
+
+  it('auditProjectDependencies reports osvSnapshotLoaded:false when no snapshot is configured', async () => {
+    const r = await auditProjectDependencies({ project, names: ['tiny'], fetchPackument })
+    expect(r.osvSnapshotLoaded).toBe(false)
+    expect(r.audits.map((a) => a.package)).toEqual(['tiny'])
   })
 
   it('audit_project records a per-package error without failing the whole scan', async () => {

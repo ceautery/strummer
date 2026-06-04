@@ -972,7 +972,12 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         runner (slice 4), which owns the ecosystem and computes `changedDependencies(ctx.diff, …)`
         itself. flake's `files` is already on its own `flake_run` MCP tool. "Compose, never widen":
         scoping only narrows what runs, never widens the gate.
-  - [ ] **Slice 4 — factor `audit_project`'s per-package pipeline into a reusable deps runner.**
+  - [x] **Slice 4 — factor `audit_project`'s per-package pipeline into a reusable deps runner.**
+        `auditProjectDependencies(config)` in `packages/mcp/src/deps.ts` (detect → SSRF-pinned packument
+        fetch → OSV snapshot → `auditDependency`, per-package error isolation) → `{audits,
+        osvSnapshotLoaded, snapshotDate, errors}` — exactly the `RunDrivingOptions.deps` shape. Optional
+        `names` scope (the diff-changed deps; omitted ⇒ all declared manifest deps). `audit_project`
+        refactored to consume it (behavior-preserving — its tests are the regression guard).
   - [ ] **Slice 5 — `bin-verify` `rd.deps`** gated by `STRUMMER_DEPS_ALLOW_NETWORK` composed under
         `ENABLE_RUN` (compose, never widen).
   - [ ] **Slice 6 — `--deps` flag on `strummer verify run`** + STATUS/ROADMAP/memory updates; push at

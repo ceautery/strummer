@@ -119,6 +119,63 @@ async function auditOne(
   })
 }
 
+/** Config for the reusable project-audit pipeline (the run-driving deps runner reuses
+ * this, scoped to the diff-changed packages via {@link ProjectAuditConfig.names}). */
+export interface ProjectAuditConfig {
+  /** Absolute project root. */
+  project: string
+  /** OSV ecosystem (default `npm`). */
+  ecosystem?: OsvEcosystem
+  /** Include devDependencies when reading the manifest (default true). Ignored when
+   * `names` is supplied (the caller already chose the scope). */
+  includeDev?: boolean
+  /** Scope: audit ONLY these declared package names (e.g. the diff-changed deps). When
+   * omitted, every declared manifest dependency is audited. */
+  names?: string[]
+  /** OPERATOR: on-disk OSV snapshot dir (absent ⇒ `osvSnapshotLoaded:false`). */
+  osvDir?: string
+  /** OPERATOR: injected, SSRF-pinned packument fetcher. Absent ⇒ every package errors. */
+  fetchPackument?: PackumentFetcher
+}
+
+/** The reusable per-package audit roll-up: the full verdicts + provenance + isolated
+ * per-package errors. The `verify_change` deps runner consumes `{audits, osvSnapshotLoaded}`. */
+export interface ProjectAuditResult {
+  audits: DependencyAudit[]
+  osvSnapshotLoaded: boolean
+  /** Newest advisory `modified` date in the loaded snapshot (undefined when none). */
+  snapshotDate?: string
+  errors: { package: string; error: string }[]
+}
+
+/**
+ * Detect → fetch → audit each declared (or `names`-scoped) dependency of a project,
+ * isolating per-package failures. Surface-agnostic: `audit_project` builds its compact
+ * roll-up from this, and the run-driving `verify_change` deps runner (bin-verify) calls
+ * it scoped to `changedDependencies(diff)`. Sequential — deterministic + gentle on the
+ * registry.
+ */
+export async function auditProjectDependencies(
+  config: ProjectAuditConfig,
+): Promise<ProjectAuditResult> {
+  const ecosystem = config.ecosystem ?? 'npm'
+  const { advisories, snapshotDate, loaded } = loadAdvisories(config.osvDir, ecosystem)
+  const names =
+    config.names ?? dependencyNames(config.project, ecosystem, config.includeDev ?? true)
+  const opts: DepsToolsOptions = { fetchPackument: config.fetchPackument, osvDir: config.osvDir }
+
+  const audits: DependencyAudit[] = []
+  const errors: { package: string; error: string }[] = []
+  for (const name of names) {
+    try {
+      audits.push(await auditOne(config.project, name, ecosystem, opts, advisories, snapshotDate))
+    } catch (err) {
+      errors.push({ package: name, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  return { audits, osvSnapshotLoaded: loaded, snapshotDate, errors }
+}
+
 /** Register the dependency-intelligence tools onto a server. */
 export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}): void {
   const ecosystemArg = z
@@ -199,52 +256,32 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
     },
     async (args) => {
       const ecosystem = (args.ecosystem ?? 'npm') as OsvEcosystem
-      const { advisories, snapshotDate, loaded } = loadAdvisories(opts.osvDir, ecosystem)
-      const names = dependencyNames(args.project, ecosystem, args.includeDev ?? true)
-
-      const dependencies: {
-        package: string
-        installedVersion: string
-        worstSeverity: DependencyAudit['worstSeverity']
-        deprecated: boolean
-        isOutdated: boolean
-        recommendedTarget?: string
-        minimumSafeUpgrade?: string
-        vulnerabilityCount: number
-        hasFindings: boolean
-      }[] = []
-      const errors: { package: string; error: string }[] = []
       // The full per-package verdicts (vulnerability lists, deprecation messages,
       // freshness) — too large to inline, surfaced by handle when a store is set.
-      const fullAudits: DependencyAudit[] = []
+      const {
+        audits: fullAudits,
+        osvSnapshotLoaded: loaded,
+        snapshotDate,
+        errors,
+      } = await auditProjectDependencies({
+        project: args.project,
+        ecosystem,
+        includeDev: args.includeDev ?? true,
+        osvDir: opts.osvDir,
+        fetchPackument: opts.fetchPackument,
+      })
 
-      // Sequential keeps output deterministic and is gentle on the registry.
-      for (const name of names) {
-        try {
-          const audit = await auditOne(
-            args.project,
-            name,
-            ecosystem,
-            opts,
-            advisories,
-            snapshotDate,
-          )
-          fullAudits.push(audit)
-          dependencies.push({
-            package: name,
-            installedVersion: audit.installedVersion,
-            worstSeverity: audit.worstSeverity,
-            deprecated: audit.deprecated.isDeprecated,
-            isOutdated: audit.freshness.isOutdated,
-            recommendedTarget: audit.recommendedTarget,
-            minimumSafeUpgrade: audit.minimumSafeUpgrade,
-            vulnerabilityCount: audit.vulnerabilities.length,
-            hasFindings: audit.hasFindings,
-          })
-        } catch (err) {
-          errors.push({ package: name, error: err instanceof Error ? err.message : String(err) })
-        }
-      }
+      const dependencies = fullAudits.map((audit) => ({
+        package: audit.package,
+        installedVersion: audit.installedVersion,
+        worstSeverity: audit.worstSeverity,
+        deprecated: audit.deprecated.isDeprecated,
+        isOutdated: audit.freshness.isOutdated,
+        recommendedTarget: audit.recommendedTarget,
+        minimumSafeUpgrade: audit.minimumSafeUpgrade,
+        vulnerabilityCount: audit.vulnerabilities.length,
+        hasFindings: audit.hasFindings,
+      }))
 
       const bySeverity: Record<string, number> = {}
       for (const d of dependencies) {
