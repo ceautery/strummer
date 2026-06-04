@@ -5,7 +5,34 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a + 5b + 5c + 5d COMPLETE. Milestone 5d (diff-scoping the non-coverage pillars + deps run-wiring) LANDED in full — all 6 slices, design = ADR 0013 §5 + Addendum; 1109 TS + 45 Py green. Next: 5e (live capture) — or pivot to a new phase.**
+**Phase 5 — Cross-pillar verification: 5a–5e COMPLETE. Milestone 5e (verify driving a LIVE browser capture to PRODUCE the HAR) LANDED in full — all 8 slices, design = ADR 0013 Addendum 3 (forged via the `verify-live-capture-design` fan-out: 5 research streams → synthesis → 3 adversarial critics); 1122 TS + 45 Py green. Next: 5f (API-runner capture + the older tails) — or pivot to a new phase.**
+_**MILESTONE 5e — verify-driven LIVE capture (browser-spawn) — COMPLETE** (2026-06-04, all TDD red→green;
+design = ADR 0013 Addendum 3, human-ratified forks: browser-spawn only / API-runner→5f; test-first
+attach-body redaction; keep `source:'capture-from-HAR'`; live-capture extracted to `@strummer/browser`).
+Turns the consume-only capture→contract bridge into a verify-DRIVEN one: ONE gated `verify_change` call (or
+`strummer verify run --flow`) drives a browser flow, captures the HAR, and validates it. **The fan-out's
+load-bearing correction (all 3 critics, independently):** `runFlow` SWALLOWS step errors (returns
+`passed:false`, never throws), so a partially-denied flow yields a NON-empty HAR that could validate to a
+PASS — "absence as a pass." Fix: **`driveBrowserFlowToHar` gates on FLOW COMPLETENESS, not HAR emptiness**
+(throws if `!flow.passed` ⇒ inconclusive, never finalizes/validates the partial HAR). 8 slices: (1) brand the
+browser `GateError` (`Symbol.for('strummer.gate-denial')`); (2) `ContractCaptureContext` → `consume|produce`
+discriminated union + the `verify_change` `contract:{flow,vars}` input (core UNTOUCHED — `orchestrate.test.ts`
+import-scan still green); (3) extract single-source **`buildBrowserRuntimeFromEnv`** from `bin-browser` (the 3
+interlocking egress mechanisms: proxy started + `proxyServer`/hardening args + gate installed) so the verify
+path can't omit one; (4) **`driveBrowserFlowToHar` + the flow-completeness guard** (single-shot
+`runtime.shutdown()` in `finally` — no SSRF-proxy leak; lazy import); (5) **redact attach-mode HAR bodies by
+declared mimeType** — test-first confirmed the leak (a JSON/GraphQL body stored under a non-`.json`
+content-addressed filename bypassed `finalizeHar`'s extension gate); (6) `bin-verify` produce branch behind
+the FULL browser gate (`ENABLE_RUN ∧ ALLOW_CAPTURE ∧ BROWSER_ALLOWED_HOSTS ∧ _HAR_DIR ∧ _FLOWS_DIR`, no new
+env) + the **union redactor** (verify ∪ browser secrets) at BOTH chokepoints (`finalizeHar` + `validate`);
+(7) surface the produced HAR handle (`capture:{harHandle,summary}`) for auditability — via a widened SURFACE
+runner return, core still `() => Promise<ContractResult[]>`; (8) extract live-capture to `@strummer/browser`
+(its natural home — shared by the MCP bin AND the CLI, ONE flow-completeness guard) + `strummer verify run
+--flow` (gated by browser egress flags, not `--allow-run`; injectable runner so the suite never spawns).
+Invariants held: core `.mjs` untouched, compose-never-widen, absence-never-a-pass, no real spawn in `pnpm
+gate`, redaction (union) before the verdict inline AND stored. **5f staged:** the API-runner capture path
+(per-hop HAR + request-body capture for GraphQL + a finalizeHar-style redaction pass); request-body/param
+contract validation; extract the shared `Severity` scale out of deps; artifact GC/TTL; the Python half._
 _**MILESTONE 5d — diff-scoping + deps run-wiring — COMPLETE** (2026-06-04, all TDD red→green; the
 shared-primitive placement fork was ratified by the human: EXTRACT `@strummer/diff`, not extend coverage).
 Two coupled threads, 6 slices: **(a) diff-scoping.** **Slice 1** extracted the new pure, zero-dependency

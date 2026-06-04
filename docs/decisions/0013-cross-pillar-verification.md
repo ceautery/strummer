@@ -240,6 +240,14 @@ The draft proposed extending `PillarStatus` with `'errored'`/`'skipped'`. **The 
 
 ## Addendum 3 (2026-06-04): Milestone 5e — verify-driven LIVE capture (browser-spawn)
 
+**Status: COMPLETE** (2026-06-04) — all 8 slices landed TDD red→green; 1122 TS + 45 Py green. The
+load-bearing flow-completeness correction shipped in `@strummer/browser` `driveBrowserFlowToHar`; the
+attach-body redaction leak (Fork 2) was confirmed by test and fixed (`finalizeHar` redacts by declared
+mimeType). One deviation from the slice plan, human-ratified: `driveBrowserFlowToHar` was extracted to
+`@strummer/browser` (not kept in `packages/mcp`) so the MCP bin AND the `strummer verify run --flow` CLI
+share ONE flow-completeness guard (the CLI cannot import `@strummer/mcp`). 5f (API-runner capture + the
+older tails) stays staged.
+
 Forged via the `verify-live-capture-design` fan-out (5 research streams reading the real code →
 synthesis → 3 adversarial critics; all three returned **sound-with-fixes**, browser-spawn endorsed).
 The human ratified the forks. This addendum is the durable distillation; the workflow transcript is the

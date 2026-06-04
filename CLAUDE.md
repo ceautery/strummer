@@ -98,7 +98,10 @@ vision and `ARCHITECTURE.md` for the technical design.
   Postman/Insomnia/OpenAPI/HAR), `browser` (browser/UI engine: lifecycle,
   ARIA-snapshot + step tools, action gate, two-tier SSRF, a11y audit, HAR
   capture/replay, video capture, visual regression, persisted `.bru` flows,
-  multi-engine chromium/firefox/webkit — on `playwright-core`, headless-only),
+  multi-engine chromium/firefox/webkit — on `playwright-core`, headless-only; plus the
+  Phase-5e shared `driveBrowserFlowToHar` (drive a flow → capture+redact its HAR; the
+  flow-completeness guard — never validate a partially-failed flow's HAR; consumed by both
+  the verify MCP bin AND the `strummer verify run --flow` CLI)),
   `safety` (shared SSRF range classifier + secret redaction, used by `api` +
   `browser`), `assert` (shared declarative-assertion operator core — `AssertionOp`
   + `applyOp` — used by `api` + `browser`), `artifacts` (shared on-disk artifact
@@ -208,8 +211,14 @@ vision and `ARCHITECTURE.md` for the technical design.
   `@strummer/diff`) so ONE diff scopes coverage/mutate/flake; the reusable `auditProjectDependencies`
   runner (`mcp/deps.ts`, optional `names` scope) is wired into `bin-verify` `rd.deps` gated by
   `STRUMMER_DEPS_ALLOW_NETWORK` composed under `ENABLE_RUN` (deps' gate is NETWORK, not spawn) +
-  `strummer verify run --deps`; the deps runner scopes to `changedDependencies(diff)`. Design = ADR 0013
-  Addendum),
+  `strummer verify run --deps`; the deps runner scopes to `changedDependencies(diff)`. **Phase-5e landed
+  verify-DRIVEN live capture (browser-spawn):** `verify_change`'s `contract` input + `strummer verify run
+  --flow` DRIVE an operator-authored browser flow → capture the HAR → validate it (the consume-only path
+  stays). `ContractCaptureContext` is a `consume|produce` discriminated union; produce composes the FULL
+  browser gate (`ALLOWED_HOSTS`+`HAR_DIR`+`FLOWS_DIR`, no new env) behind `ENABLE_RUN`+`ALLOW_CAPTURE`;
+  the shared `@strummer/browser` `driveBrowserFlowToHar` gates on FLOW COMPLETENESS (never validates a
+  partial HAR) over the single-source `buildBrowserRuntimeFromEnv` (egress) with a union redactor at both
+  finalize + validate; the produced HAR handle is surfaced for audit. Design = ADR 0013 Addenda 2+3),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write
