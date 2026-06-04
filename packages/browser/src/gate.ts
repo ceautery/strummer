@@ -19,6 +19,14 @@ export class GateError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'GateError'
+    // Brand as a gate DENIAL (ADR 0013 Addendum 3, milestone 5e): the run-driving
+    // `@strummer/verify` reads this global-registry symbol via `isGateDenial` to map a
+    // denial to `skipReason:'gate-not-set'` (never `errored`) WITHOUT importing engine
+    // code — matching CoverageGateError/FlakeGateError/MutationGateError. The
+    // `Symbol.for` key string is the cross-package contract. (Inert for in-flow denials
+    // that `runFlow` swallows — verify gates on flow completeness — but load-bearing for
+    // the pre-`runFlow` `createSession`→`checkNavigation` reject path.)
+    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('strummer.gate-denial')] = true
   }
 }
 

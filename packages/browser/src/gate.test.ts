@@ -23,6 +23,18 @@ describe('BrowserGate policy (pure, operator-set)', () => {
     expect(() => gate.checkNavigation('https://evil.test/a')).toThrow(GateError)
   })
 
+  it('brands GateError as a gate denial via the global symbol (5e: cross-package, no import)', () => {
+    // The run-driving @strummer/verify reads Symbol.for('strummer.gate-denial') to map a
+    // gate denial to skipReason:'gate-not-set' WITHOUT importing engine code — matching
+    // CoverageGateError/FlakeGateError/MutationGateError. Inert for runFlow-swallowed
+    // in-flow denials (gate on flow completeness instead), but load-bearing for the
+    // pre-runFlow createSession→checkNavigation reject path.
+    const err = new GateError('denied')
+    expect((err as unknown as Record<symbol, unknown>)[Symbol.for('strummer.gate-denial')]).toBe(
+      true,
+    )
+  })
+
   it('decideMutation: dry-run by default, execute only with allowUnsafe + allowlisted host', () => {
     expect(
       new BrowserGate({ allowedHosts: ['example.com'] }).decideMutation('https://example.com'),
