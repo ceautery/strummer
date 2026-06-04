@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { ContractResult } from '@strummer/api'
 import { type DiffCoverageReport, runScoped, type TestRunner } from '@strummer/coverage'
+import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@strummer/deps'
 import { type FlakeVerdict, HistoryStore, runAndRecord } from '@strummer/flake'
 import { type MutationRunner, type MutationSummary, runMutation } from '@strummer/mutate'
 import {
@@ -17,6 +18,7 @@ import {
   type Severity,
 } from '@strummer/verdict'
 import { type OrchestrateRequest, orchestrate } from '@strummer/verify'
+import { auditProjectScoped, makeFetcher, type PackumentFetcher, registriesFrom } from './deps.js'
 import type { CliIO } from './index.js'
 
 const SEVERITIES = ['critical', 'high', 'moderate', 'low', 'none']
@@ -37,9 +39,12 @@ export interface VerifyRunDeps {
   coverage?: (ctx: RunCtx) => Promise<DiffCoverageReport>
   flake?: (ctx: RunCtx) => Promise<FlakeVerdict[]>
   mutate?: (ctx: RunCtx) => Promise<MutationSummary>
+  deps?: (ctx: RunCtx) => Promise<{ audits: DependencyAudit[]; osvSnapshotLoaded: boolean }>
   coverageRunner?: TestRunner
   flakeRunner?: TestRunner
   mutateRunner?: MutationRunner
+  /** Injected packument fetcher for the realistic deps path (keeps the suite offline). */
+  depsFetcher?: PackumentFetcher
   historyStore?: HistoryStore
 }
 
@@ -54,12 +59,14 @@ interface RunCtx {
  *
  * - `verify [--contract f] [--coverage f] ...` (COMPOSE): fold per-pillar JSON results
  *   on disk into one verdict (ADR 0013 §1). The human supplies each pillar's output.
- * - `verify run <root> [--coverage] [--flake --flake-db f] [--mutate] [--allow-run] ...`
- *   (RUN-DRIVING, ADR 0013 Addendum 5c): DRIVE the selected pillars and fold them. The
- *   human is the operator, so `--allow-run` is the straight-through gate and the typed
- *   root is auto-allowed; each pillar's own `assertAllowed` still denies without it
- *   (⇒ `skipReason:gate-not-set`, never run — "compose, never widen"). Runners are
- *   injectable so the suite never spawns (ADR 0010).
+ * - `verify run <root> [--coverage] [--flake --flake-db f] [--mutate] [--deps] [--allow-run] ...`
+ *   (RUN-DRIVING, ADR 0013 Addendum 5c/5d): DRIVE the selected pillars and fold them. The
+ *   human is the operator, so `--allow-run` is the straight-through gate for the SPAWN
+ *   pillars (coverage/flake/mutate) and the typed root is auto-allowed; each pillar's own
+ *   `assertAllowed` still denies without it (⇒ `skipReason:gate-not-set`, never run —
+ *   "compose, never widen"). `--deps` is gated by NETWORK not spawn (a packument fetch),
+ *   so it needs no `--allow-run`; a `--diff` scopes the audit to the changed packages
+ *   (`changedDependencies`). Runners are injectable so the suite never spawns (ADR 0010).
  *
  * Exit codes (both modes): 0 pass / 1 fail|warn / 2 inconclusive.
  */
@@ -105,10 +112,16 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
       coverage: { type: 'boolean' },
       flake: { type: 'boolean' },
       mutate: { type: 'boolean' },
+      deps: { type: 'boolean' },
       'allow-run': { type: 'boolean' },
       'changed-file': { type: 'string', multiple: true },
       diff: { type: 'string' },
       'flake-db': { type: 'string' },
+      // deps run-driving: its gate is NETWORK (a packument fetch), not spawn — the human
+      // typing --deps is the operator intent, so it needs no --allow-run.
+      'osv-db': { type: 'string' },
+      registry: { type: 'string' },
+      'allow-private': { type: 'boolean' },
       'timeout-ms': { type: 'string' },
       'fail-at-or-above': { type: 'string' },
       json: { type: 'boolean' },
@@ -193,8 +206,34 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
     }
   }
 
+  if (values.deps) {
+    const ovr = deps.deps
+    if (ovr) {
+      request.deps = { run: () => ovr(ctx) }
+    } else {
+      // npm-first (matches the deps run-wiring); the diff scopes the audit to the
+      // changed packages, falling back to the whole project when none changed.
+      const ecosystem: OsvEcosystem = 'npm'
+      const fetchPackument = deps.depsFetcher ?? makeFetcher(registriesFrom(values))
+      const osvDir = values['osv-db']
+      request.deps = {
+        run: async () => {
+          const scoped = diff ? changedDependencies(diff, ecosystem) : []
+          const { audits, osvSnapshotLoaded } = await auditProjectScoped({
+            project: projectRoot,
+            ecosystem,
+            names: scoped.length > 0 ? scoped : undefined,
+            osvDir,
+            fetchPackument,
+          })
+          return { audits, osvSnapshotLoaded }
+        },
+      }
+    }
+  }
+
   if (Object.keys(request).length === 0) {
-    io.err('verify run needs ≥1 pillar (--coverage / --flake / --mutate)\n')
+    io.err('verify run needs ≥1 pillar (--coverage / --flake / --mutate / --deps)\n')
     return 2
   }
 

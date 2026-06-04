@@ -103,11 +103,16 @@ vision and `ARCHITECTURE.md` for the technical design.
   `browser`), `assert` (shared declarative-assertion operator core — `AssertionOp`
   + `applyOp` — used by `api` + `browser`), `artifacts` (shared on-disk artifact
   store — `strummer://<prefix>/<id>/<kind>` by-handle egress, parameterized prefix;
-  extracted from `browser` per ADR 0010), `deps` (Phase-4 dependency/version
+  extracted from `browser` per ADR 0010), `diff` (Phase-5d shared changed-set primitive —
+  pure, ZERO-dependency `parseUnifiedDiff` (per-file new-side added lines) + `changedFiles`
+  (all non-deleted touched paths, the scope primitive); extracted out of `coverage` the moment
+  a 2nd consumer appeared, mirroring safety/assert/artifacts — its zero deps are what let
+  `verify` consume it without dragging in spawn code), `deps` (Phase-4 dependency/version
   intelligence: deprecation/vuln/freshness for the *installed* version; pure offline
-  core + on-disk OSV snapshot + `audit_dependency`/`audit_project` MCP surface),
-  `coverage` (Phase-4 track A: the forgotten-assertion catch — `parseUnifiedDiff` +
-  `uncoveredNewLines` + `uncoveredInDiff` pure differs, plus gated impact-scoped
+  core + on-disk OSV snapshot + `audit_dependency`/`audit_project` MCP surface; plus the
+  Phase-5d pure `changedDependencies(diff, ecosystem)` block-aware npm manifest diff over `diff`),
+  `coverage` (Phase-4 track A: the forgotten-assertion catch — `uncoveredNewLines` +
+  `uncoveredInDiff` pure differs over `@strummer/diff`'s `parseUnifiedDiff`, plus gated impact-scoped
   `runScoped`; `uncovered_in_diff`/`run_scoped` MCP surface),
   `flake` (Phase-4 test-quality chain, COMPLETE: flaky-test detection — pure Wilson/binomial
   `classifyHistory` → `flaky`/`reliable`/`broken`/`insufficient-data` + `flakeScore`; a private
@@ -198,8 +203,13 @@ vision and `ARCHITECTURE.md` for the technical design.
   (default `randomUUID`). "Compose, never widen": `orchestrate` invokes each thunk with ZERO args and has
   no `allowRun`/`allowedRoots` knob. Surfaced as the deny-by-default `verify_change` MCP tool +
   `bin-verify` "both required" env gate (`STRUMMER_VERIFY_ENABLE_RUN` AND each pillar's OWN
-  `*_ALLOW_RUN` — never verify-scoped renames) + `strummer verify run` CLI. deps run-wiring + diff-scoping
-  staged to 5d. Design = ADR 0013 Addendum),
+  `*_ALLOW_RUN` — never verify-scoped renames) + `strummer verify run` CLI. **Phase-5d landed
+  diff-scoping + deps run-wiring:** `verify_change` derives `changedFiles` from a supplied `diff` (via
+  `@strummer/diff`) so ONE diff scopes coverage/mutate/flake; the reusable `auditProjectDependencies`
+  runner (`mcp/deps.ts`, optional `names` scope) is wired into `bin-verify` `rd.deps` gated by
+  `STRUMMER_DEPS_ALLOW_NETWORK` composed under `ENABLE_RUN` (deps' gate is NETWORK, not spawn) +
+  `strummer verify run --deps`; the deps runner scopes to `changedDependencies(diff)`. Design = ADR 0013
+  Addendum),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write

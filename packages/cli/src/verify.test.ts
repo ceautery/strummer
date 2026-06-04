@@ -118,4 +118,19 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
     ).toBe(2)
     expect(c.err()).toContain('fail-at-or-above')
   })
+
+  it('drives the deps pillar via an injected runner — no --allow-run, no network', async () => {
+    // deps' gate is NETWORK, not spawn — the human typing --deps is the operator intent;
+    // it needs no --allow-run. The injected runner keeps the suite offline.
+    const c = capture()
+    const code = await runVerify(['run', '/repo', '--deps', '--fail-at-or-above', 'high'], c.io, {
+      deps: async () => ({
+        audits: [{ worstSeverity: 'high', deprecated: { isDeprecated: false } } as never],
+        osvSnapshotLoaded: true,
+      }),
+    })
+    expect(code).toBe(1) // the high-severity deps warn ≥ the declared cut ⇒ overall FAIL
+    expect(c.out()).toContain('verdict: FAIL')
+    expect(c.out()).toContain('deps: warn [high]') // the pillar ran and folded
+  })
 })

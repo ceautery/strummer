@@ -5,7 +5,41 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a + 5b + 5c COMPLETE. Milestone 5c (run-driving / orchestration `verify`) LANDED in full — all 6 slices, design = ADR 0013 Addendum (Accepted 2026-06-04); 1087 TS + 45 Py green, pushed. Next: 5d (diff-scoping + deps run-wiring).**
+**Phase 5 — Cross-pillar verification: 5a + 5b + 5c + 5d COMPLETE. Milestone 5d (diff-scoping the non-coverage pillars + deps run-wiring) LANDED in full — all 6 slices, design = ADR 0013 §5 + Addendum; 1109 TS + 45 Py green. Next: 5e (live capture) — or pivot to a new phase.**
+_**MILESTONE 5d — diff-scoping + deps run-wiring — COMPLETE** (2026-06-04, all TDD red→green; the
+shared-primitive placement fork was ratified by the human: EXTRACT `@strummer/diff`, not extend coverage).
+Two coupled threads, 6 slices: **(a) diff-scoping.** **Slice 1** extracted the new pure, zero-dependency
+**`@strummer/diff`** package — `parseUnifiedDiff` MOVED out of `@strummer/coverage` (which re-exports it
+for back-compat + consumes it via `report.ts`; behavior-preserving, coverage suite is the regression guard)
++ a new `changedFiles(diff)` scope primitive (all non-deleted touched paths, incl. removal-only
+modifications `parseUnifiedDiff` omits; excludes deletions). The placement is forced, not aesthetic:
+`@strummer/verify` must RUNTIME-call the parser to scope pillars, and its source-scanned "imports zero
+spawn-capable code" invariant forbids a runtime import from the engine-listed `@strummer/coverage` (re-exports
+`runScoped`→`child_process`) — a pure shared package keeps the invariant provable. Mirrors safety/assert/
+artifacts. **Slice 2** added pure block-aware **`changedDependencies(diff, ecosystem)`** to `@strummer/deps`
+(over `@strummer/diff`): tracks the open `dependencies`/`devDependencies`/`peerDependencies`/
+`optionalDependencies` block so a changed `version`/`engines.node`/`packageManager`/`scripts` value (which
+also LOOKS like a version) is never mistaken for a dependency. Under-scopes (never invents a dep) when a deep
+dependency's block header is outside the diff context — documented, caller falls back to whole-project.
+PyPI/Gem lockfile diffs return `[]` (staged). **Slice 3** — `verify_change` now DERIVES `changedFiles` from
+a supplied `diff` (explicit `changedFiles` still wins) so ONE diff scopes coverage (`vitest related`), mutate
+(`mutateFiles`), and flake (`files`); deps scoping is delegated to its runner (it owns the ecosystem). flake's
+`files` was already on its `flake_run` MCP tool. **(b) deps run-wiring (carried from 5c).** **Slice 4**
+factored `audit_project`'s per-package pipeline into the reusable **`auditProjectDependencies(config)`**
+(`packages/mcp/src/deps.ts`) → `{audits, osvSnapshotLoaded, snapshotDate, errors}` (the `RunDrivingOptions.deps`
+shape) with an optional `names` scope; `audit_project` refactored to consume it (behavior-preserving). **Slice 5**
+wired `rd.deps` into `bin-verify`: deps' OWN gate is NETWORK (it fetches packuments, never runs project code),
+so it composes "both required" — `STRUMMER_VERIFY_ENABLE_RUN` AND `STRUMMER_DEPS_ALLOW_NETWORK`; a shared
+`depsNetworkConfig(env)` (factored in `bin-deps`) is the single source for the SSRF-pinned fetcher + OSV dir;
+the runner scopes the audit to `changedDependencies(ctx.diff)`, whole-project fallback when none changed.
+**Slice 6** added `--deps` to `strummer verify run` over a reusable `auditProjectScoped` (factored into
+`cli/deps.ts`); `--deps` is NETWORK-gated (no `--allow-run`), a `--diff` scopes it, fetcher = the same
+`makeFetcher(registriesFrom)` as `strummer deps`. Load-bearing invariants HELD: "compose, never widen" (no
+umbrella gate; deps composes `ALLOW_NETWORK` under `ENABLE_RUN`); scoping only NARROWS what runs; no real
+spawn/fetch in `pnpm gate` (every runner/fetcher injected). The `@strummer/diff` alias was added to
+`vitest.config.ts` + it is a dep of coverage/deps/mcp; verify's built `.mjs` still imports only `node:crypto`
++ `@strummer/verdict` (verify uses the MCP/CLI layer's diff derivation, not its own runtime diff import — the
+invariant is untouched)._
 _Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
 contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
 structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new

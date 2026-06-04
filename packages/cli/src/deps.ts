@@ -21,7 +21,7 @@ import { resolveAndPin } from '@strummer/safety'
 import type { CliIO } from './index.js'
 
 /** Injected (so tests stay offline) registry-metadata fetcher; the real one is SSRF-pinned. */
-type PackumentFetcher = (packageName: string, ecosystem: OsvEcosystem) => Promise<Packument>
+export type PackumentFetcher = (packageName: string, ecosystem: OsvEcosystem) => Promise<Packument>
 /** Injected CHANGELOG fetcher (npm only); the real one is SSRF-pinned to raw.githubusercontent. */
 type ChangelogFetcher = (
   packageName: string,
@@ -82,7 +82,7 @@ interface Registries {
   allowPrivate: boolean
 }
 
-function registriesFrom(values: Record<string, unknown>): Registries {
+export function registriesFrom(values: Record<string, unknown>): Registries {
   return {
     registry: (values.registry as string) || 'https://registry.npmjs.org',
     pypiRegistry: (values['pypi-registry'] as string) || 'https://pypi.org/pypi',
@@ -106,7 +106,7 @@ function packumentUrl(registry: string, packageName: string): string {
 }
 
 /** Build the SSRF-pinned packument fetcher (npm/PyPI/RubyGems), mirroring the deps bin. */
-function makeFetcher(r: Registries): PackumentFetcher {
+export function makeFetcher(r: Registries): PackumentFetcher {
   return async (packageName, ecosystem) => {
     if (ecosystem === 'npm') {
       const url = packumentUrl(r.registry, packageName)
@@ -204,6 +204,47 @@ async function auditOne(
     snapshotDate,
     comparator: comparatorFor(ecosystem),
   })
+}
+
+/**
+ * Detect → fetch → audit each declared (or `names`-scoped) dependency of a project,
+ * isolating per-package failures — the reusable project audit the `verify run --deps`
+ * path reuses (mirrors the MCP `auditProjectDependencies`). Returns the
+ * `{audits, osvSnapshotLoaded}` shape the verify orchestrator's deps adapter consumes.
+ */
+export async function auditProjectScoped(input: {
+  project: string
+  ecosystem: OsvEcosystem
+  /** Audit ONLY these names (the diff-changed deps); omitted ⇒ all declared deps. */
+  names?: string[]
+  osvDir?: string
+  fetchPackument: PackumentFetcher
+}): Promise<{
+  audits: DependencyAudit[]
+  osvSnapshotLoaded: boolean
+  errors: { package: string; error: string }[]
+}> {
+  const { advisories, snapshotDate, loaded } = loadAdvisories(input.osvDir, input.ecosystem)
+  const names = input.names ?? dependencyNames(input.project, input.ecosystem, true)
+  const audits: DependencyAudit[] = []
+  const errors: { package: string; error: string }[] = []
+  for (const name of names) {
+    try {
+      audits.push(
+        await auditOne(
+          input.project,
+          name,
+          input.ecosystem,
+          input.fetchPackument,
+          advisories,
+          snapshotDate,
+        ),
+      )
+    } catch (e) {
+      errors.push({ package: name, error: (e as Error).message })
+    }
+  }
+  return { audits, osvSnapshotLoaded: loaded, errors }
 }
 
 /** A security or deprecation finding — the CI-actionable signal (outdated alone is not). */

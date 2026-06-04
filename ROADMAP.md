@@ -828,7 +828,7 @@ Two independent tracks, then the test-quality chain, then LSP last:
         resolution matrix (server↔toolchain); the residual confine→commit parent-dir-swap TOCTOU
         (documented terminal-partial-but-confined).
 
-## Phase 5 — Cross-pillar verification  *(COMPLETE — both milestones; make the pillars COMPOSE; design = ADR 0013, Accepted)*
+## Phase 5 — Cross-pillar verification  *(5a–5d COMPLETE; make the pillars COMPOSE; design = ADR 0013 + Addendum, Accepted; only 5e staged)*
 
 The Phase-4 pillars each emit a pure, structured verdict that nothing composes. Phase 5 makes
 them compose: a captured browser/API run's traffic is validated against the API contract, and
@@ -939,8 +939,8 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         the suite never spawns). Exit codes `0 pass / 1 fail|warn / 2 inconclusive`; a gate-blocked
         pillar ⇒ `2` (absence, not misconfig). Then STATUS/ROADMAP/memory updates; push at the
         milestone boundary.
-- [ ] **Milestone 5d — diff-scoping the non-coverage pillars + deps run-wiring** *(UNDERWAY; ADR 0013 §5
-      + Addendum).* A shared changed-set primitive; expose flake's existing `files` input in MCP; a pure
+- [x] **Milestone 5d — diff-scoping the non-coverage pillars + deps run-wiring: COMPLETE** *(ADR 0013 §5
+      + Addendum; 1109 TS + 45 Py green).* A shared changed-set primitive; expose flake's existing `files` input in MCP; a pure
       `changedDependencies(diff, ecosystem)` for deps (npm `package.json` first, PyPI/Gem lockfiles
       staged); mutate already supports `mutateFiles`/`--incremental`. `verify_change` then scopes each
       pillar from one diff. **Also wire deps into the verify run path** (carried from 5c): factor
@@ -984,8 +984,12 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         Factored a shared `depsNetworkConfig(env)` in `bin-deps` (the SSRF-pinned fetcher + OSV dir,
         single source — both bins use it). The deps runner scopes the audit to
         `changedDependencies(ctx.diff)`; no changed deps ⇒ whole-project fallback.
-  - [ ] **Slice 6 — `--deps` flag on `strummer verify run`** + STATUS/ROADMAP/memory updates; push at
-        the milestone boundary.
+  - [x] **Slice 6 — `--deps` flag on `strummer verify run`.** Drives the deps pillar over
+        `auditProjectScoped` (factored into `cli/deps.ts`, mirroring the MCP runner) + folds it. deps'
+        gate is NETWORK not spawn (a packument fetch), so `--deps` needs NO `--allow-run`; a `--diff`
+        scopes the audit to `changedDependencies`. The fetcher is the same SSRF-pinned
+        `makeFetcher(registriesFrom(values))` the `strummer deps` CLI uses (`--osv-db`/`--registry`/
+        `--allow-private`); the runner is injectable so the suite never fetches.
 - [ ] *(staged, not amputated — ADR 0013 §5 + Addendum)* **5e** `verify` driving a live capture to
       *produce* the HAR (browser-spawn behind the browser gate; and/or an API-runner capture path once
       the runner records redirect hops + request bodies); request-body/param contract validation;
