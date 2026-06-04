@@ -75,6 +75,9 @@ importers:
       '@axe-core/playwright':
         specifier: 4.11.3
         version: 4.11.3(playwright-core@1.60.0)
+      '@strummer/api':
+        specifier: workspace:*
+        version: link:../api
       '@strummer/artifacts':
         specifier: workspace:*
         version: link:../artifacts

@@ -1,6 +1,7 @@
 import { readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { redactHarZip, summarizeHar } from '@strummer/api'
+import { strFromU8, unzipSync } from 'fflate'
 import type { ArtifactStore } from './artifacts.js'
 
 /**
@@ -19,54 +20,9 @@ import type { ArtifactStore } from './artifacts.js'
  * stays operator-gated rather than on by default.
  */
 
-// Text entries in a HAR `.zip` where a secret can land: the `.har` JSON itself
-// (urls/headers/query/postData) and any persisted text resource bodies. Binary
-// resources (images, fonts, the `.dat` bodies) pass through untouched. Entries
-// are content-addressed but referenced by name, so redacting their bytes in place
-// is safe — the HAR still resolves them by name.
-const HAR_TEXT_ENTRY = /\.(har|json|txt|html|htm|css|js|xml|svg)$/
-
-// A body's DECLARED mimeType is text-like (so its bytes may carry a secret as text and
-// must be redacted), even when its content-addressed attach filename has no text
-// extension. Inclusive on purpose — redacting more is safe; a genuinely binary type
-// (image/font/octet-stream) is excluded so its bytes pass through byte-for-byte.
-const TEXT_MIME = /^text\/|(?:json|xml|javascript|ecmascript|graphql|html|urlencoded|csv|yaml)/i
-
-/**
- * In `content:'attach'` mode Playwright persists request/response bodies as SEPARATE
- * archive entries whose names are content-addressed — frequently WITHOUT a text
- * extension — so {@link HAR_TEXT_ENTRY} (a filename gate) would pass a JSON/GraphQL body
- * through unredacted. Walk the `.har` JSON and collect the `_file` names of every body
- * whose DECLARED mimeType is text-like, so they are redacted by type, not by extension.
- */
-function textAttachFiles(harJson: string): Set<string> {
-  const files = new Set<string>()
-  let entries: unknown[] = []
-  try {
-    const log = (JSON.parse(harJson) as { log?: { entries?: unknown[] } }).log
-    if (Array.isArray(log?.entries)) entries = log.entries
-  } catch {
-    return files
-  }
-  const consider = (part: { mimeType?: unknown; _file?: unknown } | undefined) => {
-    if (
-      part &&
-      typeof part._file === 'string' &&
-      typeof part.mimeType === 'string' &&
-      TEXT_MIME.test(part.mimeType)
-    ) {
-      files.add(part._file)
-    }
-  }
-  for (const e of entries as {
-    request?: { postData?: { mimeType?: unknown; _file?: unknown } }
-    response?: { content?: { mimeType?: unknown; _file?: unknown } }
-  }[]) {
-    consider(e?.request?.postData)
-    consider(e?.response?.content)
-  }
-  return files
-}
+// The blanket-redaction pass + the `.har` tally live in `@strummer/api` `har-synth.ts`
+// (extracted 5f slice 1) so both this file wrapper AND a SYNTHESIZED in-memory api HAR
+// share ONE redaction code path (incl. the attach-by-declared-mimeType coverage).
 
 /** A finished HAR capture, returned by handle with a compact summary. */
 export interface HarSummary {
@@ -89,35 +45,6 @@ export interface HarSummary {
  */
 export function harPathFor(dir: string, sessionId: string): string {
   return join(dir, `${sessionId.replace(/[^\w.-]/g, '_')}.zip`)
-}
-
-interface HarCounts {
-  entryCount: number
-  byStatus: Record<string, number>
-  byMethod: Record<string, number>
-}
-
-/** Parse the `.har` JSON into compact tallies; tolerant of a malformed/empty log. */
-function summarizeHar(harJson: string): HarCounts {
-  const byStatus: Record<string, number> = {}
-  const byMethod: Record<string, number> = {}
-  let entries: unknown[] = []
-  try {
-    const log = (JSON.parse(harJson) as { log?: { entries?: unknown[] } }).log
-    if (Array.isArray(log?.entries)) entries = log.entries
-  } catch {
-    return { entryCount: 0, byStatus, byMethod }
-  }
-  for (const e of entries as {
-    request?: { method?: unknown }
-    response?: { status?: unknown }
-  }[]) {
-    const status = e?.response?.status
-    if (typeof status === 'number') byStatus[String(status)] = (byStatus[String(status)] ?? 0) + 1
-    const method = e?.request?.method
-    if (typeof method === 'string') byMethod[method] = (byMethod[method] ?? 0) + 1
-  }
-  return { entryCount: entries.length, byStatus, byMethod }
 }
 
 export interface FinalizeHarOptions {
@@ -147,27 +74,14 @@ export async function finalizeHar(opts: FinalizeHarOptions): Promise<HarSummary 
   }
   const redact = opts.redact ?? ((v: string) => v)
 
-  const entries = unzipSync(new Uint8Array(raw))
-  // The `.har` JSON names the text-like attach bodies (by declared mimeType) that the
-  // filename gate would miss — collect them first so they are redacted by TYPE.
-  let attachText = new Set<string>()
-  for (const [name, bytes] of Object.entries(entries)) {
-    if (name.endsWith('.har')) attachText = textAttachFiles(strFromU8(bytes))
+  // Delegate the unzip → redact-text-members-by-extension-AND-declared-mimeType → rezip
+  // transform to the shared pass; summarize from the redacted `.har` (status/method are
+  // not secrets, so the counts are unchanged by redaction). Binary bodies pass through.
+  const zip = redactHarZip(raw, redact)
+  let counts = { entryCount: 0, byStatus: {}, byMethod: {} }
+  for (const [name, bytes] of Object.entries(unzipSync(new Uint8Array(zip)))) {
+    if (name.endsWith('.har')) counts = summarizeHar(strFromU8(bytes))
   }
-  // Redact every text entry — the `.har` JSON + persisted text bodies (by extension OR
-  // by declared mimeType) — and summarize from the `.har`; binary bodies pass through.
-  const out: Record<string, Uint8Array> = {}
-  let counts: HarCounts = { entryCount: 0, byStatus: {}, byMethod: {} }
-  for (const [name, bytes] of Object.entries(entries)) {
-    if (HAR_TEXT_ENTRY.test(name) || attachText.has(name)) {
-      const text = redact(strFromU8(bytes))
-      if (name.endsWith('.har')) counts = summarizeHar(text)
-      out[name] = strToU8(text)
-    } else {
-      out[name] = bytes
-    }
-  }
-  const zip = Buffer.from(zipSync(out))
   const handle = opts.store.put(opts.runId, 'har', zip, 'application/zip')
 
   // Drop the unredacted temp HAR — the store now holds the canonical (redacted) one.

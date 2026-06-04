@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { redactHarZip, summarizeHar } from './har-synth.js'
@@ -103,5 +105,21 @@ describe('summarizeHar — compact tallies from the .har JSON (5f slice 1)', () 
 
   it('is tolerant of a malformed log', () => {
     expect(summarizeHar('not json')).toEqual({ entryCount: 0, byStatus: {}, byMethod: {} })
+  })
+})
+
+// har-synth.ts is the leaf that creates the new `@strummer/browser → @strummer/api`
+// dep edge (slice 2: browser's finalizeHar delegates here). It must import ONLY fflate,
+// so that edge can never drag runner/undici/spawn-capable code into the browser pillar.
+describe('har-synth.ts — pure leaf, fflate-only imports (5f slice 2 guard)', () => {
+  it('imports nothing beyond fflate', () => {
+    const src = readFileSync(fileURLToPath(new URL('./har-synth.ts', import.meta.url)), 'utf8')
+    for (const line of src.split('\n')) {
+      const m = line.match(/^\s*import\s+(?:type\s+)?.*?\s+from\s+['"]([^'"]+)['"]/)
+      if (m) expect(m[1]).toBe('fflate')
+    }
+    // No CommonJS require / no dynamic import of anything but fflate (scan calls, not prose).
+    expect(src).not.toMatch(/\brequire\s*\(/)
+    for (const m of src.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]/g)) expect(m[1]).toBe('fflate')
   })
 })
