@@ -95,7 +95,12 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `packages/` — TS workspace: `core` (docs domain + SQLite), `embed` (query
   embedding), `api` (API-testing engine: `.bru`, runner, assertions, secrets,
   safety, scripts, contract validation — response (`validateOpenApiResponse`/
-  `validateGraphqlOperation`) AND request (`validateOpenApiRequest` in
+  `validateGraphqlOperation` — which ALSO validates GraphQL request `variables` against the
+  operation's declared types, ADR 0015: per-variable `getVariableValues` loop, findings
+  reconstructed from name+type (never echoing values), custom-scalar/non-object/multi-op-ambiguity
+  → `unverified` folded into the bridge's `noSignal`; wired through the capture bridge + MCP
+  `validate_response.variables` + CLI `api validate --variables` + live `api run --graphql`) AND
+  request (`validateOpenApiRequest` in
   `request-contract.ts`, ADR 0014: body + path/query/header params over the shared
   `resolveOpenApiOperation`/`normalizeOpenApiSchema` seams; the `unverified` flag the
   capture bridge folds into `noSignal` so a present-but-uncheckable request can't pass;

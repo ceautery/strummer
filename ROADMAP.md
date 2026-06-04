@@ -1071,9 +1071,22 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       path (never a false `missing-required-body`); a GraphQL envelope skips OpenAPI request validation.
       Ratified forks: validate even on a dry-run (request known at prepare time; exit code unchanged); CLI-only
       (MCP `run_request` keeps run/validate as separate tools).
+- [x] **GraphQL-request variable validation: COMPLETE** (1228 TS + 45 Py green; design = ADR 0015, a design
+      fan-out → synthesis → adversarial critic). The contract-pillar deepening: `validateGraphqlOperation`
+      (EXTENDED, not a sibling — fork 1) validates the runtime `variables` against the operation's declared
+      types via a per-variable `getVariableValues(schema, [varDef], vars)` loop (structural attribution →
+      findings reconstructed from variable name + printed type + category, never from graphql-js messages,
+      which echo values). Returns `GraphqlValidationResult extends ContractResult { unverified? }` (additive
+      subtype). Authority model + `unverified`-skip (custom-scalar-typed vars via a `typeFromAST` transitive
+      walk, non-object `variables`, multi-op ambiguity) mirror ADR 0014. Full-parity surfaces (fork 2): engine
+      + capture→contract bridge (`graphqlOperationOf` extracts `variables`; `unverified → noSignal` fold) +
+      MCP `validate_response.variables` + CLI `api validate --graphql --variables` + live `api run --graphql
+      <schema>` (the symmetric parallel to `api run --openapi`). New finding kinds `graphql-variable-missing`/
+      `-invalid` (error) + `graphql-undocumented-variable` (warning).
 - [ ] *(staged, not amputated)* the older tails: non-scalar/advanced OpenAPI parameter serializations (deepObject/pipeDelimited/CSV/
       explode arrays, object-valued, content-typed, cookie params) + `label`/`matrix`/multi-param path
-      templates + non-local `$ref` + non-JSON body schemas + GraphQL-request variable validation; artifact
+      templates + non-local `$ref` + non-JSON body schemas; GraphQL directive-argument validation + custom-scalar
+      variable coercers; artifact
       GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture); `changedDependencies`
       for PyPI/Gem lockfiles; deps `changelog_diff` for PyPI/RubyGems; a mutate cosmic-ray/`runMutmut` adapter;
       LSP recursive/dir delete + the full toolchain cross-version matrix.

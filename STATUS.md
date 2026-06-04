@@ -5,7 +5,34 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: LIVE `api run --openapi` REQUEST validation LANDED — the one surface ADR 0014 staged is now closed; gate green (1207 TS + 45 Py). Before that: REQUEST-BODY/PARAM contract validation (v1, ADR 0014) and the `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining older staged tails (non-scalar OpenAPI param serializations / non-JSON body schemas / GraphQL-request variable validation; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: GRAPHQL-REQUEST VARIABLE validation LANDED (contract-pillar deepening, ADR 0015) — `validateGraphqlOperation` now validates the runtime `variables` against the operation's declared types, wired through the capture bridge + direct surfaces + live `api run --graphql`; gate green (1228 TS + 45 Py). Before that: live `api run --openapi` REQUEST validation (ADR 0014 close-out), REQUEST-BODY/PARAM contract validation (v1, ADR 0014), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (non-scalar OpenAPI param serializations / non-JSON body schemas; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**GRAPHQL-REQUEST VARIABLE VALIDATION — COMPLETE** (2026-06-04, all TDD red→green; gate green at 1228 TS +
+45 Py; design = ADR 0015, a design fan-out — 3 research streams → synthesis → 1 adversarial critic [found 4
+holes, all folded in]; both forks human-ratified). The contract-pillar deepening: `validateGraphqlOperation`
+now validates the runtime `variables` payload against the chosen operation's declared types — the GraphQL
+analogue of ADR 0014's OpenAPI request validation. **Fork 1 (ratified):** EXTEND `validateGraphqlOperation`
+(not a `validateGraphqlRequest` sibling) — it already spans request (query-vs-SDL drift) AND response
+(`errors[]`) and reuses the same built schema + parsed document + chosen operation node; returns a
+`GraphqlValidationResult extends ContractResult { unverified? }` (additive subtype, NEVER widening
+`ContractResult`). Variable validation runs iff `opts.variables !== undefined` (existing query-only callers
+behavior-preserved). **The redaction-safety mechanism:** graphql-js `getVariableValues` error messages ECHO
+raw input values, so we iterate `variableDefinitions` ONE AT A TIME (`getVariableValues(schema, [varDef],
+vars)`) → each error is structurally attributable → findings RECONSTRUCTED from variable name + printed type
++ category (`graphql-variable-missing`/`-invalid`, `graphql-undocumented-variable` warning), never from
+graphql-js messages. **Authority:** `variablesAuthoritative` (direct surfaces true; capture omits) — absent
+required (non-null, no-default; default-aware) is a finding only when authoritative, else `unverified`; a
+present-but-invalid value is always a finding. **`unverified`-skip → noSignal:** custom-scalar-typed vars
+(SDL identity scalars validate nothing — `typeFromAST`-resolved transitive walk, cycle-guarded), non-object
+`variables`, multi-op with no operationName. **Fork 2 (full parity):** 3 slices — (1) engine; (2) capture→
+contract bridge (`graphqlOperationOf` extracts `variables`; the GraphQL branch folds `unverified → noSignal++`
+as `graphql-variable-unverified`, mirroring the REST `request-unverified` fold so absence-is-never-a-pass
+holds for GraphQL); (3) direct surfaces — MCP `validate_response` gains `variables`, CLI `api validate
+--graphql --variables`, and live `api run --graphql <schema>` (the symmetric parallel to `api run --openapi`,
+findings redacted via `registeredSecrets`, folded into the exit code). Invariants held: absence-never-a-pass
+(the bridge noSignal fold), redaction-before-verdict (value-free reconstructed messages + the bridge's single
+chokepoint), compose-never-widen (`unverified` on a subtype; verdict shape/`fromCaptureVerdict`/`orchestrate`
+UNCHANGED), no-real-fetch-in-gate (pure validator; in-process server for the live-run test). 21 tests added
+(13 engine + 3 bridge + 4 CLI + 1 MCP)._
 _**LIVE `api run --openapi` REQUEST validation — COMPLETE** (2026-06-04, all TDD red→green; gate green at
 1207 TS + 45 Py; design + 2 forks human-ratified). Closes the ONE surface ADR 0014 explicitly staged.
 `RunResult` still exposes only the REDACTED `PreparedRequest` by design, so a new out-of-band channel —
