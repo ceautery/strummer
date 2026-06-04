@@ -828,7 +828,7 @@ Two independent tracks, then the test-quality chain, then LSP last:
         resolution matrix (server↔toolchain); the residual confine→commit parent-dir-swap TOCTOU
         (documented terminal-partial-but-confined).
 
-## Phase 5 — Cross-pillar verification  *(UNDERWAY — make the pillars COMPOSE; design = ADR 0013, Accepted)*
+## Phase 5 — Cross-pillar verification  *(COMPLETE — both milestones; make the pillars COMPOSE; design = ADR 0013, Accepted)*
 
 The Phase-4 pillars each emit a pure, structured verdict that nothing composes. Phase 5 makes
 them compose: a captured browser/API run's traffic is validated against the API contract, and
@@ -864,13 +864,13 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
   - [x] **Slice 6 — `validate_capture` MCP (api server) + CLI**, behind the §3a capture gate
         (`STRUMMER_VERIFY_ALLOW_CAPTURE` + the source artifact gate); a HAR with an unregistered
         cookie/token yields a verdict whose inline + stored bytes contain neither.
-- [ ] **Milestone 5b — the unified verdict reducer.**
-  - [ ] **Slice 7 — `@strummer/verdict` Severity core + empty-fold = `inconclusive`** (NOT `pass`).
-  - [ ] **Slice 8 — `fromContractResults`/`fromDiffCoverage`/`fromDependencyAudits` + a real fold**
+- [x] **Milestone 5b — the unified verdict reducer: COMPLETE.** New pure `@strummer/verdict` package (type-only pillar imports; zero runtime pillar deps) + `request_verdict` MCP + `strummer-verify-mcp` bin + `strummer verify` CLI.
+  - [x] **Slice 7 — `@strummer/verdict` Severity core + empty-fold = `inconclusive`** (NOT `pass`).
+  - [x] **Slice 8 — `fromContractResults`/`fromDiffCoverage`/`fromDependencyAudits` + a real fold**
         (deps `'unknown'` ⇒ `no-signal`, never `low`/`none`; no OSV snapshot ⇒ `inconclusive`).
-  - [ ] **Slice 9 — `fromFlakeVerdicts`/`fromMutationSummary` no-signal correctness** (mutation
+  - [x] **Slice 9 — `fromFlakeVerdicts`/`fromMutationSummary` no-signal correctness** (mutation
         `survivors[]` drives warn/fail; `mutationScore===null` AND no survivors ⇒ `no-signal`).
-  - [ ] **Slice 10 — `request_verdict` MCP + `strummer-verify-mcp` bin + `strummer verify` CLI**;
+  - [x] **Slice 10 — `request_verdict` MCP + `strummer-verify-mcp` bin + `strummer verify` CLI**;
         **no baked-in `failAtOrAbove` default**; v1 bin reads ONLY `STRUMMER_ARTIFACTS_ROOT` +
         `STRUMMER_VERIFY_ALLOW_CAPTURE` (no per-pillar `ALLOW_RUN` env pre-read).
 - [ ] *(staged, not amputated — ADR 0013 §5)* GraphQL drift over captured traffic (discriminated

@@ -5,12 +5,22 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: UNDERWAY (design = ADR 0013, Accepted).** _Make the
-pillars COMPOSE: a captured browser/API run's traffic is validated against the API contract
-(the capture→contract bridge), and that folds with the four Phase-4 signals into ONE structured
-verdict an agent requests for a change. Two milestones: **5a** the capture→contract bridge (the
-cross-pillar win), **5b** the unified `composeVerdict` reducer in a new pure `@strummer/verdict`
-package. Both compose-only / zero-spawn in v1; orchestration/run-driving, GraphQL-from-HAR, and
+**Phase 5 — Cross-pillar verification: COMPLETE (both milestones; design = ADR 0013, Accepted).**
+_Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
+contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
+structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new
+pure **`@strummer/verdict`** package — `Severity`/`SEVERITY_RANK`/`maxSeverity`, the five `from*`
+pillar adapters, and `composeVerdict` (type-only pillar imports, **zero runtime pillar deps** — the
+built `.mjs` has no imports at all, so it never drags `better-sqlite3`/`playwright-core` in). The
+load-bearing invariant holds: **absence is never a pass** — an empty fold, or any present
+`missing`/`no-signal` pillar, yields `inconclusive` (`ok:false`), never `pass`; deps `'unknown'` ⇒
+`no-signal` (never `low`/`none`); mutation `survivors[]` drives warn/fail (not just
+`mutationScore===null`); **no baked-in `failAtOrAbove`** — the caller declares the cut. Surface:
+`request_verdict` MCP tool (compact inline + detail by `strummer://verify/{id}/verdict`) +
+`strummer-verify-mcp` bin (reads ONLY `STRUMMER_ARTIFACTS_ROOT` + `STRUMMER_VERIFY_ALLOW_CAPTURE`,
+the §3c guard — no per-pillar `*_ALLOW_RUN`) + `strummer verify` CLI (exit 0 pass / 1 fail|warn /
+2 inconclusive). Earlier: **5a** the capture→contract bridge (below). Both compose-only / zero-spawn
+in v1; orchestration/run-driving, GraphQL-from-HAR, and
 the Python half are explicitly staged. **MILESTONE 5a COMPLETE (1011 TS + 45 Py green) — the
 capture→contract bridge works end-to-end:** (slice 1) `@strummer/artifacts` is now
 **prefix-qualified on disk** (`<baseDir>/<prefix>/<id>/<kind>`) so one shared `baseDir` is
@@ -26,8 +36,12 @@ routed through the operator `Redactor`**; (slice 6) the gated MCP `validate_capt
 registered only when a HAR resolver is wired, refuses without `STRUMMER_VERIFY_ALLOW_CAPTURE`,
 detail by handle under the `verify` prefix) + the human `strummer api validate-capture <har.zip>
 --openapi <spec>` CLI. Verified vs a real captured HAR (schema drift + base-path + redaction).
-**Next: milestone 5b** — the unified `composeVerdict` reducer in a new pure `@strummer/verdict`
-package (slice 7: Severity core + empty-fold = `inconclusive`). See ROADMAP Phase 5 + ADR 0013 §6._
+**Next: Phase 5 is done — no required work remains.** Open candidates are the explicitly-staged
+Phase-5 tails (ADR 0013 §5): GraphQL drift over captured traffic (discriminated SDL input);
+orchestration / run-driving `verify` ("compose, never widen" gate composition); `verify` driving a
+live capture to produce the HAR; request-body/param contract validation; extracting the shared
+`Severity` scale out of deps; the Python second half. Or a new phase (needs a design pass/ADR).
+See ROADMAP Phase 5 + ADR 0013 §5._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now

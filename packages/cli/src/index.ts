@@ -17,6 +17,7 @@ import { runDeps } from './deps.js'
 import { runFlake } from './flake.js'
 import { runLsp } from './lsp.js'
 import { runMutate } from './mutate.js'
+import { runVerify } from './verify.js'
 
 /** Output sinks and dependencies injected into `run` (so it is testable). */
 export interface CliIO {
@@ -107,6 +108,8 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
       return runDeps(rest, io)
     case 'lsp':
       return runLsp(rest, io)
+    case 'verify':
+      return runVerify(rest, io)
     case 'help':
     case '--help':
     case '-h':

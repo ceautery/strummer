@@ -44,6 +44,7 @@ export {
   type MutateToolsOptions,
   registerMutateTools,
 } from './mutate.js'
+export { createVerifyServer, registerVerifyTools, type VerifyToolsOptions } from './verify.js'
 
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */

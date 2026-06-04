@@ -177,6 +177,16 @@ vision and `ARCHITECTURE.md` for the technical design.
   guard. Plus a conservative toolchain-mismatch `versionWarning` (toolchain-identity servers only;
   tsserver excluded). Staged-as-refused-by-design: recursive/dir delete; the FULL toolchain
   cross-version matrix),
+  `verdict` (Phase-5 cross-pillar verification, COMPLETE: the pure unified change-verdict reducer
+  — `Severity`/`SEVERITY_RANK`/`maxSeverity`, the five `from*` pillar adapters (contract/coverage/
+  deps/flake/mutate), and `composeVerdict`; **type-only pillar imports, zero runtime pillar deps**
+  (the built `.mjs` has NO imports — never drags `better-sqlite3`/`playwright-core` in; pillars are
+  `external` in the tsdown build). The load-bearing invariant: **absence is never a pass** (missing/
+  no-signal ⇒ `inconclusive`, never `pass`); deps `'unknown'` ⇒ no-signal; mutation survivors drive
+  warn/fail; NO baked-in `failAtOrAbove` (caller declares the cut). Design = ADR 0013. The
+  capture→contract bridge half lives in `@strummer/api` `har-capture.ts` (`harEntriesToFacts` +
+  `validateCapturedTraffic` reuse the shipped `validateOpenApiResponse` over a stored HAR; surfaced
+  as the gated `validate_capture`)),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write

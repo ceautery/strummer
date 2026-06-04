@@ -32,6 +32,7 @@
     "@strummer/lsp": "workspace:*",
     "@strummer/mutate": "workspace:*",
     "@strummer/safety": "workspace:*",
+    "@strummer/verdict": "workspace:*",
     "playwright-core": "1.60.0"
   },
   "devDependencies": {
