@@ -5,7 +5,40 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5e COMPLETE. Milestone 5e (verify driving a LIVE browser capture to PRODUCE the HAR) LANDED in full — all 8 slices, design = ADR 0013 Addendum 3 (forged via the `verify-live-capture-design` fan-out: 5 research streams → synthesis → 3 adversarial critics); 1122 TS + 45 Py green. Next: 5f (API-runner capture + the older tails) — or pivot to a new phase.**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Milestone 5f (verify driving the @strummer/api RUNNER to PRODUCE the HAR — the second produce source after 5e's browser) LANDED in full — all 9 slices, design = ADR 0013 Addendum 4 (forged via the `verify-api-capture-5f-design` fan-out: 4 research streams → synthesis → 3 adversarial critics → corrected design; human ratified both open forks); 1160 TS + 45 Py green, HEAD pushed to main. Next: pivot to a new phase, or the older staged tails (request-body/param contract validation; extract the shared `Severity` scale out of deps; artifact GC/TTL; the Python second half).**
+_**MILESTONE 5f — verify-driven API-RUNNER capture — COMPLETE** (2026-06-04, all TDD red→green; design =
+ADR 0013 Addendum 4, the `verify-api-capture-5f-design` fan-out; human ratified 2 forks: ADD
+`STRUMMER_API_COLLECTIONS_DIR`, and the DEEPER `@strummer/verdict` fix). Adds a SECOND verify-driven
+produce source: a single gated call drives the **`@strummer/api` runner** for an operator-authored request
+(by NAME), SYNTHESIZES a HAR from the run, and validates it via the SHIPPED `validateCapturedTraffic` —
+full REST + GraphQL parity. Closes the 3 gaps Addendum 3 staged: (a) per-hop HAR entries in the redirect
+loop, (b) the real request body as `postData` (GraphQL), (c) a `finalizeHar`-style blanket-redaction pass
+extracted to shared code. 9 slices: (1) extract pure `redactHarZip`+`summarizeHar` into `@strummer/api`
+`har-synth.ts` (fflate-only leaf); (2) browser `finalizeHar` delegates to it (acyclic browser→api edge,
+ONE redaction path, the 5e attach-mimeType fix inherited); (3) `synthesizeRedactedHarZip` (pure; inline
+text; redact folded in so no un-redacted buffer escapes; THROWS on a status-less record); (4) runner
+`runRequestForHar`/`runSequenceForHar` out-of-band channel (per-hop records via `text()` not `dump()`,
+labeled the CURRENT vetted url; the REAL wire request body; `redirectTruncated`; `Redactor.entries()` →
+run-resolved secret pairs; `RunResult` UNCHANGED); (5) the `runRequestToHar`/`runSequenceToHar` produce
+driver + TRANSPORT-completeness guards that THROW ⇒ inconclusive (a withheld/dry-run/blocked request, any
+non-sent step per `step.result.sent` [the critics' blocker, NOT `step.sent`], a truncated redirect chain)
++ the secret-union fold; returns the FULL `CaptureContractVerdict`; (6) **the ratified deeper fix** —
+`@strummer/verdict` `fromCaptureVerdict` folds `clean===false` ⇒ inconclusive (closing a CONFIRMED latent
+absence-as-pass hole in the shipped 5e produce + consume paths: a valid REST entry rode a sibling
+no-signal/unresolved entry to a PASS because the thunk handed the adapter only `.results`), threaded
+through orchestrate's contract thunk (`ContractResult[] | CaptureVerdictFacts`, type-only — invariant 1
+intact) + retrofitted into both bin-verify runners; (7) the `verify_change` `produce-api` contract variant
+(target = `request` + optional `collection` NAME + vars; EXACTLY ONE of request/flow/harHandle); (8)
+`bin-verify` produce-api branch composing the api pillar's OWN gate (`STRUMMER_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/
+`_BLOCK_PRIVATE` + `{{secret:NAME}}`) + the ratified `STRUMMER_API_COLLECTIONS_DIR` (by-NAME, traversal
+refused) — gate-denied when unmet, a mutating request without ALLOW_UNSAFE dry-runs ⇒ inconclusive; (9)
+`strummer verify run --request <name> --collection-dir <dir>` CLI (mutually exclusive with `--flow`;
+straight-through `--allow-unsafe`/`--allow-host`; a REAL redactor at BOTH chokepoints, NOT the empty `{}`
+the browser path can use — the synthesized api HAR holds raw bytes until `redactHarZip`). Invariants held:
+core `.mjs` untouched (the verdict threading is type-only), compose-never-widen (api pillar's own gate, one
+ratified env, agent supplies only the target NAME), absence-never-a-pass (transport guards throw +
+`clean===false` folds to inconclusive), no real fetch in `pnpm gate` (injected runners; the loopback e2e
+is the api pillar's accepted style), redaction (union) before the verdict inline AND stored._
 _**MILESTONE 5e — verify-driven LIVE capture (browser-spawn) — COMPLETE** (2026-06-04, all TDD red→green;
 design = ADR 0013 Addendum 3, human-ratified forks: browser-spawn only / API-runner→5f; test-first
 attach-body redaction; keep `source:'capture-from-HAR'`; live-capture extracted to `@strummer/browser`).

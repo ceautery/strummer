@@ -828,7 +828,7 @@ Two independent tracks, then the test-quality chain, then LSP last:
         resolution matrix (server↔toolchain); the residual confine→commit parent-dir-swap TOCTOU
         (documented terminal-partial-but-confined).
 
-## Phase 5 — Cross-pillar verification  *(5a–5e COMPLETE; design = ADR 0013 + Addenda, Accepted; only 5f staged)*
+## Phase 5 — Cross-pillar verification  *(5a–5f COMPLETE; design = ADR 0013 + Addenda 1–4, Accepted; only the older non-blocking tails remain)*
 
 The Phase-4 pillars each emit a pure, structured verdict that nothing composes. Phase 5 makes
 them compose: a captured browser/API run's traffic is validated against the API contract, and
@@ -1017,10 +1017,27 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
   - [x] **Slice 6 — `bin-verify` produce-branch wiring** behind the full gate (env-matrix tests).
   - [x] **Slice 7 — `verify_change` MCP input** (`contract:{flow,vars}`) + surface the verify HAR handle.
   - [x] **Slice 8 — `strummer verify run --flow <name>` CLI** + the milestone tail (notes + push).
-- [ ] *(staged, not amputated — ADR 0013 Addendum 3)* **5f** the API-runner capture path (per-hop HAR
-      entries + request-body capture for GraphQL + a `finalizeHar`-style redaction pass). Plus the older
-      tails: request-body/param contract validation; extracting the shared `Severity` scale out of deps;
-      artifact GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture).
+- [x] **Milestone 5f — `verify` driving the @strummer/api RUNNER to *produce* the HAR: COMPLETE** (1160 TS
+      + 45 Py green; design = ADR 0013 Addendum 4, the `verify-api-capture-5f-design` fan-out → human
+      ratified 2 forks). The SECOND produce source (after 5e's browser-spawn): a single gated call drives
+      the api runner for an operator-authored request (by NAME), SYNTHESIZES a HAR, and validates it via the
+      shipped `validateCapturedTraffic` — REST + GraphQL parity. Closes Addendum 3's 3 gaps: per-hop HAR
+      entries in the redirect loop, the real request body as `postData`, and a `finalizeHar`-style
+      blanket-redaction pass extracted to `@strummer/api` `har-synth.ts` (shared so browser's `finalizeHar`
+      delegates to it). 9 TDD slices: `redactHarZip`/`summarizeHar` extract → browser delegation →
+      `synthesizeRedactedHarZip` → runner `runRequestForHar`/`runSequenceForHar` out-of-band channel →
+      `runRequestToHar`/`runSequenceToHar` driver + transport guards (throw ⇒ inconclusive) →
+      **`@strummer/verdict` `fromCaptureVerdict`** (the ratified deeper fix: `clean===false` ⇒ inconclusive,
+      closing a CONFIRMED latent absence-as-pass hole in the shipped 5e produce + consume paths) →
+      `verify_change` `produce-api` variant → `bin-verify` branch behind the api gate +
+      `STRUMMER_API_COLLECTIONS_DIR` → `strummer verify run --request`. Invariants held (compose-never-widen,
+      absence-never-a-pass, redaction before the verdict, no real fetch in `pnpm gate`, core `.mjs`
+      untouched).
+- [ ] *(staged, not amputated)* the older tails: request-body/param contract validation; extracting the
+      shared `Severity` scale out of deps; artifact GC/TTL/refcounting; the Python second half (pytest /
+      coverage.py / pyright capture); `changedDependencies` for PyPI/Gem lockfiles; deps `changelog_diff`
+      for PyPI/RubyGems; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + the full
+      toolchain cross-version matrix.
 
 ## Ongoing
 

@@ -95,7 +95,15 @@ vision and `ARCHITECTURE.md` for the technical design.
 - `packages/` — TS workspace: `core` (docs domain + SQLite), `embed` (query
   embedding), `api` (API-testing engine: `.bru`, runner, assertions, secrets,
   safety, scripts, contract validation, SSRF + redirect re-check, import
-  Postman/Insomnia/OpenAPI/HAR), `browser` (browser/UI engine: lifecycle,
+  Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
+  pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that
+  `@strummer/browser` `finalizeHar` now delegates to) + `synthesizeRedactedHarZip`
+  (RunResult→consume-bridge HAR, redact folded in), the runner's out-of-band
+  `runRequestForHar`/`runSequenceForHar` capture channel (per-hop records + the real wire
+  request body + `redirectTruncated`; `RunResult` UNCHANGED), and the `runRequestToHar`/
+  `runSequenceToHar` produce driver — drive the runner → synthesize+redact+store → validate
+  via the shipped `validateCapturedTraffic`, with TRANSPORT-completeness guards that throw ⇒
+  inconclusive), `browser` (browser/UI engine: lifecycle,
   ARIA-snapshot + step tools, action gate, two-tier SSRF, a11y audit, HAR
   capture/replay, video capture, visual regression, persisted `.bru` flows,
   multi-engine chromium/firefox/webkit — on `playwright-core`, headless-only; plus the
@@ -191,7 +199,10 @@ vision and `ARCHITECTURE.md` for the technical design.
   (the built `.mjs` has NO imports — never drags `better-sqlite3`/`playwright-core` in; pillars are
   `external` in the tsdown build). The load-bearing invariant: **absence is never a pass** (missing/
   no-signal ⇒ `inconclusive`, never `pass`); deps `'unknown'` ⇒ no-signal; mutation survivors drive
-  warn/fail; NO baked-in `failAtOrAbove` (caller declares the cut). Design = ADR 0013. The
+  warn/fail; NO baked-in `failAtOrAbove` (caller declares the cut). Design = ADR 0013. **Phase-5f added
+  `fromCaptureVerdict`** — folds the FULL `CaptureContractVerdict` (its `clean` flag), so a capture with a
+  valid entry alongside a no-signal/unresolved one (which push NO `ContractResult`) is `inconclusive`, not
+  a pass — closing a confirmed latent absence-as-pass hole in the shipped 5e produce + consume paths. The
   capture→contract bridge half lives in `@strummer/api` `har-capture.ts` (`harEntriesToFacts` +
   `validateCapturedTraffic` reuse the shipped `validateOpenApiResponse` over a stored HAR; surfaced
   as the gated `validate_capture`)),
@@ -218,7 +229,15 @@ vision and `ARCHITECTURE.md` for the technical design.
   browser gate (`ALLOWED_HOSTS`+`HAR_DIR`+`FLOWS_DIR`, no new env) behind `ENABLE_RUN`+`ALLOW_CAPTURE`;
   the shared `@strummer/browser` `driveBrowserFlowToHar` gates on FLOW COMPLETENESS (never validates a
   partial HAR) over the single-source `buildBrowserRuntimeFromEnv` (egress) with a union redactor at both
-  finalize + validate; the produced HAR handle is surfaced for audit. Design = ADR 0013 Addenda 2+3),
+  finalize + validate; the produced HAR handle is surfaced for audit. **Phase-5f landed the SECOND produce
+  source — verify-DRIVEN API-RUNNER capture:** `verify_change`'s `contract.request` + `strummer verify run
+  --request` DRIVE the `@strummer/api` runner for an operator-authored request (by NAME) → synthesize +
+  redact + store its HAR (via `@strummer/api` `har-synth.ts`) → validate. `ContractCaptureContext` gains a
+  `produce-api` variant (EXACTLY ONE of request/flow/harHandle); `bin-verify` composes the api pillar's OWN
+  gate (`STRUMMER_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/`_BLOCK_PRIVATE` + `{{secret:NAME}}`) + the ratified
+  `STRUMMER_API_COLLECTIONS_DIR` (by-NAME, traversal refused). Transport guards throw ⇒ inconclusive; the
+  contract thunk now surfaces the FULL verdict so `@strummer/verdict` `fromCaptureVerdict` folds
+  `clean===false` to inconclusive (consume + both produce paths). Design = ADR 0013 Addenda 2+3+4),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write

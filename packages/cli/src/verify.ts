@@ -2,7 +2,13 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { type CaptureContract, type ContractResult, validateCapturedTraffic } from '@strummer/api'
+import {
+  type CaptureContract,
+  type ContractResult,
+  loadCollection,
+  runRequestToHar,
+  validateCapturedTraffic,
+} from '@strummer/api'
 import { ArtifactStore } from '@strummer/artifacts'
 import {
   BrowserGate,
@@ -18,7 +24,9 @@ import { type DiffCoverageReport, runScoped, type TestRunner } from '@strummer/c
 import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@strummer/deps'
 import { type FlakeVerdict, HistoryStore, runAndRecord } from '@strummer/flake'
 import { type MutationRunner, type MutationSummary, runMutation } from '@strummer/mutate'
+import { Redactor } from '@strummer/safety'
 import {
+  type CaptureVerdictFacts,
   type ComposeInputs,
   type CompositeVerdict,
   composeVerdict,
@@ -55,6 +63,13 @@ export interface VerifyRunDeps {
   /** Produce-mode contract capture (drive a browser flow → validate). Injected in tests so
    * the suite never spawns a browser; the real path builds the runtime from CLI flags. */
   contract?: (req: CaptureRequest) => Promise<ContractResult[]>
+  /** Produce-API contract capture (drive the api runner → synthesize + validate, 5f).
+   * Injected in tests so the suite never fetches; the real path builds it from CLI flags. */
+  contractApi?: (req: {
+    request: string
+    collectionDir?: string
+    vars?: Record<string, string>
+  }) => Promise<ContractResult[] | CaptureVerdictFacts>
   coverageRunner?: TestRunner
   flakeRunner?: TestRunner
   mutateRunner?: MutationRunner
@@ -144,6 +159,11 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
       // Gated by the browser egress flags (allowlist + the mandatory SSRF proxy), not --allow-run.
       flow: { type: 'string' },
       'flows-dir': { type: 'string' },
+      // contract PRODUCE-API mode (5f): drive an operator-authored api request → synthesize
+      // + validate. Gated by --allow-unsafe + --allow-host (the api pillar gate), not --allow-run.
+      request: { type: 'string' },
+      'collection-dir': { type: 'string' },
+      'allow-unsafe': { type: 'boolean' },
       'allow-host': { type: 'string', multiple: true },
       var: { type: 'string', multiple: true },
       openapi: { type: 'string' },
@@ -262,6 +282,52 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
     }
   }
 
+  if (values.request && values.flow) {
+    io.err('verify run: --request and --flow are mutually exclusive\n')
+    return 2
+  }
+
+  if (values.request) {
+    const requestName = values.request
+    const vars = parseVars(values.var)
+    const ovr = deps.contractApi
+    if (ovr) {
+      request.contract = {
+        source: 'capture-from-HAR',
+        run: () => ovr({ request: requestName, collectionDir: values['collection-dir'], vars }),
+      }
+    } else {
+      const colDir = values['collection-dir']
+      if (!colDir) {
+        io.err('verify run --request needs --collection-dir <dir>\n')
+        return 2
+      }
+      const contract = readCaptureContract(values)
+      const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-verify-cap-')), 'verify')
+      // The human is the operator: --allow-unsafe + --allow-host are the api pillar gate
+      // (a mutating request without them dry-runs ⇒ the driver throws ⇒ inconclusive). The
+      // run-resolved {{secret:NAME}} pairs are folded into the redactor by the driver, so a
+      // fresh Redactor scrubs both the stored HAR AND the findings (NOT the empty `{}` the
+      // browser path can use — the synthesized api HAR holds raw bytes until redaction).
+      request.contract = {
+        source: 'capture-from-HAR',
+        run: async () => {
+          const out = await runRequestToHar(
+            loadCollection(colDir),
+            requestName,
+            {
+              vars,
+              allowUnsafe: values['allow-unsafe'] ?? false,
+              allowedHosts: values['allow-host'] ?? [],
+            },
+            { store, redactor: new Redactor(), contract },
+          )
+          return out.verdict
+        },
+      }
+    }
+  }
+
   if (values.flow) {
     const flow = values.flow
     const vars = parseVars(values.var)
@@ -294,7 +360,9 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
   }
 
   if (Object.keys(request).length === 0) {
-    io.err('verify run needs ≥1 pillar (--coverage / --flake / --mutate / --deps / --flow)\n')
+    io.err(
+      'verify run needs ≥1 pillar (--coverage / --flake / --mutate / --deps / --flow / --request)\n',
+    )
     return 2
   }
 

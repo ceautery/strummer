@@ -383,10 +383,18 @@ injected runtime/launch; (5) redaction before the verdict, inline AND stored —
 
 ## Addendum 4 (2026-06-04): Milestone 5f — verify-driven LIVE capture from the @strummer/api RUNNER
 
-**Status: ACCEPTED — building.** Forged via the `verify-api-capture-5f-design` fan-out (4 research
-streams reading the real code → synthesis → 3 adversarial critics, all returning **sound-with-fixes** →
-corrected design). The human ratified the two open forks. This addendum is the durable distillation; the
-workflow transcript is the research record. Addendum 3 (5e) staged the API-runner path here.
+**Status: COMPLETE** (2026-06-04) — all 9 slices landed TDD red→green; 1160 TS + 45 Py green, pushed to
+`main`. Both ratified forks shipped: `STRUMMER_API_COLLECTIONS_DIR` (by-NAME, traversal refused) and the
+deeper `@strummer/verdict` `fromCaptureVerdict` fix — which CONFIRMED + closed a latent absence-as-pass
+hole in the shipped 5e produce + consume paths (a valid entry rode a sibling no-signal/unresolved entry to
+a pass because the contract thunk handed the adapter only `.results`). The critics' two blockers were
+folded in test-first: the sequence guard is `step.result.sent` (not the always-undefined `step.sent`), and
+the CLI passes a REAL redactor at both chokepoints (not the empty `{}` the browser path can use, since the
+synthesized api HAR holds raw bytes until `redactHarZip`). Forged via the `verify-api-capture-5f-design`
+fan-out (4 research streams reading the real code → synthesis → 3 adversarial critics, all returning
+**sound-with-fixes** → corrected design). The human ratified the two open forks. This addendum is the
+durable distillation; the workflow transcript is the research record. Addendum 3 (5e) staged the
+API-runner path here.
 
 5f adds a SECOND verify-driven produce source: instead of (5e) spawning a browser to produce the HAR, a
 single gated call drives the **`@strummer/api` runner** for an operator-authored request (by NAME),

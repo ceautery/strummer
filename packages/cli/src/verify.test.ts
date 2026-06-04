@@ -144,6 +144,46 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
     expect(c.err()).toContain('--flows-dir')
   })
 
+  it('drives a --request api capture via an injected runner — no fetch (5f)', async () => {
+    // The human is the operator; --request drives the api runner gated by --allow-unsafe/
+    // --allow-host, not --allow-run. The injected runner keeps the suite offline AND
+    // returns the FULL verdict facts so clean===false folds to inconclusive (5f).
+    const c = capture()
+    const contractApi = vi.fn(
+      async (req: { request: string; collectionDir?: string; vars?: unknown }) => {
+        expect(req.request).toBe('get-widgets')
+        expect(req.vars).toEqual({ baseUrl: 'http://127.0.0.1:9' })
+        return {
+          results: [{ valid: true, findings: [] }],
+          clean: false,
+          noSignal: 1,
+          unresolvedBodies: 0,
+          entriesValidated: 1,
+        }
+      },
+    )
+    const code = await runVerify(
+      ['run', '/repo', '--request', 'get-widgets', '--var', 'baseUrl=http://127.0.0.1:9'],
+      c.io,
+      { contractApi },
+    )
+    expect(contractApi).toHaveBeenCalledOnce()
+    expect(code).toBe(2) // clean===false ⇒ contract no-signal ⇒ inconclusive
+    expect(c.out()).toContain('contract: no-signal')
+  })
+
+  it('--request without an injected runner needs --collection-dir', async () => {
+    const c = capture()
+    expect(await runVerify(['run', '/repo', '--request', 'get-widgets'], c.io)).toBe(2)
+    expect(c.err()).toContain('--collection-dir')
+  })
+
+  it('--request and --flow are mutually exclusive', async () => {
+    const c = capture()
+    expect(await runVerify(['run', '/repo', '--request', 'r', '--flow', 'f'], c.io)).toBe(2)
+    expect(c.err()).toMatch(/mutually exclusive|either/i)
+  })
+
   it('drives the deps pillar via an injected runner — no --allow-run, no network', async () => {
     // deps' gate is NETWORK, not spawn — the human typing --deps is the operator intent;
     // it needs no --allow-run. The injected runner keeps the suite offline.
