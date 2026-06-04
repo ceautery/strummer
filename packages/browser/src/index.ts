@@ -49,6 +49,13 @@ export {
   type HarSummary,
   harPathFor,
 } from './har.js'
+export {
+  type CaptureRequest,
+  type CaptureRuntime,
+  driveBrowserFlowToHar,
+  type LiveCapture,
+  type LiveCaptureDeps,
+} from './live-capture.js'
 export { BrowserManager, type BrowserManagerOptions } from './manager.js'
 export {
   auditPerf,

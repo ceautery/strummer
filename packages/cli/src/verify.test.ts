@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { run } from './index.js'
 import { runVerify } from './verify.js'
 
@@ -117,6 +117,31 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
       await runVerify(['run', '/repo', '--coverage', '--fail-at-or-above', 'spicy'], c.io),
     ).toBe(2)
     expect(c.err()).toContain('fail-at-or-above')
+  })
+
+  it('drives a --flow contract capture via an injected runner — no browser spawn', async () => {
+    // The human is the operator; --flow drives a live capture gated by browser egress flags,
+    // not --allow-run. The injected contract runner keeps the suite offline.
+    const c = capture()
+    const contract = vi.fn(async (req: { flow: string }) => {
+      expect(req.flow).toBe('login')
+      return [
+        {
+          valid: false,
+          findings: [{ kind: 'response-schema', message: 'drift', severity: 'error' }],
+        } as never,
+      ]
+    })
+    const code = await runVerify(['run', '/repo', '--flow', 'login'], c.io, { contract })
+    expect(contract).toHaveBeenCalledOnce()
+    expect(code).toBe(1) // a contract error fails the verdict
+    expect(c.out()).toContain('contract: fail')
+  })
+
+  it('--flow without an injected runner needs --flows-dir', async () => {
+    const c = capture()
+    expect(await runVerify(['run', '/repo', '--flow', 'login'], c.io)).toBe(2)
+    expect(c.err()).toContain('--flows-dir')
   })
 
   it('drives the deps pillar via an injected runner — no --allow-run, no network', async () => {

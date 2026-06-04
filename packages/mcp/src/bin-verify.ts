@@ -231,7 +231,7 @@ export function buildVerifyServerFromEnv(
         const [
           { buildBrowserRuntimeFromEnv, buildBrowserRedactorFromEnv },
           { driveBrowserFlowToHar },
-        ] = await Promise.all([import('./bin-browser.js'), import('./live-capture.js')])
+        ] = await Promise.all([import('./bin-browser.js'), import('@strummer/browser')])
         // The UNION redactor (browser secrets + HTTP creds ∪ verify secrets), used at BOTH
         // chokepoints — finalizeHar (the archive) and validateCapturedTraffic (the findings)
         // — so a browser-registered secret never survives in either. More aggressive
@@ -240,12 +240,15 @@ export function buildVerifyServerFromEnv(
         for (const [name, value] of verifySecrets) union.register(name, value)
         const unionRedact = (s: string) => union.redact(s)
 
-        const { harHandle, summary } = await driveBrowserFlowToHar(ctx, {
-          runtimeFactory: () => buildBrowserRuntimeFromEnv(env),
-          store,
-          flowsDir,
-          redact: unionRedact,
-        })
+        const { harHandle, summary } = await driveBrowserFlowToHar(
+          { flow: ctx.flow, vars: ctx.vars },
+          {
+            runtimeFactory: () => buildBrowserRuntimeFromEnv(env),
+            store,
+            flowsDir,
+            redact: unionRedact,
+          },
+        )
         const har = store.get(harHandle)?.body
         if (!har) throw new Error('no HAR was captured for the driven flow')
         const { results } = validateCapturedTraffic(har, buildCaptureContract(ctx), {

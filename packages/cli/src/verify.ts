@@ -1,7 +1,19 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import type { ContractResult } from '@strummer/api'
+import { type CaptureContract, type ContractResult, validateCapturedTraffic } from '@strummer/api'
+import { ArtifactStore } from '@strummer/artifacts'
+import {
+  BrowserGate,
+  BrowserManager,
+  type CaptureRequest,
+  type CaptureRuntime,
+  createSsrfProxy,
+  driveBrowserFlowToHar,
+  engineLauncher,
+  resolveEngine,
+} from '@strummer/browser'
 import { type DiffCoverageReport, runScoped, type TestRunner } from '@strummer/coverage'
 import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@strummer/deps'
 import { type FlakeVerdict, HistoryStore, runAndRecord } from '@strummer/flake'
@@ -40,6 +52,9 @@ export interface VerifyRunDeps {
   flake?: (ctx: RunCtx) => Promise<FlakeVerdict[]>
   mutate?: (ctx: RunCtx) => Promise<MutationSummary>
   deps?: (ctx: RunCtx) => Promise<{ audits: DependencyAudit[]; osvSnapshotLoaded: boolean }>
+  /** Produce-mode contract capture (drive a browser flow → validate). Injected in tests so
+   * the suite never spawns a browser; the real path builds the runtime from CLI flags. */
+  contract?: (req: CaptureRequest) => Promise<ContractResult[]>
   coverageRunner?: TestRunner
   flakeRunner?: TestRunner
   mutateRunner?: MutationRunner
@@ -66,7 +81,10 @@ interface RunCtx {
  *   `assertAllowed` still denies without it (⇒ `skipReason:gate-not-set`, never run —
  *   "compose, never widen"). `--deps` is gated by NETWORK not spawn (a packument fetch),
  *   so it needs no `--allow-run`; a `--diff` scopes the audit to the changed packages
- *   (`changedDependencies`). Runners are injectable so the suite never spawns (ADR 0010).
+ *   (`changedDependencies`). `--flow <name>` (5e) DRIVES an operator-authored browser flow
+ *   to capture a HAR and validate it against `--openapi`/`--graphql` — gated by the browser
+ *   egress flags (`--flows-dir`/`--allow-host` + the mandatory SSRF proxy), not `--allow-run`.
+ *   Runners are injectable so the suite never spawns (ADR 0010).
  *
  * Exit codes (both modes): 0 pass / 1 fail|warn / 2 inconclusive.
  */
@@ -122,6 +140,18 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
       'osv-db': { type: 'string' },
       registry: { type: 'string' },
       'allow-private': { type: 'boolean' },
+      // contract PRODUCE mode (5e): drive an operator-authored flow → capture → validate.
+      // Gated by the browser egress flags (allowlist + the mandatory SSRF proxy), not --allow-run.
+      flow: { type: 'string' },
+      'flows-dir': { type: 'string' },
+      'allow-host': { type: 'string', multiple: true },
+      var: { type: 'string', multiple: true },
+      openapi: { type: 'string' },
+      graphql: { type: 'string' },
+      'graphql-endpoint': { type: 'string' },
+      engine: { type: 'string' },
+      'no-sandbox': { type: 'boolean' },
+      headed: { type: 'boolean' },
       'timeout-ms': { type: 'string' },
       'fail-at-or-above': { type: 'string' },
       json: { type: 'boolean' },
@@ -232,8 +262,39 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
     }
   }
 
+  if (values.flow) {
+    const flow = values.flow
+    const vars = parseVars(values.var)
+    const ovr = deps.contract
+    if (ovr) {
+      request.contract = { source: 'capture-from-HAR', run: () => ovr({ flow, vars }) }
+    } else {
+      if (!values['flows-dir']) {
+        io.err('verify run --flow needs --flows-dir <dir>\n')
+        return 2
+      }
+      const flowsDir = values['flows-dir']
+      const contract = readCaptureContract(values)
+      // The human is the operator: the typed flow's hosts are allowlisted via --allow-host;
+      // the mandatory SSRF proxy fronts every request (built in the runtime factory).
+      const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-verify-cap-')), 'verify')
+      request.contract = {
+        source: 'capture-from-HAR',
+        run: async () => {
+          const { harHandle } = await driveBrowserFlowToHar(
+            { flow, vars },
+            { runtimeFactory: () => captureRuntimeFromFlags(values), store, flowsDir },
+          )
+          const har = store.get(harHandle)?.body
+          if (!har) throw new Error('no HAR was captured for the driven flow')
+          return validateCapturedTraffic(har, contract, {}).results
+        },
+      }
+    }
+  }
+
   if (Object.keys(request).length === 0) {
-    io.err('verify run needs ≥1 pillar (--coverage / --flake / --mutate / --deps)\n')
+    io.err('verify run needs ≥1 pillar (--coverage / --flake / --mutate / --deps / --flow)\n')
     return 2
   }
 
@@ -242,6 +303,66 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
   })
   printVerdict(io, verdict, values.json)
   return exitFor(verdict)
+}
+
+/** Parse repeated `--var k=v` flags into a map (non-secret flow vars). */
+function parseVars(pairs: string[] | undefined): Record<string, string> {
+  const vars: Record<string, string> = {}
+  for (const p of pairs ?? []) {
+    const i = p.indexOf('=')
+    if (i > 0) vars[p.slice(0, i)] = p.slice(i + 1)
+  }
+  return vars
+}
+
+/** Build the capture→contract from the openapi/graphql flags (≥1 needed, like the MCP tool). */
+function readCaptureContract(values: {
+  openapi?: string
+  graphql?: string
+  'graphql-endpoint'?: string
+}): CaptureContract {
+  const contract: CaptureContract = {}
+  if (values.openapi) contract.openapi = JSON.parse(readFileSync(values.openapi, 'utf8'))
+  if (values.graphql) {
+    contract.graphql = {
+      endpointPath: values['graphql-endpoint'] ?? '/graphql',
+      sdl: readFileSync(values.graphql, 'utf8'),
+    }
+  }
+  return contract
+}
+
+/** Build a single-shot CaptureRuntime from the CLI's browser egress flags (mirrors
+ * `strummer browser`): a gated, proxy-fronted manager with HAR recording armed. */
+async function captureRuntimeFromFlags(values: {
+  'allow-host'?: string[]
+  'allow-private'?: boolean
+  'no-sandbox'?: boolean
+  headed?: boolean
+  engine?: string
+}): Promise<CaptureRuntime> {
+  const gate = new BrowserGate({ allowedHosts: values['allow-host'] ?? [] })
+  const proxy = await createSsrfProxy({ allowPrivate: values['allow-private'] ?? false })
+  const harDir = mkdtempSync(join(tmpdir(), 'strummer-verify-har-'))
+  const manager = new BrowserManager({
+    gate,
+    harDir,
+    launch: engineLauncher(resolveEngine(values.engine), {
+      headless: !values.headed,
+      proxyServer: proxy.url,
+      noSandbox: values['no-sandbox'] ?? false,
+    }),
+  })
+  return {
+    manager,
+    gate,
+    redact: (s) => s,
+    config: { harDir },
+    shutdown: async () => {
+      await manager.shutdown()
+      await proxy.close()
+    },
+  }
 }
 
 function runVerifyCompose(args: string[], io: CliIO): number {

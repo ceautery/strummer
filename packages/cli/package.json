@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@strummer/api": "workspace:*",
+    "@strummer/artifacts": "workspace:*",
     "@strummer/browser": "workspace:*",
     "@strummer/core": "workspace:*",
     "@strummer/coverage": "workspace:*",
