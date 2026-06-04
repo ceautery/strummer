@@ -20,8 +20,11 @@
  */
 
 import { execFile } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { parseCosmicRayDump } from './cosmic-ray.js'
+import { parseMutmutResults } from './mutmut.js'
 import { type MutationReport, type MutationSummary, summarizeMutation } from './summarize.js'
 
 /** Thrown when the paired operator gate denies a run. */
@@ -53,6 +56,8 @@ export interface RunMutationInput {
   mutateFiles?: string[]
   /** Reuse Stryker's incremental cache (`--incremental`) — faster re-runs. */
   incremental?: boolean
+  /** cosmic-ray config path (relative to projectRoot). Default `cosmic-ray.toml`. */
+  configPath?: string
 }
 
 /** Injected command runner — executes `stryker <argv>` and yields its exit status. */
@@ -66,7 +71,13 @@ export interface RunMutationResult {
   exitCode: number
   /** Files mutation was scoped to (empty ⇒ the project's configured set). */
   scopedFiles: string[]
-  reportPath: string
+  /** Which mutation tool produced the summary. */
+  tool?: 'stryker' | 'mutmut' | 'cosmic-ray'
+  /**
+   * The on-disk JSON report path (Stryker). Optional: the Python tools (mutmut/cosmic-ray) emit
+   * their report to STDOUT, so there is no report file to surface.
+   */
+  reportPath?: string
   summary: MutationSummary
 }
 
@@ -85,24 +96,35 @@ function runArgv(input: RunMutationInput): string[] {
   return argv
 }
 
+/** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
+function spawnMutationRunner(command: string): MutationRunner {
+  return (argv, opts) =>
+    new Promise((res) => {
+      execFile(
+        command,
+        argv,
+        { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
+        (err, stdout, stderr) => {
+          const code =
+            err && typeof (err as { code?: unknown }).code === 'number'
+              ? (err as { code: number }).code
+              : err
+                ? 1
+                : 0
+          res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
+        },
+      )
+    })
+}
+
 /** Default live runner: spawn the local `stryker` as a subprocess (used by the bin, not the gate). */
-export const defaultStrykerRunner: MutationRunner = (argv, opts) =>
-  new Promise((res) => {
-    execFile(
-      'stryker',
-      argv,
-      { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        const code =
-          err && typeof (err as { code?: unknown }).code === 'number'
-            ? (err as { code: number }).code
-            : err
-              ? 1
-              : 0
-        res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
-      },
-    )
-  })
+export const defaultStrykerRunner: MutationRunner = spawnMutationRunner('stryker')
+
+/** Default live runner: spawn the local `mutmut` as a subprocess (used by the bin, not the gate). */
+export const defaultMutmutRunner: MutationRunner = spawnMutationRunner('mutmut')
+
+/** Default live runner: spawn the local `cosmic-ray` as a subprocess (used by the bin, not the gate). */
+export const defaultCosmicRayRunner: MutationRunner = spawnMutationRunner('cosmic-ray')
 
 function assertAllowed(config: RunMutationConfig): void {
   if (!config.allowRun) {
@@ -151,7 +173,77 @@ export async function runMutation(
     ran: true,
     exitCode,
     scopedFiles: input.mutateFiles ?? [],
+    tool: 'stryker',
     reportPath,
     summary: summarizeMutation(report),
   }
+}
+
+/**
+ * Transport-completeness guard for the Python tools, mirroring the capture/HAR guards: a run that
+ * produced NO mutants (an empty/failed session), or a cosmic-ray session with unexecuted/ambiguous
+ * (`Pending`) mutants, is INCONCLUSIVE — it must never be reported as a clean pass
+ * (absence-is-never-a-pass). Throws so the caller (verify) folds it to inconclusive.
+ */
+function assertComplete(tool: string, summary: MutationSummary): void {
+  if (summary.metrics.totalMutants === 0) {
+    throw new Error(`${tool} produced no mutants — inconclusive (never a clean pass)`)
+  }
+  if (summary.metrics.counts.pending > 0) {
+    throw new Error(
+      `${tool} session is incomplete: ${summary.metrics.counts.pending} unexecuted/ambiguous ` +
+        'mutant(s) — inconclusive',
+    )
+  }
+}
+
+/**
+ * mutmut sibling of {@link runMutation} (ADR 0010 addendum, the lightweight Python option). Spawns
+ * `mutmut run` (mutate + test; a non-zero exit just means survivors exist, not an error) then reads
+ * `mutmut results --all true` from STDOUT and feeds the pure {@link parseMutmutResults}. No report
+ * file. (Diff-scoping is staged — mutmut 3.x scopes via its own config, not a clean CLI file list.)
+ */
+export async function runMutmut(
+  config: RunMutationConfig,
+  _input: RunMutationInput,
+  deps: { runner?: MutationRunner } = {},
+): Promise<RunMutationResult> {
+  assertAllowed(config)
+  const runner = deps.runner ?? defaultMutmutRunner
+  const opts = { cwd: config.projectRoot, timeoutMs: config.timeoutMs }
+
+  await runner(['run'], opts)
+  const { exitCode, stdout } = await runner(['results', '--all', 'true'], opts)
+  const summary = summarizeMutation(parseMutmutResults(stdout))
+  assertComplete('mutmut', summary)
+  return { ran: true, exitCode, scopedFiles: [], tool: 'mutmut', summary }
+}
+
+/**
+ * cosmic-ray sibling of {@link runMutation} (ADR 0010 addendum, the PRIMARY Python tool — its dump
+ * carries real file:line:operator, so survivors are actionable). Drives the three-step workflow
+ * against an operator-authored config (`input.configPath`, default `cosmic-ray.toml` — it carries
+ * the project's test-command + module scope) over a throwaway session DB: `init` → `exec` → `dump`,
+ * reading the `dump` JSON-lines from STDOUT and feeding the pure {@link parseCosmicRayDump}. The
+ * {@link assertComplete} guard makes an empty or partially-executed session inconclusive, never a
+ * clean pass. (Diff-scoping by synthesizing the per-run config from `mutateFiles` is staged.)
+ */
+export async function runCosmicRay(
+  config: RunMutationConfig,
+  input: RunMutationInput,
+  deps: { runner?: MutationRunner; sessionDir?: string } = {},
+): Promise<RunMutationResult> {
+  assertAllowed(config)
+  const runner = deps.runner ?? defaultCosmicRayRunner
+  const opts = { cwd: config.projectRoot, timeoutMs: config.timeoutMs }
+  const configPath = input.configPath ?? 'cosmic-ray.toml'
+  const sessionDir = deps.sessionDir ?? mkdtempSync(join(tmpdir(), 'strummer-mutate-'))
+  const session = join(sessionDir, 'session.sqlite')
+
+  await runner(['init', configPath, session], opts)
+  const exec = await runner(['exec', configPath, session], opts)
+  const { stdout } = await runner(['dump', session], opts)
+  const summary = summarizeMutation(parseCosmicRayDump(stdout))
+  assertComplete('cosmic-ray', summary)
+  return { ran: true, exitCode: exec.exitCode, scopedFiles: [], tool: 'cosmic-ray', summary }
 }

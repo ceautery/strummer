@@ -4,7 +4,9 @@ import {
   type MutationReport,
   type MutationRunner,
   parseMutmutResults,
+  runCosmicRay,
   runMutation,
+  runMutmut,
   summarizeMutation,
 } from '@strummer/mutate'
 import { z } from 'zod'
@@ -103,30 +105,49 @@ export function registerMutateTools(server: McpServer, opts: MutateToolsOptions 
       {
         title: 'Run mutation testing',
         description:
-          'Run Stryker over the project (slow — the suite re-runs per mutant), then summarize. ' +
-          'Operator-gated and confined to allowlisted roots. Diff-scope with `mutateFiles` ' +
-          '(changed source files → Stryker --mutate) and `incremental`. Returns a compact ' +
-          'summary (no full report inlined); the report path is included.',
+          'Run a mutation tool over the project (slow — the suite re-runs per mutant), then ' +
+          'summarize. `tool` is `stryker` (JS, default), `mutmut`, or `cosmic-ray` (Python — its ' +
+          'dump carries real file:line:operator). Operator-gated and confined to allowlisted ' +
+          'roots. Stryker diff-scopes with `mutateFiles`/`incremental`; cosmic-ray reads an ' +
+          'operator config (`configPath`, default cosmic-ray.toml). Returns a compact summary.',
         inputSchema: {
           projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
+          tool: z
+            .enum(['stryker', 'mutmut', 'cosmic-ray'])
+            .optional()
+            .describe('mutation tool (default stryker)'),
           mutateFiles: z
             .array(z.string())
             .optional()
-            .describe('changed source files to scope mutation to'),
+            .describe('changed source files to scope mutation to (Stryker)'),
           incremental: z.boolean().optional().describe("reuse Stryker's incremental cache"),
+          configPath: z
+            .string()
+            .optional()
+            .describe('cosmic-ray config path relative to projectRoot (default cosmic-ray.toml)'),
         },
       },
       async (args) => {
-        const result = await runMutation(
-          {
-            projectRoot: args.projectRoot,
-            allowedRoots,
-            allowRun: true,
-            timeoutMs: opts.timeoutMs,
-          },
-          { mutateFiles: args.mutateFiles, incremental: args.incremental },
-          { runner: opts.runner, reportPath: opts.reportPath },
-        )
+        const config = {
+          projectRoot: args.projectRoot,
+          allowedRoots,
+          allowRun: true,
+          timeoutMs: opts.timeoutMs,
+        }
+        const input = {
+          mutateFiles: args.mutateFiles,
+          incremental: args.incremental,
+          configPath: args.configPath,
+        }
+        const result =
+          args.tool === 'mutmut'
+            ? await runMutmut(config, input, { runner: opts.runner })
+            : args.tool === 'cosmic-ray'
+              ? await runCosmicRay(config, input, { runner: opts.runner })
+              : await runMutation(config, input, {
+                  runner: opts.runner,
+                  reportPath: opts.reportPath,
+                })
         const structured = {
           ran: result.ran,
           exitCode: result.exitCode,

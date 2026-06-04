@@ -7,7 +7,9 @@ import {
   type MutationRunner,
   type MutationSummary,
   parseMutmutResults,
+  runCosmicRay,
   runMutation,
+  runMutmut,
   summarizeMutation,
 } from '@strummer/mutate'
 import type { CliIO } from './index.js'
@@ -104,8 +106,10 @@ async function cmdRun(
     args,
     allowPositionals: true,
     options: {
+      tool: { type: 'string' },
       file: { type: 'string', multiple: true },
       incremental: { type: 'boolean' },
+      'config-path': { type: 'string' },
       'allow-run': { type: 'boolean' },
       'timeout-ms': { type: 'string' },
       'report-path': { type: 'string' },
@@ -117,29 +121,44 @@ async function cmdRun(
     io.err('mutate run needs a <project-root>\n')
     return 1
   }
+  const tool = values.tool ?? 'stryker'
+  if (tool !== 'stryker' && tool !== 'mutmut' && tool !== 'cosmic-ray') {
+    io.err(`unknown tool: ${tool} (expected stryker|mutmut|cosmic-ray)\n`)
+    return 1
+  }
   const timeoutRaw = values['timeout-ms']
   const timeoutMs = timeoutRaw !== undefined ? Number(timeoutRaw) : undefined
 
   try {
-    const result = await runMutation(
-      {
-        projectRoot,
-        // The human typed this root, so it is the operator allowlist (explicit intent),
-        // exactly as `strummer browser` auto-allows the typed host.
-        allowedRoots: [resolve(projectRoot)],
-        allowRun: values['allow-run'] ?? false,
-        timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
-      },
-      { mutateFiles: values.file, incremental: values.incremental ?? false },
-      { runner: deps.runner, reportPath: values['report-path'] },
-    )
+    const config = {
+      projectRoot,
+      // The human typed this root, so it is the operator allowlist (explicit intent),
+      // exactly as `strummer browser` auto-allows the typed host.
+      allowedRoots: [resolve(projectRoot)],
+      allowRun: values['allow-run'] ?? false,
+      timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
+    }
+    const input = {
+      mutateFiles: values.file,
+      incremental: values.incremental ?? false,
+      configPath: values['config-path'],
+    }
+    const result =
+      tool === 'mutmut'
+        ? await runMutmut(config, input, { runner: deps.runner })
+        : tool === 'cosmic-ray'
+          ? await runCosmicRay(config, input, { runner: deps.runner })
+          : await runMutation(config, input, {
+              runner: deps.runner,
+              reportPath: values['report-path'],
+            })
 
     if (values.json) {
       io.out(`${JSON.stringify(result, null, 2)}\n`)
       return result.exitCode === 0 ? 0 : 1
     }
     io.out(
-      `ran stryker (exit ${result.exitCode}); scoped: ${result.scopedFiles.join(', ') || '(project default)'}\n`,
+      `ran ${tool} (exit ${result.exitCode}); scoped: ${result.scopedFiles.join(', ') || '(project default)'}\n`,
     )
     printSummary(io, result.summary)
     return result.exitCode === 0 ? 0 : 1

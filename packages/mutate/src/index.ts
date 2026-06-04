@@ -1,13 +1,17 @@
 export { parseCosmicRayDump } from './cosmic-ray.js'
 export { parseMutmutResults } from './mutmut.js'
 export {
+  defaultCosmicRayRunner,
+  defaultMutmutRunner,
   defaultStrykerRunner,
   MutateGateError,
   type MutationRunner,
   type RunMutationConfig,
   type RunMutationInput,
   type RunMutationResult,
+  runCosmicRay,
   runMutation,
+  runMutmut,
 } from './run.js'
 export {
   type FileSummary,

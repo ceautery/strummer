@@ -481,9 +481,17 @@ stage `reportlog`. Pure/zero-spawn slices first.
       gate. MCP `flake_run` gains `framework: vitest|pytest` (agent-supplied — picks the tool, not a
       security knob; the gate still governs whether to spawn at all); CLI `flake run --framework`.
       Injected runner ⇒ no real spawn in the gate.
-- [ ] **Slice 5 — mutate Python mutation runner** (cosmic-ray primary + mutmut, `--tool`) —
-      stdout-fed parse branch, `reportPath` optional; cosmic-ray TOML synth from `changedFiles` +
-      `session.sqlite`; transport-completeness guard (pending/null → inconclusive). *(Depends on slice 3.)*
+- [x] **Slice 5 — mutate Python mutation runner** (cosmic-ray primary + mutmut). `runMutmut`
+      (`mutmut run` → `mutmut results --all true` stdout → `parseMutmutResults`) and `runCosmicRay`
+      (operator-config `init`→`exec`→`dump` over a throwaway `session.sqlite`, dump stdout →
+      `parseCosmicRayDump`) join `runMutation` as siblings sharing the `MutateGateError`/`assertAllowed`
+      gate + the `MutationRunner` seam. STDOUT-fed (no report file) ⇒ `RunMutationResult.reportPath`
+      is now optional + a `tool` field added. **Transport-completeness guard `assertComplete`**: zero
+      mutants (empty/failed session) OR any `Pending` (unexecuted/ambiguous) mutant ⇒ THROW (inconclusive,
+      never a clean pass — mirrors the capture/HAR guards). MCP `mutate_run` gains `tool: stryker|mutmut|
+      cosmic-ray` (+ `configPath`); CLI `mutate run --tool` (+ `--config-path`). Injected runner ⇒ no real
+      spawn in the gate. *(Staged: cosmic-ray/mutmut diff-scoping — cosmic-ray needs per-run TOML synthesis,
+      mutmut scopes via its own config, not a clean CLI file list.)*
 - [ ] **Slice 6 — coverage `runScopedPython`** (pytest + coverage.py) — mirror `runScoped`;
       `--cov=<target> --cov-report=json`; `coveragePyToIstanbul`→`uncoveredInDiff` (unchanged);
       pytest exit-code map (5=no-tests → inconclusive); scoping = diff path-heuristic with the

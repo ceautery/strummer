@@ -107,6 +107,29 @@ describe('strummer mutate CLI', () => {
     expect(code).toBe(1)
   })
 
+  it('run --tool cosmic-ray drives init→exec→dump and summarizes the dump stdout', async () => {
+    const dump = [
+      '[{"mutations":[{"module_path":"calc.py","operator_name":"core/Op1","start_pos":[2,13]}]},{"worker_outcome":"normal","test_outcome":"killed"}]',
+      '[{"mutations":[{"module_path":"calc.py","operator_name":"core/Op2","start_pos":[10,13]}]},{"worker_outcome":"normal","test_outcome":"survived"}]',
+    ].join('\n')
+    const runner: MutationRunner = async (argv) =>
+      argv[0] === 'dump'
+        ? { exitCode: 0, stdout: dump, stderr: '' }
+        : { exitCode: 0, stdout: '', stderr: '' }
+    const c = capture()
+    const code = await runMutate(['run', dir, '--allow-run', '--tool', 'cosmic-ray'], c.io, {
+      runner,
+    })
+    expect(code).toBe(0)
+    expect(c.out()).toMatch(/cosmic-ray/)
+  })
+
+  it('run rejects an unknown --tool', async () => {
+    const c = capture()
+    expect(await runMutate(['run', dir, '--tool', 'pitest'], c.io)).toBe(1)
+    expect(c.err()).toMatch(/unknown tool/i)
+  })
+
   it('unknown subcommand exits 1', async () => {
     const c = capture()
     expect(await runMutate(['frobnicate'], c.io)).toBe(1)
