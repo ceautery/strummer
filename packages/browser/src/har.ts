@@ -26,6 +26,48 @@ import type { ArtifactStore } from './artifacts.js'
 // is safe — the HAR still resolves them by name.
 const HAR_TEXT_ENTRY = /\.(har|json|txt|html|htm|css|js|xml|svg)$/
 
+// A body's DECLARED mimeType is text-like (so its bytes may carry a secret as text and
+// must be redacted), even when its content-addressed attach filename has no text
+// extension. Inclusive on purpose — redacting more is safe; a genuinely binary type
+// (image/font/octet-stream) is excluded so its bytes pass through byte-for-byte.
+const TEXT_MIME = /^text\/|(?:json|xml|javascript|ecmascript|graphql|html|urlencoded|csv|yaml)/i
+
+/**
+ * In `content:'attach'` mode Playwright persists request/response bodies as SEPARATE
+ * archive entries whose names are content-addressed — frequently WITHOUT a text
+ * extension — so {@link HAR_TEXT_ENTRY} (a filename gate) would pass a JSON/GraphQL body
+ * through unredacted. Walk the `.har` JSON and collect the `_file` names of every body
+ * whose DECLARED mimeType is text-like, so they are redacted by type, not by extension.
+ */
+function textAttachFiles(harJson: string): Set<string> {
+  const files = new Set<string>()
+  let entries: unknown[] = []
+  try {
+    const log = (JSON.parse(harJson) as { log?: { entries?: unknown[] } }).log
+    if (Array.isArray(log?.entries)) entries = log.entries
+  } catch {
+    return files
+  }
+  const consider = (part: { mimeType?: unknown; _file?: unknown } | undefined) => {
+    if (
+      part &&
+      typeof part._file === 'string' &&
+      typeof part.mimeType === 'string' &&
+      TEXT_MIME.test(part.mimeType)
+    ) {
+      files.add(part._file)
+    }
+  }
+  for (const e of entries as {
+    request?: { postData?: { mimeType?: unknown; _file?: unknown } }
+    response?: { content?: { mimeType?: unknown; _file?: unknown } }
+  }[]) {
+    consider(e?.request?.postData)
+    consider(e?.response?.content)
+  }
+  return files
+}
+
 /** A finished HAR capture, returned by handle with a compact summary. */
 export interface HarSummary {
   /** `strummer://browser/run/<id>/har` — the recorded HAR archive (.zip), by handle. */
@@ -105,12 +147,19 @@ export async function finalizeHar(opts: FinalizeHarOptions): Promise<HarSummary 
   }
   const redact = opts.redact ?? ((v: string) => v)
 
-  // Single pass over the archive: redact text entries, summarize from the `.har`.
   const entries = unzipSync(new Uint8Array(raw))
+  // The `.har` JSON names the text-like attach bodies (by declared mimeType) that the
+  // filename gate would miss — collect them first so they are redacted by TYPE.
+  let attachText = new Set<string>()
+  for (const [name, bytes] of Object.entries(entries)) {
+    if (name.endsWith('.har')) attachText = textAttachFiles(strFromU8(bytes))
+  }
+  // Redact every text entry — the `.har` JSON + persisted text bodies (by extension OR
+  // by declared mimeType) — and summarize from the `.har`; binary bodies pass through.
   const out: Record<string, Uint8Array> = {}
   let counts: HarCounts = { entryCount: 0, byStatus: {}, byMethod: {} }
   for (const [name, bytes] of Object.entries(entries)) {
-    if (HAR_TEXT_ENTRY.test(name)) {
+    if (HAR_TEXT_ENTRY.test(name) || attachText.has(name)) {
       const text = redact(strFromU8(bytes))
       if (name.endsWith('.har')) counts = summarizeHar(text)
       out[name] = strToU8(text)

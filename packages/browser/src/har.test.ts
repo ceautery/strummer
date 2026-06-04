@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Redactor } from '@strummer/safety'
-import { unzipSync } from 'fflate'
+import { strToU8, unzipSync, zipSync } from 'fflate'
 import { type Browser, chromium } from 'playwright-core'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactStore } from './artifacts.js'
@@ -128,5 +128,101 @@ describe('finalizeHar — recorded HAR capture (real headless chromium)', () => 
       store,
     })
     expect(summary).toBeUndefined()
+  })
+})
+
+// 5e: in attach mode, Playwright persists a body as a SEPARATE archive entry whose
+// filename is content-addressed — frequently WITHOUT a text extension. finalizeHar's
+// filename-extension gate (HAR_TEXT_ENTRY) then passes it through unredacted, so a
+// registered secret in a JSON/GraphQL body could survive into the stored artifact. The
+// verify-driven capture (5e) feeds that archive to validateCapturedTraffic, so this must
+// redact attach bodies by their HAR-declared mimeType, not by filename extension.
+describe('finalizeHar — attach-body redaction by declared mimeType (5e)', () => {
+  it('redacts a registered secret in a text-like body stored under a non-text filename', () => {
+    const SECRET = 'tok-LIVE-abcdef'
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-har-attach-'))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-har-attach-store-')))
+    const redactor = new Redactor()
+    redactor.register('token', SECRET)
+
+    // A HAR whose request (GraphQL query) AND response bodies are attach entries with
+    // application/json mimeType but NO `.json` extension (the content-addressed name).
+    const har = {
+      log: {
+        entries: [
+          {
+            request: {
+              method: 'POST',
+              url: 'https://app.test/graphql',
+              postData: { mimeType: 'application/json', _file: 'req-body-7f3a' },
+            },
+            response: {
+              status: 200,
+              content: { mimeType: 'application/json', _file: 'res-body-9c1b' },
+            },
+          },
+        ],
+      },
+    }
+    const harPath = harPathFor(dir, 'attach-1')
+    writeFileSync(
+      harPath,
+      Buffer.from(
+        zipSync({
+          'attach-1.har': strToU8(JSON.stringify(har)),
+          'req-body-7f3a': strToU8(JSON.stringify({ query: '{ me { id } }', token: SECRET })),
+          'res-body-9c1b': strToU8(JSON.stringify({ data: { token: SECRET } })),
+        }),
+      ),
+    )
+
+    return finalizeHar({
+      harPath,
+      runId: 'attach-1',
+      store,
+      redact: (v) => redactor.redact(v),
+    }).then((summary) => {
+      const stored = store.get(summary?.handle as string)
+      const entries = unzipSync(new Uint8Array(stored?.body as Buffer))
+      const all = Object.values(entries).map((b) => new TextDecoder().decode(b))
+      // The secret must survive NOWHERE — not the .har, not either attach body.
+      for (const text of all) expect(text).not.toContain(SECRET)
+      // ...and redaction actually ran on the attach bodies (proves they were processed).
+      const bodies = [
+        new TextDecoder().decode(entries['req-body-7f3a'] as Uint8Array),
+        new TextDecoder().decode(entries['res-body-9c1b'] as Uint8Array),
+      ]
+      for (const body of bodies) expect(body).toContain('[redacted:token]')
+    })
+  })
+
+  it('leaves a genuinely binary body (octet-stream) untouched', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-har-bin-'))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-har-bin-store-')))
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const har = {
+      log: {
+        entries: [
+          {
+            request: { method: 'GET', url: 'https://app.test/img' },
+            response: { status: 200, content: { mimeType: 'image/png', _file: 'img-1' } },
+          },
+        ],
+      },
+    }
+    const harPath = harPathFor(dir, 'bin-1')
+    writeFileSync(
+      harPath,
+      Buffer.from(zipSync({ 'bin-1.har': strToU8(JSON.stringify(har)), 'img-1': png })),
+    )
+    return finalizeHar({ harPath, runId: 'bin-1', store, redact: (v) => v.toUpperCase() }).then(
+      (summary) => {
+        const entries = unzipSync(
+          new Uint8Array(store.get(summary?.handle as string)?.body as Buffer),
+        )
+        // The binary body is passed through byte-for-byte (not run through `redact`).
+        expect(Array.from(entries['img-1'] as Uint8Array)).toEqual(Array.from(png))
+      },
+    )
   })
 })
