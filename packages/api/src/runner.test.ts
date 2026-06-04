@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ArtifactStore } from './artifacts.js'
 import { loadCollection } from './collection.js'
-import { runRequest, runRequestForHar } from './runner.js'
+import { runRequest, runRequestForContract, runRequestForHar } from './runner.js'
 import { StaticSecretStore } from './secrets.js'
 import { runSequence, runSequenceForHar } from './sequence.js'
 
@@ -448,6 +448,41 @@ describe('runRequest (offline, in-process server)', () => {
       expect(result.steps).toHaveLength(2)
       expect(result.steps.every((s) => s.result.sent)).toBe(true)
       expect(capture.hops.map((h) => h.status)).toEqual([200, 200])
+    })
+  })
+
+  describe('runRequestForContract — un-redacted request facts for contract validation', () => {
+    it('surfaces the UN-redacted request facts + registeredSecrets while RunResult stays redacted', async () => {
+      const token = 'super-secret-token-123'
+      const { result, capture } = await runRequestForContract(
+        loadCollection(FIXTURE),
+        'echo-auth',
+        {
+          vars: { baseUrl },
+          secrets: new StaticSecretStore({ API_TOKEN: token }),
+        },
+      )
+      // The capture holds the RAW request the validator must read.
+      expect(capture.request.method).toBe('GET')
+      expect(capture.request.path).toBe('/echo')
+      expect(capture.request.headers?.authorization).toBe(`Bearer ${token}`)
+      expect(capture.registeredSecrets).toContainEqual({ name: 'API_TOKEN', value: token })
+      // The agent-facing RunResult is UNCHANGED — still fully redacted (never the raw token).
+      expect(JSON.stringify(result.request)).not.toContain(token)
+    })
+
+    it('populates the capture at prepare time, even for a withheld (dry-run) request', async () => {
+      const { result, capture } = await runRequestForContract(
+        loadCollection(FIXTURE),
+        'create-thing-json',
+        { vars: { baseUrl, thingName: 'Widget' } },
+      )
+      // A POST is dry-run by default — but the request facts are still captured.
+      expect(result.sent).toBe(false)
+      expect(capture.request.method).toBe('POST')
+      expect(capture.request.path).toBe('/things')
+      // The JSON body is parsed to its value (so schema validation is meaningful).
+      expect(capture.request.body).toEqual({ name: 'Widget' })
     })
   })
 })

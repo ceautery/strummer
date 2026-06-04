@@ -3,13 +3,17 @@ import { dirname } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
   ArtifactStore,
+  type ContractRequestCapture,
   type ContractResult,
   type ImportFormat,
   importToCollection,
   isGraphqlEnvelope,
   loadCollection,
+  Redactor,
+  type RunResult,
   resolveSecretStore,
   runRequest,
+  runRequestForContract,
   runSequence,
   type SecretStore,
   validateCapturedTraffic,
@@ -190,8 +194,8 @@ function parseStoredBody(artifacts: ArtifactStore, handle: string): unknown {
   }
 }
 
-function printContract(io: CliIO, contract: ContractResult): void {
-  io.out(`contract: ${contract.valid ? 'valid' : 'INVALID'}\n`)
+function printContract(io: CliIO, contract: ContractResult, label = 'contract'): void {
+  io.out(`${label}: ${contract.valid ? 'valid' : 'INVALID'}\n`)
   for (const f of contract.findings) {
     io.out(`  ${f.severity.toUpperCase()} ${f.kind}: ${f.message}${f.path ? ` (${f.path})` : ''}\n`)
   }
@@ -216,7 +220,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
   const artifacts = new ArtifactStore()
   // --unsafe/--allow-host are operator (human) controlled here — correct for a
   // CLI the human runs; pass them straight through to the engine.
-  const result = await runRequest(collection, name, {
+  const runOpts = {
     vars: parseVars(values.var),
     env: values.env,
     allowUnsafe: values.unsafe ?? false,
@@ -225,33 +229,78 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     maxRedirects: parseMaxRedirects(values['max-redirects']),
     secrets: secretsFor(values.keyring),
     artifacts,
-  })
-
-  let contract: ContractResult | undefined
-  if (values.openapi && result.sent && result.response) {
-    const spec = JSON.parse(readFileSync(values.openapi, 'utf8'))
-    const url = new URL(result.request.url)
-    contract = validateOpenApiResponse(
-      spec,
-      { method: result.request.method, path: url.pathname },
-      {
-        status: result.response.status,
-        headers: result.response.headers,
-        body: parseStoredBody(artifacts, result.response.bodyHandle),
-      },
-      // External local-file $refs resolve relative to the spec file's directory.
-      { baseDir: dirname(values.openapi) },
-    )
+  }
+  // When validating against a contract, capture the UN-redacted sent request too, so
+  // its body/params can be type-checked (ADR 0014); RunResult itself stays redacted.
+  let result: RunResult
+  let reqCapture: ContractRequestCapture | undefined
+  if (values.openapi) {
+    const driven = await runRequestForContract(collection, name, runOpts)
+    result = driven.result
+    reqCapture = driven.capture
+  } else {
+    result = await runRequest(collection, name, runOpts)
   }
 
-  // Return code: 0 only if SENT and every assertion passed and (if validated)
-  // the contract is valid; 1 otherwise — including a dry-run, since a withheld
-  // request verified nothing.
+  let contract: ContractResult | undefined
+  let requestContract: ContractResult | undefined
+  if (values.openapi) {
+    const spec = JSON.parse(readFileSync(values.openapi, 'utf8'))
+    const baseDir = dirname(values.openapi)
+    // Response validation needs a sent response; request validation does not — the
+    // request is fully known at prepare time, so it runs even on a withheld dry-run.
+    if (result.sent && result.response) {
+      const url = new URL(result.request.url)
+      contract = validateOpenApiResponse(
+        spec,
+        { method: result.request.method, path: url.pathname },
+        {
+          status: result.response.status,
+          headers: result.response.headers,
+          body: parseStoredBody(artifacts, result.response.bodyHandle),
+        },
+        // External local-file $refs resolve relative to the spec file's directory.
+        { baseDir },
+      )
+    }
+    // A GraphQL request envelope has no REST requestBody/param model — skip it (the
+    // capture→contract bridge routes GraphQL to schema validation separately).
+    if (reqCapture && !isGraphqlEnvelope(reqCapture.request.body)) {
+      const raw = validateOpenApiRequest(spec, reqCapture.request, {
+        baseDir,
+        // The CLI holds the real sent request, so body presence + params are authoritative.
+        bodyPresenceAuthoritative: true,
+        paramsAuthoritative: true,
+      })
+      // Findings can echo a captured body/param value (incl. a resolved secret), so
+      // redact message AND path through a redactor that learned the run's secrets.
+      const redactor = new Redactor()
+      for (const s of reqCapture.registeredSecrets) redactor.register(s.name, s.value)
+      requestContract = {
+        ...raw,
+        findings: raw.findings.map((f) => ({
+          ...f,
+          message: redactor.redact(f.message),
+          ...(f.path !== undefined ? { path: redactor.redact(f.path) } : {}),
+        })),
+      }
+    }
+  }
+
+  // Return code: 0 only if SENT and every assertion passed and (if validated) both the
+  // response AND request contracts are valid; 1 otherwise — including a dry-run, since a
+  // withheld request verified nothing (though its request contract is still surfaced).
   const assertionsOk = !!result.response?.assertions.every((a) => a.pass)
-  const ok = result.sent && assertionsOk && (contract ? contract.valid : true)
+  const ok =
+    result.sent &&
+    assertionsOk &&
+    (contract ? contract.valid : true) &&
+    (requestContract ? requestContract.valid : true)
 
   if (values.json) {
-    io.out(`${JSON.stringify(contract ? { ...result, contract } : result, null, 2)}\n`)
+    io.out(
+      `${JSON.stringify({ ...result, ...(contract ? { contract } : {}), ...(requestContract ? { requestContract } : {}) }, null, 2)}\n`,
+    )
     return ok ? 0 : 1
   }
 
@@ -272,7 +321,8 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     }
     io.out(`body: ${res.bodyHandle}\n`)
   }
-  if (contract) printContract(io, contract)
+  if (requestContract) printContract(io, requestContract, 'request contract')
+  if (contract) printContract(io, contract, 'response contract')
   return ok ? 0 : 1
 }
 

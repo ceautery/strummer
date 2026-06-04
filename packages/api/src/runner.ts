@@ -6,7 +6,8 @@ import { ArtifactStore } from './artifacts.js'
 import { evaluateAssertions, extractCaptures } from './assert.js'
 import type { HarHopRecord } from './har-synth.js'
 import type { Collection, PreparedRequest, RunResult, ScriptTest, SecretStore } from './model.js'
-import { prepareRequest } from './prepare.js'
+import { type Prepared, prepareRequest } from './prepare.js'
+import type { RequestFacts } from './request-contract.js'
 import { assertSsrfAllowed, checkGate, isMutating } from './safety.js'
 import { runScript } from './script.js'
 import { EnvSecretStore, Redactor } from './secrets.js'
@@ -165,11 +166,109 @@ export async function runRequestForHar(
   return { result, capture }
 }
 
+/**
+ * The out-of-band channel surfacing the UN-redacted {@link RequestFacts} a contract
+ * validator reads (method, pathname, decoded query, lower-cased headers, JSON-parsed
+ * body), plus the run-resolved secret pairs a downstream redactor must learn to scrub
+ * findings. Mirrors {@link HarCapture}: NEVER attached to `RunResult` (which stays fully
+ * redacted), and populated at PREPARE time so it is available even when the request is
+ * withheld (dry-run / gated). Consumed by `api run --openapi`'s request-side validation
+ * (ADR 0014).
+ */
+export interface ContractRequestCapture {
+  request: RequestFacts
+  registeredSecrets: { name: string; value: string }[]
+}
+
+/**
+ * Drive a request AND retain the un-redacted request facts a contract validator reads
+ * (ADR 0014). `RunResult` is returned UNCHANGED (still fully redacted); `capture` is the
+ * raw channel (never on `RunResult`). The caller (`api run --openapi`) folds
+ * `capture.registeredSecrets` into a redactor, validates `capture.request` against the
+ * contract, then redacts the findings before surfacing them.
+ */
+export async function runRequestForContract(
+  collection: Collection,
+  name: string,
+  opts: RunOptions = {},
+): Promise<{ result: RunResult; capture: ContractRequestCapture }> {
+  const capture: ContractRequestCapture = {
+    request: { method: '', path: '' },
+    registeredSecrets: [],
+  }
+  const result = await runRequestImpl(collection, name, opts, undefined, capture)
+  return { result, capture }
+}
+
+/** JSON-family media type: `application/json` or any `*+json`. */
+function isJsonFamily(ct: string | undefined): boolean {
+  if (!ct) return false
+  const base = (ct.split(';')[0] ?? '').trim().toLowerCase()
+  return base === 'application/json' || base.endsWith('+json')
+}
+
+/** Decode a query string into a record; a repeated key collapses to an array. */
+function queryRecord(sp: URLSearchParams): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {}
+  for (const key of new Set(sp.keys())) {
+    const all = sp.getAll(key)
+    out[key] = all.length > 1 ? all : (all[0] ?? '')
+  }
+  return out
+}
+
+/**
+ * Build the UN-redacted {@link RequestFacts} a contract validator reads from a prepared
+ * request. A JSON-family body is parsed to its value (so schema validation is
+ * meaningful); a present non-JSON / binary body (multipart/file/urlencoded/xml) is passed
+ * through as a non-undefined value so the validator routes it to its presence-only
+ * `unverified` path — never a false `missing-required-body`. A multipart body's
+ * Content-Type (set by undici with the boundary, absent at prepare time) is synthesized as
+ * a bare `multipart/form-data` so that routing is correct.
+ */
+function buildRequestFacts(
+  prepared: Prepared,
+  sendHeaders: Record<string, string>,
+  bodyType: string | undefined,
+): RequestFacts {
+  const url = new URL(prepared.url)
+  const headers = flattenHeaders(sendHeaders)
+  if (bodyType === 'multipart-form' && headers['content-type'] === undefined) {
+    headers['content-type'] = 'multipart/form-data'
+  }
+  let body: unknown
+  if (prepared.body) {
+    const content = prepared.body.content
+    if (typeof content === 'string') {
+      if (isJsonFamily(headers['content-type'])) {
+        try {
+          body = JSON.parse(content)
+        } catch {
+          body = content // unparseable JSON body: the schema-check reports the violation
+        }
+      } else {
+        body = content // non-JSON text body → validator marks it unverified by Content-Type
+      }
+    } else {
+      // binary/multipart: no string content — surface presence (the redaction-safe
+      // preview); the non-JSON Content-Type routes it to `unverified`.
+      body = prepared.body.preview
+    }
+  }
+  const query = queryRecord(url.searchParams)
+  const facts: RequestFacts = { method: prepared.method, path: url.pathname }
+  if (body !== undefined) facts.body = body
+  if (Object.keys(query).length > 0) facts.query = query
+  if (Object.keys(headers).length > 0) facts.headers = headers
+  return facts
+}
+
 async function runRequestImpl(
   collection: Collection,
   name: string,
   opts: RunOptions = {},
   capture?: HarCapture,
+  contractSink?: ContractRequestCapture,
 ): Promise<RunResult> {
   const entry = collection.requests.get(name)
   if (!entry) {
@@ -200,6 +299,14 @@ async function runRequestImpl(
   const sendHeaders = { ...prepared.headers }
   if (prepared.body?.contentType && !hasHeader(sendHeaders, 'content-type')) {
     sendHeaders['Content-Type'] = prepared.body.contentType
+  }
+
+  // Surface the un-redacted request facts + resolved secrets for contract validation
+  // (ADR 0014). Done at PREPARE time so they exist even when the request is withheld
+  // (the gate may dry-run below); `RunResult` itself stays fully redacted.
+  if (contractSink) {
+    contractSink.request = buildRequestFacts(prepared, sendHeaders, entry.request.body?.type)
+    contractSink.registeredSecrets = redactor.registeredSecrets()
   }
 
   const redactedRequest: PreparedRequest = {

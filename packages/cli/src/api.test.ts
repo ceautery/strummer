@@ -27,7 +27,7 @@ let dir: string
 
 beforeAll(async () => {
   server = createServer((req, res) => {
-    if (req.url === '/health' && req.method === 'GET') {
+    if (req.url?.split('?')[0] === '/health' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ ok: true }))
     } else if (req.url === '/things' && req.method === 'POST') {
@@ -285,6 +285,170 @@ describe('cli api', () => {
       ),
     ).toBe(0)
     expect(c.out().toLowerCase()).toContain('contract')
+  })
+
+  it('run --openapi flags a request body that violates the contract (exit 1)', async () => {
+    writeFileSync(
+      join(dir, 'create-json.bru'),
+      `meta {
+  name: create-json
+}
+post {
+  url: {{baseUrl}}/things
+  body: json
+}
+body:json {
+  {
+    "name": "{{thingName}}"
+  }
+}
+`,
+    )
+    const spec = join(dir, 'openapi-req.json')
+    writeFileSync(
+      spec,
+      JSON.stringify({
+        openapi: '3.1.0',
+        paths: {
+          '/things': {
+            post: {
+              requestBody: {
+                required: true,
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: { name: { type: 'integer' } },
+                      required: ['name'],
+                    },
+                  },
+                },
+              },
+              responses: { '201': { description: 'created' } },
+            },
+          },
+        },
+      }),
+    )
+    const c = capture()
+    // --unsafe --allow-host actually sends it (response is a valid 201), so the
+    // ONLY failure is the request body — name is a string, the schema wants integer.
+    const code = await run(
+      [
+        'api',
+        'run',
+        dir,
+        'create-json',
+        '--var',
+        `baseUrl=${baseUrl}`,
+        '--var',
+        'thingName=Widget',
+        '--unsafe',
+        '--allow-host',
+        '127.0.0.1',
+        '--openapi',
+        spec,
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out()).toContain('request-body-schema')
+    expect(c.out().toLowerCase()).toContain('request contract: invalid')
+  })
+
+  it('run --openapi: a conformant request validates clean (exit 0)', async () => {
+    const spec = join(dir, 'openapi-req-ok.json')
+    writeFileSync(
+      spec,
+      JSON.stringify({
+        openapi: '3.1.0',
+        paths: {
+          '/things': {
+            post: {
+              requestBody: {
+                required: true,
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: { name: { type: 'string' } },
+                      required: ['name'],
+                    },
+                  },
+                },
+              },
+              responses: { '201': { description: 'created' } },
+            },
+          },
+        },
+      }),
+    )
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'run',
+        dir,
+        'create-json',
+        '--var',
+        `baseUrl=${baseUrl}`,
+        '--var',
+        'thingName=Widget',
+        '--unsafe',
+        '--allow-host',
+        '127.0.0.1',
+        '--openapi',
+        spec,
+      ],
+      c.io,
+    )
+    expect(code).toBe(0)
+    expect(c.out().toLowerCase()).toContain('request contract: valid')
+  })
+
+  it('run --openapi redacts a secret echoed in a request finding', async () => {
+    const secret = 'super-secret-token-zzz'
+    process.env.STRUMMER_SECRET_API_TOKEN = secret
+    writeFileSync(
+      join(dir, 'search-secret.bru'),
+      `meta {
+  name: search-secret
+}
+get {
+  url: {{baseUrl}}/health?token={{secret:API_TOKEN}}
+}
+`,
+    )
+    const spec = join(dir, 'openapi-secret.json')
+    writeFileSync(
+      spec,
+      JSON.stringify({
+        openapi: '3.1.0',
+        paths: {
+          '/health': {
+            get: {
+              parameters: [{ name: 'token', in: 'query', schema: { type: 'integer' } }],
+              responses: { '200': { description: 'ok' } },
+            },
+          },
+        },
+      }),
+    )
+    try {
+      const c = capture()
+      // The secret is not an integer → a param-schema finding that would echo the raw
+      // value; it MUST be redacted before it reaches the agent-facing output.
+      const code = await run(
+        ['api', 'run', dir, 'search-secret', '--var', `baseUrl=${baseUrl}`, '--openapi', spec],
+        c.io,
+      )
+      expect(code).toBe(1)
+      expect(c.out()).toContain('param-schema')
+      expect(c.out()).not.toContain(secret)
+      expect(c.out()).toContain('[redacted:API_TOKEN]')
+    } finally {
+      delete process.env.STRUMMER_SECRET_API_TOKEN
+    }
   })
 
   it('run-collection summarizes each step', async () => {

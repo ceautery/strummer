@@ -75,7 +75,14 @@ export {
   type RequestValidationResult,
   validateOpenApiRequest,
 } from './request-contract.js'
-export { type HarCapture, type RunOptions, runRequest, runRequestForHar } from './runner.js'
+export {
+  type ContractRequestCapture,
+  type HarCapture,
+  type RunOptions,
+  runRequest,
+  runRequestForContract,
+  runRequestForHar,
+} from './runner.js'
 export { checkGate, isMutating, type SafetyDecision, type SafetyOptions } from './safety.js'
 export { type SchemaError, type SchemaValidation, validateSchema } from './schema.js'
 export { runScript, type ScriptResponseView, type ScriptResult } from './script.js'
