@@ -55,6 +55,23 @@ function num(value: string | undefined): number | undefined {
   return value && Number.isFinite(n) ? n : undefined
 }
 
+/** Build the discriminated `CaptureContract` (REST and/or GraphQL) from the agent's
+ * contract inputs — shared by the consume and produce capture paths. */
+function buildCaptureContract(ctx: {
+  openapiSpec?: unknown
+  graphqlSchema?: string
+  graphqlEndpoint?: string
+}): CaptureContract {
+  const contract: CaptureContract = {}
+  if (ctx.openapiSpec !== undefined) {
+    contract.openapi = ctx.openapiSpec as CaptureContract['openapi']
+  }
+  if (ctx.graphqlSchema) {
+    contract.graphql = { endpointPath: ctx.graphqlEndpoint ?? '/graphql', sdl: ctx.graphqlSchema }
+  }
+  return contract
+}
+
 const EMPTY_COVERAGE = {
   files: [],
   uncovered: [],
@@ -172,24 +189,23 @@ export function buildVerifyServerFromEnv(
       }
     }
 
-    // The consume-only contract bridge: its OWN gate is the capture gate (allowCapture
-    // + a shared artifacts root to resolve the foreign-prefix browser HAR by handle).
+    // The capture→contract bridge: its OWN gate is the capture gate (allowCapture + a
+    // shared artifacts root to resolve a HAR by handle). CONSUME mode validates an
+    // already-produced stored HAR; PRODUCE mode (5e, wired in slice 6) DRIVES a browser
+    // flow to capture the HAR first. Both share the validate back half.
     if (config.allowCapture && harStore) {
       const store = harStore
       rd.contract = async (ctx) => {
-        const har = store.get(ctx.harHandle)?.body
-        if (!har) throw new Error(`no stored HAR for ${ctx.harHandle}`)
-        const contract: CaptureContract = {}
-        if (ctx.openapiSpec !== undefined) {
-          contract.openapi = ctx.openapiSpec as CaptureContract['openapi']
+        let har: Buffer | undefined
+        if (ctx.mode === 'consume') {
+          har = store.get(ctx.harHandle)?.body
+          if (!har) throw new Error(`no stored HAR for ${ctx.harHandle}`)
+        } else {
+          // PRODUCE mode wiring lands in slice 6 (driveBrowserFlowToHar behind the
+          // browser gate). Until then a produce request is not enabled here.
+          throw new Error('live browser capture (produce mode) is not enabled')
         }
-        if (ctx.graphqlSchema) {
-          contract.graphql = {
-            endpointPath: ctx.graphqlEndpoint ?? '/graphql',
-            sdl: ctx.graphqlSchema,
-          }
-        }
-        return validateCapturedTraffic(har, contract, { redact }).results
+        return validateCapturedTraffic(har, buildCaptureContract(ctx), { redact }).results
       }
     }
 

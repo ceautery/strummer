@@ -26,13 +26,31 @@ export interface RunDrivingContext {
   diff?: string
 }
 
-/** The agent-supplied consume-only capture inputs for the contract sub-verdict. */
-export interface ContractCaptureContext {
-  harHandle: string
+/** Contract inputs the agent may supply: the API/GraphQL contract to validate against. */
+interface ContractInputs {
   openapiSpec?: unknown
   graphqlSchema?: string
   graphqlEndpoint?: string
 }
+
+/** CONSUME mode (5a/5b): validate an already-produced, stored browser HAR by handle. */
+export interface ContractConsumeContext extends ContractInputs {
+  mode: 'consume'
+  harHandle: string
+}
+
+/** PRODUCE mode (5e): verify DRIVES a browser flow (by operator-authored NAME) to capture
+ * the HAR, then validates it. The agent supplies only the target — the flow name + non-secret
+ * `vars`; every egress-safety input stays operator-set ("compose, never widen"). */
+export interface ContractProduceContext extends ContractInputs {
+  mode: 'produce'
+  flow: string
+  vars?: Record<string, string>
+}
+
+/** The agent-supplied capture inputs for the contract sub-verdict — consume a stored HAR
+ * (5a/5b) or drive a live browser capture (5e). Discriminated by `mode`. */
+export type ContractCaptureContext = ContractConsumeContext | ContractProduceContext
 
 /**
  * The operator-wired, ALREADY-GATED pillar runners for the run-driving `verify_change`
@@ -180,13 +198,29 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
             .describe('which pillars to attempt; omitted ⇒ all enabled pillars'),
           contract: z
             .object({
-              harHandle: z.string().describe('a stored browser HAR handle to validate'),
+              harHandle: z
+                .string()
+                .optional()
+                .describe('CONSUME: a stored browser HAR handle to validate'),
+              flow: z
+                .string()
+                .optional()
+                .describe(
+                  'PRODUCE: an operator-authored flow NAME to DRIVE + capture, then validate',
+                ),
+              vars: z
+                .record(z.string(), z.string())
+                .optional()
+                .describe('non-secret vars for the driven flow (PRODUCE mode)'),
               openapiSpec: z.unknown().optional(),
               graphqlSchema: z.string().optional(),
               graphqlEndpoint: z.string().optional(),
             })
             .optional()
-            .describe('consume-only capture→contract inputs (behind the capture gate)'),
+            .describe(
+              'capture→contract inputs behind the capture gate: supply EITHER `harHandle` ' +
+                '(consume a stored HAR) OR `flow` (verify drives a live browser capture).',
+            ),
           failAtOrAbove: z
             .enum(SEVERITIES)
             .optional()
@@ -224,11 +258,26 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
         if (wants('flake')) request.flake = { run: spawnRun(rd.flake, 'flake') }
         if (wants('mutate')) request.mutate = { run: spawnRun(rd.mutate, 'mutate') }
         if (args.contract) {
-          const cc = args.contract
+          const a = args.contract
+          const inputs: ContractInputs = {
+            openapiSpec: a.openapiSpec,
+            graphqlSchema: a.graphqlSchema,
+            graphqlEndpoint: a.graphqlEndpoint,
+          }
+          // Discriminated by which target the agent supplied: a `flow` to DRIVE (produce)
+          // or a stored `harHandle` to validate (consume). Exactly one is required.
+          let cc: ContractCaptureContext | undefined
+          if (a.flow !== undefined) cc = { mode: 'produce', flow: a.flow, vars: a.vars, ...inputs }
+          else if (a.harHandle !== undefined)
+            cc = { mode: 'consume', harHandle: a.harHandle, ...inputs }
+          if (cc === undefined) {
+            throw new Error('contract needs either `harHandle` (consume) or `flow` (produce)')
+          }
+          const ccx = cc
           const crun = rd.contract
           request.contract = {
             source: 'capture-from-HAR',
-            run: crun ? () => crun(cc) : denied('contract'),
+            run: crun ? () => crun(ccx) : denied('contract'),
           }
         }
 

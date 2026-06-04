@@ -151,8 +151,9 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
     expect(sc.status).toBe('inconclusive') // deps pass + coverage gate-not-set ⇒ inconclusive
   })
 
-  it('folds the consume-only contract sub-verdict from a HAR handle (capture-from-HAR)', async () => {
-    const contract = vi.fn(async (ctx: { harHandle: string }) => {
+  it('folds the consume contract sub-verdict from a HAR handle (mode:consume)', async () => {
+    const contract = vi.fn(async (ctx: { mode: string; harHandle?: string }) => {
+      expect(ctx.mode).toBe('consume')
       expect(ctx.harHandle).toBe('strummer://browser/run/x/har')
       return [contractError as never]
     })
@@ -174,6 +175,26 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
       source: 'capture-from-HAR',
     })
     expect(sc.status).toBe('fail')
+  })
+
+  it('builds a PRODUCE ctx (mode:produce + flow/vars) for the live-capture path (5e slice 2)', async () => {
+    const contract = vi.fn(async (ctx: { mode: string; flow?: string; vars?: unknown }) => {
+      expect(ctx.mode).toBe('produce')
+      expect(ctx.flow).toBe('login')
+      expect(ctx.vars).toEqual({ user: 'alice' })
+      return [contractError as never]
+    })
+    const c = await connect({ runDriving: { contract } })
+    const res = await c.callTool({
+      name: 'verify_change',
+      arguments: {
+        projectRoot: '/repo',
+        contract: { flow: 'login', vars: { user: 'alice' } },
+      },
+    })
+    const sc = res.structuredContent as { status: string }
+    expect(contract).toHaveBeenCalledOnce()
+    expect(sc.status).toBe('fail') // the contract error dominates
   })
 
   it('derives changedFiles from a diff so one diff scopes the file-scoped pillars (slice 5d-3)', async () => {
