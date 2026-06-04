@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
   ArtifactStore,
@@ -6,6 +7,7 @@ import {
   runRequest,
   runSequence,
   type SecretStore,
+  validateCapturedTraffic,
   validateGraphqlOperation,
   validateOpenApiResponse,
 } from '@strummer/api'
@@ -21,6 +23,23 @@ export interface ApiToolsOptions {
   allowPrivate?: boolean
   secrets?: SecretStore
   artifacts?: ArtifactStore
+  /**
+   * OPERATOR-controlled: permit `validate_capture` to resolve + parse a stored
+   * browser HAR (ADR 0013 §3a). A HAR is operator-gated bytes with known-incomplete
+   * redaction, so reading one is NOT free — it requires this explicit opt-in
+   * (`STRUMMER_VERIFY_ALLOW_CAPTURE`). Never an agent input.
+   */
+  allowCapture?: boolean
+  /**
+   * Injected getter that resolves a HAR handle (e.g. `strummer://browser/run/<id>/har`)
+   * to its raw `.zip` bytes — wired by the bin from the shared artifact store
+   * (cross-prefix rehydrate). When absent, `validate_capture` is not registered.
+   */
+  resolveHar?: (handle: string) => Buffer | undefined
+  /** Redacts capture finding messages before they leave the surface (ADR 0013 §3b). */
+  verifyRedact?: (value: string) => string
+  /** Injected: persist the full capture verdict detail by handle; returns the handle. */
+  storeVerifyDetail?: (id: string, kind: string, body: string, contentType: string) => string
 }
 
 const INSTRUCTIONS = `Strummer drives version-pinned API tests from a Bruno collection on disk.
@@ -258,6 +277,71 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
       return { content: [text(result)], structuredContent: { ...result } }
     },
   )
+
+  // validate_capture — the capture→contract bridge (ADR 0013 §3, milestone 5a).
+  // Registered ONLY when the bin injected a HAR resolver (i.e. an artifacts root is
+  // configured). Resolving a HAR additionally requires the operator capture gate.
+  if (opts.resolveHar) {
+    const resolveHar = opts.resolveHar
+    const redact = opts.verifyRedact ?? ((v: string) => v)
+    server.registerTool(
+      'validate_capture',
+      {
+        title: 'Validate a captured run against an OpenAPI contract',
+        description:
+          'Validate the traffic in a stored browser/API HAR (by handle) against an OpenAPI 3.1 ' +
+          'spec — no request is re-run. Reports drift (undocumented operations/statuses, schema ' +
+          'violations) and which documented operations the run exercised. Requires the operator ' +
+          'capture gate; finding messages are redacted; raw headers/cookies never enter the result.',
+        inputSchema: {
+          harHandle: z
+            .string()
+            .describe('handle of a stored HAR, e.g. strummer://browser/run/<id>/har'),
+          openapiSpec: z.unknown().describe('a parsed OpenAPI 3.1 document'),
+          allowedOrigins: z
+            .array(z.string())
+            .optional()
+            .describe('restrict validation to entries from these request origins'),
+        },
+      },
+      (args) => {
+        if (opts.allowCapture !== true) {
+          throw new Error(
+            'validate_capture is disabled: the operator must set STRUMMER_VERIFY_ALLOW_CAPTURE to ' +
+              'resolve an operator-gated HAR (its redaction is known-incomplete).',
+          )
+        }
+        const bytes = resolveHar(args.harHandle)
+        if (!bytes) throw new Error(`no stored HAR for ${args.harHandle}`)
+        const verdict = validateCapturedTraffic(
+          bytes,
+          args.openapiSpec as Parameters<typeof validateCapturedTraffic>[1],
+          { redact, allowedOrigins: args.allowedOrigins },
+        )
+        // Compact inline; full per-entry detail (redacted) by handle when a store is wired.
+        const compact = {
+          clean: verdict.clean,
+          entriesValidated: verdict.entriesValidated,
+          findingsByKind: verdict.findingsByKind,
+          firstFailing: verdict.firstFailing,
+          exercisedOperations: verdict.exercisedOperations,
+          unexercisedOperations: verdict.unexercisedOperations,
+          unresolvedBodies: verdict.unresolvedBodies,
+        }
+        let detailHandle: string | undefined
+        if (opts.storeVerifyDetail) {
+          detailHandle = opts.storeVerifyDetail(
+            randomUUID(),
+            'capture-verdict',
+            JSON.stringify(verdict, null, 2),
+            'application/json',
+          )
+        }
+        const out = { ...compact, ...(detailHandle ? { detailHandle } : {}) }
+        return { content: [text(out)], structuredContent: out }
+      },
+    )
+  }
 
   server.registerResource(
     'run-body',

@@ -11,6 +11,7 @@ import {
   runRequest,
   runSequence,
   type SecretStore,
+  validateCapturedTraffic,
   validateGraphqlOperation,
   validateOpenApiResponse,
 } from '@strummer/api'
@@ -63,6 +64,8 @@ export async function runApi(args: string[], io: CliIO): Promise<number> {
       return cmdRunCollection(rest, io)
     case 'validate':
       return cmdValidate(rest, io)
+    case 'validate-capture':
+      return cmdValidateCapture(rest, io)
     case 'import':
       return cmdImport(rest, io)
     default:
@@ -364,4 +367,52 @@ function cmdValidate(args: string[], io: CliIO): number {
     io.out(`  ${f.severity.toUpperCase()} ${f.kind}: ${f.message}${f.path ? ` (${f.path})` : ''}\n`)
   }
   return contract.valid ? 0 : 1
+}
+
+/**
+ * `api validate-capture <har.zip> --openapi <spec.json>` — validate the traffic in
+ * a captured HAR against an OpenAPI contract (ADR 0013, the capture→contract
+ * bridge). The human is the operator, so the local HAR file is read directly (no
+ * surface capture gate). Exits 1 when the capture is not clean.
+ */
+function cmdValidateCapture(args: string[], io: CliIO): number {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      openapi: { type: 'string' },
+      origin: { type: 'string', multiple: true },
+      json: { type: 'boolean' },
+    },
+  })
+  const [harPath] = positionals
+  if (!harPath || !values.openapi) {
+    io.err('api validate-capture needs <har.zip> --openapi <spec.json>\n')
+    return 1
+  }
+  const harZip = readFileSync(harPath)
+  const spec = JSON.parse(readFileSync(values.openapi, 'utf8'))
+  const verdict = validateCapturedTraffic(harZip, spec, {
+    allowedOrigins: values.origin,
+  })
+
+  if (values.json) {
+    io.out(`${JSON.stringify(verdict, null, 2)}\n`)
+    return verdict.clean ? 0 : 1
+  }
+  io.out(
+    `capture: ${verdict.clean ? 'clean' : 'NOT CLEAN'} (${verdict.entriesValidated} entries)\n`,
+  )
+  for (const [kind, count] of Object.entries(verdict.findingsByKind)) {
+    io.out(`  ${count}× ${kind}\n`)
+  }
+  if (verdict.firstFailing) {
+    const f = verdict.firstFailing
+    io.out(`  first failing: ${f.method} ${f.path} — ${f.kind}: ${f.message}\n`)
+  }
+  io.out(`  exercised: ${verdict.exercisedOperations.join(', ') || '(none)'}\n`)
+  if (verdict.unexercisedOperations.length > 0) {
+    io.out(`  unexercised: ${verdict.unexercisedOperations.join(', ')}\n`)
+  }
+  return verdict.clean ? 0 : 1
 }

@@ -11,16 +11,23 @@ pillars COMPOSE: a captured browser/API run's traffic is validated against the A
 verdict an agent requests for a change. Two milestones: **5a** the capture→contract bridge (the
 cross-pillar win), **5b** the unified `composeVerdict` reducer in a new pure `@strummer/verdict`
 package. Both compose-only / zero-spawn in v1; orchestration/run-driving, GraphQL-from-HAR, and
-the Python half are explicitly staged. **Slice 1 of 5a LANDED (994 TS + 45 Py green):** the
-`@strummer/artifacts` store is now **prefix-qualified on disk** (`<baseDir>/<prefix>/<id>/<kind>`,
-the prefix moved INTO the path) so one shared `baseDir` is collision-free across pillars and a
-store **rehydrates a foreign-prefix handle it never `put()`** (the cross-pillar read) —
-hardened with a per-segment allowlist (refuses `..`/separators/absolute in `put()` AND on the
-rehydrate path) + realpath-confinement under `baseDir` (symlink-escape closed), plus a
-`<kind>.meta.json` contentType sidecar (legacy/no-sidecar ⇒ `application/octet-stream` +
-`contentTypeInferred`). Browser pillar (the regression guard) stayed green through the layout
-change. **Next: 5a slice 2** — `harEntriesToFacts` (attach/zip HAR body resolution first) in
-`packages/api/src/har-capture.ts`. See ROADMAP Phase 5 + ADR 0013 §6._
+the Python half are explicitly staged. **MILESTONE 5a COMPLETE (1011 TS + 45 Py green) — the
+capture→contract bridge works end-to-end:** (slice 1) `@strummer/artifacts` is now
+**prefix-qualified on disk** (`<baseDir>/<prefix>/<id>/<kind>`) so one shared `baseDir` is
+collision-free across pillars and a store **rehydrates a foreign-prefix handle it never `put()`**
+(the cross-pillar read) — per-segment allowlist + realpath-confinement (symlink-escape closed) +
+a `<kind>.meta.json` contentType sidecar; (slices 2–5) pure `harEntriesToFacts`/
+`validateCapturedTraffic` in `packages/api/src/har-capture.ts` — resolve a REAL Playwright
+`content:'attach'` HAR `.zip` (bodies as separate `_file` entries; an unresolved attached body is
+a hard finding, never an empty pass), JSON-only origin/content-type filter, OpenAPI server
+base-path reconciliation, drive each entry through the SHIPPED `validateOpenApiResponse` + an
+`spec.paths × methods` exercised/unexercised drift walk, **every finding message + captured path
+routed through the operator `Redactor`**; (slice 6) the gated MCP `validate_capture` (api server,
+registered only when a HAR resolver is wired, refuses without `STRUMMER_VERIFY_ALLOW_CAPTURE`,
+detail by handle under the `verify` prefix) + the human `strummer api validate-capture <har.zip>
+--openapi <spec>` CLI. Verified vs a real captured HAR (schema drift + base-path + redaction).
+**Next: milestone 5b** — the unified `composeVerdict` reducer in a new pure `@strummer/verdict`
+package (slice 7: Severity core + empty-fold = `inconclusive`). See ROADMAP Phase 5 + ADR 0013 §6._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now

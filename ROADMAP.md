@@ -839,8 +839,10 @@ ONE structured verdict an agent requests for a change. Two compose-only / zero-s
 gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strummer/verdict` is a
 **pure, type-only-import** package (never pulls a pillar runtime).
 
-- [ ] **Milestone 5a — the capture→contract bridge** (the cross-pillar win; reuses 100% of the
-      shipped `validateOpenApiResponse`).
+- [x] **Milestone 5a — the capture→contract bridge: COMPLETE** (the cross-pillar win; reuses 100%
+      of the shipped `validateOpenApiResponse`). Engine (`packages/api/src/har-capture.ts`) + gated
+      MCP `validate_capture` (api server) + human `strummer api validate-capture` CLI; verified
+      against a REAL Playwright-emitted `content:'attach'` HAR `.zip` fixture.
   - [x] **Slice 1 — `@strummer/artifacts` prefix-qualified, hardened, cross-prefix resolution.**
         On-disk layout moved to `<baseDir>/<prefix>/<id>/<kind>` (prefix INTO the path) so one
         shared `baseDir` is collision-free across pillars and a store **rehydrates a foreign-prefix
@@ -848,18 +850,18 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         `..`/separator/absolute in `put()` AND rehydrate) + realpath-confinement under `baseDir`
         (symlink-escape closed); `<kind>.meta.json` contentType sidecar (legacy/no-sidecar ⇒
         `application/octet-stream` + `contentTypeInferred`). Browser pillar (regression guard) green.
-  - [ ] **Slice 2 — `harEntriesToFacts`** in `packages/api/src/har-capture.ts`: attach/zip HAR body
+  - [x] **Slice 2 — `harEntriesToFacts`** in `packages/api/src/har-capture.ts`: attach/zip HAR body
         resolution **first** (the only path a real browser HAR emits — `content:'attach'`), inline
         `text` fallback; body JSON-parsed, URL→`pathname`; an attached-but-unresolved body is a hard
         finding, never an empty-body pass. Real Playwright `.zip` fixture; size-bounded `fflate`.
-  - [ ] **Slice 3 — origin / content-type filter** (PRIMARY, not late): a non-API asset is skipped,
+  - [x] **Slice 3 — origin / content-type filter** (PRIMARY, not late): a non-API asset is skipped,
         so the exercised-operations set isn't polluted + no false `missing-operation` flood.
-  - [ ] **Slice 4 — OpenAPI server-base-path reconciliation** (strip `servers[].url` base before
+  - [x] **Slice 4 — OpenAPI server-base-path reconciliation** (strip `servers[].url` base before
         `matchPath` so `/api/v1/widgets` matches spec path `/widgets`).
-  - [ ] **Slice 5 — bridge → existing validator + the exercised-operations spec-walk** (`spec.paths
+  - [x] **Slice 5 — bridge → existing validator + the exercised-operations spec-walk** (`spec.paths
         × methods`, net-new code, scoped here); **every finding message routed through the operator
         `Redactor`; reference paths use `matched.template`, never `req.path`**.
-  - [ ] **Slice 6 — `validate_capture` MCP (api server) + CLI**, behind the §3a capture gate
+  - [x] **Slice 6 — `validate_capture` MCP (api server) + CLI**, behind the §3a capture gate
         (`STRUMMER_VERIFY_ALLOW_CAPTURE` + the source artifact gate); a HAR with an unregistered
         cookie/token yields a verdict whose inline + stored bytes contain neither.
 - [ ] **Milestone 5b — the unified verdict reducer.**

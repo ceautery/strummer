@@ -8,7 +8,19 @@ describe('strummer-api-mcp bin config (operator env)', () => {
       allowedHosts: [],
       keyring: false,
       allowPrivate: true,
+      artifactsRoot: undefined,
+      allowCapture: false,
     })
+  })
+
+  it('the capture gate (ADR 0013) is off by default and opt-in via env', () => {
+    expect(buildApiServerFromEnv({}).config.allowCapture).toBe(false)
+    const { config } = buildApiServerFromEnv({
+      STRUMMER_ARTIFACTS_ROOT: '/tmp/strummer-artifacts',
+      STRUMMER_VERIFY_ALLOW_CAPTURE: '1',
+    })
+    expect(config.allowCapture).toBe(true)
+    expect(config.artifactsRoot).toBe('/tmp/strummer-artifacts')
   })
 
   it('STRUMMER_BLOCK_PRIVATE hardens the SSRF posture', () => {

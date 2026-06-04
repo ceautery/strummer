@@ -1,12 +1,13 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createApiServer } from './api.js'
+import { type ApiToolsOptions, createApiServer } from './api.js'
 
 /** Build a temp Bruno collection with the requests the tests exercise. */
 function makeCollection(): string {
@@ -224,5 +225,106 @@ describe('strummer API MCP tools', () => {
   it('validate_response throws without a contract', async () => {
     const res = await client.callTool({ name: 'validate_response', arguments: {} })
     expect(res.isError).toBe(true)
+  })
+})
+
+describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)', () => {
+  // The real Playwright HAR fixture lives in the api package.
+  const HAR = readFileSync(
+    fileURLToPath(new URL('../../api/test/fixtures/widgets-capture.har.zip', import.meta.url)),
+  )
+  const SPEC = {
+    openapi: '3.1.0',
+    servers: [{ url: '/api/v1' }],
+    paths: {
+      '/widgets': {
+        get: {
+          responses: { '200': { content: { 'application/json': { schema: { type: 'object' } } } } },
+        },
+      },
+      '/widgets/{id}': {
+        get: {
+          responses: {
+            '200': {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['id'],
+                    properties: { id: { type: 'integer' } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+
+  async function connect(opts: ApiToolsOptions): Promise<Client> {
+    const api = createApiServer(opts)
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    const c = new Client({ name: 'test', version: '0.0.0' })
+    await Promise.all([api.connect(st), c.connect(ct)])
+    return c
+  }
+
+  it('is NOT registered when no HAR resolver is wired (deny-by-default)', async () => {
+    const c = await connect({})
+    const tools = await c.listTools()
+    expect(tools.tools.map((t) => t.name)).not.toContain('validate_capture')
+  })
+
+  it('refuses to resolve a HAR without the operator capture gate', async () => {
+    const c = await connect({ allowCapture: false, resolveHar: () => HAR })
+    const res = await c.callTool({
+      name: 'validate_capture',
+      arguments: { harHandle: 'strummer://browser/run/x/har', openapiSpec: SPEC },
+    })
+    expect(res.isError).toBe(true)
+  })
+
+  it('validates captured JSON traffic and reports drift when gated on', async () => {
+    const c = await connect({ allowCapture: true, resolveHar: () => HAR })
+    const res = await c.callTool({
+      name: 'validate_capture',
+      arguments: { harHandle: 'strummer://browser/run/x/har', openapiSpec: SPEC },
+    })
+    const sc = res.structuredContent as {
+      clean: boolean
+      entriesValidated: number
+      exercisedOperations: string[]
+    }
+    expect(sc.entriesValidated).toBe(2)
+    expect(sc.clean).toBe(false) // /widgets/1 violates the integer-id schema
+    expect(sc.exercisedOperations).toContain('GET /widgets/{id}')
+  })
+
+  it('redacts finding messages + stored detail; no sentinel leaks into inline or bytes', async () => {
+    let storedBody = ''
+    const c = await connect({
+      allowCapture: true,
+      resolveHar: () => HAR,
+      verifyRedact: (s) => s.replace(/widgets/gi, '‹redacted›'),
+      storeVerifyDetail: (_id, _kind, body) => {
+        storedBody = body
+        return 'strummer://verify/test/capture-verdict'
+      },
+    })
+    // Force missing-operation findings (which echo the path) by validating against
+    // a spec that documents neither path — every finding message carries the path.
+    const res = await c.callTool({
+      name: 'validate_capture',
+      arguments: {
+        harHandle: 'strummer://browser/run/x/har',
+        openapiSpec: { openapi: '3.1.0', paths: {} },
+      },
+    })
+    const inline = JSON.stringify(res.structuredContent)
+    expect(inline).not.toContain('widgets')
+    expect(storedBody.length).toBeGreaterThan(0)
+    expect(storedBody).not.toContain('widgets')
+    expect(res.structuredContent).toHaveProperty('detailHandle')
   })
 })

@@ -365,3 +365,50 @@ describe('bundled example collection', () => {
     expect(c.out()).toContain('required secrets')
   })
 })
+
+// The capture→contract bridge over the human CLI (ADR 0013). Reads a local HAR
+// file directly (the human is the operator — no surface capture gate).
+describe('cli api validate-capture', () => {
+  const harFixture = resolve(here, '../../api/test/fixtures/widgets-capture.har.zip')
+
+  it('validates a captured HAR against an OpenAPI spec and exits 1 on drift', async () => {
+    const spec = {
+      openapi: '3.1.0',
+      servers: [{ url: '/api/v1' }],
+      paths: {
+        '/widgets': { get: { responses: { '200': {} } } },
+        '/widgets/{id}': {
+          get: {
+            responses: {
+              '200': {
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      required: ['id'],
+                      properties: { id: { type: 'integer' } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+    const specPath = join(mkdtempSync(join(tmpdir(), 'strummer-cap-')), 'openapi.json')
+    writeFileSync(specPath, JSON.stringify(spec))
+
+    const c = capture()
+    const code = await run(['api', 'validate-capture', harFixture, '--openapi', specPath], c.io)
+    expect(code).toBe(1) // /widgets/1 violates the integer-id schema
+    expect(c.out()).toContain('NOT CLEAN')
+    expect(c.out()).toContain('response-schema')
+  })
+
+  it('needs both a HAR path and --openapi', async () => {
+    const c = capture()
+    expect(await run(['api', 'validate-capture'], c.io)).toBe(1)
+    expect(c.err()).toContain('validate-capture')
+  })
+})
