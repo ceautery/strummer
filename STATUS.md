@@ -5,7 +5,21 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM serialization — DELIMITED arrays LANDED (slice 6, ADR 0016 addendum 1) — query form/explode=false + spaceDelimited + pipeDelimited + path/header simple arrays now validated for NON-STRING scalar items (exact split); gate green (1260 TS + 45 Py). Before that: non-scalar param v1 (query form explode=true arrays + undoc-param suppression, ADR 0016), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), REQUEST-BODY/PARAM validation (ADR 0014), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (path label/matrix arrays + object reconstruction [ADR 0016]; non-JSON body schemas; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM serialization — PATH label/matrix arrays LANDED (slice 7, ADR 0016 addendum 2) — path `label` (.a,b,c / .a.b.c) + `matrix` (;n=a,b,c / ;n=a;n=b) array styles now validated; gate green (1268 TS + 45 Py). Before that: delimited arrays (slice 6, ADR 0016 addendum 1), non-scalar param v1 (query form explode=true + undoc-param suppression, ADR 0016), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. The non-scalar param ARRAY matrix is now COMPLETE except object reconstruction. Next: pivot to a new phase, or the remaining staged tails (object reconstruction [form/explode=false + deepObject, ADR 0016]; non-JSON body schemas; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**NON-SCALAR PARAM — PATH label/matrix arrays (slice 7) — COMPLETE** (2026-06-04, all TDD red→green; gate
+green at 1268 TS + 45 Py; design = ADR 0016 addendum 2). Un-stages the remaining path array styles via
+`splitArrayValue` (strip the RFC 6570 prefix, split per explode): `label` `{.ids}`→`.a,b,c` /
+`{.ids*}`→`.a.b.c`, `matrix` `{;ids}`→`;ids=a,b,c` / `{;ids*}`→`;ids=a;ids=b`. Same non-string-scalar
+soundness gate, ONE new wrinkle: label-EXPLODE joins with `.` — the one delimiter that occurs inside a
+JSON `number` (decimal) — so `number` items are excluded there (integer/boolean only), flagged by
+`arraySplitUsesDot`; every other delimiter (`,`/`;`/`=`/` `/`|`) admits all non-string scalars. A
+malformed prefix (segment not starting with `.` / `;name=`) ⇒ `splitArrayValue` returns undefined ⇒
+`unverified`, never a false fail. Seams: `arrayDelimiter`→`queryArrayDelimiter` + location-aware
+`arraySerializationSupported` (the array half of `styleSupported`), `splitArrayValue`, `arraySplitUsesDot`,
+`itemTypesSplittable(types, usesDot)`. Signature + `RequestValidationResult` shape + finding kinds
+UNCHANGED. Invariants held (ambiguity ⇒ unverified-skip; absence-never-a-pass; redaction; no real fetch
+in gate). The non-scalar param ARRAY matrix is COMPLETE except object reconstruction. 9 tests added (one
+obsolete slice-6 `label`-staged test removed)._
 _**NON-SCALAR PARAM — DELIMITED ARRAYS (slice 6) — COMPLETE** (2026-06-04, all TDD red→green; gate green
 at 1260 TS + 45 Py; design = ADR 0016 addendum 1 — no new fan-out, the v1 critics already mapped this
 matrix). Un-stages the delimited (single-string) array serializations behind the soundness rule the v1

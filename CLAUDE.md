@@ -110,14 +110,16 @@ vision and `ARCHITECTURE.md` for the technical design.
   added NON-SCALAR ARRAY params via `validateArrayParam` — query `form` explode=true
   (≥2 occ = the array, sound count; single occ wrapped only when comma-free + no
   cardinality, else `unverified`; `nonScalarType`/`array-values` `ParamLookup` state, a
-  scalar param that gets repeated keys folds to `unverified`) AND (addendum 1) the
-  DELIMITED single-string arrays — query `form/explode:false`/`spaceDelimited`/
-  `pipeDelimited` + path/header `simple` (`arrayDelimiter` + the `itemTypesSplittable`
-  non-string-scalar gate: split is EXACT only for integer/number/boolean items, string/
-  typeless/empty-segment → `unverified`) + undocumented-param SUPPRESSION around object
-  query params (form/explode object ⇒ suppress whole pass; deepObject ⇒ exclude
-  `name[...]` keys; unresolved `$ref` ⇒ suppress); STAGED: path `label`/`matrix` + object
-  reconstruction; no new finding kind, signature unchanged),
+  scalar param that gets repeated keys folds to `unverified`) AND the
+  DELIMITED single-string arrays via `splitArrayValue` — query `form/explode:false`/
+  `spaceDelimited`/`pipeDelimited` (add 1) + path `simple`/`label`/`matrix` (add 2, strip the
+  RFC 6570 `.`/`;name=` prefix per explode) + header `simple`, gated by `itemTypesSplittable`
+  (non-string scalars: integer/number/boolean — but `number` excluded for label-EXPLODE since
+  its `.` delimiter = a decimal, via `arraySplitUsesDot`); string/typeless/empty-segment/
+  malformed-prefix → `unverified`. Plus undocumented-param SUPPRESSION around object query
+  params (form/explode object ⇒ suppress whole pass; deepObject ⇒ exclude `name[...]` keys;
+  unresolved `$ref` ⇒ suppress); STAGED: object reconstruction; no new finding kind,
+  signature unchanged),
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that

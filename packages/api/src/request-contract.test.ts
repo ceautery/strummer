@@ -831,20 +831,6 @@ const dspec = {
         responses: { '200': { description: 'ok' } },
       },
     },
-    '/p-label/{ids}': {
-      get: {
-        parameters: [
-          {
-            name: 'ids',
-            in: 'path',
-            required: true,
-            style: 'label',
-            schema: { type: 'array', items: { type: 'integer' } },
-          },
-        ],
-        responses: { '200': { description: 'ok' } },
-      },
-    },
     '/h-simple': {
       get: {
         parameters: [
@@ -976,14 +962,178 @@ describe('validateOpenApiRequest — slice 6: delimited array params (non-string
     expect(r.valid).toBe(true)
     expect(r.findings).toHaveLength(0)
   })
+})
 
-  it('path LABEL array ⇒ unverified (staged style, never a false fail)', () => {
+// --- slice 7: PATH label + matrix array styles (ADR 0016 addendum 2). Same non-string-
+// scalar soundness rule; label-EXPLODE splits on `.` (collides with a number's decimal),
+// so `number` items are unsound there (integer/boolean only).
+const lmspec = {
+  openapi: '3.1.0',
+  paths: {
+    '/lbl/{ids}': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'path',
+            required: true,
+            style: 'label',
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/lblx/{ids}': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'path',
+            required: true,
+            style: 'label',
+            explode: true,
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/lblnum/{ns}': {
+      get: {
+        parameters: [
+          {
+            name: 'ns',
+            in: 'path',
+            required: true,
+            style: 'label',
+            explode: true,
+            schema: { type: 'array', items: { type: 'number' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/mtx/{ids}': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'path',
+            required: true,
+            style: 'matrix',
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/mtxx/{ids}': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'path',
+            required: true,
+            style: 'matrix',
+            explode: true,
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+  },
+}
+
+describe('validateOpenApiRequest — slice 7: path label + matrix array styles', () => {
+  it('label, explode=false ⇒ strip `.`, split on comma', () => {
     const r = validateOpenApiRequest(
-      dspec,
-      { method: 'GET', path: '/p-label/.1.2.3' },
+      lmspec,
+      { method: 'GET', path: '/lbl/.1,2,3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('label, explode=true ⇒ strip `.`, split on dot', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/lblx/.1.2.3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('label-explode with NUMBER items ⇒ unverified (dot collides with the decimal)', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/lblnum/.1.5.2.5' },
       { paramsAuthoritative: true },
     )
     expect(r.findings).toHaveLength(0)
     expect(r.unverified).toBe(true)
+  })
+
+  it('label malformed (no leading `.`) ⇒ unverified, never a false fail', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/lbl/1,2,3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('label bad element ⇒ param-schema', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/lbl/.1,x,3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+
+  it('matrix, explode=false ⇒ strip `;name=`, split on comma', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/mtx/;ids=1,2,3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('matrix, explode=true ⇒ split on `;`, strip each `name=`', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/mtxx/;ids=1;ids=2;ids=3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('matrix malformed (wrong param name) ⇒ unverified, never a false fail', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/mtx/;other=1,2' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('matrix bad element ⇒ param-schema', () => {
+    const r = validateOpenApiRequest(
+      lmspec,
+      { method: 'GET', path: '/mtx/;ids=1,x' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
   })
 })

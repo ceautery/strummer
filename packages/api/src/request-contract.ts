@@ -151,50 +151,106 @@ function hasCardinalityConstraint(schema: Record<string, unknown>): boolean {
   )
 }
 
-/**
- * The delimiter that joins elements of a non-exploded (single-string) array for this
- * param's (location, style), or `undefined` when the location/style isn't a supported
- * array serialization (cookie / deepObject / path `label`/`matrix` → STAGED). Used both
- * as the "array serialization supported?" predicate and the split delimiter.
- */
-function arrayDelimiter(param: ParamObject): string | undefined {
+/** The delimiter joining elements of a non-exploded QUERY array for this style, or
+ * `undefined` when the query style isn't a supported array serialization. */
+function queryArrayDelimiter(param: ParamObject): string | undefined {
+  if (param.style === undefined || param.style === 'form') return ','
+  if (param.style === 'spaceDelimited') return ' '
+  if (param.style === 'pipeDelimited') return '|'
+  return undefined
+}
+
+/** Whether this param's (location, style, type) is a supported ARRAY serialization
+ * (query form/space/pipe-delimited, path simple/label/matrix, header simple). Explode +
+ * item-type soundness are resolved in the handler. */
+function arraySerializationSupported(param: ParamObject): boolean {
   switch (param.in) {
     case 'query':
-      if (param.style === undefined || param.style === 'form') return ','
-      if (param.style === 'spaceDelimited') return ' '
-      if (param.style === 'pipeDelimited') return '|'
-      return undefined
-    case 'path':
+      return queryArrayDelimiter(param) !== undefined
     case 'header':
-      return param.style === undefined || param.style === 'simple' ? ',' : undefined
+      return param.style === undefined || param.style === 'simple'
+    case 'path':
+      return (
+        param.style === undefined ||
+        param.style === 'simple' ||
+        param.style === 'label' ||
+        param.style === 'matrix'
+      )
     default:
-      return undefined // cookie + anything unknown
+      return false // cookie + anything unknown
   }
 }
 
-/** Every non-null item type is a NON-STRING scalar (integer/number/boolean). The
- * delimiter provably cannot occur inside such an element, so a delimited split is
- * exact — element coercion AND cardinality are sound. String/typeless items would
- * over-split (an embedded delimiter is a legal data char), so they stay `unverified`. */
-function itemTypesSplittable(itemTypes: string[]): boolean {
+/** A PATH array's split delimiter is `.` only for `label` + `explode` (RFC 6570
+ * `{.list*}` → `.a.b.c`). `.` is the one delimiter that occurs inside a JSON `number`
+ * (decimal point), so a `number`-typed label-explode array would over-split. */
+function arraySplitUsesDot(param: ParamObject): boolean {
+  return param.in === 'path' && param.style === 'label' && (param.explode ?? false) === true
+}
+
+/** Decompose a serialized array value into its raw string elements, or `undefined`
+ * when the serialization can't be soundly reversed (malformed prefix / unsupported
+ * style) — the caller then `unverified`-skips. Query splits on the style delimiter;
+ * header `simple` splits on `,` and trims; PATH handles simple/label/matrix × explode
+ * (stripping the RFC 6570 `.`/`;name=` prefixes). */
+function splitArrayValue(param: ParamObject, value: string): string[] | undefined {
+  if (param.in === 'query') {
+    const d = queryArrayDelimiter(param)
+    return d === undefined ? undefined : value.split(d)
+  }
+  if (param.in === 'header') return value.split(',').map((s) => s.trim())
+  if (param.in === 'path') {
+    const style = param.style ?? 'simple'
+    if (style === 'simple') return value.split(',') // explode irrelevant for arrays
+    if (style === 'label') {
+      if (!value.startsWith('.')) return undefined
+      const body = value.slice(1)
+      return (param.explode ?? false) ? body.split('.') : body.split(',')
+    }
+    if (style === 'matrix') {
+      const name = param.name as string
+      if (param.explode ?? false) {
+        if (!value.startsWith(';')) return undefined
+        const out: string[] = []
+        for (const part of value.slice(1).split(';')) {
+          const pre = `${name}=`
+          if (!part.startsWith(pre)) return undefined
+          out.push(part.slice(pre.length))
+        }
+        return out
+      }
+      const pre = `;${name}=`
+      return value.startsWith(pre) ? value.slice(pre.length).split(',') : undefined
+    }
+  }
+  return undefined
+}
+
+/** Whether every non-null item type is a scalar whose value space cannot contain the
+ * split delimiter — making a delimited split EXACT (element coercion AND cardinality
+ * sound). `integer`/`boolean` never contain any of our delimiters; `number` contains
+ * `.`, so it is excluded only when the dot delimiter is used (label-explode). String/
+ * typeless items always over-split, so they stay `unverified`. */
+function itemTypesSplittable(itemTypes: string[], usesDotDelimiter: boolean): boolean {
   const nonNull = itemTypes.filter((t) => t !== 'null')
-  return (
-    nonNull.length > 0 && nonNull.every((t) => t === 'integer' || t === 'number' || t === 'boolean')
+  if (nonNull.length === 0) return false
+  return nonNull.every(
+    (t) => t === 'integer' || t === 'boolean' || (t === 'number' && !usesDotDelimiter),
   )
 }
 
 /**
  * Which (location, style, type) serializations the validator can soundly check.
- * SCALARS: the default per location (path/header `simple`, query `form`). ARRAYS:
- * any location/style with an `arrayDelimiter` (query form/space/pipe-delimited, path
- * `simple`, header `simple`); explode + item-type soundness are resolved in the
- * handler. OBJECTS and every other style/location (deepObject/path `label`/`matrix`/
- * cookie/content-typed) are STAGED → inconclusive-skip. `schema` is the NORMALIZED
- * param schema (so the array/scalar decision sees the 3.0 nullable shim). */
+ * SCALARS: the default per location (path/header `simple`, query `form`). ARRAYS: any
+ * `arraySerializationSupported` location/style (query form/space/pipe-delimited, path
+ * simple/label/matrix, header simple); explode + item-type soundness are resolved in the
+ * handler. OBJECTS and every other style/location (deepObject/cookie/content-typed) are
+ * STAGED → inconclusive-skip. `schema` is the NORMALIZED param schema (so the array/
+ * scalar decision sees the 3.0 nullable shim). */
 function styleSupported(param: ParamObject, schema: Record<string, unknown> | undefined): boolean {
   if (param.content) return false
   const nonScalar = schema ? nonScalarType(schema) : undefined
-  if (nonScalar === 'array') return arrayDelimiter(param) !== undefined
+  if (nonScalar === 'array') return arraySerializationSupported(param)
   if (nonScalar === 'object') return false // object reconstruction is STAGED
   switch (param.in) {
     case 'query':
@@ -300,10 +356,11 @@ function lookupParamValue(
  *  - query `form` + explode=true, single occurrence — wrapped `[v]` ONLY when it carries
  *    no comma (no explode-disagreement) and the schema has no cardinality constraint
  *    (else `unverified`).
- *  - DELIMITED single string (query explode=false form/space/pipe, path/header simple) —
- *    split on the style delimiter, but ONLY for NON-STRING scalar items (the delimiter
- *    can't appear inside an integer/number/boolean, so the split is exact); string/
- *    typeless items and empty segments are `unverified` (embedded-delimiter ambiguity).
+ *  - DELIMITED single string (query explode=false form/space/pipe, path simple/label/
+ *    matrix, header simple) — decomposed by `splitArrayValue`, but ONLY for scalar items
+ *    whose value space can't contain the delimiter (`integer`/`boolean` always; `number`
+ *    unless the dot delimiter is used); string/typeless items, empty segments, and a
+ *    malformed prefix are `unverified` (embedded-delimiter / serialization ambiguity).
  *
  * Appends `param-schema` findings; returns whether the param was `unverified`-skipped.
  */
@@ -334,12 +391,11 @@ function validateArrayParam(
     if (lk.value.includes(',') || hasCardinalityConstraint(normSchema)) return true
     elements = [lk.value]
   } else if (lk.state === 'present') {
-    // DELIMITED single string. Sound to split ONLY for non-string scalar items.
-    const delim = arrayDelimiter(param)
-    if (delim === undefined || !itemTypesSplittable(itemTypes) || lk.value === '') return true
-    const parts =
-      param.in === 'header' ? lk.value.split(delim).map((s) => s.trim()) : lk.value.split(delim)
-    if (parts.some((s) => s === '')) return true // empty/trailing segment ambiguity
+    // DELIMITED single string. Sound to split ONLY when the delimiter can't occur
+    // inside an element and the serialization parses cleanly.
+    if (!itemTypesSplittable(itemTypes, arraySplitUsesDot(param))) return true
+    const parts = splitArrayValue(param, lk.value)
+    if (parts === undefined || parts.some((s) => s === '')) return true
     elements = parts
   } else {
     return true // 'multi'/'absent' — handled upstream; skip defensively

@@ -138,3 +138,30 @@ shape, and finding kinds still unchanged.
 **Still STAGED:** path `label`/`matrix` arrays; object reconstruction (`form`/`explode=false`
 + `deepObject` flat scalar props); non-JSON request **body** schemas; string-item delimited
 arrays (permanently `unverified` — the unsound class).
+
+## Addendum 2 — path `label` + `matrix` array styles (2026-06-04)
+
+Slice 7 un-stages the remaining path array styles, same soundness rule, one new wrinkle:
+
+- **CHECKed:** path `label` (`{.ids}` → `.a,b,c` explode=false / `{.ids*}` → `.a.b.c`
+  explode=true) and `matrix` (`{;ids}` → `;ids=a,b,c` / `{;ids*}` → `;ids=a;ids=b`). The
+  serialized segment is decomposed by `splitArrayValue` — strip the RFC 6570 prefix
+  (`.` / `;name=`), then split on the per-explode delimiter — and validated like any
+  other delimited array.
+- **The label-explode wrinkle:** label-explode joins elements with `.`, which is the one
+  delimiter that occurs *inside* a JSON `number` (the decimal point), so a `number`-typed
+  label-explode array would over-split. The soundness gate `itemTypesSplittable(types,
+  usesDot)` therefore excludes `number` (allowing only `integer`/`boolean`) when the dot
+  delimiter is used; every other delimiter (`,` `;` `=` ` ` `|`) admits all non-string
+  scalars. `arraySplitUsesDot` flags the label-explode case.
+- **Malformed serialization → `unverified`:** a segment that doesn't start with the
+  expected `.` (label) or `;name=` (matrix) prefix returns `undefined` from
+  `splitArrayValue` and is skipped — never a false finding.
+
+Seams: `arrayDelimiter` generalized into `queryArrayDelimiter` + the location-aware
+`arraySerializationSupported` (the array half of `styleSupported`), `splitArrayValue`
+(query/header/path-simple/label/matrix decomposition), `arraySplitUsesDot`. Signature,
+result shape, and finding kinds still unchanged.
+
+**Still STAGED after this:** object reconstruction (`form`/`explode=false` + `deepObject`);
+non-JSON request **body** schemas.

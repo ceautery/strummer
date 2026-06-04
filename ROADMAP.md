@@ -128,9 +128,13 @@ installed version Z" and get a precise, cited answer over MCP.
         can't occur inside an integer/number/boolean, so the split is exact + cardinality is
         sound). String/typeless items + empty segments stay `unverified` (irreducible
         embedded-delimiter class).
-  - [ ] *(staged, parseable — ADR 0016)* path `label`/`matrix` arrays; object *reconstruction*
-        (`form/explode:false` + `deepObject`, flat scalar props). Each ships with its own
-        tested splitter + guards.
+  - [x] **slice 7 — path `label` + `matrix` arrays (ADR 0016 addendum 2)** — `label`
+        (`.a,b,c` / `.a.b.c`) + `matrix` (`;n=a,b,c` / `;n=a;n=b`): strip the RFC 6570 prefix
+        then split per explode. Same non-string-scalar gate, with `number` excluded for
+        label-EXPLODE (its `.` delimiter collides with the decimal point). A malformed prefix
+        ⇒ `unverified`, never a false fail.
+  - [ ] *(staged, parseable — ADR 0016)* object *reconstruction* (`form/explode:false` +
+        `deepObject`, flat scalar props). Ships with its own tested splitter + guards.
   - [ ] *(staged)* non-JSON request **body** schemas (form-urlencoded / multipart fields
         against their declared object schema), today presence-only `unverified`.
 
