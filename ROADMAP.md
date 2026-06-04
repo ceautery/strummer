@@ -883,14 +883,17 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       `--graphql`/`--graphql-endpoint`. Backed by a REAL Playwright `content:'attach'` capture
       (`packages/api/test/fixtures/graphql-capture.har.zip`) consumed by the api/MCP/CLI tests; only
       the response-errors / no-query / operationName edge cases stay hand-authored.
-- [ ] **Milestone 5c — run-driving / orchestration `verify`** *(design = ADR 0013 Addendum 2026-06-04,
-      Proposed; "compose, never widen").* A new `@strummer/verify` runtime package + a sibling
+- [x] **Milestone 5c — run-driving / orchestration `verify`: COMPLETE** *(design = ADR 0013 Addendum
+      2026-06-04, Accepted; "compose, never widen").* A new `@strummer/verify` runtime package + a sibling
       `verify_change` MCP tool + `strummer verify run` CLI that DRIVE the gated pillars and fold them
       into one `CompositeVerdict` in a single agent call. **First cut runs the pillars unscoped**
       (diff-scoping is 5d); **capture stays consume-only** (live capture is 5e). All TDD red→green;
       every runner/store/validator injected so `pnpm gate` never spawns (no `better-sqlite3`/
-      `playwright-core` loaded). Ordered slices:
-  - [ ] **Slice 1 — `@strummer/verdict` provenance fields (pure, no new statuses).** Red: a
+      `playwright-core` loaded). Run-driving wired for **coverage / flake / mutate + the consume-only
+      contract**; **deps run-wiring is carried to 5d** (its `audit_project` pipeline has no single
+      exported runner — deps stays reachable via the deps server's `audit_project` → `request_verdict`).
+      Ordered slices:
+  - [x] **Slice 1 — `@strummer/verdict` provenance fields (pure, no new statuses).** Red: a
         `PillarVerdict` carrying `skipReason:'gate-not-set'` folds to `inconclusive` (never `pass`);
         a present `errorReason` likewise; a `{coverage:fail, flake:skipReason:'gate-not-set'}` fold
         stays `fail` (a real failure beats absence). Green: add optional `skipReason`/`errorReason` to
@@ -898,7 +901,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         widen the `inconclusive` predicate to also recognize a present `skipReason`/`errorReason`.
         **`PillarStatus` is UNCHANGED** (exhaustive switches + `failsByPolicy`'s `warn|fail` guard must
         not see a new value).
-  - [ ] **Slice 2 — `@strummer/verify` scaffold + the gated `orchestrate()` over injected seams.**
+  - [x] **Slice 2 — `@strummer/verify` scaffold + the gated `orchestrate()` over injected seams.**
         New package (depends on `@strummer/verdict` + engine packages for types/seams; engines
         `external` in tsdown). Red: `orchestrate()` with ALL runners injected as fakes runs the
         requested pillars concurrently (`Promise.allSettled`), maps each native result via the
@@ -906,7 +909,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         `.mjs` has zero inline `better-sqlite3`/`playwright-core`/`defaultVitestRunner` require).
         Green: the orchestration core + opts/config types + injected `idFactory` (default
         `randomUUID`, test injects a deterministic stub) + injected `redact` callback.
-  - [ ] **Slice 3 — gate composition: "compose, never widen".** Red: (i) a pillar whose own
+  - [x] **Slice 3 — gate composition: "compose, never widen".** Red: (i) a pillar whose own
         `assertAllowed` denies ⇒ `skipReason:'gate-not-set'`, surfaced, NOT run, sibling pillars still
         run and fold (the §3d test); (ii) deps' absent-fetcher and flake's absent-DB also map to
         `gate-not-set`, not `errored`; (iii) any OTHER runner rejection ⇒ `errorReason` **redacted**
@@ -915,7 +918,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         gate-denial detected via a structural brand on the `*GateError` classes (or bin
         pre-validation) so verify reuses the real gate without `instanceof`-importing spawn code; the
         gate INPUTS come only from operator config.
-  - [ ] **Slice 4 — `verify_change` MCP tool (deny-by-default registration) + the verdict handle.**
+  - [x] **Slice 4 — `verify_change` MCP tool (deny-by-default registration) + the verdict handle.**
         Red: `verify_change` is registered ONLY when run-driving is enabled (mirroring
         `run_scoped`); input selects pillars + `projectRoot` (operator-auto-allowed) + `failAtOrAbove`
         (no default); output = compact `CompositeVerdict` inline + per-pillar provenance
@@ -923,7 +926,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         `strummer://verify/{id}/{kind}`; the compose-only `request_verdict` is unchanged. Consume-only
         contract sub-verdict folds in behind the EXISTING capture gate (injected `resolveHar` +
         `validateCapturedTraffic`, `source:'capture-from-HAR'`).
-  - [ ] **Slice 5 — `bin-verify.ts` run-driving entrypoint: the "both required" env gate.** Red: the
+  - [x] **Slice 5 — `bin-verify.ts` run-driving entrypoint: the "both required" env gate.** Red: the
         run-driving path requires BOTH `STRUMMER_VERIFY_ENABLE_RUN` AND each pillar's OWN
         `STRUMMER_<PILLAR>_ALLOW_RUN`(+`_PROJECT_ROOTS`/`_TIMEOUT_MS`); with `ENABLE_RUN` unset,
         `verify_change` is not registered; with it set but a pillar's own gate unmet, that pillar is
@@ -931,16 +934,22 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         (`bin-verify` reads no per-pillar `ALLOW_RUN`) keeps passing; only the new entrypoint reads
         them. Green: the run-driving bin wiring (reuses the pillar gate as the single source of truth
         + the separate `ENABLE_RUN` opt-in, no verify-scoped renames, no umbrella).
-  - [ ] **Slice 6 — `strummer verify run <root>` CLI** (thin human wrapper over `@strummer/verify`;
+  - [x] **Slice 6 — `strummer verify run <root>` CLI** (thin human wrapper over `@strummer/verify`;
         gates as straight-through flags `--enable-run` + per-pillar `--allow-*`; runners injectable so
         the suite never spawns). Exit codes `0 pass / 1 fail|warn / 2 inconclusive`; a gate-blocked
         pillar ⇒ `2` (absence, not misconfig). Then STATUS/ROADMAP/memory updates; push at the
         milestone boundary.
-- [ ] **Milestone 5d — diff-scoping the non-coverage pillars** *(staged; ADR 0013 §5 + Addendum).* A
-      shared changed-set primitive (extend coverage's `parseUnifiedDiff` or extract `@strummer/diff`);
-      expose flake's existing `files` input in MCP; a pure `changedDependencies(diff, ecosystem)` for
-      deps (npm `package.json` first, PyPI/Gem lockfiles staged); mutate already supports
-      `mutateFiles`/`--incremental`. `verify_change` then scopes each pillar from one diff.
+- [ ] **Milestone 5d — diff-scoping the non-coverage pillars + deps run-wiring** *(staged; ADR 0013 §5
+      + Addendum).* A shared changed-set primitive (extend coverage's `parseUnifiedDiff` or extract
+      `@strummer/diff`); expose flake's existing `files` input in MCP; a pure
+      `changedDependencies(diff, ecosystem)` for deps (npm `package.json` first, PyPI/Gem lockfiles
+      staged); mutate already supports `mutateFiles`/`--incremental`. `verify_change` then scopes each
+      pillar from one diff. **Also wire deps into the verify run path** (carried from 5c): factor
+      `audit_project`'s per-package pipeline (manifest names → detect installed → SSRF-pinned packument
+      fetch → OSV snapshot → `auditDependency`) into a reusable runner, then add `rd.deps` to
+      `bin-verify` (gated by `STRUMMER_DEPS_ALLOW_NETWORK`, composed under `ENABLE_RUN`) + a `--deps`
+      flag to `strummer verify run`. Naturally paired with `changedDependencies` so a PR audits only the
+      changed packages.
 - [ ] *(staged, not amputated — ADR 0013 §5 + Addendum)* **5e** `verify` driving a live capture to
       *produce* the HAR (browser-spawn behind the browser gate; and/or an API-runner capture path once
       the runner records redirect hops + request bodies); request-body/param contract validation;

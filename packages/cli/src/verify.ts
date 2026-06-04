@@ -1,8 +1,13 @@
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { ContractResult } from '@strummer/api'
+import { type DiffCoverageReport, runScoped, type TestRunner } from '@strummer/coverage'
+import { type FlakeVerdict, HistoryStore, runAndRecord } from '@strummer/flake'
+import { type MutationRunner, type MutationSummary, runMutation } from '@strummer/mutate'
 import {
   type ComposeInputs,
+  type CompositeVerdict,
   composeVerdict,
   fromContractResults,
   fromDependencyAudits,
@@ -11,17 +16,196 @@ import {
   fromMutationSummary,
   type Severity,
 } from '@strummer/verdict'
+import { type OrchestrateRequest, orchestrate } from '@strummer/verify'
 import type { CliIO } from './index.js'
 
 const SEVERITIES = ['critical', 'high', 'moderate', 'low', 'none']
 
+const EMPTY_COVERAGE: DiffCoverageReport = {
+  files: [],
+  uncovered: [],
+  summary: { covered: 0, uncovered: 0, nonExecutable: 0, total: 0, filesWithoutCoverage: 0 },
+}
+
 /**
- * `verify --contract f --coverage f --deps f --flake f --mutate f [--fail-at-or-above sev]`
- * — fold the per-pillar JSON outputs into one change verdict (ADR 0013 §1). The
- * human is the operator; each flag points at a pillar's JSON result on disk.
- * Exit codes: 0 pass / 1 fail|warn / 2 inconclusive. NO default severity cut.
+ * Per-pillar run thunk overrides — the test seam (mirrors the MCP `RunDrivingOptions`
+ * shape). When absent, `verify run` builds the REAL engine-backed thunk; tests inject
+ * fakes so the suite never spawns. The engine runner seams (`TestRunner`/`MutationRunner`)
+ * are also injectable for the realistic path.
  */
-export function runVerify(args: string[], io: CliIO): number {
+export interface VerifyRunDeps {
+  coverage?: (ctx: RunCtx) => Promise<DiffCoverageReport>
+  flake?: (ctx: RunCtx) => Promise<FlakeVerdict[]>
+  mutate?: (ctx: RunCtx) => Promise<MutationSummary>
+  coverageRunner?: TestRunner
+  flakeRunner?: TestRunner
+  mutateRunner?: MutationRunner
+  historyStore?: HistoryStore
+}
+
+interface RunCtx {
+  projectRoot: string
+  changedFiles: string[]
+  diff?: string
+}
+
+/**
+ * `strummer verify` — the human surface over the cross-pillar verdict.
+ *
+ * - `verify [--contract f] [--coverage f] ...` (COMPOSE): fold per-pillar JSON results
+ *   on disk into one verdict (ADR 0013 §1). The human supplies each pillar's output.
+ * - `verify run <root> [--coverage] [--flake --flake-db f] [--mutate] [--allow-run] ...`
+ *   (RUN-DRIVING, ADR 0013 Addendum 5c): DRIVE the selected pillars and fold them. The
+ *   human is the operator, so `--allow-run` is the straight-through gate and the typed
+ *   root is auto-allowed; each pillar's own `assertAllowed` still denies without it
+ *   (⇒ `skipReason:gate-not-set`, never run — "compose, never widen"). Runners are
+ *   injectable so the suite never spawns (ADR 0010).
+ *
+ * Exit codes (both modes): 0 pass / 1 fail|warn / 2 inconclusive.
+ */
+export async function runVerify(
+  args: string[],
+  io: CliIO,
+  deps: VerifyRunDeps = {},
+): Promise<number> {
+  if (args[0] === 'run') return cmdVerifyRun(args.slice(1), io, deps)
+  return runVerifyCompose(args, io)
+}
+
+function printVerdict(io: CliIO, verdict: CompositeVerdict, json: boolean | undefined): void {
+  if (json) {
+    io.out(`${JSON.stringify(verdict, null, 2)}\n`)
+    return
+  }
+  io.out(`verdict: ${verdict.status.toUpperCase()} (worst severity ${verdict.worstSeverity})\n`)
+  for (const p of verdict.pillars) {
+    const sev = p.severity !== 'none' ? ` [${p.severity}]` : ''
+    const why = p.skipReason ? ` (skipped: ${p.skipReason})` : p.errorReason ? ' (errored)' : ''
+    io.out(`  ${p.pillar}: ${p.status}${sev}${why} — ${p.headline}\n`)
+  }
+}
+
+function exitFor(verdict: CompositeVerdict): number {
+  if (verdict.status === 'pass') return 0
+  if (verdict.status === 'inconclusive') return 2
+  return 1
+}
+
+function num(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
+
+async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      coverage: { type: 'boolean' },
+      flake: { type: 'boolean' },
+      mutate: { type: 'boolean' },
+      'allow-run': { type: 'boolean' },
+      'changed-file': { type: 'string', multiple: true },
+      diff: { type: 'string' },
+      'flake-db': { type: 'string' },
+      'timeout-ms': { type: 'string' },
+      'fail-at-or-above': { type: 'string' },
+      json: { type: 'boolean' },
+    },
+  })
+
+  const projectRoot = positionals[0]
+  if (!projectRoot) {
+    io.err('verify run needs a <project-root>\n')
+    return 2
+  }
+  const failAtOrAbove = values['fail-at-or-above']
+  if (failAtOrAbove !== undefined && !SEVERITIES.includes(failAtOrAbove)) {
+    io.err(`--fail-at-or-above must be one of ${SEVERITIES.join('|')}\n`)
+    return 2
+  }
+
+  const allowRun = values['allow-run'] ?? false
+  const allowedRoots = [resolve(projectRoot)]
+  const changedFiles = values['changed-file'] ?? []
+  const diff = values.diff !== undefined ? readFileSync(values.diff, 'utf8') : undefined
+  const timeoutMs = num(values['timeout-ms'])
+  const ctx: RunCtx = { projectRoot, changedFiles, diff }
+
+  const request: OrchestrateRequest = {}
+  if (values.coverage) {
+    const ovr = deps.coverage
+    request.coverage = {
+      run: ovr
+        ? () => ovr(ctx)
+        : async () => {
+            const r = await runScoped(
+              { projectRoot, allowedRoots, allowRun, timeoutMs },
+              { changedFiles, diff },
+              { runner: deps.coverageRunner },
+            )
+            return r.report ?? EMPTY_COVERAGE
+          },
+    }
+  }
+  if (values.mutate) {
+    const ovr = deps.mutate
+    request.mutate = {
+      run: ovr
+        ? () => ovr(ctx)
+        : async () =>
+            (
+              await runMutation(
+                { projectRoot, allowedRoots, allowRun, timeoutMs },
+                { mutateFiles: changedFiles },
+                { runner: deps.mutateRunner },
+              )
+            ).summary,
+    }
+  }
+  if (values.flake) {
+    const ovr = deps.flake
+    if (ovr) {
+      request.flake = { run: () => ovr(ctx) }
+    } else {
+      const dbPath = values['flake-db']
+      const store = deps.historyStore ?? (dbPath ? HistoryStore.open(dbPath) : undefined)
+      if (!store) {
+        io.err('verify run --flake needs --flake-db <path>\n')
+        return 2
+      }
+      request.flake = {
+        run: async () => {
+          try {
+            const r = await runAndRecord(
+              store,
+              { projectRoot, allowedRoots, allowRun, timeoutMs },
+              { files: changedFiles },
+              { runner: deps.flakeRunner },
+            )
+            return r.verdicts
+          } finally {
+            if (!deps.historyStore && dbPath) store.close()
+          }
+        },
+      }
+    }
+  }
+
+  if (Object.keys(request).length === 0) {
+    io.err('verify run needs ≥1 pillar (--coverage / --flake / --mutate)\n')
+    return 2
+  }
+
+  const { verdict } = await orchestrate(request, {
+    policy: { failAtOrAbove: failAtOrAbove as Severity | undefined },
+  })
+  printVerdict(io, verdict, values.json)
+  return exitFor(verdict)
+}
+
+function runVerifyCompose(args: string[], io: CliIO): number {
   const { values } = parseArgs({
     args,
     options: {
@@ -47,7 +231,6 @@ export function runVerify(args: string[], io: CliIO): number {
   const inputs: ComposeInputs = {}
 
   if (values.contract) {
-    // Accept either a bare ContractResult[] or a CaptureContractVerdict ({results}).
     const c = readJson(values.contract) as ContractResult[] | { results?: ContractResult[] }
     const results = Array.isArray(c) ? c : (c.results ?? [])
     inputs.contract = fromContractResults(
@@ -78,18 +261,6 @@ export function runVerify(args: string[], io: CliIO): number {
   }
 
   const verdict = composeVerdict(inputs, { failAtOrAbove: failAtOrAbove as Severity | undefined })
-
-  if (values.json) {
-    io.out(`${JSON.stringify(verdict, null, 2)}\n`)
-  } else {
-    io.out(`verdict: ${verdict.status.toUpperCase()} (worst severity ${verdict.worstSeverity})\n`)
-    for (const p of verdict.pillars) {
-      const sev = p.severity !== 'none' ? ` [${p.severity}]` : ''
-      io.out(`  ${p.pillar}: ${p.status}${sev} — ${p.headline}\n`)
-    }
-  }
-
-  if (verdict.status === 'pass') return 0
-  if (verdict.status === 'inconclusive') return 2
-  return 1
+  printVerdict(io, verdict, values.json)
+  return exitFor(verdict)
 }

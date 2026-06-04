@@ -5,7 +5,7 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slices 1–5 of 6 LANDED at 1082 TS + 45 Py green.**
+**Phase 5 — Cross-pillar verification: 5a + 5b + 5c COMPLETE. Milestone 5c (run-driving / orchestration `verify`) LANDED in full — all 6 slices, design = ADR 0013 Addendum (Accepted 2026-06-04); 1087 TS + 45 Py green, pushed. Next: 5d (diff-scoping + deps run-wiring).**
 _Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
 contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
 structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new
@@ -130,12 +130,21 @@ pipeline (manifest names → detect installed → SSRF-pinned packument fetch �
 has no single exported runner; factoring it out is a clean follow-up, naturally paired with 5d's deps
 `changedDependencies` diff-scoping. Until then, deps is reachable via the deps server's `audit_project` →
 fed to `request_verdict` (compose path).
-**Next action: slice 6 — `strummer verify run <root>` CLI (closes milestone 5c).** Thin human wrapper over
-`@strummer/verify` `orchestrate`; gates as straight-through flags (`--enable-run` + per-pillar
-`--allow-*`/`--project-root`); runners injectable so the suite never spawns. Exit codes `0 pass / 1
-fail|warn / 2 inconclusive`; a gate-blocked pillar ⇒ `2`. Then update ROADMAP (check off 5c slices + the
-deps-run-wiring/5d note), refresh memories, run the green gate, and PUSH at the milestone boundary. See
-ROADMAP milestone 5c (slice 6) + the ADR 0013 Addendum._
+**Slice 6 of 6 LANDED (1087 TS + 45 Py green) — `strummer verify run <root>` CLI.** A `run` subcommand on
+`strummer verify` (bare `verify` = compose, unchanged): drives the selected pillars (`--coverage` /
+`--mutate` / `--flake --flake-db <path>`) over `@strummer/verify` `orchestrate` + folds them. The human is
+the operator: `--allow-run` is the straight-through gate, the typed `<root>` is auto-allowed; without it
+each pillar's own `assertAllowed` denies (⇒ `skipReason:gate-not-set`, exit 2). `--changed-file`/`--diff`/
+`--timeout-ms`/`--fail-at-or-above`/`--json`; exit `0 pass / 1 fail|warn / 2 inconclusive`. Per-pillar run
+thunks are injectable (the test seam mirrors the MCP `RunDrivingOptions`) so the suite never spawns; the
+no-`--allow-run` test exercises the REAL engine gate (denies before any spawn). **MILESTONE 5c COMPLETE.**
+**Next action: milestone 5d — diff-scoping the non-coverage pillars + deps run-wiring.** (a) a shared
+changed-set primitive (extend coverage's `parseUnifiedDiff` or extract `@strummer/diff`); expose flake's
+existing `files` in MCP; a pure `changedDependencies(diff, ecosystem)`; `verify_change` then scopes each
+pillar from one diff. (b) Wire deps into the verify run path — factor `audit_project`'s per-package
+pipeline into a reusable runner, add `rd.deps` to `bin-verify` (gated by `STRUMMER_DEPS_ALLOW_NETWORK`
+under `ENABLE_RUN`) + a `--deps` flag to `strummer verify run`. Then 5e (live capture). See ROADMAP
+milestone 5d + the ADR 0013 Addendum § "what stays staged"._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now
