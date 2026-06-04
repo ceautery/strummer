@@ -17,14 +17,15 @@ import {
   type PillarVerdict,
   type VerdictPolicy,
 } from '@strummer/verdict'
+import { isGateDenial } from './gate.js'
 
 /**
  * Per-pillar run request. Each present pillar carries an async `run` thunk that
  * produces that pillar's NATIVE result — the orchestrator maps it via the existing
  * `@strummer/verdict` `from*` adapter. The thunk is wired by the surface (bin/CLI)
  * to the pillar's own gated runner, so `@strummer/verify` itself imports zero
- * spawn-capable engine code (§ gate (e)). Gate-denial vs error discrimination is
- * refined in slice 3; slice 2 maps any rejection to an errored contributor.
+ * spawn-capable engine code (§ gate (e)). A rejection branded as a gate denial maps
+ * to `skipReason:'gate-not-set'`; any other rejection to a redacted `errorReason`.
  */
 export interface OrchestrateRequest {
   contract?: { run: () => Promise<ContractResult[]>; source?: 'run' | 'capture-from-HAR' }
@@ -55,13 +56,15 @@ export interface OrchestrateResult {
  * concurrently; each task catches its own rejection (the per-pillar failure
  * isolation `Promise.allSettled` gives) so one pillar's crash/timeout never sinks the
  * verdict. A fulfilled run is mapped through the existing `from*` adapter; a rejected
- * run becomes an errored, **redacted** `no-signal` contributor. Pillars not in the
- * request are folded as `missing`. "Absence is never a pass" therefore holds for
- * errored/missing pillars for free (both fold to `inconclusive`).
+ * run becomes a `no-signal` contributor: a branded gate denial ⇒
+ * `skipReason:'gate-not-set'` (never run), any other crash ⇒ a **redacted**
+ * `errorReason`. Pillars not in the request are folded as `missing`. "Absence is
+ * never a pass" therefore holds for skipped/errored/missing pillars for free (all
+ * fold to `inconclusive`).
  *
  * Pure orchestration: the `run` thunks (wired by the surface to each pillar's own
  * gated runner) are the only side-effecting code; this module imports no engine
- * runtime. Gate-denial-vs-error discrimination is refined in slice 3.
+ * runtime — gate denials are recognized structurally via the global-symbol brand.
  */
 export async function orchestrate(
   request: OrchestrateRequest,
@@ -72,15 +75,18 @@ export async function orchestrate(
 
   // One labelled task per requested pillar, each composing the pillar's native
   // `run` thunk with its `from*` adapter. Each task catches its OWN rejection and
-  // resolves to an errored contributor — so the concurrent `Promise.all` never
-  // rejects (the same per-pillar failure isolation `Promise.allSettled` gives),
-  // while the pillar label rides along with each result.
+  // resolves to a skipped (gate-denied) or errored contributor — so the concurrent
+  // `Promise.all` never rejects (the same per-pillar failure isolation
+  // `Promise.allSettled` gives), while the pillar label rides along with each result.
   const tasks: Array<Promise<{ pillar: PillarName; verdict: PillarVerdict }>> = []
   const add = (pillar: PillarName, produce: () => Promise<PillarVerdict>): void => {
     tasks.push(
       produce()
         .then((verdict) => ({ pillar, verdict }))
-        .catch((reason: unknown) => ({ pillar, verdict: erroredPillar(pillar, reason, redact) })),
+        .catch((reason: unknown) => ({
+          pillar,
+          verdict: rejectionToPillar(pillar, reason, redact),
+        })),
     )
   }
 
@@ -116,14 +122,27 @@ export async function orchestrate(
 }
 
 /**
- * A requested pillar whose run rejected. Status `no-signal` (a requested-but-no-
- * usable-signal outcome — never a pass), plus the redacted `errorReason` provenance.
+ * Map a rejected pillar run to its `no-signal` contributor — never a pass (ADR 0013
+ * Addendum, milestone 5c). "Compose, never widen": a rejection BRANDED as a gate
+ * denial (the pillar's own `assertAllowed`, or the surface's no-fetcher/no-DB check)
+ * becomes `skipReason:'gate-not-set'` — the pillar was never run, surfaced, and its
+ * raw message is dropped (a skip needs no detail and must not leak a path). Any other
+ * rejection is a genuine crash ⇒ `errorReason`, with the message **redacted**.
  */
-function erroredPillar(
+function rejectionToPillar(
   pillar: PillarName,
   reason: unknown,
   redact: (value: string) => string,
 ): PillarVerdict {
+  if (isGateDenial(reason)) {
+    return {
+      pillar,
+      status: 'no-signal',
+      severity: 'none',
+      headline: `${pillar} gate not set — pillar not run`,
+      skipReason: 'gate-not-set',
+    }
+  }
   const message = reason instanceof Error ? reason.message : String(reason)
   return {
     pillar,

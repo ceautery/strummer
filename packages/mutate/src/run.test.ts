@@ -46,6 +46,11 @@ describe('runMutation gate', () => {
     )
   })
 
+  it('a MutateGateError is branded as a gate denial (ADR 0013 Addendum — cross-pillar contract)', () => {
+    const err = new MutateGateError('nope') as unknown as Record<symbol, unknown>
+    expect(err[Symbol.for('strummer.gate-denial')]).toBe(true)
+  })
+
   it('denies when the root is not allowlisted', async () => {
     await expect(
       runMutation(cfg({ allowedRoots: ['/other'] }), {}, { reportPath }),

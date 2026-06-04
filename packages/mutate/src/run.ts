@@ -29,6 +29,11 @@ export class MutateGateError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'MutateGateError'
+    // Brand as a gate DENIAL (ADR 0013 Addendum, milestone 5c): the run-driving
+    // `@strummer/verify` reads this global-registry symbol via `isGateDenial` to map a
+    // denial to `skipReason:'gate-not-set'` (never `errored`) WITHOUT importing engine
+    // code. The `Symbol.for` key string is the cross-package contract.
+    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('strummer.gate-denial')] = true
   }
 }
 

@@ -5,7 +5,7 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slices 1–2 of 6 LANDED at 1063 TS + 45 Py green.**
+**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slices 1–3 of 6 LANDED at 1072 TS + 45 Py green.**
 _Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
 contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
 structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new
@@ -92,15 +92,25 @@ invariant holds and is proven two ways:** a source-scan test (every `@strummer/<
 `import type`; no `defaultVitestRunner`/`HistoryStore`/`better-sqlite3`/`playwright-core` token) AND the
 built `.mjs` imports ONLY `node:crypto` + `@strummer/verdict` (verified, dist not committed). The pillar
 `run` thunks (wired by the surface to each gated runner) are the only side-effecting code; verify itself
-type-imports the result interfaces and runtime-imports only the pure verdict package. Gate-denial-vs-error
-discrimination is slice 3.
-**Next action: slice 3 — gate composition ("compose, never widen").** A pillar whose OWN `assertAllowed`
-denies ⇒ `skipReason:'gate-not-set'` (surfaced, NOT run; sibling pillars still fold); deps' absent-fetcher
-+ flake's absent-DB also map to `gate-not-set` (not `errored`); any OTHER rejection ⇒ redacted
-`errorReason`; NO `orchestrate` input can set `allowRun`/`allowedRoots`/timeout. Mechanism: a structural
-brand on the four `*GateError` classes so verify detects gate-denial WITHOUT `instanceof`-importing
-spawn-capable engine code (or bin pre-validation). See ROADMAP milestone 5c (slice 3) + the ADR 0013
-Addendum § gate-composition for the full contract._
+type-imports the result interfaces and runtime-imports only the pure verdict package.
+**Slice 3 of 6 LANDED (1072 TS + 45 Py green) — gate composition ("compose, never widen"):** a pillar
+whose OWN gate denies ⇒ `skipReason:'gate-not-set'` (surfaced, NOT run, raw message dropped; siblings
+still fold); any OTHER rejection ⇒ redacted `errorReason`; both `no-signal` ⇒ `inconclusive`, never pass.
+The mechanism is a **structural brand via the global symbol registry** — `@strummer/verify` exports
+`isGateDenial`/`gateDenied`/`GATE_DENIAL` keyed by `Symbol.for('strummer.gate-denial')`, and the three
+engine `*GateError` classes (Coverage/Flake/Mutate) now set that symbol in their constructors — so verify
+recognizes a REAL gate denial WITHOUT importing any engine code (the spawn-free invariant holds; reuses
+the real `assertAllowed`, no predicate drift). `gateDenied()` covers the deps-network-off / flake-no-DB
+cases the surface detects (wired in slice 5). Verified: orchestrate invokes each pillar `run` thunk with
+ZERO args (it cannot inject/widen a gate — the gate lives entirely in the operator-wired thunk), and the
+`OrchestrateRequest`/`Options` types carry no `allowRun`/`allowedRoots` knob at all.
+**Next action: slice 4 — the `verify_change` MCP tool (deny-by-default REGISTRATION) + the verdict
+handle.** Register `verify_change` ONLY when run-driving is enabled (mirroring `run_scoped`); input selects
+pillars + `projectRoot` (operator-auto-allowed) + `failAtOrAbove` (no default); output = compact
+`CompositeVerdict` inline + per-pillar provenance + detail by `strummer://verify/{id}/{kind}`; the
+compose-only `request_verdict` + `strummer verify` stay unchanged. Consume-only contract sub-verdict folds
+in behind the EXISTING capture gate (injected `resolveHar` + `validateCapturedTraffic`,
+`source:'capture-from-HAR'`). See ROADMAP milestone 5c (slice 4) + the ADR 0013 Addendum § surface._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now

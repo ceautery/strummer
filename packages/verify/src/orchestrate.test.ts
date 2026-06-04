@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { DependencyAudit } from '@strummer/deps'
 import { describe, expect, it, vi } from 'vitest'
+import { gateDenied, isGateDenial } from './gate.js'
 import { orchestrate } from './orchestrate.js'
 
 const SRC_DIR = dirname(fileURLToPath(import.meta.url))
@@ -100,6 +101,91 @@ describe('orchestrate — drives requested pillars + folds via the from* adapter
     expect(verdict.pillars.find((p) => p.pillar === 'deps')?.status).toBe('pass')
     expect(verdict.status).toBe('inconclusive')
     expect(verdict.ok).toBe(false)
+  })
+})
+
+describe('orchestrate — gate composition: compose, never widen (slice 3)', () => {
+  it("a pillar whose OWN gate denies ⇒ skipReason 'gate-not-set' (not run, surfaced), siblings still fold", async () => {
+    // The thunk throws the pillar's real (branded) gate-denial — as a gated runner's
+    // assertAllowed would. orchestrate must NOT treat it as an errored crash.
+    const { verdict } = await orchestrate({
+      coverage: {
+        run: async () => {
+          throw gateDenied('scoped test execution is not enabled (the operator must set allowRun)')
+        },
+      },
+      deps: { run: async () => ({ audits: [cleanAudit], osvSnapshotLoaded: true }) },
+    })
+    const coverage = verdict.pillars.find((p) => p.pillar === 'coverage')
+    expect(coverage).toMatchObject({ status: 'no-signal', skipReason: 'gate-not-set' })
+    expect(coverage?.errorReason).toBeUndefined()
+    // the sibling still ran; absence ⇒ inconclusive, never pass
+    expect(verdict.pillars.find((p) => p.pillar === 'deps')?.status).toBe('pass')
+    expect(verdict.status).toBe('inconclusive')
+    expect(verdict.ok).toBe(false)
+  })
+
+  it("deps-network-off / flake-no-DB style denials also map to 'gate-not-set', not errored", async () => {
+    const { verdict } = await orchestrate({
+      deps: {
+        run: async () => {
+          throw gateDenied(
+            'package-metadata fetch is not enabled (the operator must enable network)',
+          )
+        },
+      },
+      flake: {
+        run: async () => {
+          throw gateDenied('flake history DB is not configured')
+        },
+      },
+    })
+    for (const pillar of ['deps', 'flake'] as const) {
+      const p = verdict.pillars.find((x) => x.pillar === pillar)
+      expect(p).toMatchObject({ status: 'no-signal', skipReason: 'gate-not-set' })
+    }
+  })
+
+  it('a gate-denial headline carries no secret/path — it is NOT the raw error message', async () => {
+    const { verdict } = await orchestrate({
+      mutate: {
+        run: async () => {
+          throw gateDenied('mutation runs are not enabled at /tmp/secret')
+        },
+      },
+    })
+    const mutate = verdict.pillars.find((p) => p.pillar === 'mutate')
+    expect(mutate?.skipReason).toBe('gate-not-set')
+    expect(JSON.stringify(mutate)).not.toContain('/tmp/secret')
+  })
+
+  it('a genuine (non-gate) rejection stays errored, distinct from a gate denial', async () => {
+    const { verdict } = await orchestrate({
+      coverage: {
+        run: async () => {
+          throw new Error('the runner segfaulted')
+        },
+      },
+    })
+    const coverage = verdict.pillars.find((p) => p.pillar === 'coverage')
+    expect(coverage?.skipReason).toBeUndefined()
+    expect(coverage?.errorReason).toBe('the runner segfaulted')
+  })
+
+  it('orchestrate invokes each pillar run thunk with ZERO arguments — it cannot inject/widen a gate', async () => {
+    // The gate lives entirely inside the operator-wired thunk; orchestrate has no
+    // allowRun/allowedRoots knob to pass (compile-time), and passes nothing at runtime.
+    const run = vi.fn().mockResolvedValue({ audits: [cleanAudit], osvSnapshotLoaded: true })
+    await orchestrate({ deps: { run } })
+    expect(run).toHaveBeenCalledWith()
+    expect(run.mock.calls[0]).toHaveLength(0)
+  })
+
+  it('isGateDenial recognizes a branded error and rejects a plain one', () => {
+    expect(isGateDenial(gateDenied('x'))).toBe(true)
+    expect(isGateDenial(new Error('x'))).toBe(false)
+    expect(isGateDenial('x')).toBe(false)
+    expect(isGateDenial(null)).toBe(false)
   })
 })
 

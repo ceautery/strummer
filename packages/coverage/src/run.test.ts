@@ -51,6 +51,11 @@ describe('runScoped — gated, impact-scoped vitest run (injected runner)', () =
     ).rejects.toBeInstanceOf(CoverageGateError)
   })
 
+  it('a CoverageGateError is branded as a gate denial (ADR 0013 Addendum — cross-pillar contract)', () => {
+    const err = new CoverageGateError('nope') as unknown as Record<symbol, unknown>
+    expect(err[Symbol.for('strummer.gate-denial')]).toBe(true)
+  })
+
   it('refuses a project root that is not on the operator allowlist', async () => {
     await expect(
       runScoped(

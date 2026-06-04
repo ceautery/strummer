@@ -59,6 +59,11 @@ describe('runAndRecord gate', () => {
     store.close()
   })
 
+  it('a FlakeGateError is branded as a gate denial (ADR 0013 Addendum — cross-pillar contract)', () => {
+    const err = new FlakeGateError('nope') as unknown as Record<symbol, unknown>
+    expect(err[Symbol.for('strummer.gate-denial')]).toBe(true)
+  })
+
   it('denies when the project root is not allowlisted', async () => {
     const store = HistoryStore.memory()
     await expect(
