@@ -118,10 +118,10 @@ a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow wi
 adversarial verification (`docs/research/2026-05-31-pillar3-browser-testing.md`).
 Staged below; aspirational items are scheduled, not cut.
 
-- [ ] **Slice 1 (first red→green):** a11y-audit summarizer + on-disk
+- [x] **Slice 1 (first red→green):** a11y-audit summarizer + on-disk
       `ArtifactStore` + handle resolution, against an in-process `node:http`
       fixture (no pixels/perf/network).
-- [ ] **Scaffold `@strummer/browser`** (Apache-2.0, ESM, tsdown, Biome+Vitest);
+- [x] **Scaffold `@strummer/browser`** (Apache-2.0, ESM, tsdown, Biome+Vitest);
       add to the pnpm workspace + `pnpm gate` + CI; pin `playwright-core` 1.60.0
       and `mcr.microsoft.com/playwright:v1.60.0-noble` in lockstep.
 - [x] **Browser lifecycle manager** (`BrowserManager`) — lazy single shared
@@ -371,7 +371,7 @@ explicit pins / no transitive imports; paired deny-by-default operator gate; TS-
 with Python staged), and the per-candidate corrections the adversarial pass forced.
 Two independent tracks, then the test-quality chain, then LSP last:
 
-- [ ] **Dependency/version intelligence** (`@strummer/deps`) — *track B, building first.*
+- [x] **Dependency/version intelligence** (`@strummer/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
       Cleanest architectural fit: pure offline verdict core + an operator-provisioned
       on-disk OSV advisory snapshot (file-as-data); extends shipped
       `detectInstalledVersion`/`resolveVersion`; answers deprecation/EOL/CVE/freshness
@@ -469,7 +469,7 @@ Two independent tracks, then the test-quality chain, then LSP last:
         `matchName`/`dependencyNames` + `OsvEcosystem`) were lifted out of the MCP surface into
         `@strummer/deps` `ecosystem.ts` (one source of truth, shared by the surface + CLI;
         behavior-preserving). The CLI builds its own SSRF-pinned fetcher from `resolveAndPin`.
-- [ ] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A, building.*
+- [x] **Coverage-aware, impact-scoped test runner** (`@strummer/coverage`) — *track A, COMPLETE (engine + agent surface + CLI; coverage.py adapter).*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
       (the forgotten-assertion catch — the genuinely novel win under our TDD gate).
   - [x] **Slice 1 — pure `uncoveredNewLines` differ.** Classifies each diff-added line

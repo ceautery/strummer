@@ -1040,7 +1040,7 @@ thin model (via `@usebruno/lang`); Strummer assertions/captures in a **sidecar
 
 ## Next action
 
-> **CURRENT (2026-06-02).** Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
+> **CURRENT (2026-06-03).** Phase 4 is COMPLETE (all five pillars: engine + agent surface + CLI),
 > and the Python adapters + LSP capability-gated reads + LSP write-mode (`lsp_rename`, incl. multi-root
 > AND resource ops) + the LSP tails (cold-load fix, `workspace/symbol`, push- AND pull-`diagnostics`,
 > multi-root nav, resource-op safe-subset cuts) all landed. **Latest: LSP PULL-diagnostics**
