@@ -12,7 +12,9 @@ export {
   uncoveredInDiff,
 } from './report.js'
 export {
+  assertAllowed,
   CoverageGateError,
+  defaultPytestCovRunner,
   defaultVitestRunner,
   type RunScopedConfig,
   runScoped,
@@ -20,6 +22,14 @@ export {
   type ScopedRunResult,
   type TestRunner,
 } from './run.js'
+export {
+  type PytestScope,
+  runScopedPython,
+  type ScopedPythonInput,
+  type ScopedPythonResult,
+  type ScopeMode,
+  selectPytestScope,
+} from './run-python.js'
 export {
   type ClassifiedLine,
   type FileCoverage,

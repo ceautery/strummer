@@ -59,6 +59,7 @@ describe('coverage MCP surface', () => {
 
     const gated = await connect({ allowRun: true, allowedRoots: ['/abs/repo'] })
     expect((await gated.listTools()).tools.map((t) => t.name).sort()).toEqual([
+      'py_run_scoped',
       'run_scoped',
       'uncovered_in_diff',
     ])

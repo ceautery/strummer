@@ -426,7 +426,7 @@ explicit pins / no transitive imports; paired deny-by-default operator gate; TS-
 with Python staged), and the per-candidate corrections the adversarial pass forced.
 Two independent tracks, then the test-quality chain, then LSP last:
 
-### Python (+Ruby) second half — the polyglot push *(UNDERWAY; ADR 0010 addendum 2026-06-04)*
+### Python (+Ruby) second half — the polyglot push *(COMPLETE; ADR 0010 addendum 2026-06-04)*
 
 The Phase-4 pillars shipped TS-first; the pure Python adapters (`parsePytestJson`,
 `parseMutmutResults`, `coveragePyToIstanbul`) already landed. This arc adds the gated
@@ -492,11 +492,18 @@ stage `reportlog`. Pure/zero-spawn slices first.
       cosmic-ray` (+ `configPath`); CLI `mutate run --tool` (+ `--config-path`). Injected runner ⇒ no real
       spawn in the gate. *(Staged: cosmic-ray/mutmut diff-scoping — cosmic-ray needs per-run TOML synthesis,
       mutmut scopes via its own config, not a clean CLI file list.)*
-- [ ] **Slice 6 — coverage `runScopedPython`** (pytest + coverage.py) — mirror `runScoped`;
-      `--cov=<target> --cov-report=json`; `coveragePyToIstanbul`→`uncoveredInDiff` (unchanged);
-      pytest exit-code map (5=no-tests → inconclusive); scoping = diff path-heuristic with the
-      ratified both-modes fallback. coverage.json fixture captured out-of-gate. *(Staged: testmon
-      opt-in fast path.)*
+- [x] **Slice 6 — coverage `runScopedPython`** (pytest + coverage.py). Mirrors `runScoped` (shares
+      the now-exported `assertAllowed` gate + `CoverageGateError`): `pytest --cov=<target>
+      --cov-report=json:<f>` → `coveragePyToIstanbul` (unchanged) → `uncoveredInDiff` (unchanged).
+      Pure `selectPytestScope` derives the test scope (a changed test file = selector; a changed
+      source maps to its mirrored `test_<x>.py`/`tests/test_<x>.py` via an injected `testExists`);
+      the ratified no-test fallback is operator-visible — `report-gap` (default: report the gap, run
+      matched tests) vs `widen` (whole suite); testmon stays OUT (stale-DB silent deselection).
+      pytest exit-code map: 5 (no tests) / 2 / 3 / 4 → `inconclusive` (never a clean report). MCP
+      `py_run_scoped`; CLI `coverage run-scoped --python --measure <t> [--scope-mode]`. coverage.py
+      7.14.1 `coverage.json` fixture captured out-of-gate (provenance in
+      `coverage/test/fixtures/README.md`). Injected runner ⇒ no real spawn. *(Staged: testmon opt-in
+      fast path.)* **The polyglot-push arc is COMPLETE.**
 - [ ] *(staged, this arc defers)* Ruby coverage (SimpleCov) + mutation (`mutant`/`mutest`) runners,
       gated on a `mutant` licensing investigation; a Python `pytest-reportlog` aggregating parser.
 

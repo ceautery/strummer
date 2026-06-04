@@ -5,6 +5,7 @@ import {
   coveragePyToIstanbul,
   type FileCoverage,
   runScoped,
+  runScopedPython,
   type TestRunner,
   uncoveredInDiff,
 } from '@strummer/coverage'
@@ -123,6 +124,62 @@ export function registerCoverageTools(server: McpServer, opts: CoverageToolsOpti
           passed: result.passed,
           exitCode: result.exitCode,
           scopedFiles: result.scopedFiles,
+          coveragePath: result.coveragePath,
+          report: result.report,
+        }
+        return { content: [text(structured)], structuredContent: structured }
+      },
+    )
+
+    server.registerTool(
+      'py_run_scoped',
+      {
+        title: 'Run the Python tests a change touches (pytest + coverage.py)',
+        description:
+          'Run only the pytest tests related to the changed files WITH coverage.py, then report ' +
+          'the uncovered new lines for the supplied diff. `measureTargets` are the coverage.py ' +
+          '`--cov` targets. When a changed source maps to no test, `scopeMode` chooses report-gap ' +
+          '(default — report the gap, run matched tests) or widen (run the whole suite). pytest ' +
+          '"no tests collected" is reported as inconclusive, never a clean pass. Operator-gated.',
+        inputSchema: {
+          projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
+          changedFiles: z
+            .array(z.string())
+            .describe('changed source files to scope the test selection to'),
+          measureTargets: z.array(z.string()).describe('coverage.py --cov targets (package/path)'),
+          scopeMode: z
+            .enum(['report-gap', 'widen'])
+            .optional()
+            .describe('no-test fallback (default report-gap)'),
+          diff: z.string().optional().describe('unified diff to analyse against the new coverage'),
+          diffPath: z.string().optional().describe('path to a unified diff file'),
+        },
+      },
+      async (args) => {
+        const diff = args.diff ?? (args.diffPath ? readFileSync(args.diffPath, 'utf8') : undefined)
+        const result = await runScopedPython(
+          {
+            projectRoot: args.projectRoot,
+            allowedRoots,
+            allowRun: true,
+            timeoutMs: opts.timeoutMs,
+          },
+          {
+            changedFiles: args.changedFiles,
+            diff,
+            measureTargets: args.measureTargets,
+            scopeMode: args.scopeMode,
+          },
+          { runner: opts.runner },
+        )
+        const structured = {
+          ran: result.ran,
+          passed: result.passed,
+          inconclusive: result.inconclusive,
+          exitCode: result.exitCode,
+          scopedFiles: result.scopedFiles,
+          unmatched: result.unmatched,
+          widened: result.widened,
           coveragePath: result.coveragePath,
           report: result.report,
         }

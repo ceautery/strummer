@@ -184,6 +184,53 @@ describe('strummer coverage CLI', () => {
     expect(c.out()).toMatch(/src\/math\.ts:4/)
   })
 
+  it('run-scoped --python runs pytest+coverage.py and reports uncovered new lines', async () => {
+    const pyDiff = join(dir, 'py.diff')
+    writeFileSync(
+      pyDiff,
+      'diff --git a/calc.py b/calc.py\n--- a/calc.py\n+++ b/calc.py\n@@ -9,1 +9,4 @@\n def mul(a, b):\n+    if b == 0:\n+        return 0\n+    return a * b\n',
+    )
+    const coverageJson = {
+      files: { 'calc.py': { executed_lines: [1, 2, 5, 6, 9], missing_lines: [10, 11, 12] } },
+    }
+    const runner: TestRunner = async (argv) => {
+      const out = argv
+        .find((a) => a.startsWith('--cov-report=json:'))
+        ?.slice('--cov-report=json:'.length) as string
+      writeFileSync(out, JSON.stringify(coverageJson))
+      return { exitCode: 0, stdout: '', stderr: '' }
+    }
+    const c = capture()
+    const code = await runCoverage(
+      [
+        'run-scoped',
+        dir,
+        '--python',
+        '--measure',
+        'calc',
+        '--changed-file',
+        'tests/test_calc.py',
+        '--diff',
+        pyDiff,
+        '--allow-run',
+      ],
+      c.io,
+      { runner },
+    )
+    // tests passed but the mul branch (new lines 10-12) is uncovered → exit 1.
+    expect(code).toBe(1)
+    expect(c.out()).toMatch(/pytest/)
+    expect(c.out()).toMatch(/calc\.py:1[012]/)
+  })
+
+  it('run-scoped --python rejects an unknown --scope-mode', async () => {
+    const c = capture()
+    expect(await runCoverage(['run-scoped', dir, '--python', '--scope-mode', 'magic'], c.io)).toBe(
+      1,
+    )
+    expect(c.err()).toMatch(/unknown scope mode/i)
+  })
+
   it('unknown subcommand exits 1', async () => {
     const c = capture()
     expect(await runCoverage(['frobnicate'], c.io)).toBe(1)

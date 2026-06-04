@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "format": 3,
+    "version": "7.14.1",
+    "timestamp": "2026-06-04T00:00:00",
+    "branch_coverage": false,
+    "show_contexts": false
+  },
+  "files": {
+    "calc.py": {
+      "executed_lines": [1, 2, 5, 6, 9],
+      "summary": {
+        "covered_lines": 5,
+        "num_statements": 8,
+        "percent_covered": 62.5,
+        "missing_lines": 3,
+        "excluded_lines": 0
+      },
+      "missing_lines": [10, 11, 12],
+      "excluded_lines": []
+    }
+  },
+  "totals": {
+    "covered_lines": 5,
+    "num_statements": 8,
+    "percent_covered": 62.5,
+    "missing_lines": 3,
+    "excluded_lines": 0
+  }
+}

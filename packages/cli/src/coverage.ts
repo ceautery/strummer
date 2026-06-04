@@ -8,6 +8,9 @@ import {
   type DiffCoverageReport,
   type FileCoverage,
   runScoped,
+  runScopedPython,
+  type ScopedPythonResult,
+  type ScopeMode,
   type TestRunner,
   uncoveredInDiff,
 } from '@strummer/coverage'
@@ -104,6 +107,9 @@ async function cmdRunScoped(
     options: {
       'changed-file': { type: 'string', multiple: true },
       diff: { type: 'string' },
+      python: { type: 'boolean' },
+      measure: { type: 'string', multiple: true },
+      'scope-mode': { type: 'string' },
       'allow-run': { type: 'boolean' },
       'timeout-ms': { type: 'string' },
       json: { type: 'boolean' },
@@ -114,38 +120,58 @@ async function cmdRunScoped(
     io.err('coverage run-scoped needs a <project-root>\n')
     return 1
   }
+  const scopeMode = values['scope-mode'] ?? 'report-gap'
+  if (values.python && scopeMode !== 'report-gap' && scopeMode !== 'widen') {
+    io.err(`unknown scope mode: ${scopeMode} (expected report-gap|widen)\n`)
+    return 1
+  }
   const timeoutRaw = values['timeout-ms']
   const timeoutMs = timeoutRaw !== undefined ? Number(timeoutRaw) : undefined
 
   try {
-    const result = await runScoped(
-      {
-        projectRoot,
-        // Human-typed root = the operator allowlist (explicit intent), like `api`'s host.
-        allowedRoots: [resolve(projectRoot)],
-        allowRun: values['allow-run'] ?? false,
-        timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
-      },
-      {
-        changedFiles: values['changed-file'] ?? [],
-        diff: values.diff !== undefined ? readFileSync(values.diff, 'utf8') : undefined,
-      },
-      { runner: deps.runner },
-    )
+    const config = {
+      projectRoot,
+      // Human-typed root = the operator allowlist (explicit intent), like `api`'s host.
+      allowedRoots: [resolve(projectRoot)],
+      allowRun: values['allow-run'] ?? false,
+      timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
+    }
+    const changedFiles = values['changed-file'] ?? []
+    const diff = values.diff !== undefined ? readFileSync(values.diff, 'utf8') : undefined
 
+    const result = values.python
+      ? await runScopedPython(
+          config,
+          {
+            changedFiles,
+            diff,
+            measureTargets: values.measure ?? [],
+            scopeMode: scopeMode as ScopeMode,
+          },
+          { runner: deps.runner },
+        )
+      : await runScoped(config, { changedFiles, diff }, { runner: deps.runner })
+
+    const py = values.python ? (result as ScopedPythonResult) : undefined
     if (values.json) {
       io.out(`${JSON.stringify(result, null, 2)}\n`)
     } else if (!result.ran) {
       io.out('no changed files — nothing to run\n')
     } else {
       io.out(
-        `ran vitest (exit ${result.exitCode}); tests ${result.passed ? 'passed' : 'FAILED'}; ` +
-          `scoped: ${result.scopedFiles.join(', ')}\n`,
+        `ran ${values.python ? 'pytest' : 'vitest'} (exit ${result.exitCode}); tests ${
+          py?.inconclusive ? 'INCONCLUSIVE' : result.passed ? 'passed' : 'FAILED'
+        }; scoped: ${result.scopedFiles.join(', ')}\n`,
       )
+      if (py?.unmatched)
+        io.out(`uncovered-by-scope (no mirrored test): ${py.unmatched.join(', ')}\n`)
       if (result.report) printReport(io, result.report)
     }
-    // 0 only if tests passed AND (when a diff was analysed) no new line is uncovered.
-    const ok = result.passed && (result.report ? result.report.uncovered.length === 0 : true)
+    // 0 only if tests passed, not inconclusive, AND (when a diff was analysed) no new line uncovered.
+    const ok =
+      result.passed &&
+      !py?.inconclusive &&
+      (result.report ? result.report.uncovered.length === 0 : true)
     return ok ? 0 : 1
   } catch (e) {
     if (e instanceof CoverageGateError) {

@@ -87,27 +87,36 @@ function scopedArgv(changedFiles: string[], coverageDir: string): string[] {
   ]
 }
 
-/** Default live runner: spawn the local `vitest` as a subprocess (used by the bin, not the gate). */
-export const defaultVitestRunner: TestRunner = (argv, opts) =>
-  new Promise((res) => {
-    execFile(
-      'vitest',
-      argv,
-      { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        // vitest exits non-zero on test failure — surface the code, don't reject.
-        const code =
-          err && typeof (err as { code?: unknown }).code === 'number'
-            ? (err as { code: number }).code
-            : err
-              ? 1
-              : 0
-        res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
-      },
-    )
-  })
+/** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
+function spawnRunner(command: string): TestRunner {
+  return (argv, opts) =>
+    new Promise((res) => {
+      execFile(
+        command,
+        argv,
+        { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
+        (err, stdout, stderr) => {
+          // The tool exits non-zero on a test failure — surface the code, don't reject.
+          const code =
+            err && typeof (err as { code?: unknown }).code === 'number'
+              ? (err as { code: number }).code
+              : err
+                ? 1
+                : 0
+          res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
+        },
+      )
+    })
+}
 
-function assertAllowed(config: RunScopedConfig): void {
+/** Default live runner: spawn the local `vitest` as a subprocess (used by the bin, not the gate). */
+export const defaultVitestRunner: TestRunner = spawnRunner('vitest')
+
+/** Default live runner: spawn the local `pytest` as a subprocess (used by the bin, not the gate). */
+export const defaultPytestCovRunner: TestRunner = spawnRunner('pytest')
+
+/** The paired deny-by-default operator gate (allowRun + allowlisted root). Shared by both runners. */
+export function assertAllowed(config: RunScopedConfig): void {
   if (!config.allowRun) {
     throw new CoverageGateError(
       'scoped test execution is not enabled (the operator must set allowRun)',
