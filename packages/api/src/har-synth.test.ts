@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
-import { redactHarZip, summarizeHar } from './har-synth.js'
+import { harEntriesToFacts } from './har-capture.js'
+import {
+  type HarHopRecord,
+  redactHarZip,
+  summarizeHar,
+  synthesizeRedactedHarZip,
+} from './har-synth.js'
 
 const SECRET = 's3cr3t-value'
 const redact = (v: string) => v.split(SECRET).join('[redacted:token]')
@@ -105,6 +111,79 @@ describe('summarizeHar — compact tallies from the .har JSON (5f slice 1)', () 
 
   it('is tolerant of a malformed log', () => {
     expect(summarizeHar('not json')).toEqual({ entryCount: 0, byStatus: {}, byMethod: {} })
+  })
+})
+
+describe('synthesizeRedactedHarZip — RunResult → consume-bridge-shaped HAR (5f slice 3)', () => {
+  it('round-trips through harEntriesToFacts: GraphQL req.body parsed, status kept, secret redacted', () => {
+    const records: HarHopRecord[] = [
+      {
+        method: 'POST',
+        url: 'https://api.test/graphql',
+        status: 200,
+        reqContentType: 'application/json',
+        reqBody: `{"query":"query Widgets { widgets { id name } }","token":"${SECRET}"}`,
+        resContentType: 'application/json',
+        resBody: `{"data":{"widgets":[]},"echo":"${SECRET}"}`,
+      },
+    ]
+    const zip = synthesizeRedactedHarZip(records, redact)
+    // No raw secret survives anywhere in the synthesized archive.
+    for (const bytes of Object.values(unzipSync(new Uint8Array(zip)))) {
+      expect(strFromU8(bytes)).not.toContain(SECRET)
+    }
+    // The shipped consume bridge reads it as one JSON entry with a parsed GraphQL body.
+    const facts = harEntriesToFacts(zip)
+    expect(facts).toHaveLength(1)
+    expect(facts[0]?.req.method).toBe('POST')
+    expect(facts[0]?.req.path).toBe('/graphql')
+    expect(facts[0]?.res.status).toBe(200)
+    expect((facts[0]?.req.body as { query?: string })?.query).toContain('query Widgets')
+  })
+
+  it('omits postData for a record with no string request body (binary/multipart)', () => {
+    const records: HarHopRecord[] = [
+      {
+        method: 'GET',
+        url: 'https://api.test/widgets',
+        status: 200,
+        resContentType: 'application/json',
+        resBody: '[]',
+      },
+    ]
+    const zip = synthesizeRedactedHarZip(records, (v) => v)
+    const facts = harEntriesToFacts(zip)
+    expect(facts[0]?.req.body).toBeUndefined()
+    expect(facts[0]?.res.body).toEqual([])
+  })
+
+  it('THROWS on a record with a non-numeric status (incomplete capture ⇒ inconclusive, never a status-0 finding)', () => {
+    const bad = [
+      { method: 'GET', url: 'https://api.test/x', status: undefined as unknown as number },
+    ] satisfies HarHopRecord[]
+    expect(() => synthesizeRedactedHarZip(bad, (v) => v)).toThrow(/status/i)
+  })
+
+  it('emits one entry per hop (no collapsed redirect chain)', () => {
+    const records: HarHopRecord[] = [
+      {
+        method: 'GET',
+        url: 'https://api.test/a',
+        status: 302,
+        resContentType: 'application/json',
+        resBody: '{}',
+      },
+      {
+        method: 'GET',
+        url: 'https://api.test/b',
+        status: 200,
+        resContentType: 'application/json',
+        resBody: '{"ok":true}',
+      },
+    ]
+    const facts = harEntriesToFacts(synthesizeRedactedHarZip(records, (v) => v))
+    expect(facts.map((f) => f.req.path)).toEqual(['/a', '/b'])
+    expect(facts.map((f) => f.res.status)).toEqual([302, 200])
   })
 })
 

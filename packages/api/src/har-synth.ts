@@ -126,3 +126,64 @@ export function redactHarZip(zip: Buffer, redact: (value: string) => string): Bu
   }
   return Buffer.from(zipSync(out))
 }
+
+/**
+ * One captured HTTP exchange (a single request OR a single redirect hop) reduced to
+ * what {@link synthesizeRedactedHarZip} needs. The runner's produce channel
+ * (`runRequestForHar`, slice 4) emits one of these per hop — so a redirect chain
+ * becomes one HAR entry per hop, never a collapsed chain (ADR 0013 Addendum 4 gap a).
+ * Bodies are STRING-only: a Buffer/FormData (file/multipart) request body leaves
+ * `reqBody` undefined ⇒ no `postData` is synthesized (lossless — the response still
+ * validates; gap b's GraphQL path needs only string JSON bodies anyway).
+ */
+export interface HarHopRecord {
+  method: string
+  url: string
+  /** The real numeric HTTP status. A missing status is INCOMPLETE capture and THROWS
+   * (never coerced to 0, which the bridge would read as an undocumented-status finding —
+   * a false fail masking the true inconclusive state). */
+  status: number
+  resContentType?: string
+  /** The real (secret-bearing) response body text; redacted by {@link redactHarZip}. */
+  resBody?: string
+  reqContentType?: string
+  /** The real (secret-bearing) request body text (GraphQL's `query` lives here). */
+  reqBody?: string
+}
+
+interface SynthEntry {
+  request: { method: string; url: string; postData?: { mimeType: string; text: string } }
+  response: { status: number; content: { mimeType: string; text?: string } }
+}
+
+/**
+ * Synthesize a HAR `.zip` Buffer from per-hop records and IMMEDIATELY redact it — the
+ * ONLY public surface, so no un-redacted synthesized buffer is ever returned/stored/
+ * validated (ADR 0013 §3b). Builds `{log:{entries}}` with ONLY the six fields the
+ * consume bridge reads, INLINE `text` bodies (we hold the strings — no `_file` attach),
+ * one `.har` member, then runs {@link redactHarZip}. THROWS on a status-less record.
+ */
+export function synthesizeRedactedHarZip(
+  records: HarHopRecord[],
+  redact: (value: string) => string,
+): Buffer {
+  const entries: SynthEntry[] = []
+  for (const r of records) {
+    if (typeof r.status !== 'number' || !Number.isFinite(r.status)) {
+      throw new Error(`har-synth: record for ${r.method} ${r.url} has no numeric status`)
+    }
+    const request: SynthEntry['request'] = { method: r.method, url: r.url }
+    // postData only for a string body with a declared content-type (omit for binary).
+    if (typeof r.reqBody === 'string' && r.reqContentType) {
+      request.postData = { mimeType: r.reqContentType, text: r.reqBody }
+    }
+    const content: SynthEntry['response']['content'] = { mimeType: r.resContentType ?? '' }
+    if (typeof r.resBody === 'string') content.text = r.resBody
+    entries.push({ request, response: { status: r.status, content } })
+  }
+  const har = {
+    log: { version: '1.2', creator: { name: 'strummer-api', version: '1.2' }, entries },
+  }
+  const zip = Buffer.from(zipSync({ 'synth.har': strToU8(JSON.stringify(har)) }))
+  return redactHarZip(zip, redact)
+}

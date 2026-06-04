@@ -17,7 +17,13 @@ export {
   type ValidateCaptureOptions,
   validateCapturedTraffic,
 } from './har-capture.js'
-export { type HarCounts, redactHarZip, summarizeHar } from './har-synth.js'
+export {
+  type HarCounts,
+  type HarHopRecord,
+  redactHarZip,
+  summarizeHar,
+  synthesizeRedactedHarZip,
+} from './har-synth.js'
 export {
   type ImportedRequest,
   type ImportFormat,
