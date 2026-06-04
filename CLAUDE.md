@@ -175,21 +175,29 @@ vision and `ARCHITECTURE.md` for the technical design.
   `none`≠`unknown` distinction kept, deps' `unknown`→no-signal pillar), `deps` (Phase-4 dependency/version
   intelligence: deprecation/vuln/freshness for the *installed* version; pure offline
   core + on-disk OSV snapshot + `audit_dependency`/`audit_project` MCP surface; plus the
-  Phase-5d pure `changedDependencies(diff, ecosystem)` block-aware npm manifest diff over `diff`),
+  pure `changedDependencies(diff, ecosystem)` block-aware manifest+lockfile diff over `diff`
+  (npm `package.json` + PyPI pyproject/requirements/TOML-`[[package]]`-lockfiles + RubyGems
+  Gemfile/Gemfile.lock, per-file classifiers; ADR 0010 addendum) AND `changelog_diff` for
+  npm/PyPI/RubyGems via the shared `repo.ts` source-repo derivation),
   `coverage` (Phase-4 track A: the forgotten-assertion catch — `uncoveredNewLines` +
   `uncoveredInDiff` pure differs over `@strummer/diff`'s `parseUnifiedDiff`, plus gated impact-scoped
-  `runScoped`; `uncovered_in_diff`/`run_scoped` MCP surface),
+  `runScoped` (vitest) AND `runScopedPython` (pytest + coverage.py via `coveragePyToIstanbul`;
+  `selectPytestScope` mirrored-test heuristic + report-gap/widen fallback; pytest exit 5/2/3/4 →
+  inconclusive; ADR 0010 addendum); `uncovered_in_diff`/`run_scoped`/`py_run_scoped` MCP surface),
   `flake` (Phase-4 test-quality chain, COMPLETE: flaky-test detection — pure Wilson/binomial
   `classifyHistory` → `flaky`/`reliable`/`broken`/`insufficient-data` + `flakeScore`; a private
   better-sqlite3 `HistoryStore` (second SQLite owner per ADR 0010); `parseVitestJson`/
-  `ingestReport`; operator-gated `Quarantine` (mandatory expiry); gated `runAndRecord` vitest
-  spawner; `flake_status`/`flake_candidates`/`flake_release`/`flake_run`/`flake_quarantine`
-  MCP surface),
+  `ingestReport` (+ pure `parsePytestJson`); operator-gated `Quarantine` (mandatory expiry); gated
+  `runAndRecord` (vitest) AND `runAndRecordPytest` (pytest `--json-report`, whole-suite repeats; ADR
+  0010 addendum) over a framework-agnostic core; `flake_status`/`flake_candidates`/`flake_release`/
+  `flake_run` (`framework: vitest|pytest`)/`flake_quarantine` MCP surface),
   `mutate` (Phase-4 test-quality chain, COMPLETE: mutation testing — "are the tests
   meaningful?"; pure `summarizeMutation` over the mutation-testing-elements report schema
   (no `@stryker-mutator` import) → mutationScore + survivors; gated diff-scoped `runMutation`
-  spawning `stryker run` (injected runner, not a gate dep); `mutate_summarize`/`mutate_run`
-  MCP surface),
+  spawning `stryker run` (injected runner, not a gate dep) PLUS Python `runMutmut` + `runCosmicRay`
+  (stdout-fed `parseMutmutResults`/`parseCosmicRayDump`; `reportPath` optional; transport-completeness
+  guard ⇒ zero-mutant/Pending = inconclusive; ADR 0010 addendum); `mutate_summarize`/`mutate_run`
+  (`tool: stryker|mutmut|cosmic-ray`) MCP surface),
   `lsp` (Phase-4, COMPLETE (engine + agent surface) — semantic code navigation via a live LSP
   subprocess; the documented, fenced exception to ARCHITECTURE §1's no-live-RPC rule, design = ADR 0011.
   Slice 1 landed: pure `encoding.ts` (the position-encoding correctness core, utf-8/16/32)

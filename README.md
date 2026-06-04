@@ -201,8 +201,13 @@ validate-request` CLI. The live **`api run --openapi`** path then folded the req
 validates the runtime `variables` against the operation's declared types (per-variable, findings
 reconstructed from name+type so values never leak; custom-scalar/non-object/ambiguous → `unverified`),
 wired through the capture bridge + `validate_response.variables` + `api validate --graphql --variables` +
-live `api run --graphql`. Staged (not amputated): non-scalar OpenAPI param serializations, non-JSON body
-schemas, GraphQL directive-argument validation, and the Python second half.
+live `api run --graphql`. Since then the non-scalar OpenAPI param serialization matrix + non-JSON request
+bodies ([ADR 0016](./docs/decisions/0016-nonscalar-param-serialization.md), closed), artifact retention/GC
+([ADR 0017](./docs/decisions/0017-artifact-retention.md)), and the **Python half of the Phase-4
+verification pillars** ([ADR 0010 addendum](./docs/decisions/0010-phase4-cross-cutting-verification.md) —
+PyPI/RubyGems deps diff-scoping + changelog, pytest flake runner, cosmic-ray/mutmut mutation runners, and
+pytest+coverage.py run-scoping) all landed. Staged (not amputated): GraphQL directive-argument validation
++ custom-scalar variable coercers; cosmic-ray/mutmut/pytest diff-scoping; Ruby coverage/mutation.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
