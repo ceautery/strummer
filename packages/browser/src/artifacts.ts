@@ -1,4 +1,8 @@
-import { type Artifact, ArtifactStore as BaseArtifactStore } from '@strummer/artifacts'
+import {
+  type Artifact,
+  type ArtifactStoreOptions,
+  ArtifactStore as BaseArtifactStore,
+} from '@strummer/artifacts'
 
 /**
  * The browser pillar's artifact metadata. Alias of the shared `Artifact` (the
@@ -13,7 +17,7 @@ export type BrowserArtifact = Artifact
  * baked in, so every browser call site constructs it with just a base dir.
  */
 export class ArtifactStore extends BaseArtifactStore {
-  constructor(baseDir: string) {
-    super(baseDir, 'browser/run')
+  constructor(baseDir: string, opts?: ArtifactStoreOptions) {
+    super(baseDir, 'browser/run', opts)
   }
 }

@@ -2,7 +2,7 @@
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { ArtifactStore } from '@strummer/artifacts'
+import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
 import {
   normalizePypiName,
   type Packument,
@@ -211,7 +211,16 @@ export function buildDepsServerFromEnv(
         )
       : undefined,
     artifacts:
-      config.artifactDir !== undefined ? new ArtifactStore(config.artifactDir, 'deps') : undefined,
+      config.artifactDir !== undefined
+        ? new ArtifactStore(config.artifactDir, 'deps', {
+            retention: retentionFromEnv({
+              maxAgeMs: env.STRUMMER_DEPS_ARTIFACT_MAX_AGE_MS,
+              maxEntries: env.STRUMMER_DEPS_ARTIFACT_MAX_ENTRIES,
+              maxBytes: env.STRUMMER_DEPS_ARTIFACT_MAX_BYTES,
+            }),
+            sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
+          })
+        : undefined,
   })
   return { server, config }
 }

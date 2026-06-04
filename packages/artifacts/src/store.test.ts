@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { ArtifactStore } from './store.js'
+import { ArtifactStore, retentionFromEnv } from './store.js'
 
 /** Stamp an <id> dir's mtime deterministically (seconds) so eviction order is stable. */
 function stampMtime(baseDir: string, prefix: string, id: string, seconds: number): void {
@@ -245,6 +245,20 @@ describe('ArtifactStore — retention / GC (ADR 0017)', () => {
     expect(store.get('strummer://p/a/k')).toBeUndefined()
     expect(store.get('strummer://p/b/k')).toBeUndefined()
     expect(store.get('strummer://p/c/k')).toBeDefined()
+  })
+
+  it('retentionFromEnv parses set dimensions, ignores invalid, and is undefined when unset', () => {
+    expect(retentionFromEnv({ maxAgeMs: '5000', maxEntries: '20', maxBytes: '1048576' })).toEqual({
+      maxAgeMs: 5000,
+      maxEntries: 20,
+      maxBytes: 1048576,
+    })
+    expect(retentionFromEnv({ maxEntries: '10' })).toEqual({ maxEntries: 10 })
+    expect(retentionFromEnv({})).toBeUndefined()
+    // A typo / negative never silently deletes everything (ignored ⇒ unset).
+    expect(retentionFromEnv({ maxBytes: 'lots', maxAgeMs: '-1' })).toBeUndefined()
+    // 0 is a legitimate cap (keep none).
+    expect(retentionFromEnv({ maxEntries: '0' })).toEqual({ maxEntries: 0 })
   })
 
   it('never deletes THROUGH a symlinked <id> dir that escapes baseDir', () => {

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
 import {
   ArtifactStore,
   auditPerf,
@@ -273,7 +274,14 @@ export async function buildBrowserRuntimeFromEnv(
   const launchArgs = engineLaunchOptions(engine, launchSpec).args ?? []
 
   const gate = new BrowserGate({ allowUnsafe, allowedHosts, allowDialogs })
-  const store = new ArtifactStore(artifactsDir)
+  const store = new ArtifactStore(artifactsDir, {
+    retention: retentionFromEnv({
+      maxAgeMs: env.STRUMMER_BROWSER_ARTIFACT_MAX_AGE_MS,
+      maxEntries: env.STRUMMER_BROWSER_ARTIFACT_MAX_ENTRIES,
+      maxBytes: env.STRUMMER_BROWSER_ARTIFACT_MAX_BYTES,
+    }),
+    sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
+  })
   // Lighthouse spawns its OWN Chrome (chrome-launcher) and is Chrome-only, so the
   // perf audit ALWAYS uses chromium regardless of the session engine. It gets the
   // same egress boundary via flags: the mandatory SSRF proxy + loopback-bypass +

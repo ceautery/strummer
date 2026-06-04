@@ -10,7 +10,7 @@ import {
   StaticSecretStore,
   validateCapturedTraffic,
 } from '@strummer/api'
-import { ArtifactStore } from '@strummer/artifacts'
+import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
 import { runScoped } from '@strummer/coverage'
 import { changedDependencies } from '@strummer/deps'
 import { HistoryStore, runAndRecord } from '@strummer/flake'
@@ -117,7 +117,14 @@ export function buildVerifyServerFromEnv(
     | undefined
   let harStore: ArtifactStore | undefined
   if (config.artifactsRoot) {
-    const store = new ArtifactStore(config.artifactsRoot, 'verify')
+    const store = new ArtifactStore(config.artifactsRoot, 'verify', {
+      retention: retentionFromEnv({
+        maxAgeMs: env.STRUMMER_VERIFY_ARTIFACT_MAX_AGE_MS,
+        maxEntries: env.STRUMMER_VERIFY_ARTIFACT_MAX_ENTRIES,
+        maxBytes: env.STRUMMER_VERIFY_ARTIFACT_MAX_BYTES,
+      }),
+      sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
+    })
     harStore = store
     storeVerdict = (id, kind, body, contentType) => store.put(id, kind, body, contentType)
     resolveVerdict = (handle) => {

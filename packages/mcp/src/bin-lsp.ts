@@ -2,7 +2,7 @@
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { ArtifactStore } from '@strummer/artifacts'
+import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
 import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
 import {
   defaultListFiles,
@@ -141,7 +141,16 @@ export function buildLspServerFromEnv(
   }
 
   const artifacts =
-    config.artifactDir !== undefined ? new ArtifactStore(config.artifactDir, 'lsp') : undefined
+    config.artifactDir !== undefined
+      ? new ArtifactStore(config.artifactDir, 'lsp', {
+          retention: retentionFromEnv({
+            maxAgeMs: env.STRUMMER_LSP_ARTIFACT_MAX_AGE_MS,
+            maxEntries: env.STRUMMER_LSP_ARTIFACT_MAX_ENTRIES,
+            maxBytes: env.STRUMMER_LSP_ARTIFACT_MAX_BYTES,
+          }),
+          sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
+        })
+      : undefined
 
   // A registry is required to spawn anything; without one only lsp_languages (empty) is useful.
   let manager: LanguageServerManager | undefined

@@ -40,6 +40,10 @@ export interface RetentionPolicy {
   maxBytes?: number
 }
 
+/** A sane default throttle for the server bins' opportunistic `put()` sweep — a hot
+ * write loop re-scans the subtree at most once a minute, GC stays responsive enough. */
+export const DEFAULT_SWEEP_INTERVAL_MS = 60_000
+
 export interface ArtifactStoreOptions {
   /** Retention bounds; absent ⇒ the store is append-only (no GC). */
   retention?: RetentionPolicy
@@ -47,6 +51,32 @@ export interface ArtifactStoreOptions {
   now?: () => number
   /** Minimum ms between opportunistic `put()`-triggered sweeps. Default 0 (every put). */
   sweepIntervalMs?: number
+}
+
+/**
+ * Parse a `RetentionPolicy` from raw env strings (each bin's per-pillar
+ * `STRUMMER_<PILLAR>_ARTIFACT_MAX_AGE_MS` / `_MAX_ENTRIES` / `_MAX_BYTES`). Returns
+ * `undefined` when NONE is set (⇒ no GC — opt-in). A non-numeric or negative value is
+ * ignored (treated as unset) so a typo never silently deletes everything.
+ */
+export function retentionFromEnv(raw: {
+  maxAgeMs?: string
+  maxEntries?: string
+  maxBytes?: string
+}): RetentionPolicy | undefined {
+  const n = (v: string | undefined): number | undefined => {
+    if (!v) return undefined
+    const x = Number(v)
+    return Number.isFinite(x) && x >= 0 ? x : undefined
+  }
+  const policy: RetentionPolicy = {}
+  const age = n(raw.maxAgeMs)
+  const entries = n(raw.maxEntries)
+  const bytes = n(raw.maxBytes)
+  if (age !== undefined) policy.maxAgeMs = age
+  if (entries !== undefined) policy.maxEntries = entries
+  if (bytes !== undefined) policy.maxBytes = bytes
+  return Object.keys(policy).length > 0 ? policy : undefined
 }
 
 /** A handle parsed into its on-disk-addressing parts. */
