@@ -18,6 +18,14 @@ export {
   validateCapturedTraffic,
 } from './har-capture.js'
 export {
+  type HarArtifactSink,
+  type HarProduceDeps,
+  type ProducedHar,
+  type ProducedHarSummary,
+  runRequestToHar,
+  runSequenceToHar,
+} from './har-produce.js'
+export {
   type HarCounts,
   type HarHopRecord,
   redactHarZip,
