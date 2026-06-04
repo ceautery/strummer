@@ -319,6 +319,17 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
             .record(z.string(), z.string())
             .optional()
             .describe('lower-cased request header names → value'),
+          form: z
+            .record(z.string(), z.union([z.string(), z.array(z.string())]))
+            .optional()
+            .describe(
+              'decoded form-body fields (application/x-www-form-urlencoded or multipart text ' +
+                'parts; repeated keys → array). Set the content-type header to route validation.',
+            ),
+          formFileFields: z
+            .array(z.string())
+            .optional()
+            .describe('names of multipart FILE parts (presence only; bytes never validated)'),
         },
       },
       (args) => {
@@ -335,6 +346,8 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
             body: args.body,
             query: args.query as Record<string, string | string[]> | undefined,
             headers: args.headers as Record<string, string> | undefined,
+            form: args.form as Record<string, string | string[]> | undefined,
+            formFileFields: args.formFileFields,
           },
           { bodyPresenceAuthoritative: true, paramsAuthoritative: true },
         )

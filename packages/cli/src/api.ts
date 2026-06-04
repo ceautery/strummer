@@ -486,6 +486,8 @@ function cmdValidateRequest(args: string[], io: CliIO): number {
       body: { type: 'string' },
       query: { type: 'string', multiple: true },
       header: { type: 'string', multiple: true },
+      form: { type: 'string', multiple: true },
+      'form-file': { type: 'string', multiple: true },
       json: { type: 'boolean' },
     },
   })
@@ -518,6 +520,19 @@ function cmdValidateRequest(args: string[], io: CliIO): number {
     if (c < 0) continue
     headers[hv.slice(0, c).trim().toLowerCase()] = hv.slice(c + 1).trim()
   }
+  // `--form name=value` (repeatable; repeated names → array): the structured field map of
+  // a form-urlencoded / multipart text body. The content-type header routes validation.
+  const form: Record<string, string | string[]> = {}
+  for (const kv of values.form ?? []) {
+    const eq = kv.indexOf('=')
+    if (eq < 0) continue
+    const k = kv.slice(0, eq)
+    const v = kv.slice(eq + 1)
+    const cur = form[k]
+    form[k] = cur === undefined ? v : Array.isArray(cur) ? [...cur, v] : [cur, v]
+  }
+  // `--form-file name` (repeatable): multipart FILE part names (presence only).
+  const formFileFields = values['form-file'] ?? []
 
   const contract = validateOpenApiRequest(
     spec,
@@ -527,6 +542,8 @@ function cmdValidateRequest(args: string[], io: CliIO): number {
       body,
       ...(Object.keys(query).length > 0 ? { query } : {}),
       ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      ...(Object.keys(form).length > 0 ? { form } : {}),
+      ...(formFileFields.length > 0 ? { formFileFields } : {}),
     },
     {
       baseDir: dirname(values.openapi),

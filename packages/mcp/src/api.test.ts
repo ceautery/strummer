@@ -452,6 +452,58 @@ describe('validate_request — the request half of contract validation (sibling)
     expect(res.isError).toBe(true)
   })
 
+  it('validates a form-urlencoded body via the `form` field map (ADR 0016 add.4)', async () => {
+    const formSpec = {
+      openapi: '3.1.0',
+      paths: {
+        '/form': {
+          post: {
+            requestBody: {
+              required: true,
+              content: {
+                'application/x-www-form-urlencoded': {
+                  schema: {
+                    type: 'object',
+                    required: ['age'],
+                    properties: { age: { type: 'integer' } },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            responses: { '201': { description: 'created' } },
+          },
+        },
+      },
+    }
+    const c = await connect()
+    const bad = await c.callTool({
+      name: 'validate_request',
+      arguments: {
+        openapiSpec: formSpec,
+        method: 'POST',
+        path: '/form',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        form: { age: 'abc' },
+      },
+    })
+    const sc = bad.structuredContent as { valid: boolean; findings: { kind: string }[] }
+    expect(sc.valid).toBe(false)
+    expect(sc.findings.map((f) => f.kind)).toContain('request-body-schema')
+
+    const good = await c.callTool({
+      name: 'validate_request',
+      arguments: {
+        openapiSpec: formSpec,
+        method: 'POST',
+        path: '/form',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        form: { age: '5' },
+      },
+    })
+    expect((good.structuredContent as { valid: boolean }).valid).toBe(true)
+  })
+
   it('redacts a secret-bearing finding path AND message via the operator redactor', async () => {
     const c = await connect({ verifyRedact: (s) => s.split('apikey').join('‹redacted›') })
     const specKeys = {

@@ -462,6 +462,73 @@ body:json {
     expect(c.out().toLowerCase()).toContain('request contract: valid')
   })
 
+  it('run --openapi validates a FORM-URLENCODED request body (ADR 0016 add.4, exit 1)', async () => {
+    writeFileSync(
+      join(dir, 'create-form.bru'),
+      `meta {
+  name: create-form
+}
+post {
+  url: {{baseUrl}}/things
+  body: formUrlEncoded
+}
+body:form-urlencoded {
+  age: {{age}}
+}
+`,
+    )
+    const spec = join(dir, 'openapi-form.json')
+    writeFileSync(
+      spec,
+      JSON.stringify({
+        openapi: '3.1.0',
+        paths: {
+          '/things': {
+            post: {
+              requestBody: {
+                required: true,
+                content: {
+                  'application/x-www-form-urlencoded': {
+                    schema: {
+                      type: 'object',
+                      properties: { age: { type: 'integer' } },
+                      required: ['age'],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              responses: { '201': { description: 'created' } },
+            },
+          },
+        },
+      }),
+    )
+    const c = capture()
+    // The form field `age` is "abc" — not a valid integer; the only failure is the body.
+    const code = await run(
+      [
+        'api',
+        'run',
+        dir,
+        'create-form',
+        '--var',
+        `baseUrl=${baseUrl}`,
+        '--var',
+        'age=abc',
+        '--unsafe',
+        '--allow-host',
+        '127.0.0.1',
+        '--openapi',
+        spec,
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out()).toContain('request-body-schema')
+    expect(c.out().toLowerCase()).toContain('request contract: invalid')
+  })
+
   it('run --openapi redacts a secret echoed in a request finding', async () => {
     const secret = 'super-secret-token-zzz'
     process.env.STRUMMER_SECRET_API_TOKEN = secret
@@ -762,6 +829,24 @@ describe('cli api validate-request', () => {
           responses: { '200': { description: 'ok' } },
         },
       },
+      '/form': {
+        post: {
+          requestBody: {
+            required: true,
+            content: {
+              'application/x-www-form-urlencoded': {
+                schema: {
+                  type: 'object',
+                  required: ['age'],
+                  properties: { age: { type: 'integer' } },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: { '201': { description: 'created' } },
+        },
+      },
     },
   }
 
@@ -853,6 +938,53 @@ describe('cli api validate-request', () => {
         ok.io,
       ),
     ).toBe(0)
+  })
+
+  it('validates a form-urlencoded body via --form (bad ⇒ exit 1, good ⇒ exit 0)', async () => {
+    const specPath = specFile()
+    const bad = capture()
+    expect(
+      await run(
+        [
+          'api',
+          'validate-request',
+          '--openapi',
+          specPath,
+          '--method',
+          'POST',
+          '--path',
+          '/form',
+          '--header',
+          'content-type:application/x-www-form-urlencoded',
+          '--form',
+          'age=abc',
+        ],
+        bad.io,
+      ),
+    ).toBe(1)
+    expect(bad.out()).toContain('request-body-schema')
+
+    const ok = capture()
+    expect(
+      await run(
+        [
+          'api',
+          'validate-request',
+          '--openapi',
+          specPath,
+          '--method',
+          'POST',
+          '--path',
+          '/form',
+          '--header',
+          'content-type:application/x-www-form-urlencoded',
+          '--form',
+          'age=5',
+        ],
+        ok.io,
+      ),
+    ).toBe(0)
+    expect(ok.out()).toContain('valid: true')
   })
 
   it('needs --openapi/--method/--path', async () => {
