@@ -139,6 +139,15 @@ export type ContractFindingKind =
   // An undocumented QUERY parameter was present (warning; headers excluded —
   // infra/trace headers saturate captures).
   | 'undocumented-param'
+  // --- GraphQL request-variable drift. See `graphql.ts` (ADR 0015). ---
+  // A required GraphQL variable (non-null, no default) was absent and the caller is
+  // authoritative about variables; never on the capture path (which folds to no-signal).
+  | 'graphql-variable-missing'
+  // A present GraphQL variable value fails coercion against its declared type, or an
+  // explicit null was passed to a non-null type (error; authority-independent).
+  | 'graphql-variable-invalid'
+  // A `variables` key the operation does not declare (warning; the server ignores it).
+  | 'graphql-undocumented-variable'
 
 /** A single contract discrepancy between a response and its declared shape. */
 export interface ContractFinding {

@@ -256,6 +256,13 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
           .string()
           .optional()
           .describe('scope GraphQL drift to a named operation in a multi-operation document'),
+        variables: z
+          .unknown()
+          .optional()
+          .describe(
+            'GraphQL request variables to validate against the operation’s declared types ' +
+              '(authoritative — this surface holds the real request)',
+          ),
       },
     },
     (args) => {
@@ -264,6 +271,11 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
         result = validateGraphqlOperation(args.graphqlSchema, args.query ?? '', {
           json: args.body,
           operationName: args.operationName,
+          // Findings are reconstructed from variable name + declared type (never the value),
+          // so they are value-free; authoritative because the caller supplies the request.
+          ...(args.variables !== undefined
+            ? { variables: args.variables, variablesAuthoritative: true }
+            : {}),
         })
       } else if (args.openapiSpec !== undefined) {
         result = validateOpenApiResponse(

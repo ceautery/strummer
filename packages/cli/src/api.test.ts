@@ -33,6 +33,13 @@ beforeAll(async () => {
     } else if (req.url === '/things' && req.method === 'POST') {
       res.writeHead(201, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ created: true }))
+    } else if (req.url === '/graphql' && req.method === 'POST') {
+      // Drain the body, then return a clean GraphQL data payload (no errors).
+      req.on('data', () => {})
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ data: { thing: { id: 1 } } }))
+      })
     } else if (req.url === '/redirect') {
       res.writeHead(302, { location: '/health' })
       res.end()
@@ -123,6 +130,55 @@ type User { id: ID! name: String! }
   )
   writeFileSync(join(dir, 'good.graphql'), `{ user(id: "1") { id name } }`)
   writeFileSync(join(dir, 'bad.graphql'), `{ user(id: "1") { id bogusField } }`)
+
+  // GraphQL request-variable validation fixtures (ADR 0015).
+  writeFileSync(
+    join(dir, 'thing-schema.graphql'),
+    `type Query { thing(id: Int!): Thing }
+type Thing { id: Int! }
+`,
+  )
+  writeFileSync(join(dir, 'thing-query.graphql'), `query Q($id: Int!) { thing(id: $id) { id } }`)
+  // A GraphQL run whose variable is the wrong type (string for Int!).
+  writeFileSync(
+    join(dir, 'gql-bad.bru'),
+    `meta {
+  name: gql-bad
+}
+post {
+  url: {{baseUrl}}/graphql
+  body: graphql
+}
+body:graphql {
+  query Q($id: Int!) { thing(id: $id) { id } }
+}
+body:graphql:vars {
+  {
+    "id": "not-an-int"
+  }
+}
+`,
+  )
+  // A GraphQL run with a conformant integer variable.
+  writeFileSync(
+    join(dir, 'gql-ok.bru'),
+    `meta {
+  name: gql-ok
+}
+post {
+  url: {{baseUrl}}/graphql
+  body: graphql
+}
+body:graphql {
+  query Q($id: Int!) { thing(id: $id) { id } }
+}
+body:graphql:vars {
+  {
+    "id": 5
+  }
+}
+`,
+  )
 })
 
 afterAll(async () => {
@@ -493,6 +549,89 @@ get {
         c.io,
       ),
     ).toBe(0)
+  })
+
+  it('validate --graphql --variables flags a wrong-typed variable (exit 1)', async () => {
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'validate',
+        '--graphql',
+        join(dir, 'thing-schema.graphql'),
+        '--query',
+        join(dir, 'thing-query.graphql'),
+        '--variables',
+        '{"id":"hello"}',
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out()).toContain('graphql-variable-invalid')
+    expect(c.out()).not.toContain('hello') // value never echoed
+  })
+
+  it('validate --graphql --variables passes a conformant variable (exit 0)', async () => {
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'validate',
+        '--graphql',
+        join(dir, 'thing-schema.graphql'),
+        '--query',
+        join(dir, 'thing-query.graphql'),
+        '--variables',
+        '{"id":5}',
+      ],
+      c.io,
+    )
+    expect(code).toBe(0)
+  })
+
+  it('run --graphql flags a wrong-typed request variable (exit 1, response still clean)', async () => {
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'run',
+        dir,
+        'gql-bad',
+        '--var',
+        `baseUrl=${baseUrl}`,
+        '--unsafe',
+        '--allow-host',
+        '127.0.0.1',
+        '--graphql',
+        join(dir, 'thing-schema.graphql'),
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out().toLowerCase()).toContain('graphql contract: invalid')
+    expect(c.out()).toContain('graphql-variable-invalid')
+  })
+
+  it('run --graphql passes a conformant request variable (exit 0)', async () => {
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'run',
+        dir,
+        'gql-ok',
+        '--var',
+        `baseUrl=${baseUrl}`,
+        '--unsafe',
+        '--allow-host',
+        '127.0.0.1',
+        '--graphql',
+        join(dir, 'thing-schema.graphql'),
+      ],
+      c.io,
+    )
+    expect(code).toBe(0)
+    expect(c.out().toLowerCase()).toContain('graphql contract: valid')
   })
 
   it('unknown api subcommand returns non-zero', async () => {

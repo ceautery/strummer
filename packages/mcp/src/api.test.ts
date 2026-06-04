@@ -222,6 +222,25 @@ describe('strummer API MCP tools', () => {
     expect(sc.valid).toBe(false)
   })
 
+  it('validate_response flags a GraphQL request variable of the wrong type', async () => {
+    const sdl = 'type Query { thing(id: Int!): Int }'
+    const res = await client.callTool({
+      name: 'validate_response',
+      arguments: {
+        graphqlSchema: sdl,
+        query: 'query Q($id: Int!) { thing(id: $id) }',
+        variables: { id: 'not-an-int' },
+      },
+    })
+    const sc = res.structuredContent as {
+      valid: boolean
+      findings: { kind: string }[]
+    }
+    expect(sc.valid).toBe(false)
+    expect(sc.findings.map((f) => f.kind)).toContain('graphql-variable-invalid')
+    expect(JSON.stringify(sc.findings)).not.toContain('not-an-int') // value never echoed
+  })
+
   it('validate_response throws without a contract', async () => {
     const res = await client.callTool({ name: 'validate_response', arguments: {} })
     expect(res.isError).toBe(true)

@@ -194,6 +194,24 @@ function parseStoredBody(artifacts: ArtifactStore, handle: string): unknown {
   }
 }
 
+/** Redact every finding's message AND path through a redactor that learned the run's
+ * resolved secrets — a finding can echo a captured body/param/variable value. */
+function redactContract(
+  raw: ContractResult,
+  secrets: { name: string; value: string }[],
+): ContractResult {
+  const redactor = new Redactor()
+  for (const s of secrets) redactor.register(s.name, s.value)
+  return {
+    ...raw,
+    findings: raw.findings.map((f) => ({
+      ...f,
+      message: redactor.redact(f.message),
+      ...(f.path !== undefined ? { path: redactor.redact(f.path) } : {}),
+    })),
+  }
+}
+
 function printContract(io: CliIO, contract: ContractResult, label = 'contract'): void {
   io.out(`${label}: ${contract.valid ? 'valid' : 'INVALID'}\n`)
   for (const f of contract.findings) {
@@ -205,7 +223,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: { ...RUN_OPTIONS, openapi: { type: 'string' } },
+    options: { ...RUN_OPTIONS, openapi: { type: 'string' }, graphql: { type: 'string' } },
   })
   const [dir, name] = positionals
   if (!dir || !name) {
@@ -234,7 +252,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
   // its body/params can be type-checked (ADR 0014); RunResult itself stays redacted.
   let result: RunResult
   let reqCapture: ContractRequestCapture | undefined
-  if (values.openapi) {
+  if (values.openapi || values.graphql) {
     const driven = await runRequestForContract(collection, name, runOpts)
     result = driven.result
     reqCapture = driven.capture
@@ -272,19 +290,31 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
         bodyPresenceAuthoritative: true,
         paramsAuthoritative: true,
       })
-      // Findings can echo a captured body/param value (incl. a resolved secret), so
-      // redact message AND path through a redactor that learned the run's secrets.
-      const redactor = new Redactor()
-      for (const s of reqCapture.registeredSecrets) redactor.register(s.name, s.value)
-      requestContract = {
-        ...raw,
-        findings: raw.findings.map((f) => ({
-          ...f,
-          message: redactor.redact(f.message),
-          ...(f.path !== undefined ? { path: redactor.redact(f.path) } : {}),
-        })),
-      }
+      requestContract = redactContract(raw, reqCapture.registeredSecrets)
     }
+  }
+
+  // --graphql validates a GraphQL run's query + variables (+ response errors) against the
+  // supplied SDL — the symmetric parallel to --openapi (ADR 0015). The CLI holds the real
+  // request, so variables are authoritative.
+  let graphqlContract: ContractResult | undefined
+  if (values.graphql && reqCapture && isGraphqlEnvelope(reqCapture.request.body)) {
+    const sdl = readFileSync(values.graphql, 'utf8')
+    const env = reqCapture.request.body as {
+      query: string
+      operationName?: string
+      variables?: unknown
+    }
+    const raw = validateGraphqlOperation(sdl, env.query, {
+      operationName: env.operationName,
+      ...(result.sent && result.response
+        ? { json: parseStoredBody(artifacts, result.response.bodyHandle) }
+        : {}),
+      ...(env.variables !== undefined
+        ? { variables: env.variables, variablesAuthoritative: true }
+        : {}),
+    })
+    graphqlContract = redactContract(raw, reqCapture.registeredSecrets)
   }
 
   // Return code: 0 only if SENT and every assertion passed and (if validated) both the
@@ -295,11 +325,12 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     result.sent &&
     assertionsOk &&
     (contract ? contract.valid : true) &&
-    (requestContract ? requestContract.valid : true)
+    (requestContract ? requestContract.valid : true) &&
+    (graphqlContract ? graphqlContract.valid : true)
 
   if (values.json) {
     io.out(
-      `${JSON.stringify({ ...result, ...(contract ? { contract } : {}), ...(requestContract ? { requestContract } : {}) }, null, 2)}\n`,
+      `${JSON.stringify({ ...result, ...(contract ? { contract } : {}), ...(requestContract ? { requestContract } : {}), ...(graphqlContract ? { graphqlContract } : {}) }, null, 2)}\n`,
     )
     return ok ? 0 : 1
   }
@@ -323,6 +354,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
   }
   if (requestContract) printContract(io, requestContract, 'request contract')
   if (contract) printContract(io, contract, 'response contract')
+  if (graphqlContract) printContract(io, graphqlContract, 'graphql contract')
   return ok ? 0 : 1
 }
 
@@ -401,6 +433,7 @@ function cmdValidate(args: string[], io: CliIO): number {
       graphql: { type: 'string' },
       query: { type: 'string' },
       operation: { type: 'string' },
+      variables: { type: 'string' },
       json: { type: 'boolean' },
     },
   })
@@ -410,7 +443,20 @@ function cmdValidate(args: string[], io: CliIO): number {
   }
   const sdl = readFileSync(values.graphql, 'utf8')
   const query = readFileSync(values.query, 'utf8')
-  const contract = validateGraphqlOperation(sdl, query, { operationName: values.operation })
+  // --variables accepts inline JSON or a file path. The human supplies the real request,
+  // so variables are authoritative (an absent required variable is a finding, not skipped).
+  let variables: unknown
+  if (values.variables !== undefined) {
+    try {
+      variables = JSON.parse(values.variables)
+    } catch {
+      variables = JSON.parse(readFileSync(values.variables, 'utf8'))
+    }
+  }
+  const contract = validateGraphqlOperation(sdl, query, {
+    operationName: values.operation,
+    ...(variables !== undefined ? { variables, variablesAuthoritative: true } : {}),
+  })
 
   if (values.json) {
     io.out(`${JSON.stringify(contract, null, 2)}\n`)

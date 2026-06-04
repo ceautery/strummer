@@ -280,18 +280,20 @@ export interface CaptureContract {
 
 /**
  * Extract the GraphQL operation from a captured request body. The GraphQL-over-
- * HTTP shape is a JSON object with a string `query` (and optional `operationName`).
- * Returns `undefined` for a non-GraphQL body.
+ * HTTP shape is a JSON object with a string `query` (and optional `operationName`
+ * and `variables`). Returns `undefined` for a non-GraphQL body.
  */
 function graphqlOperationOf(
   entry: CaptureEntry,
-): { query: string; operationName?: string } | undefined {
+): { query: string; operationName?: string; variables?: unknown } | undefined {
   const b = entry.req.body
   if (b && typeof b === 'object' && typeof (b as { query?: unknown }).query === 'string') {
     const opName = (b as { operationName?: unknown }).operationName
+    const variables = (b as { variables?: unknown }).variables
     return {
       query: (b as { query: string }).query,
       ...(typeof opName === 'string' ? { operationName: opName } : {}),
+      ...(variables !== undefined ? { variables } : {}),
     }
   }
   return undefined
@@ -446,11 +448,22 @@ export function validateCapturedTraffic(
         )
         continue
       }
+      // The capture path is NOT authoritative about variable completeness (a HAR may
+      // have dropped `variables`), so `variablesAuthoritative` is omitted — an absent
+      // required variable surfaces as `unverified`, never a false finding (ADR 0015).
       const raw = validateGraphqlOperation(graphql.sdl, op.query, {
         json: entry.res.body,
         operationName: op.operationName,
+        ...(op.variables !== undefined ? { variables: op.variables } : {}),
       })
       pushResult(entry, raw, redact(graphql.endpointPath))
+      // A present-but-uncheckable variable set is `unverified` — fold into `noSignal`
+      // (out-of-band, NOT a finding) so it can never be laundered into a clean pass
+      // (absence-is-never-a-pass; mirrors the REST `request-unverified` fold).
+      if (raw.unverified) {
+        noSignal++
+        bump('graphql-variable-unverified')
+      }
       continue
     }
 

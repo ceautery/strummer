@@ -182,6 +182,7 @@ describe('harEntriesToFacts — slice 2 (attach/zip body resolution)', () => {
 function graphqlHar(opts: {
   query: string
   operationName?: string
+  variables?: unknown
   response: unknown
   endpoint?: string
   origin?: string
@@ -202,6 +203,7 @@ function graphqlHar(opts: {
               text: JSON.stringify({
                 query: opts.query,
                 ...(opts.operationName ? { operationName: opts.operationName } : {}),
+                ...(opts.variables !== undefined ? { variables: opts.variables } : {}),
               }),
             },
           },
@@ -253,6 +255,54 @@ describe('validateCapturedTraffic — GraphQL drift over a REAL capture (ADR 001
     expect(v.clean).toBe(false)
     expect(v.findingsByKind['graphql-validation']).toBeGreaterThanOrEqual(1)
     expect(v.firstFailing?.kind).toBe('graphql-validation')
+  })
+
+  it('folds a captured GraphQL variable that cannot be verified into noSignal (never a pass)', () => {
+    // A custom scalar the SDL cannot validate → unverified → noSignal → clean:false.
+    const sdl = `
+      scalar DateTime
+      type Query { events(at: DateTime!): Event }
+      type Event { id: ID! }
+    `
+    const har = graphqlHar({
+      query: 'query E($at: DateTime!) { events(at: $at) { id } }',
+      variables: { at: { anything: true } },
+      response: { data: { events: { id: '1' } } },
+    })
+    const v = validateCapturedTraffic(har, { graphql: { endpointPath: '/graphql', sdl } })
+    expect(v.clean).toBe(false)
+    expect(v.noSignal).toBeGreaterThanOrEqual(1)
+    expect(v.findingsByKind['graphql-variable-unverified']).toBeGreaterThanOrEqual(1)
+  })
+
+  it('flags a captured GraphQL variable whose present value is the wrong type', () => {
+    const sdl = `
+      type Query { thing(id: Int!): Thing }
+      type Thing { id: Int! }
+    `
+    const har = graphqlHar({
+      query: 'query T($id: Int!) { thing(id: $id) { id } }',
+      variables: { id: 'not-an-int' },
+      response: { data: { thing: { id: 1 } } },
+    })
+    const v = validateCapturedTraffic(har, { graphql: { endpointPath: '/graphql', sdl } })
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['graphql-variable-invalid']).toBeGreaterThanOrEqual(1)
+  })
+
+  it('a captured GraphQL request with conformant variables stays clean', () => {
+    const sdl = `
+      type Query { thing(id: Int!): Thing }
+      type Thing { id: Int! }
+    `
+    const har = graphqlHar({
+      query: 'query T($id: Int!) { thing(id: $id) { id } }',
+      variables: { id: 7 },
+      response: { data: { thing: { id: 7 } } },
+    })
+    const v = validateCapturedTraffic(har, { graphql: { endpointPath: '/graphql', sdl } })
+    expect(v.clean).toBe(true)
+    expect(v.noSignal).toBe(0)
   })
 
   it('detects GraphQL by the {query} request shape even without endpointPath', () => {

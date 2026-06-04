@@ -91,4 +91,123 @@ describe('validateGraphqlOperation', () => {
       expect(validateGraphqlOperation(sdl, doc).valid).toBe(false)
     })
   })
+
+  describe('request-variable validation (ADR 0015)', () => {
+    const varSdl = `
+      scalar DateTime
+      type Query {
+        thing(id: Int!): Thing
+        search(q: String): Thing
+        events(at: DateTime!): Thing
+      }
+      type Thing { id: Int! }
+    `
+    const thingQ = 'query Q($id: Int!) { thing(id: $id) { id } }'
+
+    it('does NOT run variable validation when no `variables` opt is given (back-compat)', () => {
+      // A query with a required variable, validated WITHOUT variables: query-vs-SDL only.
+      const r = validateGraphqlOperation(varSdl, thingQ)
+      expect(r.valid).toBe(true)
+      expect(r.unverified).toBeUndefined()
+      expect(r.findings).toEqual([])
+    })
+
+    it('passes conformant variables', () => {
+      const r = validateGraphqlOperation(varSdl, thingQ, { variables: { id: 5 } })
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBeUndefined()
+    })
+
+    it('flags a missing required variable only when AUTHORITATIVE', () => {
+      const auth = validateGraphqlOperation(varSdl, thingQ, {
+        variables: {},
+        variablesAuthoritative: true,
+      })
+      expect(auth.valid).toBe(false)
+      expect(auth.findings.map((f) => f.kind)).toContain('graphql-variable-missing')
+      expect(JSON.stringify(auth.findings)).toContain('$id')
+    })
+
+    it('a missing required variable is UNVERIFIED (not a finding) when non-authoritative', () => {
+      const r = validateGraphqlOperation(varSdl, thingQ, { variables: {} })
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBe(true)
+    })
+
+    it('a non-null variable WITH a default that is omitted is NOT missing (default-aware)', () => {
+      const q = 'query Q($id: Int! = 7) { thing(id: $id) { id } }'
+      const r = validateGraphqlOperation(varSdl, q, { variables: {}, variablesAuthoritative: true })
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBeUndefined()
+    })
+
+    it('flags a present variable whose value is the wrong type (authority irrelevant)', () => {
+      const r = validateGraphqlOperation(varSdl, thingQ, { variables: { id: 'hello' } })
+      expect(r.valid).toBe(false)
+      const f = r.findings.find((x) => x.kind === 'graphql-variable-invalid')
+      expect(f).toBeDefined()
+      // Reconstructed from name + declared type — NEVER the offending value.
+      expect(f?.message).toContain('$id')
+      expect(f?.message).toContain('Int!')
+      expect(JSON.stringify(r.findings)).not.toContain('hello')
+    })
+
+    it('flags an explicit null against a non-null type (distinct from a type mismatch)', () => {
+      const r = validateGraphqlOperation(varSdl, thingQ, { variables: { id: null } })
+      expect(r.valid).toBe(false)
+      const f = r.findings.find((x) => x.kind === 'graphql-variable-invalid')
+      expect(f?.message.toLowerCase()).toContain('null')
+    })
+
+    it('NEVER echoes a secret-bearing variable value into a finding', () => {
+      const secret = 'super-secret-token-xyz'
+      const r = validateGraphqlOperation(varSdl, thingQ, { variables: { id: secret } })
+      expect(r.valid).toBe(false)
+      expect(JSON.stringify(r.findings)).not.toContain(secret)
+    })
+
+    it('treats a custom-scalar-typed variable as UNVERIFIED (cannot validate via SDL), never a pass', () => {
+      const q = 'query Q($at: DateTime!) { events(at: $at) { id } }'
+      // A garbage value the SDL identity-scalar would happily green-light.
+      const r = validateGraphqlOperation(varSdl, q, { variables: { at: { garbage: true } } })
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBe(true)
+    })
+
+    it('warns on an undocumented variable the operation does not declare', () => {
+      const r = validateGraphqlOperation(varSdl, thingQ, { variables: { id: 1, bogus: 2 } })
+      expect(r.valid).toBe(true) // a warning never fails
+      const f = r.findings.find((x) => x.kind === 'graphql-undocumented-variable')
+      expect(f?.severity).toBe('warning')
+      expect(f?.message).toContain('bogus')
+    })
+
+    it('UNVERIFIED for a multi-operation document with no operationName (ambiguous target)', () => {
+      const doc = `query A($id: Int!) { thing(id: $id) { id } }
+        query B($q: String) { search(q: $q) { id } }`
+      const r = validateGraphqlOperation(varSdl, doc, { variables: { id: 1 } })
+      expect(r.unverified).toBe(true)
+      // No spurious missing/invalid findings attributed to the wrong operation.
+      expect(r.findings.filter((f) => f.kind.startsWith('graphql-variable'))).toEqual([])
+    })
+
+    it('validates the named operation’s variables in a multi-operation document', () => {
+      const doc = `query A($id: Int!) { thing(id: $id) { id } }
+        query B($q: String) { search(q: $q) { id } }`
+      const r = validateGraphqlOperation(varSdl, doc, {
+        variables: { id: 1 },
+        operationName: 'A',
+      })
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+    })
+
+    it('UNVERIFIED when `variables` is present but not a JSON object (array)', () => {
+      const r = validateGraphqlOperation(varSdl, thingQ, { variables: [1, 2] })
+      expect(r.unverified).toBe(true)
+      expect(r.findings.filter((f) => f.kind.startsWith('graphql-variable'))).toEqual([])
+    })
+  })
 })
