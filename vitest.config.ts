@@ -26,6 +26,7 @@ export default defineConfig({
       '@strummer/verdict': fileURLToPath(
         new URL('./packages/verdict/src/index.ts', import.meta.url),
       ),
+      '@strummer/verify': fileURLToPath(new URL('./packages/verify/src/index.ts', import.meta.url)),
     },
   },
   test: {

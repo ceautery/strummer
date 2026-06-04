@@ -268,6 +268,9 @@ importers:
       '@strummer/verdict':
         specifier: workspace:*
         version: link:../verdict
+      '@strummer/verify':
+        specifier: workspace:*
+        version: link:../verify
       playwright-core:
         specifier: 1.60.0
         version: 1.60.0
