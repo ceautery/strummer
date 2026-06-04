@@ -5,6 +5,7 @@ export {
   type DependencyAudit,
   type FreshnessVerdict,
 } from './audit.js'
+export { changedDependencies } from './changed.js'
 export {
   type ChangelogEntry,
   type ChangelogSlice,

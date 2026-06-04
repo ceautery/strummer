@@ -958,8 +958,13 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         pillars and its source-scanned "imports zero spawn-capable code" invariant forbids a runtime
         import from the engine-listed coverage (re-exports `runScoped`→`child_process`); a pure shared
         package keeps that invariant provable. Mirrors the safety/assert/artifacts extractions.
-  - [ ] **Slice 2 — `changedDependencies(diff, ecosystem)` in `@strummer/deps`** (pure; npm
+  - [x] **Slice 2 — `changedDependencies(diff, ecosystem)` in `@strummer/deps`** (pure; npm
         `package.json` dependency-name diff first; PyPI/Gem lockfiles staged) over `@strummer/diff`.
+        Block-aware: tracks the open `dependencies`/`devDependencies`/`peerDependencies`/
+        `optionalDependencies` block so a changed `version`/`engines.node`/`packageManager`/`scripts`
+        value (which also *looks* like a version) is never mistaken for a dependency. Under-scopes
+        (never invents a dep) when a deep dependency's block header is outside the diff context —
+        documented; the caller falls back to a whole-project audit.
   - [ ] **Slice 3 — `verify_change` scopes each pillar from one diff** (coverage `changedFiles`→related,
         mutate `mutateFiles`, flake `files`, deps `changedDependencies`); flake's `files` already on its
         own MCP tool.

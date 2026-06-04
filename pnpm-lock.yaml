@@ -198,6 +198,9 @@ importers:
       '@renovatebot/ruby-semver':
         specifier: 5.0.0
         version: 5.0.0
+      '@strummer/diff':
+        specifier: workspace:*
+        version: link:../diff
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
