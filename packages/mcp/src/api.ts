@@ -287,17 +287,28 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
     server.registerTool(
       'validate_capture',
       {
-        title: 'Validate a captured run against an OpenAPI contract',
+        title: 'Validate a captured run against an OpenAPI or GraphQL contract',
         description:
           'Validate the traffic in a stored browser/API HAR (by handle) against an OpenAPI 3.1 ' +
-          'spec — no request is re-run. Reports drift (undocumented operations/statuses, schema ' +
-          'violations) and which documented operations the run exercised. Requires the operator ' +
-          'capture gate; finding messages are redacted; raw headers/cookies never enter the result.',
+          'spec and/or a GraphQL SDL — no request is re-run. REST entries report drift ' +
+          '(undocumented operations/statuses, schema violations) + which documented operations ' +
+          'the run exercised; GraphQL entries (at the given endpoint) report query-vs-schema drift ' +
+          'and response errors. Supply openapiSpec, graphqlSchema (+ graphqlEndpoint), or both. ' +
+          'Requires the operator capture gate; finding messages are redacted; raw headers/cookies ' +
+          'never enter the result.',
         inputSchema: {
           harHandle: z
             .string()
             .describe('handle of a stored HAR, e.g. strummer://browser/run/<id>/har'),
-          openapiSpec: z.unknown().describe('a parsed OpenAPI 3.1 document'),
+          openapiSpec: z.unknown().optional().describe('a parsed OpenAPI 3.1 document'),
+          graphqlSchema: z
+            .string()
+            .optional()
+            .describe('GraphQL schema (SDL) to validate captured operations against'),
+          graphqlEndpoint: z
+            .string()
+            .optional()
+            .describe('request pathname that serves GraphQL (default /graphql)'),
           allowedOrigins: z
             .array(z.string())
             .optional()
@@ -311,13 +322,30 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
               'resolve an operator-gated HAR (its redaction is known-incomplete).',
           )
         }
+        if (args.openapiSpec === undefined && args.graphqlSchema === undefined) {
+          throw new Error(
+            'Supply at least one contract: `openapiSpec` (REST) and/or `graphqlSchema` (+ optional `graphqlEndpoint`).',
+          )
+        }
         const bytes = resolveHar(args.harHandle)
         if (!bytes) throw new Error(`no stored HAR for ${args.harHandle}`)
-        const verdict = validateCapturedTraffic(
-          bytes,
-          args.openapiSpec as Parameters<typeof validateCapturedTraffic>[1],
-          { redact, allowedOrigins: args.allowedOrigins },
-        )
+        const contract: import('@strummer/api').CaptureContract = {
+          ...(args.openapiSpec !== undefined
+            ? { openapi: args.openapiSpec as import('@strummer/api').CaptureContract['openapi'] }
+            : {}),
+          ...(args.graphqlSchema !== undefined
+            ? {
+                graphql: {
+                  endpointPath: args.graphqlEndpoint ?? '/graphql',
+                  sdl: args.graphqlSchema,
+                },
+              }
+            : {}),
+        }
+        const verdict = validateCapturedTraffic(bytes, contract, {
+          redact,
+          allowedOrigins: args.allowedOrigins,
+        })
         // Compact inline; full per-entry detail (redacted) by handle when a store is wired.
         const compact = {
           clean: verdict.clean,
@@ -327,6 +355,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
           exercisedOperations: verdict.exercisedOperations,
           unexercisedOperations: verdict.unexercisedOperations,
           unresolvedBodies: verdict.unresolvedBodies,
+          noSignal: verdict.noSignal,
         }
         let detailHandle: string | undefined
         if (opts.storeVerifyDetail) {

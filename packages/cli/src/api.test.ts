@@ -406,9 +406,44 @@ describe('cli api validate-capture', () => {
     expect(c.out()).toContain('response-schema')
   })
 
-  it('needs both a HAR path and --openapi', async () => {
+  it('needs a HAR path and at least one contract', async () => {
     const c = capture()
     expect(await run(['api', 'validate-capture'], c.io)).toBe(1)
     expect(c.err()).toContain('validate-capture')
+  })
+
+  it('validates captured GraphQL traffic against an SDL and exits 1 on drift', async () => {
+    const { strToU8, zipSync } = await import('fflate')
+    const har = {
+      log: {
+        entries: [
+          {
+            request: {
+              method: 'POST',
+              url: 'http://127.0.0.1:9/graphql',
+              postData: {
+                mimeType: 'application/json',
+                text: JSON.stringify({ query: '{ user { id missingField } }' }),
+              },
+            },
+            response: { status: 200, content: { mimeType: 'application/json', text: '{}' } },
+          },
+        ],
+      },
+    }
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-gqlcap-'))
+    const harPath = join(dir, 'gql.har.zip')
+    writeFileSync(harPath, Buffer.from(zipSync({ 'har.har': strToU8(JSON.stringify(har)) })))
+    const sdlPath = join(dir, 'schema.graphql')
+    writeFileSync(sdlPath, 'type Query { user: User } type User { id: ID! name: String }')
+
+    const c = capture()
+    const code = await run(
+      ['api', 'validate-capture', harPath, '--graphql', sdlPath, '--graphql-endpoint', '/graphql'],
+      c.io,
+    )
+    expect(code).toBe(1) // `missingField` is not on User — graphql drift
+    expect(c.out()).toContain('NOT CLEAN')
+    expect(c.out()).toContain('graphql-validation')
   })
 })

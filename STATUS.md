@@ -36,12 +36,27 @@ routed through the operator `Redactor`**; (slice 6) the gated MCP `validate_capt
 registered only when a HAR resolver is wired, refuses without `STRUMMER_VERIFY_ALLOW_CAPTURE`,
 detail by handle under the `verify` prefix) + the human `strummer api validate-capture <har.zip>
 --openapi <spec>` CLI. Verified vs a real captured HAR (schema drift + base-path + redaction).
-**Next: Phase 5 is done — no required work remains.** Open candidates are the explicitly-staged
-Phase-5 tails (ADR 0013 §5): GraphQL drift over captured traffic (discriminated SDL input);
-orchestration / run-driving `verify` ("compose, never widen" gate composition); `verify` driving a
-live capture to produce the HAR; request-body/param contract validation; extracting the shared
-`Severity` scale out of deps; the Python second half. Or a new phase (needs a design pass/ADR).
-See ROADMAP Phase 5 + ADR 0013 §5._
+**Phase-5 tail LANDED — GraphQL drift over captured traffic (1050 TS + 45 Py green):** the
+capture→contract bridge now validates GraphQL traffic, not just REST. `harEntriesToFacts` resolves
+the **request** body (`postData._file` attach → inline `text` → JSON-parse) into `req.body` — the
+GraphQL `query` lives in the request, not the response. `validateCapturedTraffic`'s 2nd arg is now
+the discriminated **`CaptureContract { openapi?, graphql?: {endpointPath, sdl} }`** (clean break;
+only the MCP + CLI callers + tests updated): a JSON entry matched by the contract's `endpointPath`
+OR the `{query}` request shape routes to the SHIPPED `validateGraphqlOperation` (query-vs-SDL drift +
+response-`errors[]`), and a GraphQL entry **never** falls through to the OpenAPI validator (no
+`missing-operation` flood). **Absence is still never a pass:** a detected GraphQL entry with NO SDL
+is no-signal `graphql-sdl-not-supplied`, a REST entry with no OpenAPI spec is no-signal
+`no-contract-for-entry`, and any `noSignal>0` blocks `clean` (new `verdict.noSignal` field). Surface:
+`validate_capture` MCP gained `graphqlSchema`+`graphqlEndpoint` (openapiSpec now optional; ≥1 required)
++ `strummer api validate-capture <har.zip> --graphql <schema> --graphql-endpoint <path>` CLI.
+**Honest limitation:** the GraphQL HARs in the tests are HAND-AUTHORED (Playwright `postData` shape is
+HAR-spec-stable; no real browser-capture run was done for a GraphQL endpoint — a real-capture fixture
+is a follow-up, like the LSP overwrite-input fixtures).
+**Next: Phase 5 is done — no required work remains.** Open candidates are the remaining explicitly-
+staged Phase-5 tails (ADR 0013 §5): orchestration / run-driving `verify` ("compose, never widen" gate
+composition); `verify` driving a live capture to produce the HAR; request-body/param contract
+validation; extracting the shared `Severity` scale out of deps; the Python second half. Or a new
+phase (needs a design pass/ADR). See ROADMAP Phase 5 + ADR 0013 §5._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now

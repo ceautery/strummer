@@ -873,11 +873,19 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
   - [x] **Slice 10 — `request_verdict` MCP + `strummer-verify-mcp` bin + `strummer verify` CLI**;
         **no baked-in `failAtOrAbove` default**; v1 bin reads ONLY `STRUMMER_ARTIFACTS_ROOT` +
         `STRUMMER_VERIFY_ALLOW_CAPTURE` (no per-pillar `ALLOW_RUN` env pre-read).
-- [ ] *(staged, not amputated — ADR 0013 §5)* GraphQL drift over captured traffic (discriminated
-      SDL input); orchestration / run-driving `verify` ("compose, never widen"); `verify` driving a
-      live capture to produce the HAR; request-body/param contract validation; extracting the shared
-      `Severity` scale out of deps; artifact GC/TTL/refcounting; the Python second half (pytest /
-      coverage.py / pyright capture); diff-scoping the non-coverage pillars.
+- [x] **GraphQL drift over captured traffic (ADR 0013 §5 tail).** `harEntriesToFacts` resolves the
+      **request** body (where the GraphQL `query` lives); `validateCapturedTraffic`'s 2nd arg is the
+      discriminated `CaptureContract { openapi?, graphql?: {endpointPath, sdl} }`; a JSON entry matched
+      by `endpointPath` or the `{query}` shape routes to the shipped `validateGraphqlOperation` (never
+      to the OpenAPI validator). Absence is never a pass: GraphQL-with-no-SDL ⇒ no-signal
+      `graphql-sdl-not-supplied`, REST-with-no-OpenAPI ⇒ `no-contract-for-entry`, any `noSignal>0`
+      blocks `clean`. Surface: `validate_capture` MCP `graphqlSchema`/`graphqlEndpoint` + CLI
+      `--graphql`/`--graphql-endpoint`. (GraphQL HARs in tests are hand-authored — a real-capture
+      fixture is a follow-up.)
+- [ ] *(staged, not amputated — ADR 0013 §5)* orchestration / run-driving `verify` ("compose, never
+      widen"); `verify` driving a live capture to produce the HAR; request-body/param contract
+      validation; extracting the shared `Severity` scale out of deps; artifact GC/TTL/refcounting; the
+      Python second half (pytest / coverage.py / pyright capture); diff-scoping the non-coverage pillars.
 
 ## Ongoing
 

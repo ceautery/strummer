@@ -8,9 +8,11 @@ export {
 } from './contract.js'
 export { type GraphqlValidateOptions, validateGraphqlOperation } from './graphql.js'
 export {
+  type CaptureContract,
   type CaptureContractVerdict,
   type CaptureEntry,
   type CaptureFilterOptions,
+  type GraphqlContract,
   harEntriesToFacts,
   type ValidateCaptureOptions,
   validateCapturedTraffic,

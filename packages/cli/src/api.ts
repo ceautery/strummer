@@ -370,10 +370,12 @@ function cmdValidate(args: string[], io: CliIO): number {
 }
 
 /**
- * `api validate-capture <har.zip> --openapi <spec.json>` — validate the traffic in
- * a captured HAR against an OpenAPI contract (ADR 0013, the capture→contract
- * bridge). The human is the operator, so the local HAR file is read directly (no
- * surface capture gate). Exits 1 when the capture is not clean.
+ * `api validate-capture <har.zip> --openapi <spec.json> | --graphql <schema.graphql>`
+ * — validate the traffic in a captured HAR against an OpenAPI and/or GraphQL
+ * contract (ADR 0013, the capture→contract bridge). The human is the operator, so
+ * the local HAR file is read directly (no surface capture gate). REST entries are
+ * checked against the OpenAPI spec; GraphQL entries (at `--graphql-endpoint`,
+ * default `/graphql`) are checked against the SDL. Exits 1 when not clean.
  */
 function cmdValidateCapture(args: string[], io: CliIO): number {
   const { values, positionals } = parseArgs({
@@ -381,18 +383,32 @@ function cmdValidateCapture(args: string[], io: CliIO): number {
     allowPositionals: true,
     options: {
       openapi: { type: 'string' },
+      graphql: { type: 'string' },
+      'graphql-endpoint': { type: 'string' },
       origin: { type: 'string', multiple: true },
       json: { type: 'boolean' },
     },
   })
   const [harPath] = positionals
-  if (!harPath || !values.openapi) {
-    io.err('api validate-capture needs <har.zip> --openapi <spec.json>\n')
+  if (!harPath || (!values.openapi && !values.graphql)) {
+    io.err(
+      'api validate-capture needs <har.zip> and --openapi <spec.json> and/or --graphql <schema.graphql>\n',
+    )
     return 1
   }
   const harZip = readFileSync(harPath)
-  const spec = JSON.parse(readFileSync(values.openapi, 'utf8'))
-  const verdict = validateCapturedTraffic(harZip, spec, {
+  const contract: import('@strummer/api').CaptureContract = {
+    ...(values.openapi ? { openapi: JSON.parse(readFileSync(values.openapi, 'utf8')) } : {}),
+    ...(values.graphql
+      ? {
+          graphql: {
+            endpointPath: values['graphql-endpoint'] ?? '/graphql',
+            sdl: readFileSync(values.graphql, 'utf8'),
+          },
+        }
+      : {}),
+  }
+  const verdict = validateCapturedTraffic(harZip, contract, {
     allowedOrigins: values.origin,
   })
 

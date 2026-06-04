@@ -13,6 +13,7 @@
  */
 import { strFromU8, unzipSync } from 'fflate'
 import { type ResponseFacts, validateOpenApiResponse } from './contract.js'
+import { validateGraphqlOperation } from './graphql.js'
 import type { ContractFinding, ContractResult } from './model.js'
 
 /** fflate is unbounded by default; cap the inflated HAR archive (ADR 0013 §3e). */
@@ -20,7 +21,17 @@ const MAX_HAR_INFLATED_BYTES = 64 * 1024 * 1024
 
 /** A captured HTTP exchange reduced to the facts the validator needs. */
 export interface CaptureEntry {
-  req: { method: string; path: string; origin: string }
+  req: {
+    method: string
+    path: string
+    origin: string
+    /**
+     * The parsed JSON request body, when the request carried a JSON `postData`
+     * (attach `_file` first, inline `text` fallback). Needed for GraphQL drift:
+     * the operation `query` lives in the request, not the response (ADR 0013 §5).
+     */
+    body?: unknown
+  }
   res: ResponseFacts
   /** Lower-cased response content-type (sans parameters), e.g. `application/json`. */
   mimeType: string
@@ -32,11 +43,18 @@ export interface CaptureEntry {
   unresolvedBody?: string
 }
 
+interface HarContent {
+  mimeType?: string
+  text?: string
+  _file?: string
+  encoding?: string
+}
+
 interface HarEntry {
-  request?: { method?: string; url?: string }
+  request?: { method?: string; url?: string; postData?: HarContent }
   response?: {
     status?: number
-    content?: { mimeType?: string; text?: string; _file?: string; encoding?: string }
+    content?: HarContent
   }
 }
 
@@ -82,6 +100,29 @@ export function harEntriesToFacts(harZip: Buffer): CaptureEntry[] {
     const content = e.response?.content
     const mimeType = mimeOf(content)
 
+    // Resolve the JSON request body (GraphQL's operation lives here). Attach
+    // (`_file`) first, inline `text` fallback; parse only a JSON content-type.
+    // A non-resolving/non-JSON request body just leaves `req.body` undefined —
+    // the GraphQL router treats a missing query as a hard finding itself.
+    const reqContent = e.request?.postData
+    let reqBody: unknown
+    if (reqContent && mimeOf(reqContent).includes('json')) {
+      let rawReq: string | undefined
+      if (reqContent._file) {
+        const bytes = zip[reqContent._file]
+        if (bytes) rawReq = strFromU8(bytes)
+      } else if (typeof reqContent.text === 'string') {
+        rawReq = reqContent.text
+      }
+      if (rawReq !== undefined && rawReq.length > 0) {
+        try {
+          reqBody = JSON.parse(rawReq)
+        } catch {
+          // unparseable request body: leave undefined (no GraphQL query extractable)
+        }
+      }
+    }
+
     let body: unknown
     let unresolvedBody: string | undefined
     const isJson = mimeType.includes('json')
@@ -111,7 +152,7 @@ export function harEntriesToFacts(harZip: Buffer): CaptureEntry[] {
     }
 
     out.push({
-      req: { method, path, origin },
+      req: { method, path, origin, ...(reqBody !== undefined ? { body: reqBody } : {}) },
       res: { status, body },
       mimeType,
       ...(unresolvedBody ? { unresolvedBody } : {}),
@@ -173,6 +214,45 @@ interface OpenApiSpec {
   [key: string]: unknown
 }
 
+/** The GraphQL half of a capture contract (ADR 0013 §5 discriminated input). */
+export interface GraphqlContract {
+  /** The full request pathname that serves GraphQL, e.g. `/graphql`. */
+  endpointPath: string
+  /** The schema SDL captured operations are validated against (drift detection). */
+  sdl: string
+}
+
+/**
+ * The discriminated contract a captured run is validated against. Supply
+ * `openapi` (REST), `graphql` (GraphQL), or both. A captured entry is routed to
+ * exactly one validator; a GraphQL entry never falls through to the OpenAPI
+ * validator (which would flood `missing-operation`), and an entry with no
+ * matching contract half is **no-signal**, never a pass (ADR 0013 §1/§5).
+ */
+export interface CaptureContract {
+  openapi?: OpenApiSpec
+  graphql?: GraphqlContract
+}
+
+/**
+ * Extract the GraphQL operation from a captured request body. The GraphQL-over-
+ * HTTP shape is a JSON object with a string `query` (and optional `operationName`).
+ * Returns `undefined` for a non-GraphQL body.
+ */
+function graphqlOperationOf(
+  entry: CaptureEntry,
+): { query: string; operationName?: string } | undefined {
+  const b = entry.req.body
+  if (b && typeof b === 'object' && typeof (b as { query?: unknown }).query === 'string') {
+    const opName = (b as { operationName?: unknown }).operationName
+    return {
+      query: (b as { query: string }).query,
+      ...(typeof opName === 'string' ? { operationName: opName } : {}),
+    }
+  }
+  return undefined
+}
+
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'patch', 'options', 'head', 'trace']
 
 /** Every documented operation as `METHOD /template` — the universe for the drift walk. */
@@ -204,8 +284,15 @@ export interface CaptureContractVerdict {
   /** Entries whose attached body could not be resolved/parsed (never a pass). */
   unresolvedBodies: number
   /**
-   * `true` only when at least one entry was validated, every result is valid, and
-   * no body was unresolved. Absence is never a pass (ADR 0013 §1).
+   * Entries we could NOT verify because no matching contract half was supplied —
+   * a GraphQL call with no SDL (`graphql-sdl-not-supplied`), or a REST call with
+   * no OpenAPI spec (`no-contract-for-entry`). Counted, never a pass (ADR 0013 §1).
+   */
+  noSignal: number
+  /**
+   * `true` only when at least one entry was validated, every result is valid, no
+   * body was unresolved, AND no entry was no-signal. Absence is never a pass
+   * (ADR 0013 §1) — an unverifiable GraphQL/REST call can't make a run clean.
    */
   clean: boolean
 }
@@ -218,18 +305,23 @@ export interface ValidateCaptureOptions extends CaptureFilterOptions {
 }
 
 /**
- * Slice 5 — drive captured entries through the shipped `validateOpenApiResponse`
- * and compute the exercised/unexercised-operations drift walk. Every finding
- * message is routed through the operator `Redactor`; reference paths in our own
- * summary use the matched operation template, never the raw captured path.
+ * Slice 5 (+ ADR 0013 §5 GraphQL) — drive each captured JSON entry through the
+ * matching shipped validator. A GraphQL entry (matched by the contract's
+ * `endpointPath` or the JSON `{query}` shape) goes to `validateGraphqlOperation`
+ * and NEVER to the OpenAPI validator; a REST entry goes to
+ * `validateOpenApiResponse` and feeds the exercised/unexercised drift walk. An
+ * entry with no matching contract half is no-signal (never a pass). Every finding
+ * message is routed through the operator `Redactor`; our own summary paths use the
+ * matched operation template / operator-supplied endpoint, never a raw captured path.
  */
 export function validateCapturedTraffic(
   harZip: Buffer,
-  spec: OpenApiSpec,
+  contract: CaptureContract,
   opts: ValidateCaptureOptions = {},
 ): CaptureContractVerdict {
   const redact = opts.redact ?? ((v: string) => v)
-  const bases = serverBasePaths(spec)
+  const { openapi: spec, graphql } = contract
+  const bases = spec ? serverBasePaths(spec) : []
   const entries = harEntriesToFacts(harZip).filter((e) => isApiEntry(e, opts))
 
   const results: ContractResult[] = []
@@ -237,9 +329,30 @@ export function validateCapturedTraffic(
   const exercised = new Set<string>()
   let firstFailing: CaptureContractVerdict['firstFailing']
   let unresolvedBodies = 0
+  let noSignal = 0
 
   const bump = (kind: string) => {
     findingsByKind[kind] = (findingsByKind[kind] ?? 0) + 1
+  }
+  const pushResult = (entry: CaptureEntry, raw: ContractResult, displayPath: string) => {
+    // Redact every finding message before it enters the verdict (ADR 0013 §3b).
+    const redactedFindings: ContractFinding[] = raw.findings.map((f) => ({
+      ...f,
+      message: redact(f.message),
+    }))
+    const result: ContractResult = { ...raw, findings: redactedFindings }
+    results.push(result)
+    for (const f of redactedFindings) bump(f.kind)
+    if (!result.valid && !firstFailing) {
+      const f = redactedFindings.find((x) => x.severity === 'error') ?? redactedFindings[0]
+      firstFailing = {
+        method: entry.req.method,
+        path: displayPath,
+        kind: f?.kind ?? 'unknown',
+        message: f?.message ?? '',
+      }
+    }
+    return result
   }
 
   for (const entry of entries) {
@@ -254,6 +367,52 @@ export function validateCapturedTraffic(
       }
       continue
     }
+
+    // GraphQL detection: the operator-supplied endpoint path, or the JSON
+    // `{query}` request shape. Either way it is a GraphQL call, not a REST one.
+    const op = graphqlOperationOf(entry)
+    const isGraphql = (graphql !== undefined && entry.req.path === graphql.endpointPath) || !!op
+    if (isGraphql) {
+      if (!graphql) {
+        // Detected GraphQL but no SDL supplied: no-signal, NEVER an OpenAPI
+        // fall-through (which would flood `missing-operation`). ADR 0013 §5.
+        noSignal++
+        bump('graphql-sdl-not-supplied')
+        continue
+      }
+      if (!op) {
+        // Matched the GraphQL endpoint but no `query` could be extracted from the
+        // request — a hard finding, never an empty pass.
+        pushResult(
+          entry,
+          {
+            valid: false,
+            findings: [
+              {
+                kind: 'graphql-no-query',
+                severity: 'error',
+                message: 'no GraphQL query found in the captured request body',
+              },
+            ],
+          },
+          redact(graphql.endpointPath),
+        )
+        continue
+      }
+      const raw = validateGraphqlOperation(graphql.sdl, op.query, {
+        json: entry.res.body,
+        operationName: op.operationName,
+      })
+      pushResult(entry, raw, redact(graphql.endpointPath))
+      continue
+    }
+
+    // REST: requires an OpenAPI contract. Without one, the call is unverifiable.
+    if (!spec) {
+      noSignal++
+      bump('no-contract-for-entry')
+      continue
+    }
     const reqPath = reconcileBasePath(entry.req.path, bases)
     const raw = validateOpenApiResponse(
       spec as Parameters<typeof validateOpenApiResponse>[0],
@@ -261,34 +420,19 @@ export function validateCapturedTraffic(
       entry.res,
       { baseDir: opts.baseDir },
     )
-    // Redact every finding message before it enters the verdict (ADR 0013 §3b).
-    const redactedFindings: ContractFinding[] = raw.findings.map((f) => ({
-      ...f,
-      message: redact(f.message),
-    }))
-    const result: ContractResult = { ...raw, findings: redactedFindings }
-    results.push(result)
+    // A matched operation template is operator-authored (safe); a raw captured
+    // path is not — redact it (§3b: never echo an unredacted captured path).
+    const result = pushResult(entry, raw, raw.operation?.path ?? redact(reqPath))
     if (result.operation)
       exercised.add(`${result.operation.method.toUpperCase()} ${result.operation.path}`)
-    for (const f of redactedFindings) bump(f.kind)
-    if (!result.valid && !firstFailing) {
-      const f = redactedFindings.find((x) => x.severity === 'error') ?? redactedFindings[0]
-      firstFailing = {
-        // A matched operation template is operator-authored (safe); a raw captured
-        // path is not — redact it (§3b: never echo an unredacted captured path).
-        method: entry.req.method,
-        path: result.operation?.path ?? redact(reqPath),
-        kind: f?.kind ?? 'unknown',
-        message: f?.message ?? '',
-      }
-    }
   }
 
-  const documented = documentedOperations(spec)
+  const documented = spec ? documentedOperations(spec) : []
   const exercisedOperations = [...exercised].sort()
   const unexercisedOperations = documented.filter((op) => !exercised.has(op)).sort()
 
-  const clean = entries.length > 0 && unresolvedBodies === 0 && results.every((r) => r.valid)
+  const clean =
+    entries.length > 0 && unresolvedBodies === 0 && noSignal === 0 && results.every((r) => r.valid)
 
   return {
     entriesValidated: entries.length,
@@ -298,6 +442,7 @@ export function validateCapturedTraffic(
     unexercisedOperations,
     results,
     unresolvedBodies,
+    noSignal,
     clean,
   }
 }

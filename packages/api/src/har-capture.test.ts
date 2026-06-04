@@ -103,24 +103,201 @@ describe('harEntriesToFacts — slice 2 (attach/zip body resolution)', () => {
     expect(facts[0]?.unresolvedBody).toBeDefined()
     expect(facts[0]?.res.body).toBeUndefined()
   })
+
+  it('resolves an inline request postData (text) into a parsed req.body', () => {
+    const har = {
+      log: {
+        entries: [
+          {
+            request: {
+              method: 'POST',
+              url: 'http://x/graphql',
+              postData: {
+                mimeType: 'application/json',
+                text: JSON.stringify({ query: '{ widget { id } }' }),
+              },
+            },
+            response: { status: 200, content: { mimeType: 'application/json', text: '{}' } },
+          },
+        ],
+      },
+    }
+    const zip = Buffer.from(zipSync({ 'har.har': strToU8(JSON.stringify(har)) }))
+    const facts = harEntriesToFacts(zip)
+    expect(facts[0]?.req.body).toEqual({ query: '{ widget { id } }' })
+  })
+
+  it('resolves an attached (_file) request postData into a parsed req.body', () => {
+    const reqFile = 'req0.json'
+    const har = {
+      log: {
+        entries: [
+          {
+            request: {
+              method: 'POST',
+              url: 'http://x/graphql',
+              postData: { mimeType: 'application/json', _file: reqFile },
+            },
+            response: { status: 200, content: { mimeType: 'application/json', text: '{}' } },
+          },
+        ],
+      },
+    }
+    const zip = Buffer.from(
+      zipSync({
+        'har.har': strToU8(JSON.stringify(har)),
+        [reqFile]: strToU8(JSON.stringify({ query: '{ widget { id } }', operationName: 'W' })),
+      }),
+    )
+    const facts = harEntriesToFacts(zip)
+    expect(facts[0]?.req.body).toEqual({ query: '{ widget { id } }', operationName: 'W' })
+  })
+})
+
+// A hand-authored GraphQL HAR (.zip) shaped like Playwright's content:'attach' output:
+// a POST to a GraphQL endpoint with an inline JSON request body ({query, operationName?})
+// and an attached JSON response body ({data} or {errors}). (No real-capture: the request
+// postData shape is HAR-spec-stable; see the commit message.)
+function graphqlHar(opts: {
+  query: string
+  operationName?: string
+  response: unknown
+  endpoint?: string
+  origin?: string
+}): Buffer {
+  const endpoint = opts.endpoint ?? '/graphql'
+  const origin = opts.origin ?? 'http://127.0.0.1:5099'
+  const resFile = 'gqlres0.json'
+  const har = {
+    log: {
+      creator: { name: 'Playwright', version: '1.60.0' },
+      entries: [
+        {
+          request: {
+            method: 'POST',
+            url: `${origin}${endpoint}`,
+            postData: {
+              mimeType: 'application/json',
+              text: JSON.stringify({
+                query: opts.query,
+                ...(opts.operationName ? { operationName: opts.operationName } : {}),
+              }),
+            },
+          },
+          response: {
+            status: 200,
+            content: { mimeType: 'application/json', _file: resFile },
+          },
+        },
+      ],
+    },
+  }
+  return Buffer.from(
+    zipSync({
+      'har.har': strToU8(JSON.stringify(har)),
+      [resFile]: strToU8(JSON.stringify(opts.response)),
+    }),
+  )
+}
+
+// A tiny schema: `widget(id)` → { id, name }. `color` does NOT exist (drift target).
+const SDL = `
+  type Query { widget(id: ID!): Widget }
+  type Widget { id: ID!, name: String }
+`
+const GQL = { endpointPath: '/graphql', sdl: SDL }
+
+describe('validateCapturedTraffic — GraphQL drift over capture (ADR 0013 §5)', () => {
+  it('validates a clean GraphQL operation against the SDL (clean=true)', () => {
+    const har = graphqlHar({
+      query: '{ widget(id: "1") { id name } }',
+      response: { data: { widget: { id: '1', name: 'alpha' } } },
+    })
+    const v = validateCapturedTraffic(har, { graphql: GQL })
+    expect(v.entriesValidated).toBe(1)
+    expect(v.clean).toBe(true)
+    expect(v.results.every((r) => r.valid)).toBe(true)
+  })
+
+  it('flags query-vs-schema drift (an unknown field) as graphql-validation', () => {
+    const har = graphqlHar({
+      query: '{ widget(id: "1") { id color } }',
+      response: { data: null },
+    })
+    const v = validateCapturedTraffic(har, { graphql: GQL })
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['graphql-validation']).toBeGreaterThanOrEqual(1)
+    expect(v.firstFailing?.kind).toBe('graphql-validation')
+  })
+
+  it('flags a response with a top-level errors[] as graphql-errors', () => {
+    const har = graphqlHar({
+      query: '{ widget(id: "1") { id name } }',
+      response: { errors: [{ message: 'boom' }] },
+    })
+    const v = validateCapturedTraffic(har, { graphql: GQL })
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['graphql-errors']).toBeGreaterThanOrEqual(1)
+  })
+
+  it('a detected GraphQL entry with NO graphql contract is no-signal, never an OpenAPI fall-through', () => {
+    const har = graphqlHar({
+      query: '{ widget(id: "1") { id name } }',
+      response: { data: { widget: { id: '1' } } },
+    })
+    // openapi-only contract: the graphql POST must NOT flood missing-operation.
+    const v = validateCapturedTraffic(har, { openapi: SPEC })
+    expect(v.findingsByKind['graphql-sdl-not-supplied']).toBe(1)
+    expect(v.findingsByKind['missing-operation']).toBeUndefined()
+    expect(v.clean).toBe(false)
+  })
+
+  it('passes operationName through to the validator (named operation that exists)', () => {
+    const har = graphqlHar({
+      query: 'query W { widget(id: "1") { id name } }',
+      operationName: 'W',
+      response: { data: { widget: { id: '1', name: 'a' } } },
+    })
+    const v = validateCapturedTraffic(har, { graphql: GQL })
+    expect(v.clean).toBe(true)
+  })
+
+  it('routes GraphQL finding messages through the operator Redactor', () => {
+    const redact = vi.fn((s: string) => s.replace(/color/gi, '‹redacted›'))
+    const har = graphqlHar({
+      query: '{ widget(id: "1") { id color } }',
+      response: { data: null },
+    })
+    const v = validateCapturedTraffic(har, { graphql: GQL }, { redact })
+    expect(redact).toHaveBeenCalled()
+    for (const r of v.results) for (const f of r.findings) expect(f.message).not.toContain('color')
+  })
+
+  it('validates REST via OpenAPI and GraphQL via SDL in one capture (no cross-contamination)', () => {
+    // The real REST HAR + a graphql entry, both contracts supplied: the graphql entry
+    // is NOT counted as a missing OpenAPI operation, and REST drift is still caught.
+    const v = validateCapturedTraffic(HAR, { openapi: SPEC })
+    expect(v.findingsByKind['graphql-sdl-not-supplied']).toBeUndefined()
+    expect(v.exercisedOperations).toContain('GET /widgets')
+  })
 })
 
 describe('validateCapturedTraffic — slices 3/4/5 (filter, base-path, drive + drift)', () => {
   it('validates only JSON API entries (html/css filtered out)', () => {
-    const v = validateCapturedTraffic(HAR, SPEC)
+    const v = validateCapturedTraffic(HAR, { openapi: SPEC })
     // Two JSON entries; html + css skipped.
     expect(v.entriesValidated).toBe(2)
   })
 
   it('reconciles the /api/v1 server base path so /api/v1/widgets matches /widgets', () => {
-    const v = validateCapturedTraffic(HAR, SPEC)
+    const v = validateCapturedTraffic(HAR, { openapi: SPEC })
     // /widgets is valid; no missing-operation for it.
     expect(v.exercisedOperations).toContain('GET /widgets')
     expect(v.exercisedOperations).toContain('GET /widgets/{id}')
   })
 
   it('surfaces a real response-schema drift on the violating body, and a first-failing headline', () => {
-    const v = validateCapturedTraffic(HAR, SPEC)
+    const v = validateCapturedTraffic(HAR, { openapi: SPEC })
     expect(v.clean).toBe(false)
     expect(v.findingsByKind['response-schema']).toBeGreaterThanOrEqual(1)
     expect(v.firstFailing?.path).toBe('/widgets/{id}')
@@ -128,13 +305,13 @@ describe('validateCapturedTraffic — slices 3/4/5 (filter, base-path, drive + d
   })
 
   it('computes the exercised/unexercised drift walk over spec.paths × methods', () => {
-    const v = validateCapturedTraffic(HAR, SPEC)
+    const v = validateCapturedTraffic(HAR, { openapi: SPEC })
     expect(v.unexercisedOperations).toEqual(['GET /unused'])
   })
 
   it('routes every finding message through the operator Redactor', () => {
     const redact = vi.fn((s: string) => s.replace(/widgets/gi, '‹redacted›'))
-    const v = validateCapturedTraffic(HAR, SPEC, { redact })
+    const v = validateCapturedTraffic(HAR, { openapi: SPEC }, { redact })
     expect(redact).toHaveBeenCalled()
     for (const r of v.results) {
       for (const f of r.findings) expect(f.message).not.toContain('widgets')
@@ -145,7 +322,7 @@ describe('validateCapturedTraffic — slices 3/4/5 (filter, base-path, drive + d
     const empty = Buffer.from(
       zipSync({ 'har.har': strToU8(JSON.stringify({ log: { entries: [] } })) }),
     )
-    const v = validateCapturedTraffic(empty, SPEC)
+    const v = validateCapturedTraffic(empty, { openapi: SPEC })
     expect(v.entriesValidated).toBe(0)
     expect(v.clean).toBe(false)
   })

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { strToU8, zipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type ApiToolsOptions, createApiServer } from './api.js'
 
@@ -326,5 +327,52 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
     expect(storedBody.length).toBeGreaterThan(0)
     expect(storedBody).not.toContain('widgets')
     expect(res.structuredContent).toHaveProperty('detailHandle')
+  })
+
+  // A minimal GraphQL HAR (.zip): a POST to /graphql with an inline JSON body.
+  const GQL_HAR = (() => {
+    const har = {
+      log: {
+        entries: [
+          {
+            request: {
+              method: 'POST',
+              url: 'http://127.0.0.1:9/graphql',
+              postData: {
+                mimeType: 'application/json',
+                text: JSON.stringify({ query: '{ widget { id color } }' }),
+              },
+            },
+            response: { status: 200, content: { mimeType: 'application/json', text: '{}' } },
+          },
+        ],
+      },
+    }
+    return Buffer.from(zipSync({ 'har.har': strToU8(JSON.stringify(har)) }))
+  })()
+  const GQL_SDL = 'type Query { widget: Widget } type Widget { id: ID! name: String }'
+
+  it('validates captured GraphQL traffic against a supplied SDL (drift caught)', async () => {
+    const c = await connect({ allowCapture: true, resolveHar: () => GQL_HAR })
+    const res = await c.callTool({
+      name: 'validate_capture',
+      arguments: {
+        harHandle: 'strummer://browser/run/x/har',
+        graphqlSchema: GQL_SDL,
+        graphqlEndpoint: '/graphql',
+      },
+    })
+    const sc = res.structuredContent as { clean: boolean; findingsByKind: Record<string, number> }
+    expect(sc.clean).toBe(false) // `color` is not on Widget — graphql drift
+    expect(sc.findingsByKind['graphql-validation']).toBeGreaterThanOrEqual(1)
+  })
+
+  it('requires at least one of openapiSpec / graphqlSchema', async () => {
+    const c = await connect({ allowCapture: true, resolveHar: () => GQL_HAR })
+    const res = await c.callTool({
+      name: 'validate_capture',
+      arguments: { harHandle: 'strummer://browser/run/x/har' },
+    })
+    expect(res.isError).toBe(true)
   })
 })

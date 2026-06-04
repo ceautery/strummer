@@ -115,6 +115,9 @@ export type ContractFindingKind =
   | 'graphql-syntax'
   | 'graphql-validation'
   | 'graphql-errors'
+  // A captured request matched the GraphQL endpoint but carried no extractable
+  // `query` — a hard finding (never an empty pass), used by the capture bridge.
+  | 'graphql-no-query'
 
 /** A single contract discrepancy between a response and its declared shape. */
 export interface ContractFinding {
