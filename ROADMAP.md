@@ -154,9 +154,17 @@ installed version Z" and get a precise, cited answer over MCP.
         `validate_request` (`form`/`formFileFields`) + CLI `api validate-request --form`/
         `--form-file`. Signature + result shape + finding kinds UNCHANGED (reuse
         `request-body-schema`). **The ADR 0016 tail list is now EMPTY.**
-  - [ ] *(staged)* HAR-CAPTURE form bodies (`harEntriesToFacts` resolving `postData.params[]` —
-        non-authoritative, redaction-incomplete, currently safely `unverified`) + per-property
-        `encoding` overrides (would reuse the param splitter seams).
+  - [x] **HAR-CAPTURE form bodies (ADR 0016 addendum 4 follow-up)** — `harEntriesToFacts`
+        resolves a `form`-style request `postData` into `RequestFacts.form`/`formFileFields`
+        (prefer structured `postData.params[]`; `fileName` ⇒ file part names-only; urlencoded
+        `text` fallback; raw multipart with no `params[]` stays `unverified` — no boundary
+        parse), and the REST branch drives `validateOpenApiRequest` NON-authoritatively (absent
+        required field ⇒ `unverified`→`noSignal`; present invalid value ⇒ a true finding,
+        redacted). No surface change (`validate_capture` auto-resolves it).
+  - [x] **per-property `encoding` ⇒ PERMANENTLY OUT** (not staged) — any `encoding` block
+        `unverified`-skips the body; honoring it re-introduces the full param style/explode
+        ambiguity matrix inside the body (mostly the irreducible embedded-delimiter class) for a
+        rare feature. **The ADR 0016 tail list is now genuinely EMPTY.**
 
 ## Phase 3 — Browser / UI testing pillar  *(FEATURE-COMPLETE — engine + safety + artifacts + MCP + CLI + multi-engine; live-view dropped per ADR 0008; only the explicitly-aspirational bucket remains; design = ADR 0006/0008/0009 + ARCHITECTURE §10)*
 

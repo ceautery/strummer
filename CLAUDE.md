@@ -132,9 +132,13 @@ vision and `ARCHITECTURE.md` for the technical design.
   per-property `encoding`/non-UTF-8 charset/typed-additionalProperties/non-scalar prop/
   fractional-multipleOf/scalar-with-repeats/single-occ-cardinality/ambiguous-empty/file-part.
   Reaches live `api run --openapi` (via `runRequestForContract`) + MCP `validate_request`
-  (`form`/`formFileFields`) + CLI `api validate-request --form`/`--form-file`; no new finding
-  kind, signature/result shape unchanged. STAGED: HAR-capture form bodies + per-property
-  `encoding` overrides — the ADR 0016 tail list is now EMPTY),
+  (`form`/`formFileFields`) + CLI `api validate-request --form`/`--form-file` AND the CAPTURE
+  bridge (`harEntriesToFacts` resolves a form `postData.params[]`/urlencoded-`text` into
+  `req.form`/`formFileFields`; the REST branch validates it NON-authoritatively — absent
+  required ⇒ `unverified`→`noSignal`, present invalid ⇒ a true redacted finding; no surface
+  change). Per-property `encoding` is PERMANENTLY OUT (`unverified`-skip — full param
+  style/explode ambiguity matrix inside the body). No new finding kind, signature/result shape
+  unchanged. The ADR 0016 tail list is now genuinely EMPTY),
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that

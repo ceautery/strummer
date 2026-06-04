@@ -636,3 +636,238 @@ describe('validateCapturedTraffic — slice 4b (request validation folded into t
     expect(f?.path ?? '').not.toContain('apikey') // fork-1: path is redacted too
   })
 })
+
+// ─── ADR 0016 addendum 4 follow-up — FORM bodies over the capture bridge ───
+const SPEC_FORM = {
+  openapi: '3.1.0',
+  paths: {
+    '/form': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                required: ['name', 'age'],
+                properties: {
+                  name: { type: 'string' },
+                  age: { type: 'integer' },
+                  tags: { type: 'array', items: { type: 'string' } },
+                },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        responses: { '201': { content: { 'application/json': { schema: { type: 'object' } } } } },
+      },
+    },
+    '/upload': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['title'],
+                properties: {
+                  title: { type: 'string' },
+                  avatar: { type: 'string', format: 'binary' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '201': { content: { 'application/json': { schema: { type: 'object' } } } } },
+      },
+    },
+    '/secret-form': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                required: ['apikey'],
+                properties: { apikey: { type: 'integer' } },
+              },
+            },
+          },
+        },
+        responses: { '201': { content: { 'application/json': { schema: { type: 'object' } } } } },
+      },
+    },
+  },
+}
+
+/** A HAR with a single form-body request entry + a JSON response (so it is routed). */
+function formHar(opts: {
+  url: string
+  contentType: string
+  params?: { name: string; value?: string; fileName?: string }[]
+  text?: string
+}): Buffer {
+  const postData: Record<string, unknown> = { mimeType: opts.contentType }
+  if (opts.params) postData.params = opts.params
+  if (opts.text !== undefined) postData.text = opts.text
+  const har = {
+    log: {
+      entries: [
+        {
+          request: {
+            method: 'POST',
+            url: opts.url,
+            headers: [{ name: 'Content-Type', value: opts.contentType }],
+            postData,
+          },
+          response: {
+            status: 201,
+            content: { mimeType: 'application/json', text: '{}' },
+          },
+        },
+      ],
+    },
+  }
+  return Buffer.from(zipSync({ 'har.har': strToU8(JSON.stringify(har)) }))
+}
+
+describe('harEntriesToFacts — form-body resolution (ADR 0016 add.4 capture path)', () => {
+  it('resolves form-urlencoded postData.params[] into req.form (repeated keys → array)', () => {
+    const [e] = harEntriesToFacts(
+      formHar({
+        url: 'https://api.test/form',
+        contentType: 'application/x-www-form-urlencoded',
+        params: [
+          { name: 'name', value: 'gizmo' },
+          { name: 'tags', value: 'a' },
+          { name: 'tags', value: 'b' },
+        ],
+      }),
+    )
+    expect(e?.req.form).toEqual({ name: 'gizmo', tags: ['a', 'b'] })
+    expect(e?.req.formFileFields).toBeUndefined()
+  })
+
+  it('falls back to parsing urlencoded postData.text when params[] is absent', () => {
+    const [e] = harEntriesToFacts(
+      formHar({
+        url: 'https://api.test/form',
+        contentType: 'application/x-www-form-urlencoded',
+        text: 'name=gizmo&tags=a&tags=b',
+      }),
+    )
+    expect(e?.req.form).toEqual({ name: 'gizmo', tags: ['a', 'b'] })
+  })
+
+  it('resolves multipart params: text parts → form, FILE parts (fileName) → formFileFields', () => {
+    const [e] = harEntriesToFacts(
+      formHar({
+        url: 'https://api.test/upload',
+        contentType: 'multipart/form-data; boundary=----x',
+        params: [
+          { name: 'title', value: 'hi' },
+          { name: 'avatar', fileName: 'a.png' },
+        ],
+      }),
+    )
+    expect(e?.req.form).toEqual({ title: 'hi' })
+    expect(e?.req.formFileFields).toEqual(['avatar'])
+  })
+
+  it('a multipart body with no params (raw _file/text only) leaves form unset (no unsound parse)', () => {
+    const [e] = harEntriesToFacts(
+      formHar({
+        url: 'https://api.test/upload',
+        contentType: 'multipart/form-data; boundary=----x',
+        text: '------x\r\nContent-Disposition: form-data; name="title"\r\n\r\nhi\r\n------x--',
+      }),
+    )
+    expect(e?.req.form).toBeUndefined()
+  })
+})
+
+describe('validateCapturedTraffic — form bodies (non-authoritative capture path)', () => {
+  it('a form-urlencoded field violating the schema ⇒ clean:false + request-body-schema', () => {
+    const v = validateCapturedTraffic(
+      formHar({
+        url: 'https://api.test/form',
+        contentType: 'application/x-www-form-urlencoded',
+        params: [
+          { name: 'name', value: 'gizmo' },
+          { name: 'age', value: 'abc' }, // not an integer — a TRUE finding (the wire sent it)
+        ],
+      }),
+      { openapi: SPEC_FORM },
+    )
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['request-body-schema']).toBeGreaterThanOrEqual(1)
+  })
+
+  it('a conformant form-urlencoded body keeps the capture clean', () => {
+    const v = validateCapturedTraffic(
+      formHar({
+        url: 'https://api.test/form',
+        contentType: 'application/x-www-form-urlencoded',
+        params: [
+          { name: 'name', value: 'gizmo' },
+          { name: 'age', value: '5' },
+          { name: 'tags', value: 'a' },
+          { name: 'tags', value: 'b' },
+        ],
+      }),
+      { openapi: SPEC_FORM },
+    )
+    expect(v.clean).toBe(true)
+    expect(v.findingsByKind['request-body-schema']).toBeUndefined()
+  })
+
+  it('an absent REQUIRED form field (non-authoritative) ⇒ noSignal, never a false finding', () => {
+    const v = validateCapturedTraffic(
+      formHar({
+        url: 'https://api.test/form',
+        contentType: 'application/x-www-form-urlencoded',
+        params: [{ name: 'name', value: 'gizmo' }], // `age` absent — capture isn't authoritative
+      }),
+      { openapi: SPEC_FORM },
+    )
+    expect(v.noSignal).toBeGreaterThanOrEqual(1)
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['request-unverified']).toBeGreaterThanOrEqual(1)
+    expect(v.findingsByKind['request-body-schema']).toBeUndefined()
+  })
+
+  it('a declared prop satisfied by a multipart FILE part ⇒ unverified (noSignal), never a pass', () => {
+    const v = validateCapturedTraffic(
+      formHar({
+        url: 'https://api.test/upload',
+        contentType: 'multipart/form-data; boundary=----x',
+        params: [
+          { name: 'title', value: 'hi' },
+          { name: 'avatar', fileName: 'a.png' }, // declared `avatar` is file-backed
+        ],
+      }),
+      { openapi: SPEC_FORM },
+    )
+    expect(v.noSignal).toBeGreaterThanOrEqual(1)
+    expect(v.clean).toBe(false)
+  })
+
+  it('redacts a secret form field value echoed in a coercion finding', () => {
+    const secret = 'sk-live-abc123'
+    const v = validateCapturedTraffic(
+      formHar({
+        url: 'https://api.test/secret-form',
+        contentType: 'application/x-www-form-urlencoded',
+        params: [{ name: 'apikey', value: secret }], // not an integer ⇒ finding echoing the value
+      }),
+      { openapi: SPEC_FORM },
+      { redact: (s) => s.split(secret).join('‹redacted›') },
+    )
+    const f = v.results.flatMap((r) => r.findings).find((x) => x.kind === 'request-body-schema')
+    expect(f).toBeDefined()
+    expect(f?.message).not.toContain(secret)
+  })
+})

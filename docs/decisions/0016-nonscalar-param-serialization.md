@@ -282,3 +282,30 @@ validator + the existing in-process live-run test).
 `postData.params[]` — non-authoritative, redaction-incomplete, currently safely `unverified`);
 per-property `encoding` handling (would reuse the param splitter seams). With this addendum
 the ADR 0016 tail list is EMPTY.
+
+### Follow-up — form bodies over the capture bridge + `encoding` permanently-out (2026-06-04)
+
+The two items addendum 4 staged are now resolved (human-ratified: ship the capture path, keep
+`encoding` permanently-out).
+
+**HAR-capture form bodies — DONE.** `harEntriesToFacts` now resolves a `form`-style request
+`postData` into the same `RequestFacts.form`/`formFileFields` channel: PREFER the structured
+`postData.params[]` (each `{name, value?, fileName?}`, already URL-decoded by the capturer; a
+`fileName` marks a FILE part → names-only), with an `urlencoded`-ONLY `postData.text` fallback
+(well-defined percent-decoding). A `multipart` body with no `params[]` (only raw `_file`/`text`)
+is NOT parsed — boundary parsing reintroduces the embedded-delimiter trap — so `req.form` stays
+unset and the validator `unverified`-skips it. The bridge's REST branch passes `form`/
+`formFileFields` into `validateOpenApiRequest` **non-authoritatively**: an absent required field
+is `unverified` (folded to `noSignal`, never a false `missing-*`), while a *present* invalid
+field value is a TRUE finding (the wire really sent it — authority-independent, like the param
+path), redacted through the same operator-`Redactor` chokepoint. No surface change
+(`validate_capture` MCP/CLI auto-resolve it); no new finding kind.
+
+**Per-property `encoding` — PERMANENTLY OUT (not staged).** Any `encoding` block on the matched
+media type continues to `unverified`-skip the whole body. Honoring per-property `style`/`explode`/
+`contentType` re-introduces the entire param style/explode ambiguity matrix *inside* the body
+(delimited arrays/objects, JSON-string-encoded properties) — most cells of which addendum 1–3
+already proved irreducible (the embedded-delimiter false-positive class), for a feature that is
+rare in real-world form bodies (the default `explode=true` repeated-keys path is already
+validated). Low value, high false-positive surface; the cardinal invariant wins. Moved from
+"staged" to "permanently out of scope". **The ADR 0016 tail list is now genuinely EMPTY.**

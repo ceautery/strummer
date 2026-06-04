@@ -5,7 +5,27 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-JSON request BODY schema validation LANDED (ADR 0016 addendum 4) — `application/x-www-form-urlencoded` + `multipart/form-data` (text parts) bodies are now validated against the declared object schema over a NEW authoritative `RequestFacts.form`/`formFileFields` channel (live `api run --openapi` + direct MCP `validate_request` + CLI `api validate-request --form`); gate green (1311 TS + 45 Py). This closes the LAST ADR 0016 tail — the contract pillar's request-side serialization matrix (params + body) is now COMPLETE. Before that: non-scalar param OBJECT reconstruction + multipleOf guard (slice 8), path label/matrix arrays (slice 7), delimited arrays (slice 6), non-scalar param v1 (slice 4/5), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (HAR-capture form bodies + per-property `encoding` overrides — the new ADR 0016 staged pair; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: the ADR 0016 STAGED PAIR resolved — HAR-CAPTURE form bodies now validated (the capture/verify path drives `validateOpenApiRequest` over `postData.params[]`-resolved form fields, non-authoritatively), and per-property `encoding` declared PERMANENTLY OUT; gate green (1320 TS + 45 Py). The ADR 0016 tail list is now genuinely EMPTY — the contract pillar's request-side serialization matrix (params + body) is COMPLETE across direct surfaces AND the capture bridge. Before that: non-JSON request BODY validation v1 (ADR 0016 addendum 4 — form-urlencoded + multipart text fields over live `api run --openapi` + direct MCP/CLI), non-scalar param OBJECT reconstruction + multipleOf guard (slice 8), path label/matrix arrays (slice 7), delimited arrays (slice 6), non-scalar param v1 (slice 4/5), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. Next: pivot to a new phase, or a remaining non-ADR-0016 tail (artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**ADR 0016 STAGED PAIR resolved (form bodies over the capture bridge + `encoding` permanently-out) —
+COMPLETE** (2026-06-04, all TDD red→green; gate green at 1320 TS + 45 Py; human ratified: ship the
+capture path, keep `encoding` permanently-out). **(A) HAR-capture form bodies — DONE:**
+`harEntriesToFacts` resolves a `form`-style request `postData` into the same
+`RequestFacts.form`/`formFileFields` channel — PREFER structured `postData.params[]` (each
+`{name,value?,fileName?}`, URL-decoded by the capturer; a `fileName` ⇒ FILE part, names-only), with an
+`urlencoded`-ONLY `postData.text` fallback (well-defined percent-decoding); a `multipart` body with no
+`params[]` (only raw `_file`/`text`) is NOT parsed (boundary parse = embedded-delimiter trap) so it
+stays `unverified`. The bridge REST branch drives `validateOpenApiRequest` NON-authoritatively: an
+absent required field ⇒ `unverified` → `noSignal` (never a false `missing-*`); a PRESENT invalid value ⇒
+a TRUE `request-body-schema` finding (authority-independent, like the param path), redacted through the
+existing operator-`Redactor` chokepoint. No surface change (`validate_capture` MCP/CLI auto-resolve it);
+no new finding kind. New seams `formBaseOf`/`formFieldsFromPostData`/`appendFormField`; `HarContent.params`
++ `CaptureEntry.req.form`/`formFileFields`. 11 tests. **(B) per-property `encoding` — PERMANENTLY OUT
+(not staged):** any `encoding` block `unverified`-skips the body (re-introduces the full param style/
+explode ambiguity matrix inside the body — mostly the irreducible embedded-delimiter class — for a rare
+feature). Invariants held: ambiguity ⇒ `unverified`-skip never a false finding, absence-never-a-pass
+(non-authoritative absent-required folds to `noSignal`), redaction-before-verdict (raw field value only,
+operator chokepoint), no real fetch in `pnpm gate` (inline `zipSync` HAR fixtures). **The ADR 0016 tail
+list is now genuinely EMPTY.**_
 _**NON-JSON request BODY schema validation (ADR 0016 addendum 4) — COMPLETE** (2026-06-04, all TDD
 red→green; gate green at 1311 TS + 45 Py; design = a 2-stream research fan-out — OpenAPI form/multipart
 serialization + the `encoding` object, and an adversarial false-positive-trap sweep; the human ratified

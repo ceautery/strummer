@@ -37,6 +37,14 @@ export interface CaptureEntry {
     query?: Record<string, string | string[]>
     /** Lower-cased request header names → value (last wins). Only set when present. */
     headers?: Record<string, string>
+    /** Decoded TEXT fields of a `form`-style request body (form-urlencoded /
+     * multipart text parts) from HAR `postData.params[]` (repeated keys → array;
+     * urlencoded `text` fallback). The authoritative-source rule still holds: the
+     * capture path drives the validator NON-authoritatively (ADR 0016 addendum 4). */
+    form?: Record<string, string | string[]>
+    /** NAMES of multipart FILE parts (a `postData.params` entry with `fileName`);
+     * bytes never enter the facts. */
+    formFileFields?: string[]
   }
   res: ResponseFacts
   /** Lower-cased response content-type (sans parameters), e.g. `application/json`. */
@@ -54,6 +62,9 @@ interface HarContent {
   text?: string
   _file?: string
   encoding?: string
+  /** Structured form fields (HAR `postData.params`): `{name, value?, fileName?}`. A
+   * `fileName` marks a FILE part (bytes never inlined). */
+  params?: { name?: string; value?: string; fileName?: string }[]
 }
 
 interface HarEntry {
@@ -99,6 +110,62 @@ function mimeOf(content: { mimeType?: string } | undefined): string {
   return (content?.mimeType ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
 }
 
+/** `'urlencoded'`/`'multipart'` for the two form media bases, else `undefined`. */
+function formBaseOf(mime: string): 'urlencoded' | 'multipart' | undefined {
+  if (mime === 'application/x-www-form-urlencoded') return 'urlencoded'
+  if (mime === 'multipart/form-data') return 'multipart'
+  return undefined
+}
+
+/** Append a field into a repeated-keys-→-array map (the form-field channel shape). */
+function appendFormField(
+  map: Record<string, string | string[]>,
+  name: string,
+  value: string,
+): void {
+  const cur = map[name]
+  if (cur === undefined) map[name] = value
+  else if (Array.isArray(cur)) cur.push(value)
+  else map[name] = [cur, value]
+}
+
+/**
+ * Resolve a `form`-style request `postData` into the structured field channel
+ * `validateFormBody` consumes (ADR 0016 addendum 4 capture path). PREFER the
+ * structured `params[]` (each `{name, value?, fileName?}`, already URL-decoded by
+ * the capturer; a `fileName` marks a FILE part → names-only). For `urlencoded`
+ * ONLY, fall back to parsing `postData.text` (well-defined percent-decoding). A
+ * `multipart` body with no `params[]` (only raw `_file`/`text`) is NOT parsed —
+ * boundary parsing reintroduces the embedded-delimiter trap — so `undefined` is
+ * returned and the validator `unverified`-skips. Returns `undefined` when nothing
+ * sound is extractable.
+ */
+function formFieldsFromPostData(
+  pd: HarContent,
+  base: 'urlencoded' | 'multipart',
+): { form: Record<string, string | string[]>; fileFields: string[] } | undefined {
+  const form: Record<string, string | string[]> = {}
+  const fileFields: string[] = []
+  if (Array.isArray(pd.params) && pd.params.length > 0) {
+    for (const p of pd.params) {
+      if (typeof p?.name !== 'string') continue
+      if (typeof p.fileName === 'string')
+        fileFields.push(p.name) // FILE part — name only
+      else appendFormField(form, p.name, String(p.value ?? ''))
+    }
+    return { form, fileFields }
+  }
+  if (base === 'urlencoded' && typeof pd.text === 'string') {
+    const sp = new URLSearchParams(pd.text)
+    for (const key of new Set(sp.keys())) {
+      const all = sp.getAll(key)
+      form[key] = all.length > 1 ? all : (all[0] ?? '')
+    }
+    return { form, fileFields }
+  }
+  return undefined
+}
+
 /**
  * Slice 2 — parse a HAR `.zip` and resolve each entry's body. The PRIMARY path
  * is `content:'attach'` (the only mode the browser pillar emits): a body lives
@@ -142,6 +209,18 @@ export function harEntriesToFacts(harZip: Buffer): CaptureEntry[] {
     // A non-resolving/non-JSON request body just leaves `req.body` undefined —
     // the GraphQL router treats a missing query as a hard finding itself.
     const reqContent = e.request?.postData
+    // Resolve a `form`-style request body into the structured field channel (ADR 0016
+    // addendum 4 capture path); the validator drives it non-authoritatively.
+    let reqForm: Record<string, string | string[]> | undefined
+    let reqFormFiles: string[] | undefined
+    const reqFormBase = reqContent ? formBaseOf(mimeOf(reqContent)) : undefined
+    if (reqContent && reqFormBase) {
+      const extracted = formFieldsFromPostData(reqContent, reqFormBase)
+      if (extracted) {
+        reqForm = extracted.form
+        if (extracted.fileFields.length > 0) reqFormFiles = extracted.fileFields
+      }
+    }
     let reqBody: unknown
     if (reqContent && mimeOf(reqContent).includes('json')) {
       let rawReq: string | undefined
@@ -196,6 +275,8 @@ export function harEntriesToFacts(harZip: Buffer): CaptureEntry[] {
         ...(reqBody !== undefined ? { body: reqBody } : {}),
         ...(query ? { query } : {}),
         ...(headers ? { headers } : {}),
+        ...(reqForm ? { form: reqForm } : {}),
+        ...(reqFormFiles ? { formFileFields: reqFormFiles } : {}),
       },
       res: { status, body },
       mimeType,
@@ -494,6 +575,8 @@ export function validateCapturedTraffic(
         body: entry.req.body,
         query: entry.req.query,
         headers: entry.req.headers,
+        form: entry.req.form,
+        formFileFields: entry.req.formFileFields,
       },
       { baseDir: opts.baseDir },
     )
