@@ -116,10 +116,15 @@ vision and `ARCHITECTURE.md` for the technical design.
   RFC 6570 `.`/`;name=` prefix per explode) + header `simple`, gated by `itemTypesSplittable`
   (non-string scalars: integer/number/boolean — but `number` excluded for label-EXPLODE since
   its `.` delimiter = a decimal, via `arraySplitUsesDot`); string/typeless/empty-segment/
-  malformed-prefix → `unverified`. Plus undocumented-param SUPPRESSION around object query
-  params (form/explode object ⇒ suppress whole pass; deepObject ⇒ exclude `name[...]` keys;
-  unresolved `$ref` ⇒ suppress); STAGED: object reconstruction; no new finding kind,
-  signature unchanged),
+  malformed-prefix → `unverified`. AND (add 3) OBJECT reconstruction via
+  `validateObjectParam` — query `deepObject` (`name[prop]` discrete keys, string props sound)
+  + `form/explode=false` (`name=k,v`, integer/boolean props + `additionalProperties:false`);
+  object-form `additionalProperties`/nested/repeated keys ⇒ `unverified`; `form/explode=true`
+  objects permanently out (shared namespace, undoc-SUPPRESSION only — explicit-explode 3-way
+  metadata branch). Plus a cross-cutting `hasFractionalMultipleOf` guard: a fractional
+  `multipleOf` (IEEE-754 FP trap) ⇒ `unverified` at scalar/array-item/object-prop coercion.
+  STAGED: non-JSON request BODY schemas (the only remaining ADR 0016 tail); no new finding
+  kind, signature unchanged),
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that

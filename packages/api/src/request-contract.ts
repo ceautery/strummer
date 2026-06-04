@@ -239,19 +239,42 @@ function itemTypesSplittable(itemTypes: string[], usesDotDelimiter: boolean): bo
   )
 }
 
+/** A FRACTIONAL `multipleOf` is the IEEE-754 false-positive trap: coercing a wire
+ * string to a JS float then ajv-checking e.g. `multipleOf: 0.1` reports a
+ * spec-conformant value like `0.3` as invalid (0.3/0.1 ≠ an integer in binary). We
+ * can't soundly assert conformance, so a scalar schema carrying one is `unverified`-
+ * skipped (an INTEGER `multipleOf` divides exactly and stays validated). */
+function hasFractionalMultipleOf(schema: Record<string, unknown>): boolean {
+  const m = schema.multipleOf
+  return typeof m === 'number' && !Number.isInteger(m)
+}
+
+/** Which query OBJECT serializations the validator reconstructs. deepObject
+ * (`name[prop]` discrete keys) and form/`explode=false` (`name=k,v,k,v` single string)
+ * are checkable; form/`explode=true` objects merge into the shared top-level namespace
+ * (irreducibly ambiguous — only their undoc-param SUPPRESSION is supported), and
+ * path/header/cookie objects are STAGED. */
+function objectSerializationSupported(param: ParamObject): boolean {
+  if (param.in !== 'query') return false
+  if (param.style === 'deepObject') return true
+  return (param.style === undefined || param.style === 'form') && param.explode === false
+}
+
 /**
  * Which (location, style, type) serializations the validator can soundly check.
  * SCALARS: the default per location (path/header `simple`, query `form`). ARRAYS: any
  * `arraySerializationSupported` location/style (query form/space/pipe-delimited, path
  * simple/label/matrix, header simple); explode + item-type soundness are resolved in the
  * handler. OBJECTS and every other style/location (deepObject/cookie/content-typed) are
- * STAGED → inconclusive-skip. `schema` is the NORMALIZED param schema (so the array/
- * scalar decision sees the 3.0 nullable shim). */
+ * OBJECTS: query deepObject + form/`explode=false` (`objectSerializationSupported`).
+ * Everything else (path/header/cookie objects, form/`explode=true` objects, content-
+ * typed) is STAGED → inconclusive-skip. `schema` is the NORMALIZED param schema (so the
+ * array/scalar decision sees the 3.0 nullable shim). */
 function styleSupported(param: ParamObject, schema: Record<string, unknown> | undefined): boolean {
   if (param.content) return false
   const nonScalar = schema ? nonScalarType(schema) : undefined
   if (nonScalar === 'array') return arraySerializationSupported(param)
-  if (nonScalar === 'object') return false // object reconstruction is STAGED
+  if (nonScalar === 'object') return objectSerializationSupported(param)
   switch (param.in) {
     case 'query':
       return param.style === undefined || param.style === 'form'
@@ -377,6 +400,8 @@ function validateArrayParam(
       ? scalarTypes(itemSchema as Record<string, unknown>)
       : undefined
   if (normSchema.prefixItems !== undefined || !itemTypes) return true
+  // A fractional `multipleOf` on the items is the IEEE-754 false-positive trap — skip.
+  if (hasFractionalMultipleOf(itemSchema as Record<string, unknown>)) return true
 
   const explodeTrue =
     param.in === 'query' &&
@@ -428,6 +453,145 @@ function validateArrayParam(
         severity: 'error',
         path: param.name as string,
         message: `${param.in} parameter '${param.name}' ${err.message}`,
+      })
+    }
+  }
+  return false
+}
+
+/** Escape a string for literal use inside a RegExp. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Validate a query OBJECT param against its declared schema. deepObject reconstructs
+ * from discrete `name[prop]` keys (so STRING props are sound — no split); form/
+ * `explode=false` splits the single `name=k,v,k,v` string (integer/boolean props ONLY —
+ * a string value's comma cascades, a number's float mis-coerces). Declared scalar props
+ * are coerced; undeclared keys pass through (ajv handles them per additionalProperties);
+ * the assembled object is ajv-validated. Returns whether the param was `unverified`.
+ *
+ * REFUSE (→ unverified, never a false finding) when reconstruction can't be sound: no
+ * flat scalar `properties`; an object-form `additionalProperties` (an undeclared key we
+ * leave uncoerced could false-fail a typed schema); any prop with a fractional
+ * `multipleOf` (float trap); a deepObject nested (`a[b]`) or repeated key; a form/
+ * explode=false object with any non-(integer|boolean) prop, `additionalProperties !==
+ * false`, or an odd/empty split.
+ */
+function validateObjectParam(
+  param: ParamObject,
+  normSchema: Record<string, unknown>,
+  req: RequestFacts,
+  opts: OpenApiRequestValidateOptions,
+  method: string,
+  template: string,
+  findings: ContractFinding[],
+): boolean {
+  const props = normSchema.properties
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return true
+  const propEntries = Object.entries(props as Record<string, unknown>)
+  if (propEntries.length === 0) return true
+  const propTypes = new Map<string, string[]>()
+  for (const [propName, sub] of propEntries) {
+    if (!sub || typeof sub !== 'object' || Array.isArray(sub)) return true
+    const s = sub as Record<string, unknown>
+    const t = scalarTypes(s)
+    if (!t || hasFractionalMultipleOf(s)) return true // non-scalar prop / float trap
+    propTypes.set(propName, t)
+  }
+  // Only literal true/false/absent additionalProperties can be reasoned about; an
+  // object-form (typed/empty) schema means an undeclared key we'd leave uncoerced could
+  // false-fail — refuse.
+  const ap = normSchema.additionalProperties
+  if (ap !== undefined && typeof ap !== 'boolean') return true
+
+  const name = param.name as string
+  const collected: Array<[string, string]> = []
+  let present = false
+
+  if (param.style === 'deepObject') {
+    const prefix = `${name}[`
+    const flat = new RegExp(`^${escapeRegExp(name)}\\[([^\\]]+)\\]$`)
+    for (const [key, val] of Object.entries(req.query ?? {})) {
+      if (!key.startsWith(prefix)) continue
+      present = true
+      const m = flat.exec(key)
+      if (!m || m[1] === undefined) return true // nested / malformed bracket key
+      if (Array.isArray(val)) return true // repeated deepObject key
+      collected.push([m[1], val])
+    }
+  } else {
+    // form/explode=false: under the single key `name`; sound only for integer/boolean
+    // props (string → comma cascade, number → float) with additionalProperties:false.
+    if (ap !== false) return true
+    for (const t of propTypes.values()) {
+      if (!t.filter((x) => x !== 'null').every((x) => x === 'integer' || x === 'boolean')) {
+        return true
+      }
+    }
+    const raw = req.query?.[name]
+    if (raw === undefined) {
+      present = false
+    } else if (Array.isArray(raw) || raw === '') {
+      return true // repeated / empty → ambiguous
+    } else {
+      present = true
+      const segs = raw.split(',')
+      if (segs.length % 2 !== 0 || segs.some((s) => s === '')) return true
+      for (let i = 0; i < segs.length; i += 2) {
+        collected.push([segs[i] as string, segs[i + 1] as string])
+      }
+    }
+  }
+
+  if (!present) {
+    if (param.required === true) {
+      if (opts.paramsAuthoritative) {
+        findings.push({
+          kind: 'missing-required-param',
+          severity: 'error',
+          path: name,
+          message: `required ${param.in} parameter '${name}' missing for ${method.toUpperCase()} ${template}`,
+        })
+      } else {
+        return true
+      }
+    }
+    return false
+  }
+
+  const obj: Record<string, unknown> = {}
+  let anyBad = false
+  for (const [prop, value] of collected) {
+    const types = propTypes.get(prop)
+    if (types) {
+      const c = coerceScalar(value, types)
+      if (!c.ok) {
+        anyBad = true
+        findings.push({
+          kind: 'param-schema',
+          severity: 'error',
+          path: `${name}[${prop}]`,
+          // Echo only the RAW captured value (redaction).
+          message: `${param.in} parameter '${name}[${prop}]' value '${value}' is not a valid ${types.filter((t) => t !== 'null').join('|')}`,
+        })
+      } else {
+        obj[prop] = c.value
+      }
+    } else {
+      obj[prop] = value // undeclared — ajv decides per additionalProperties
+    }
+  }
+  if (anyBad) return false
+  const { valid, errors } = validateSchema(normSchema, obj)
+  if (!valid) {
+    for (const err of errors) {
+      findings.push({
+        kind: 'param-schema',
+        severity: 'error',
+        path: name,
+        message: `${param.in} parameter '${name}' ${err.message}`,
       })
     }
   }
@@ -613,22 +777,34 @@ export function validateOpenApiRequest(
     // wire regardless of whether we validate the object).
     if (param.in === 'query') {
       if (nonScalar === 'object') {
+        // EXPLICIT explode test: query object explode DEFAULTS to true (shared namespace).
         if (param.style === 'deepObject') deepObjectPrefixes.push(`${param.name}[`)
-        else suppressUndoc = true // form/explode object → shared top-level namespace
+        else if ((param.style === undefined || param.style === 'form') && param.explode === false)
+          declaredQuery.add(param.name) // form/explode=false: serialized under one key
+        else suppressUndoc = true // form/explode=true → shared top-level namespace
       } else {
         declaredQuery.add(param.name) // scalar + array params (the array key == its name)
       }
     }
 
-    // Unsupported location / serialization / object / content-typed param → STAGED skip.
+    // Unsupported location / serialization / content-typed param → STAGED skip.
     if (!styleSupported(param, normSchema)) {
       unverified = true
       continue
     }
-    if (!normSchema || (!types && nonScalar !== 'array')) {
-      // No schema, or a typeless/object param → STAGED skip. (Arrays have no scalar
-      // `types` but are handled below.)
+    if (!normSchema || (!types && nonScalar === undefined)) {
+      // No schema, or a truly typeless param → STAGED skip. (Arrays/objects have no
+      // scalar `types` but are handled below.)
       unverified = true
+      continue
+    }
+
+    // Object param (query deepObject or form/explode=false) — its own presence logic
+    // (deepObject has no `name` key; form/explode=false is under the single `name`).
+    if (nonScalar === 'object' && normSchema) {
+      if (validateObjectParam(param, normSchema, req, opts, method, template, findings)) {
+        unverified = true
+      }
       continue
     }
 
@@ -659,6 +835,12 @@ export function validateOpenApiRequest(
     // Scalar path. A repeated/composite value for a SCALAR param can't be coerced —
     // fold to unverified (never fall through to coerce an absent `.value`).
     if (lk.state === 'multi' || lk.state === 'array-values' || !types) {
+      unverified = true
+      continue
+    }
+    // A fractional `multipleOf` is the IEEE-754 false-positive trap — can't soundly
+    // coerce-and-ajv this number; skip rather than risk flagging a conformant value.
+    if (hasFractionalMultipleOf(normSchema)) {
       unverified = true
       continue
     }

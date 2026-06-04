@@ -697,14 +697,14 @@ describe('validateOpenApiRequest — slice 5: object-param undocumented suppress
     expect(r.unverified).toBe(true)
   })
 
-  it('deepObject ⇒ unverified, and name[prop] bracket keys are NOT undocumented', () => {
+  it('deepObject validates (slice 8) AND its name[prop] bracket keys are NOT undocumented', () => {
     const r = validateOpenApiRequest(
       objspec,
       { method: 'GET', path: '/deep', query: { 'color[R]': '100' } },
       { paramsAuthoritative: true },
     )
-    expect(r.findings.map((f) => f.kind)).not.toContain('undocumented-param')
-    expect(r.unverified).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
   })
 
   it('deepObject + a plain extra key ⇒ the plain key IS flagged, bracket keys are not', () => {
@@ -715,7 +715,9 @@ describe('validateOpenApiRequest — slice 5: object-param undocumented suppress
     )
     const f = r.findings.find((x) => x.kind === 'undocumented-param')
     expect(f?.path).toBe('surprise')
-    expect(r.unverified).toBe(true)
+    // the deepObject itself validates clean (slice 8); only `surprise` is a finding.
+    expect(r.findings.filter((x) => x.kind !== 'undocumented-param')).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
   })
 
   it('REGRESSION: scalar param + an undeclared key still flags exactly the undeclared key', () => {
@@ -1135,5 +1137,393 @@ describe('validateOpenApiRequest — slice 7: path label + matrix array styles',
     )
     expect(r.valid).toBe(false)
     expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+})
+
+// --- slice 8: OBJECT reconstruction (ADR 0016 addendum 3). deepObject (discrete keys,
+// string props OK) + form/explode=false (integer/boolean props only). Plus a shared
+// fractional-multipleOf guard (the confirmed ajv IEEE-754 false positive) across scalar/
+// array/object number coercion. form/explode=TRUE objects stay permanently out (suppress).
+const objspec2 = {
+  openapi: '3.1.0',
+  paths: {
+    '/deep': {
+      get: {
+        parameters: [
+          {
+            name: 'color',
+            in: 'query',
+            style: 'deepObject',
+            schema: {
+              type: 'object',
+              properties: { R: { type: 'integer' }, G: { type: 'integer' } },
+            },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/deepstr': {
+      get: {
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            style: 'deepObject',
+            schema: { type: 'object', properties: { name: { type: 'string' } } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/deepclosed': {
+      get: {
+        parameters: [
+          {
+            name: 'color',
+            in: 'query',
+            style: 'deepObject',
+            schema: {
+              type: 'object',
+              properties: { R: { type: 'integer' } },
+              additionalProperties: false,
+            },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/deeptyped': {
+      get: {
+        parameters: [
+          {
+            name: 'color',
+            in: 'query',
+            style: 'deepObject',
+            schema: {
+              type: 'object',
+              properties: { R: { type: 'integer' } },
+              additionalProperties: { type: 'integer' },
+            },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/deepnull': {
+      get: {
+        parameters: [
+          {
+            name: 'c',
+            in: 'query',
+            style: 'deepObject',
+            schema: { type: 'object', properties: { R: { type: ['integer', 'null'] } } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/deepmo': {
+      get: {
+        parameters: [
+          {
+            name: 'c',
+            in: 'query',
+            style: 'deepObject',
+            schema: { type: 'object', properties: { ratio: { type: 'number', multipleOf: 0.1 } } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/deeparr': {
+      get: {
+        parameters: [
+          {
+            name: 'c',
+            in: 'query',
+            style: 'deepObject',
+            schema: {
+              type: 'object',
+              properties: { tags: { type: 'array', items: { type: 'string' } } },
+            },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/ffobj': {
+      get: {
+        parameters: [
+          {
+            name: 'pt',
+            in: 'query',
+            style: 'form',
+            explode: false,
+            schema: {
+              type: 'object',
+              properties: { R: { type: 'integer' }, G: { type: 'integer' } },
+              additionalProperties: false,
+            },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/ffobjstr': {
+      get: {
+        parameters: [
+          {
+            name: 'pt',
+            in: 'query',
+            style: 'form',
+            explode: false,
+            schema: {
+              type: 'object',
+              properties: { name: { type: 'string' } },
+              additionalProperties: false,
+            },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/ffobjopen': {
+      get: {
+        parameters: [
+          {
+            name: 'pt',
+            in: 'query',
+            style: 'form',
+            explode: false,
+            schema: { type: 'object', properties: { R: { type: 'integer' } } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/ffexplode': {
+      get: {
+        parameters: [
+          {
+            name: 'color',
+            in: 'query',
+            style: 'form',
+            explode: true,
+            schema: { type: 'object', properties: { R: { type: 'integer' } } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/scl': {
+      get: {
+        parameters: [{ name: 'ratio', in: 'query', schema: { type: 'number', multipleOf: 0.1 } }],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+  },
+}
+
+describe('validateOpenApiRequest — slice 8a: deepObject reconstruction', () => {
+  it('flat scalar props ⇒ coerce + validate', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deep', query: { 'color[R]': '100', 'color[G]': '200' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('bad prop value ⇒ param-schema echoing the raw value, path name[prop]', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deep', query: { 'color[R]': '1', 'color[G]': 'x' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    const f = r.findings.find((x) => x.kind === 'param-schema')
+    expect(f?.path).toBe('color[G]')
+    expect(f?.message).toContain('x')
+  })
+
+  it('STRING prop with a comma in the value ⇒ sound (no split for deepObject)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deepstr', query: { 'q[name]': 'Smith, John' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('additionalProperties:false + undeclared key ⇒ real param-schema finding', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deepclosed', query: { 'color[R]': '1', 'color[Z]': '5' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+
+  it('typed additionalProperties ⇒ unverified (cannot coerce undeclared keys)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deeptyped', query: { 'color[R]': '1', 'color[X]': '5' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('3.1 nullable prop with an empty value ⇒ coerces to null, valid (no false fail)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deepnull', query: { 'c[R]': '' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('number prop with a fractional multipleOf ⇒ unverified (float-coercion trap)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deepmo', query: { 'c[ratio]': '0.3' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('array-typed prop ⇒ unverified (non-scalar prop)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deeparr', query: { 'c[tags]': 'a' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('nested bracket key ⇒ unverified, and the bracket key is NOT undocumented', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deep', query: { 'color[a][b]': '1' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings.map((f) => f.kind)).not.toContain('undocumented-param')
+    expect(r.unverified).toBe(true)
+  })
+
+  it('repeated bracket key (array value) ⇒ unverified', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deep', query: { 'color[R]': ['1', '2'] } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('deepObject + a plain extra key ⇒ object validates, plain key flagged undocumented', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/deep', query: { 'color[R]': '1', 'color[G]': '2', surprise: '1' } },
+      { paramsAuthoritative: true },
+    )
+    const f = r.findings.find((x) => x.kind === 'undocumented-param')
+    expect(f?.path).toBe('surprise')
+    expect(r.findings.filter((x) => x.kind !== 'undocumented-param')).toHaveLength(0)
+  })
+})
+
+describe('validateOpenApiRequest — slice 8b: form/explode=false object reconstruction', () => {
+  it('integer props ⇒ split, pair, coerce, validate', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/ffobj', query: { pt: 'R,100,G,200' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('bad value ⇒ param-schema', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/ffobj', query: { pt: 'R,100,G,x' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+
+  it('odd segment count ⇒ unverified', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/ffobj', query: { pt: 'R,100,G' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('STRING prop ⇒ unverified (comma cascade)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/ffobjstr', query: { pt: 'name,red' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('additionalProperties not false ⇒ unverified', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/ffobjopen', query: { pt: 'R,100' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('a REFUSED form/explode=false object still declares its name (no undoc false-positive)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/ffobjstr', query: { pt: 'name,red', surprise: '1' } },
+      { paramsAuthoritative: true },
+    )
+    const undoc = r.findings.filter((x) => x.kind === 'undocumented-param').map((x) => x.path)
+    expect(undoc).toContain('surprise')
+    expect(undoc).not.toContain('pt')
+    expect(r.unverified).toBe(true)
+  })
+})
+
+describe('validateOpenApiRequest — slice 8c: form/explode=true object stays out + multipleOf scalar guard', () => {
+  it('form/explode=true object ⇒ unverified + whole undoc pass suppressed', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/ffexplode', query: { R: '100', surprise: '1' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings.map((f) => f.kind)).not.toContain('undocumented-param')
+    expect(r.unverified).toBe(true)
+  })
+
+  it('SCALAR number param with a fractional multipleOf ⇒ unverified (the shipped FP guard)', () => {
+    const r = validateOpenApiRequest(
+      objspec2,
+      { method: 'GET', path: '/scl', query: { ratio: '0.3' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
   })
 })

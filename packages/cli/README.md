@@ -138,8 +138,8 @@ strummer api run mycollection gql-search --env Public --graphql schema.graphql
 strummer api validate --graphql schema.graphql --query query.graphql --variables '{"id":5}'
 
 # Preflight a REQUEST (body + params) against an OpenAPI 3.1 operation, no send:
-# (scalar params; query form/space/pipe + path/header arrays for non-string-scalar
-#  items; other serializations skip-not-fail — ADR 0016)
+# (scalar; array params [query form/space/pipe + path/header]; object params
+#  [deepObject + form/explode=false]; ambiguous serializations skip-not-fail — ADR 0016)
 strummer api validate-request --openapi openapi.json --method POST --path /widgets \
   --body new-widget.json --query limit=10
 

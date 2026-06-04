@@ -165,3 +165,45 @@ result shape, and finding kinds still unchanged.
 
 **Still STAGED after this:** object reconstruction (`form`/`explode=false` + `deepObject`);
 non-JSON request **body** schemas.
+
+## Addendum 3 — object reconstruction + the `multipleOf` float guard (2026-06-04)
+
+Slice 8 lands the last param-array-matrix cell (objects) and a cross-cutting soundness
+fix the adversarial critics surfaced. Design = a 2-critic adversarial fan-out over a
+drafted design (both *ship-with-fixes*; every blocker folded in). Completes the non-scalar
+param matrix except `form`/`explode=true` objects (permanently out — shared namespace).
+
+**CHECKed objects (query only):**
+- **`deepObject`** (`?color[R]=100&color[G]=200`): collect `^name\[prop\]$` keys (each a
+  *discrete* URL-decoded query value, so **string props are sound** — no split), coerce
+  declared scalar props via the normalized per-prop type, ajv-validate the assembled
+  object. Refuse → `unverified`: no flat scalar `properties`; an object-form
+  `additionalProperties` (only literal `true`/`false`/absent proceed — an undeclared key
+  left uncoerced would false-fail a typed schema, critic FP-5/H1); a nested (`a[b]`) or
+  repeated (`string[]`) key.
+- **`form`/`explode=false`** (`?color=R,100,G,200`): split on `,`, pair, coerce, ajv —
+  **integer/boolean props ONLY** + `additionalProperties:false`. String props comma-cascade
+  (one comma in a value misaligns every pair); number props hit the float trap below; so
+  both are refused. Odd/empty split → `unverified`.
+
+**The `multipleOf` float guard (cross-cutting):** a fractional `multipleOf` (e.g. `0.1`)
+is an IEEE-754 false-positive trap — coercing a wire string to a JS float then ajv-checking
+reports spec-conformant values like `0.3` as invalid (empirically confirmed:
+`validateSchema({type:number,multipleOf:0.1}, 0.3)` ⇒ `valid:false`). This was **pre-existing**
+in the shipped scalar (slice 2) + array (slices 4–7) number paths, not just objects. Fix
+(comprehensive, human-ratified): `hasFractionalMultipleOf(schema)` → `unverified` for any
+number-typed scalar carrying a fractional `multipleOf`, applied uniformly at scalar, array-
+item, and object-prop coercion. An INTEGER `multipleOf` divides exactly and stays validated.
+(The response-body ajv path is unchanged — that's a separate ajv-wide concern.)
+
+**Undoc-param refinement:** the metadata branch is now a three-way EXPLICIT-explode test
+(query object explode defaults to true): `deepObject` → exclude `name[...]` keys; form/
+`explode===false` → declare its single `name`; else (explode true/default) → suppress the
+whole pass. All in the pre-validation metadata step, so a REFUSED object still declares its
+name / excludes its keys (no undoc false positive — critic H2/H3). The slice-5 deepObject
+tests were updated (deepObject now validates rather than skipping).
+
+Seams: `objectSerializationSupported` (the object half of `styleSupported`),
+`validateObjectParam`, `hasFractionalMultipleOf`, `escapeRegExp`. Signature, result shape,
+and finding kinds still unchanged. **Only remaining ADR 0016 tail: non-JSON request body
+schemas.**

@@ -133,10 +133,16 @@ installed version Z" and get a precise, cited answer over MCP.
         then split per explode. Same non-string-scalar gate, with `number` excluded for
         label-EXPLODE (its `.` delimiter collides with the decimal point). A malformed prefix
         ⇒ `unverified`, never a false fail.
-  - [ ] *(staged, parseable — ADR 0016)* object *reconstruction* (`form/explode:false` +
-        `deepObject`, flat scalar props). Ships with its own tested splitter + guards.
+  - [x] **slice 8 — object reconstruction + `multipleOf` guard (ADR 0016 addendum 3)** —
+        query `deepObject` (`name[prop]` discrete keys, string props sound) + `form/explode=false`
+        (`name=k,v,k,v`, integer/boolean props + `additionalProperties:false`). Object-form
+        `additionalProperties`/nested/repeated keys ⇒ `unverified`. Plus a cross-cutting fix: a
+        fractional `multipleOf` (IEEE-754 FP trap, confirmed pre-existing in scalar+array number
+        paths) ⇒ `unverified` everywhere. `form/explode=true` objects stay permanently out
+        (shared namespace; undoc-suppression only). **Non-scalar param ARRAY+OBJECT matrix complete.**
   - [ ] *(staged)* non-JSON request **body** schemas (form-urlencoded / multipart fields
-        against their declared object schema), today presence-only `unverified`.
+        against their declared object schema), today presence-only `unverified`. *(The only
+        remaining ADR 0016 tail.)*
 
 ## Phase 3 — Browser / UI testing pillar  *(FEATURE-COMPLETE — engine + safety + artifacts + MCP + CLI + multi-engine; live-view dropped per ADR 0008; only the explicitly-aspirational bucket remains; design = ADR 0006/0008/0009 + ARCHITECTURE §10)*
 

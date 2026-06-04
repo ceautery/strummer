@@ -5,7 +5,30 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM serialization — PATH label/matrix arrays LANDED (slice 7, ADR 0016 addendum 2) — path `label` (.a,b,c / .a.b.c) + `matrix` (;n=a,b,c / ;n=a;n=b) array styles now validated; gate green (1268 TS + 45 Py). Before that: delimited arrays (slice 6, ADR 0016 addendum 1), non-scalar param v1 (query form explode=true + undoc-param suppression, ADR 0016), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. The non-scalar param ARRAY matrix is now COMPLETE except object reconstruction. Next: pivot to a new phase, or the remaining staged tails (object reconstruction [form/explode=false + deepObject, ADR 0016]; non-JSON body schemas; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM OBJECT reconstruction + multipleOf guard LANDED (slice 8, ADR 0016 addendum 3) — query deepObject + form/explode=false objects now validated, plus a cross-cutting fractional-multipleOf false-positive guard; gate green (1287 TS + 45 Py). The non-scalar param ARRAY+OBJECT matrix is now COMPLETE (only form/explode=true objects stay permanently out — shared namespace). Before that: path label/matrix arrays (slice 7), delimited arrays (slice 6), non-scalar param v1 (slice 4/5), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (non-JSON request BODY schemas — the only remaining ADR 0016 tail; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**NON-SCALAR PARAM — OBJECT reconstruction + multipleOf guard (slice 8) — COMPLETE** (2026-06-04, all TDD
+red→green; gate green at 1287 TS + 45 Py; design = ADR 0016 addendum 3, a 2-critic adversarial fan-out
+over a drafted design [both ship-with-fixes; every blocker folded in]; the comprehensive-multipleOf-scope
+fork human-ratified). Lands the last param ARRAY+OBJECT matrix cell. **CHECKed (query only):** `deepObject`
+(`?color[R]=100&color[G]=200` — collect `^name\[prop\]$` discrete keys, so STRING props are sound, no
+split; coerce declared scalar props via the normalized per-prop type, ajv the assembled object) and
+`form`/`explode=false` (`?color=R,100,G,200` — split on `,`, pair, coerce, ajv; INTEGER/BOOLEAN props
+ONLY + `additionalProperties:false`, because a string value's comma cascades and a number mis-coerces).
+**Refuse → `unverified`:** no flat scalar `properties`; an object-form `additionalProperties` (only literal
+true/false/absent proceed — a typed one would false-fail an undeclared key, critic FP-5); a deepObject
+nested (`a[b]`) or repeated (`string[]`) key; a form/explode=false odd/empty split or non-(int|bool) prop.
+**Cross-cutting fix (the critics' real find):** a fractional `multipleOf` is an IEEE-754 false-positive
+trap (`validateSchema({type:number,multipleOf:0.1},0.3)` ⇒ valid:false — empirically confirmed), PRE-EXISTING
+in the shipped scalar (slice 2) + array (slices 4–7) number paths; `hasFractionalMultipleOf` now folds any
+such number-typed scalar to `unverified` UNIFORMLY at scalar/array-item/object-prop coercion (integer
+multipleOf divides exactly, stays validated; the response-body ajv path is left as a separate concern).
+**Undoc refinement:** three-way EXPLICIT-explode metadata branch (query object explode defaults to true) —
+deepObject → exclude `name[...]` keys; form/`explode===false` → declare its single `name`; else → suppress
+the whole pass; all pre-validation so a REFUSED object still declares its name (no undoc FP, critic H2/H3).
+Seams: `objectSerializationSupported` (object half of `styleSupported`), `validateObjectParam`,
+`hasFractionalMultipleOf`, `escapeRegExp`. Signature + `RequestValidationResult` shape + finding kinds
+UNCHANGED; `form/explode=true` objects stay permanently out (shared namespace). Slice-5 deepObject tests
+updated (now validate). 19 tests added. **Only remaining ADR 0016 tail: non-JSON request BODY schemas.**_
 _**NON-SCALAR PARAM — PATH label/matrix arrays (slice 7) — COMPLETE** (2026-06-04, all TDD red→green; gate
 green at 1268 TS + 45 Py; design = ADR 0016 addendum 2). Un-stages the remaining path array styles via
 `splitArrayValue` (strip the RFC 6570 prefix, split per explode): `label` `{.ids}`→`.a,b,c` /
