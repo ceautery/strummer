@@ -125,12 +125,17 @@ STRUMMER_SECRET_API_TOKEN=… strummer api run mycollection authed-request --env
 ### Contract validation
 
 ```bash
-# Validate a live response against an OpenAPI 3.1 spec in one shot:
+# Validate a live exchange against an OpenAPI 3.1 spec in one shot — BOTH the
+# response AND the sent request's body/params (the request check runs even on a
+# withheld dry-run):
 strummer api run mycollection get-user --env Public --openapi openapi.json
 
+# Validate a live GraphQL run's query + variables against the SDL:
+strummer api run mycollection gql-search --env Public --graphql schema.graphql
+
 # Offline GraphQL drift check (no request sent): does a saved query still
-# conform to the current schema?
-strummer api validate --graphql schema.graphql --query query.graphql
+# conform to the current schema? With --variables, also type-check the variables.
+strummer api validate --graphql schema.graphql --query query.graphql --variables '{"id":5}'
 
 # Preflight a REQUEST (body + params) against an OpenAPI 3.1 operation, no send:
 strummer api validate-request --openapi openapi.json --method POST --path /widgets \
@@ -145,9 +150,9 @@ strummer api validate-capture run.har.zip --openapi openapi.json
 ```
 strummer api list  <dir>
 strummer api get   <dir> <name>
-strummer api run   <dir> <name> [--var k=v]… [--env <e>] [--unsafe] [--allow-host <h>]… [--openapi <spec.json>] [--json]
+strummer api run   <dir> <name> [--var k=v]… [--env <e>] [--unsafe] [--allow-host <h>]… [--openapi <spec.json>] [--graphql <schema>] [--json]
 strummer api run-collection <dir> <name>… [--var k=v]… [--env <e>] [--unsafe] [--allow-host <h>]… [--stop-on-failure] [--json]
-strummer api validate --graphql <schema> --query <query> [--json]
+strummer api validate --graphql <schema> --query <query> [--variables <json|file>] [--json]
 strummer api validate-request --openapi <spec.json> --method <M> --path </p> [--body <file>] [--query k=v]… [--header n:v]… [--json]
 strummer api validate-capture <har.zip> [--openapi <spec.json>] [--graphql <schema>] [--graphql-endpoint </p>] [--json]
 ```

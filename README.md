@@ -194,8 +194,15 @@ leaf (`QualitativeSeverity`/`QUALITATIVE_RANK` + the verdict scale; `none`≠`un
 — a new `validateOpenApiRequest` sibling validates the request half (body + path/query/header params) and
 threads into the capture→contract bridge + verdict (via an `unverified`→`noSignal` fold so a
 present-but-uncheckable request can't pass) + a direct `validate_request` MCP tool / `strummer api
-validate-request` CLI. Staged (not amputated): the live `api run --openapi` inline request check, non-scalar
-OpenAPI param serializations, and the Python second half.
+validate-request` CLI. The live **`api run --openapi`** path then folded the request check in too (a
+`runRequestForContract` out-of-band channel surfaces the un-redacted sent request without widening
+`RunResult`). Most recently, **GraphQL-request variable validation**
+([ADR 0015](./docs/decisions/0015-graphql-request-variable-validation.md)) — `validateGraphqlOperation` now
+validates the runtime `variables` against the operation's declared types (per-variable, findings
+reconstructed from name+type so values never leak; custom-scalar/non-object/ambiguous → `unverified`),
+wired through the capture bridge + `validate_response.variables` + `api validate --graphql --variables` +
+live `api run --graphql`. Staged (not amputated): non-scalar OpenAPI param serializations, non-JSON body
+schemas, GraphQL directive-argument validation, and the Python second half.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 

@@ -41,7 +41,8 @@ one server serves many collections):
 - **`run_collection`** — `{ dir, names[], vars?, env?, stopOnFailure? }` → a
   compact per-step summary + threaded `captured`.
 - **`validate_response`** — OpenAPI 3.1 (`openapiSpec`,`method`,`path`,`status`,
-  `body`) **or** GraphQL (`graphqlSchema`,`query`,`body`) → contract findings.
+  `body`) **or** GraphQL (`graphqlSchema`,`query`,`body`, + optional `variables` to
+  type-check the request variables against the operation's declared types) → contract findings.
 - **`validate_request`** — validate a request's **body + path/query/header params**
   against an OpenAPI 3.1 operation (`openapiSpec`,`method`,`path`,`body?`,`query?`,
   `headers?`) → contract findings (message + path redacted). A GraphQL envelope is
