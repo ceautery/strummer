@@ -159,7 +159,11 @@ vision and `ARCHITECTURE.md` for the technical design.
   `browser`), `assert` (shared declarative-assertion operator core — `AssertionOp`
   + `applyOp` — used by `api` + `browser`), `artifacts` (shared on-disk artifact
   store — `strummer://<prefix>/<id>/<kind>` by-handle egress, parameterized prefix;
-  extracted from `browser` per ADR 0010), `diff` (Phase-5d shared changed-set primitive —
+  extracted from `browser` per ADR 0010; PLUS opt-in retention/GC per ADR 0017 — a
+  `RetentionPolicy` (`maxAgeMs`/`maxEntries`/`maxBytes`) + disk-based `sweep()` scoped to the
+  store's own prefix subtree, opportunistic-throttled on `put()` + injected clock, wired into
+  the long-running server bins via `STRUMMER_<PILLAR>_ARTIFACT_MAX_*`; no policy ⇒ no GC),
+  `diff` (Phase-5d shared changed-set primitive —
   pure, ZERO-dependency `parseUnifiedDiff` (per-file new-side added lines) + `changedFiles`
   (all non-deleted touched paths, the scope primitive); extracted out of `coverage` the moment
   a 2nd consumer appeared, mirroring safety/assert/artifacts — its zero deps are what let

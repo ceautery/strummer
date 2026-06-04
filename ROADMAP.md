@@ -1138,11 +1138,19 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       MCP `validate_response.variables` + CLI `api validate --graphql --variables` + live `api run --graphql
       <schema>` (the symmetric parallel to `api run --openapi`). New finding kinds `graphql-variable-missing`/
       `-invalid` (error) + `graphql-undocumented-variable` (warning).
+- [x] **Artifact retention / GC (ADR 0017)** — the shared `@strummer/artifacts` store was append-only;
+      a long-running server grew its dir without bound. Added an opt-in `RetentionPolicy`
+      (`maxAgeMs`/`maxEntries`/`maxBytes`) applied by a disk-based `sweep()` scoped to the store's own
+      `<baseDir>/<prefix>` subtree (never a foreign pillar), oldest-first by mtime, confinement-checked
+      before every delete; triggered opportunistically + throttled on `put()` (injected clock) plus a public
+      `sweep()`. No policy ⇒ no GC (backward-compatible). Wired into every long-running server bin
+      (`bin-browser`/`bin-deps`/`bin-lsp`/`bin-verify`) via `STRUMMER_<PILLAR>_ARTIFACT_MAX_AGE_MS`/
+      `_MAX_ENTRIES`/`_MAX_BYTES`. *(Staged: a global cross-prefix cap; LRU-by-access / refcounting — we
+      evict by write-age, not last-read.)*
 - [ ] *(staged, not amputated)* the older tails: non-scalar/advanced OpenAPI parameter serializations (deepObject/pipeDelimited/CSV/
       explode arrays, object-valued, content-typed, cookie params) + `label`/`matrix`/multi-param path
-      templates + non-local `$ref` + non-JSON body schemas; GraphQL directive-argument validation + custom-scalar
-      variable coercers; artifact
-      GC/TTL/refcounting; the Python second half (pytest / coverage.py / pyright capture); `changedDependencies`
+      templates + non-local `$ref`; GraphQL directive-argument validation + custom-scalar
+      variable coercers; the Python second half (pytest / coverage.py / pyright capture); `changedDependencies`
       for PyPI/Gem lockfiles; deps `changelog_diff` for PyPI/RubyGems; a mutate cosmic-ray/`runMutmut` adapter;
       LSP recursive/dir delete + the full toolchain cross-version matrix.
 

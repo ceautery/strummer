@@ -5,7 +5,28 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: the ADR 0016 STAGED PAIR resolved — HAR-CAPTURE form bodies now validated (the capture/verify path drives `validateOpenApiRequest` over `postData.params[]`-resolved form fields, non-authoritatively), and per-property `encoding` declared PERMANENTLY OUT; gate green (1320 TS + 45 Py). The ADR 0016 tail list is now genuinely EMPTY — the contract pillar's request-side serialization matrix (params + body) is COMPLETE across direct surfaces AND the capture bridge. Before that: non-JSON request BODY validation v1 (ADR 0016 addendum 4 — form-urlencoded + multipart text fields over live `api run --openapi` + direct MCP/CLI), non-scalar param OBJECT reconstruction + multipleOf guard (slice 8), path label/matrix arrays (slice 7), delimited arrays (slice 6), non-scalar param v1 (slice 4/5), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), `@strummer/severity` extraction. Next: pivot to a new phase, or a remaining non-ADR-0016 tail (artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: ARTIFACT RETENTION / GC LANDED (ADR 0017) — the shared `@strummer/artifacts` store was append-only (a long-running server grew its dir without bound); it now has an opt-in `RetentionPolicy` (`maxAgeMs`/`maxEntries`/`maxBytes`) applied by a disk-based `sweep()` scoped to the store's own prefix subtree, triggered opportunistically + throttled on `put()` (injected clock), wired into every long-running server bin (browser/deps/lsp/verify) via `STRUMMER_<PILLAR>_ARTIFACT_MAX_*` env; no policy ⇒ no GC (backward-compatible); gate green (1330 TS + 45 Py). Before that: the ADR 0016 STAGED PAIR resolved (HAR-capture form bodies validated non-authoritatively + per-property `encoding` permanently-out — the ADR 0016 tail list is EMPTY), non-JSON request BODY validation v1 (addendum 4), non-scalar param OBJECT/array matrix (slices 4–8), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014), `@strummer/severity` extraction. Next: pivot to a new phase, or a remaining tail (the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**ARTIFACT RETENTION / GC (ADR 0017) — COMPLETE** (2026-06-04, all TDD red→green; gate green at 1330 TS +
+45 Py; human ratified both forks: opportunistic-on-put-throttled + exposed `sweep()`, and wire all
+long-running server bins). Closes a real operational gap: the disk-backed `@strummer/artifacts` store was
+append-only, so a long-running MCP server grew its artifact dir (browser traces/video/HAR, deps/lsp/verify
+detail) without bound. **Slice 1 — engine:** an opt-in `RetentionPolicy {maxAgeMs?, maxEntries?, maxBytes?}`
+applied by a DISK-based `sweep(now?)` (cold-process-safe — the in-process Map is empty after a restart),
+**scoped to the store's OWN `<baseDir>/<prefix>` subtree** (a pillar never GCs a foreign pillar's
+artifacts; the cross-pillar verify store reads foreign prefixes but never evicts them); eviction unit = the
+`<id>` dir (a run's whole set), order age→count→size oldest-first by mtime (a just-written run is evicted
+LAST), realpath-confinement-checked before every `rmSync` (never deletes THROUGH a symlink escaping
+baseDir), evicted handles dropped from the Map. Trigger: a THROTTLED opportunistic sweep on `put()` (≤ once
+per `sweepIntervalMs`, injected `now` default `Date.now`; mirrors the browser idle reaper) + a public
+`sweep()` for an explicit startup pass. **No policy ⇒ no GC ⇒ byte-identical to today** (existing stores /
+tests / CLI temp-dir stores untouched). Constructor gains an optional `ArtifactStoreOptions {retention?,
+now?, sweepIntervalMs?}`. **Slice 2 — wiring:** the browser `ArtifactStore` subclass forwards opts; shared
+`retentionFromEnv()` (ignores non-numeric/negative so a typo never silently wipes everything) +
+`DEFAULT_SWEEP_INTERVAL_MS` (60s) exported; `bin-browser`/`bin-deps`/`bin-lsp`/`bin-verify` parse
+`STRUMMER_<PILLAR>_ARTIFACT_MAX_AGE_MS`/`_MAX_ENTRIES`/`_MAX_BYTES`. Design = ADR 0017. 10 tests (7 engine +
+helper + 2 browser-subclass). Invariants held: opt-in / no surprise deletion, ownership (own-prefix only),
+realpath confinement, no real sleeping in `pnpm gate` (injected clock). STAGED: a global cross-prefix cap;
+LRU-by-access / refcounting (eviction is by write-age, not last-read)._
 _**ADR 0016 STAGED PAIR resolved (form bodies over the capture bridge + `encoding` permanently-out) —
 COMPLETE** (2026-06-04, all TDD red→green; gate green at 1320 TS + 45 Py; human ratified: ship the
 capture path, keep `encoding` permanently-out). **(A) HAR-capture form bodies — DONE:**
