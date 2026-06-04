@@ -308,6 +308,28 @@ importers:
         specifier: workspace:*
         version: link:../mutate
 
+  packages/verify:
+    dependencies:
+      '@strummer/verdict':
+        specifier: workspace:*
+        version: link:../verdict
+    devDependencies:
+      '@strummer/api':
+        specifier: workspace:*
+        version: link:../api
+      '@strummer/coverage':
+        specifier: workspace:*
+        version: link:../coverage
+      '@strummer/deps':
+        specifier: workspace:*
+        version: link:../deps
+      '@strummer/flake':
+        specifier: workspace:*
+        version: link:../flake
+      '@strummer/mutate':
+        specifier: workspace:*
+        version: link:../mutate
+
 packages:
 
   '@axe-core/playwright@4.11.3':

@@ -1,0 +1,137 @@
+import { randomUUID } from 'node:crypto'
+import type { ContractResult } from '@strummer/api'
+import type { DiffCoverageReport } from '@strummer/coverage'
+import type { DependencyAudit } from '@strummer/deps'
+import type { FlakeVerdict } from '@strummer/flake'
+import type { MutationSummary } from '@strummer/mutate'
+import {
+  type ComposeInputs,
+  type CompositeVerdict,
+  composeVerdict,
+  fromContractResults,
+  fromDependencyAudits,
+  fromDiffCoverage,
+  fromFlakeVerdicts,
+  fromMutationSummary,
+  type PillarName,
+  type PillarVerdict,
+  type VerdictPolicy,
+} from '@strummer/verdict'
+
+/**
+ * Per-pillar run request. Each present pillar carries an async `run` thunk that
+ * produces that pillar's NATIVE result — the orchestrator maps it via the existing
+ * `@strummer/verdict` `from*` adapter. The thunk is wired by the surface (bin/CLI)
+ * to the pillar's own gated runner, so `@strummer/verify` itself imports zero
+ * spawn-capable engine code (§ gate (e)). Gate-denial vs error discrimination is
+ * refined in slice 3; slice 2 maps any rejection to an errored contributor.
+ */
+export interface OrchestrateRequest {
+  contract?: { run: () => Promise<ContractResult[]>; source?: 'run' | 'capture-from-HAR' }
+  coverage?: { run: () => Promise<DiffCoverageReport> }
+  deps?: { run: () => Promise<{ audits: DependencyAudit[]; osvSnapshotLoaded: boolean }> }
+  flake?: { run: () => Promise<FlakeVerdict[]> }
+  mutate?: { run: () => Promise<MutationSummary> }
+}
+
+export interface OrchestrateOptions {
+  /** The policy cut threaded straight through to `composeVerdict` (no default). */
+  policy?: VerdictPolicy
+  /** Mint the verdict id (default `randomUUID`); tests inject a deterministic stub. */
+  idFactory?: () => string
+  /** Redact a string before it enters the verdict (default identity). */
+  redact?: (value: string) => string
+}
+
+export interface OrchestrateResult {
+  /** The id under which the surface stores the full verdict by handle. */
+  id: string
+  verdict: CompositeVerdict
+}
+
+/**
+ * Drive the requested pillars and fold them into one `CompositeVerdict` (ADR 0013
+ * Addendum, milestone 5c). Each requested pillar's `run` thunk is invoked
+ * concurrently; each task catches its own rejection (the per-pillar failure
+ * isolation `Promise.allSettled` gives) so one pillar's crash/timeout never sinks the
+ * verdict. A fulfilled run is mapped through the existing `from*` adapter; a rejected
+ * run becomes an errored, **redacted** `no-signal` contributor. Pillars not in the
+ * request are folded as `missing`. "Absence is never a pass" therefore holds for
+ * errored/missing pillars for free (both fold to `inconclusive`).
+ *
+ * Pure orchestration: the `run` thunks (wired by the surface to each pillar's own
+ * gated runner) are the only side-effecting code; this module imports no engine
+ * runtime. Gate-denial-vs-error discrimination is refined in slice 3.
+ */
+export async function orchestrate(
+  request: OrchestrateRequest,
+  options: OrchestrateOptions = {},
+): Promise<OrchestrateResult> {
+  const idFactory = options.idFactory ?? randomUUID
+  const redact = options.redact ?? ((value: string) => value)
+
+  // One labelled task per requested pillar, each composing the pillar's native
+  // `run` thunk with its `from*` adapter. Each task catches its OWN rejection and
+  // resolves to an errored contributor — so the concurrent `Promise.all` never
+  // rejects (the same per-pillar failure isolation `Promise.allSettled` gives),
+  // while the pillar label rides along with each result.
+  const tasks: Array<Promise<{ pillar: PillarName; verdict: PillarVerdict }>> = []
+  const add = (pillar: PillarName, produce: () => Promise<PillarVerdict>): void => {
+    tasks.push(
+      produce()
+        .then((verdict) => ({ pillar, verdict }))
+        .catch((reason: unknown) => ({ pillar, verdict: erroredPillar(pillar, reason, redact) })),
+    )
+  }
+
+  if (request.contract) {
+    const { run, source } = request.contract
+    add('contract', () => run().then((r) => fromContractResults(r, source)))
+  }
+  if (request.coverage) {
+    const { run } = request.coverage
+    add('coverage', () => run().then(fromDiffCoverage))
+  }
+  if (request.deps) {
+    const { run } = request.deps
+    add('deps', () =>
+      run().then((r) => fromDependencyAudits(r.audits, { osvSnapshotLoaded: r.osvSnapshotLoaded })),
+    )
+  }
+  if (request.flake) {
+    const { run } = request.flake
+    add('flake', () => run().then(fromFlakeVerdicts))
+  }
+  if (request.mutate) {
+    const { run } = request.mutate
+    add('mutate', () => run().then(fromMutationSummary))
+  }
+
+  const inputs: ComposeInputs = {}
+  for (const { pillar, verdict } of await Promise.all(tasks)) {
+    inputs[pillar] = verdict
+  }
+
+  return { id: idFactory(), verdict: composeVerdict(inputs, options.policy) }
+}
+
+/**
+ * A requested pillar whose run rejected. Status `no-signal` (a requested-but-no-
+ * usable-signal outcome — never a pass), plus the redacted `errorReason` provenance.
+ */
+function erroredPillar(
+  pillar: PillarName,
+  reason: unknown,
+  redact: (value: string) => string,
+): PillarVerdict {
+  const message = reason instanceof Error ? reason.message : String(reason)
+  return {
+    pillar,
+    status: 'no-signal',
+    severity: 'none',
+    headline: 'pillar run failed',
+    errorReason: redact(message),
+  }
+}
+
+export type { PillarName, PillarVerdict }

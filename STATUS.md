@@ -5,7 +5,7 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slice 1 of 6 LANDED at 1057 TS + 45 Py green.**
+**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slices 1–2 of 6 LANDED at 1063 TS + 45 Py green.**
 _Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
 contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
 structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new
@@ -81,10 +81,26 @@ provenance fields — `PillarVerdict` gains optional `skipReason:'gate-not-set'|
 (both already ⇒ `inconclusive`); **`PillarStatus` is UNCHANGED** (adversarial correction — extending the
 exhaustively-switched union would corrupt the fold + `failsByPolicy`); `composeVerdict`'s inconclusive
 predicate widened defensively so a present `skipReason`/`errorReason` can NEVER be laundered into a pass.
-**Next action: slice 2 — scaffold the `@strummer/verify` package + the gated `orchestrate()` over
-injected seams** (`Promise.allSettled`, the `from*` adapters, injected `idFactory`/`redact`; assert the
-built `.mjs` has zero inline `better-sqlite3`/`playwright-core`/`defaultVitestRunner`). See ROADMAP
-milestone 5c (6 ordered slices) + the ADR 0013 Addendum for the full contract._
+**Slice 2 of 6 LANDED (1063 TS + 45 Py green):** the new **`@strummer/verify`** runtime package — the
+gated `orchestrate(request, options)` core. Each requested pillar carries an async `run` thunk producing
+its NATIVE result; orchestrate fans them out concurrently (per-task `.catch` = the failure isolation
+`Promise.allSettled` gives — one pillar's crash never sinks the verdict), maps each via the existing
+`@strummer/verdict` `from*` adapter, and folds via `composeVerdict` (omitted pillars ⇒ `missing`). A
+rejected run ⇒ an errored, **redacted** `no-signal` contributor (injected `redact`); the verdict id is
+minted by an injected `idFactory` (default `randomUUID`). **The "imports zero spawn-capable code"
+invariant holds and is proven two ways:** a source-scan test (every `@strummer/<engine>` import is
+`import type`; no `defaultVitestRunner`/`HistoryStore`/`better-sqlite3`/`playwright-core` token) AND the
+built `.mjs` imports ONLY `node:crypto` + `@strummer/verdict` (verified, dist not committed). The pillar
+`run` thunks (wired by the surface to each gated runner) are the only side-effecting code; verify itself
+type-imports the result interfaces and runtime-imports only the pure verdict package. Gate-denial-vs-error
+discrimination is slice 3.
+**Next action: slice 3 — gate composition ("compose, never widen").** A pillar whose OWN `assertAllowed`
+denies ⇒ `skipReason:'gate-not-set'` (surfaced, NOT run; sibling pillars still fold); deps' absent-fetcher
++ flake's absent-DB also map to `gate-not-set` (not `errored`); any OTHER rejection ⇒ redacted
+`errorReason`; NO `orchestrate` input can set `allowRun`/`allowedRoots`/timeout. Mechanism: a structural
+brand on the four `*GateError` classes so verify detects gate-denial WITHOUT `instanceof`-importing
+spawn-capable engine code (or bin pre-validation). See ROADMAP milestone 5c (slice 3) + the ADR 0013
+Addendum § gate-composition for the full contract._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now
