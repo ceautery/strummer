@@ -828,6 +828,55 @@ Two independent tracks, then the test-quality chain, then LSP last:
         resolution matrix (server↔toolchain); the residual confine→commit parent-dir-swap TOCTOU
         (documented terminal-partial-but-confined).
 
+## Phase 5 — Cross-pillar verification  *(UNDERWAY — make the pillars COMPOSE; design = ADR 0013, Accepted)*
+
+The Phase-4 pillars each emit a pure, structured verdict that nothing composes. Phase 5 makes
+them compose: a captured browser/API run's traffic is validated against the API contract, and
+that contract sub-verdict folds with the four Phase-4 signals (deps/coverage/flake/mutate) into
+ONE structured verdict an agent requests for a change. Two compose-only / zero-spawn milestones
+(ADR 0013 §5–6). Decisive choices the adversarial pass forced: **absence is never a pass**
+(missing/no-signal ⇒ `inconclusive`, never `pass`); reading an operator-gated HAR **inherits its
+gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strummer/verdict` is a
+**pure, type-only-import** package (never pulls a pillar runtime).
+
+- [ ] **Milestone 5a — the capture→contract bridge** (the cross-pillar win; reuses 100% of the
+      shipped `validateOpenApiResponse`).
+  - [x] **Slice 1 — `@strummer/artifacts` prefix-qualified, hardened, cross-prefix resolution.**
+        On-disk layout moved to `<baseDir>/<prefix>/<id>/<kind>` (prefix INTO the path) so one
+        shared `baseDir` is collision-free across pillars and a store **rehydrates a foreign-prefix
+        handle it never `put()`** (the cross-pillar read). Hardened: per-segment allowlist (refuses
+        `..`/separator/absolute in `put()` AND rehydrate) + realpath-confinement under `baseDir`
+        (symlink-escape closed); `<kind>.meta.json` contentType sidecar (legacy/no-sidecar ⇒
+        `application/octet-stream` + `contentTypeInferred`). Browser pillar (regression guard) green.
+  - [ ] **Slice 2 — `harEntriesToFacts`** in `packages/api/src/har-capture.ts`: attach/zip HAR body
+        resolution **first** (the only path a real browser HAR emits — `content:'attach'`), inline
+        `text` fallback; body JSON-parsed, URL→`pathname`; an attached-but-unresolved body is a hard
+        finding, never an empty-body pass. Real Playwright `.zip` fixture; size-bounded `fflate`.
+  - [ ] **Slice 3 — origin / content-type filter** (PRIMARY, not late): a non-API asset is skipped,
+        so the exercised-operations set isn't polluted + no false `missing-operation` flood.
+  - [ ] **Slice 4 — OpenAPI server-base-path reconciliation** (strip `servers[].url` base before
+        `matchPath` so `/api/v1/widgets` matches spec path `/widgets`).
+  - [ ] **Slice 5 — bridge → existing validator + the exercised-operations spec-walk** (`spec.paths
+        × methods`, net-new code, scoped here); **every finding message routed through the operator
+        `Redactor`; reference paths use `matched.template`, never `req.path`**.
+  - [ ] **Slice 6 — `validate_capture` MCP (api server) + CLI**, behind the §3a capture gate
+        (`STRUMMER_VERIFY_ALLOW_CAPTURE` + the source artifact gate); a HAR with an unregistered
+        cookie/token yields a verdict whose inline + stored bytes contain neither.
+- [ ] **Milestone 5b — the unified verdict reducer.**
+  - [ ] **Slice 7 — `@strummer/verdict` Severity core + empty-fold = `inconclusive`** (NOT `pass`).
+  - [ ] **Slice 8 — `fromContractResults`/`fromDiffCoverage`/`fromDependencyAudits` + a real fold**
+        (deps `'unknown'` ⇒ `no-signal`, never `low`/`none`; no OSV snapshot ⇒ `inconclusive`).
+  - [ ] **Slice 9 — `fromFlakeVerdicts`/`fromMutationSummary` no-signal correctness** (mutation
+        `survivors[]` drives warn/fail; `mutationScore===null` AND no survivors ⇒ `no-signal`).
+  - [ ] **Slice 10 — `request_verdict` MCP + `strummer-verify-mcp` bin + `strummer verify` CLI**;
+        **no baked-in `failAtOrAbove` default**; v1 bin reads ONLY `STRUMMER_ARTIFACTS_ROOT` +
+        `STRUMMER_VERIFY_ALLOW_CAPTURE` (no per-pillar `ALLOW_RUN` env pre-read).
+- [ ] *(staged, not amputated — ADR 0013 §5)* GraphQL drift over captured traffic (discriminated
+      SDL input); orchestration / run-driving `verify` ("compose, never widen"); `verify` driving a
+      live capture to produce the HAR; request-body/param contract validation; extracting the shared
+      `Severity` scale out of deps; artifact GC/TTL/refcounting; the Python second half (pytest /
+      coverage.py / pyright capture); diff-scoping the non-coverage pillars.
+
 ## Ongoing
 
 - [ ] Distribution: Homebrew tap; single-binary CLI for macOS.

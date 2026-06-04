@@ -5,6 +5,23 @@
 
 ## Current phase
 
+**Phase 5 — Cross-pillar verification: UNDERWAY (design = ADR 0013, Accepted).** _Make the
+pillars COMPOSE: a captured browser/API run's traffic is validated against the API contract
+(the capture→contract bridge), and that folds with the four Phase-4 signals into ONE structured
+verdict an agent requests for a change. Two milestones: **5a** the capture→contract bridge (the
+cross-pillar win), **5b** the unified `composeVerdict` reducer in a new pure `@strummer/verdict`
+package. Both compose-only / zero-spawn in v1; orchestration/run-driving, GraphQL-from-HAR, and
+the Python half are explicitly staged. **Slice 1 of 5a LANDED (994 TS + 45 Py green):** the
+`@strummer/artifacts` store is now **prefix-qualified on disk** (`<baseDir>/<prefix>/<id>/<kind>`,
+the prefix moved INTO the path) so one shared `baseDir` is collision-free across pillars and a
+store **rehydrates a foreign-prefix handle it never `put()`** (the cross-pillar read) —
+hardened with a per-segment allowlist (refuses `..`/separators/absolute in `put()` AND on the
+rehydrate path) + realpath-confinement under `baseDir` (symlink-escape closed), plus a
+`<kind>.meta.json` contentType sidecar (legacy/no-sidecar ⇒ `application/octet-stream` +
+`contentTypeInferred`). Browser pillar (the regression guard) stayed green through the layout
+change. **Next: 5a slice 2** — `harEntriesToFacts` (attach/zip HAR body resolution first) in
+`packages/api/src/har-capture.ts`. See ROADMAP Phase 5 + ADR 0013 §6._
+
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now
 `@strummer/lsp` are all COMPLETE; only explicitly-staged, non-blocking tails remain — see the
