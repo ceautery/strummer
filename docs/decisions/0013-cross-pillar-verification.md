@@ -380,3 +380,121 @@ compose-never-widen — no new env, both-required, operator-only gate inputs; (3
 unmet gate ⇒ `gate-not-set`, incomplete flow ⇒ throw ⇒ inconclusive; (4) no real spawn in `pnpm gate` —
 injected runtime/launch; (5) redaction before the verdict, inline AND stored — union redactor at both
 `finalizeHar` and `validateCapturedTraffic`.
+
+## Addendum 4 (2026-06-04): Milestone 5f — verify-driven LIVE capture from the @strummer/api RUNNER
+
+**Status: ACCEPTED — building.** Forged via the `verify-api-capture-5f-design` fan-out (4 research
+streams reading the real code → synthesis → 3 adversarial critics, all returning **sound-with-fixes** →
+corrected design). The human ratified the two open forks. This addendum is the durable distillation; the
+workflow transcript is the research record. Addendum 3 (5e) staged the API-runner path here.
+
+5f adds a SECOND verify-driven produce source: instead of (5e) spawning a browser to produce the HAR, a
+single gated call drives the **`@strummer/api` runner** for an operator-authored request (by NAME),
+SYNTHESIZES a HAR from the run, and validates it against the contract via the SHIPPED
+`validateCapturedTraffic` — full **REST + GraphQL** parity. Closes the three correctness gaps Addendum 3
+flagged (ratified fork 1): (a) per-hop HAR entries in the redirect loop (no collapsed chains), (b) the
+real request body as `request.postData` (so GraphQL drift works), (c) a `finalizeHar`-style blanket
+redaction pass extracted to shared code.
+
+### Primitive placement (the user-flagged non-obvious fork — resolved)
+
+Both new primitives live in **`@strummer/api`** in a new pure leaf module `har-synth.ts`; nothing new
+in `@strummer/verify` (its source is the only thing scanned for invariant 1):
+- `redactHarZip(zip: Buffer, redact): Buffer` — the PURE Buffer→Buffer blanket-redaction pass, lifted
+  from `@strummer/browser` `finalizeHar`'s core (unzip → collect text-attach `_file` bodies by DECLARED
+  mimeType → redact `.har` JSON + text-extension members + those attach members → re-zip). NO file I/O.
+  Imports ONLY `fflate`. Browser's `finalizeHar` keeps its `readFileSync`/`unlink`/`store` wrapper but
+  delegates the transform to this — ONE redaction code path (the 5e attach-mimeType fix is inherited).
+  New dep edge `@strummer/browser → @strummer/api` (acyclic — api deps are only assert/safety today).
+- `synthesizeRedactedHarZip(records, redact): Buffer` — builds `{log:{entries:[…]}}` with ONLY the six
+  fields the consume bridge reads (`request.method`/`url`, `request.postData.{mimeType,text}`,
+  `response.status`, `response.content.{mimeType,text}`), INLINE `text` bodies (no `_file` attach — we
+  hold the strings), `zipSync` into one `*.har` member, then immediately runs `redactHarZip` — so NO
+  public API ever returns an un-redacted synthesized buffer. THROWS on a record with a non-numeric status
+  (`har-capture.ts` coerces a missing status to 0, which would validate as an undocumented-status finding
+  instead of the true inconclusive). Omits `postData` for Buffer/FormData (file/multipart) bodies —
+  lossless: the response still validates.
+
+### Runner changes (data-retention only — raw bytes never touch `RunResult`)
+
+A SEPARATE out-of-band produce entry point `runRequestForHar`/`runSequenceForHar` returns
+`{result, capture:{hops, registeredSecrets, redirectTruncated}}`. `RunResult`/`RunResponse` are
+UNCHANGED — the raw-body channel is produce-only, so no existing caller of `runRequest` ever sees a raw
+body. In the redirect loop, `res.body.dump()` becomes a size-capped `res.body.text()` (mirror
+`MAX_HAR_INFLATED_BYTES`); a hop record is pushed labeled with the CURRENT (already-vetted, already-
+fetched) url AFTER the per-hop SSRF + mutation re-checks pass — a blocked target url is never recorded as
+sent. `redirectTruncated` is set when the loop exits with the terminal status still a 3xx (budget
+exhausted / unparseable / missing Location). `Redactor` gains an `entries()` accessor so the union
+redactor can learn the run-resolved `{{secret:NAME}}` values (the api redactor is local + populated by a
+`prepareRequest` side-effect, never returned — without this, a resolved secret survives into the stored
+`.har` and the findings; the critics' redaction blocker).
+
+### "Absence is never a pass" — the completeness predicate
+
+The 5e analogue (`runFlow` swallows errors ⇒ flow-completeness guard). Here, the produce driver applies
+guards, each ⇒ inconclusive, BEFORE trusting the synthesized HAR:
+- **Transport completeness (driver THROWS ⇒ inconclusive):** any non-sent step (`result.sent !== true`;
+  for sequences the per-step shape is `step.result.sent`, NOT `step.sent` — the critics' blocker: the
+  latter is always undefined and would throw on every sequence); `redirectTruncated` (a truncated 3xx
+  chain yields a non-empty HAR that could validate — do NOT rely on `isApiEntry`'s JSON heuristic, a 3xx
+  WITH a JSON body passes it); `synthesizeRedactedHarZip` throws on a status-less record.
+- **Contract completeness (the ratified DEEPER fix):** `validateCapturedTraffic`'s `clean` field
+  (`entriesValidated>0 ∧ unresolvedBodies===0 ∧ noSignal===0 ∧ all valid`) is **load-bearing but was
+  unreachable** — the contract thunk returned only `.results`, and `fromContractResults` folds on findings
+  only. So a capture with one VALID REST entry **plus** an unverifiable GraphQL-no-SDL entry (which
+  `continue`s without pushing a `ContractResult`) folded to **pass** — "absence rendered as a pass," a
+  CONFIRMED latent hole in the SHIPPED 5e produce path AND the consume path. **Fix (ratified fork 2):
+  thread the full `CaptureContractVerdict` through orchestrate's contract thunk (optional `clean`/
+  `noSignal`/`unresolvedBodies`/`entriesValidated`, type-only — invariant 1 holds) + a
+  `fromCaptureVerdict` mapping in `@strummer/verdict` that folds `clean===false` (no errors) to
+  `inconclusive`, never pass.** Retrofitted into the consume-by-handle + 5e browser-produce thunks too —
+  one consistent absence posture across consume + both produce sources.
+
+### Gate composition — "compose, never widen" (ratified fork 1)
+
+A verify-driven api capture IS an api-pillar run, so it composes the api pillar's OWN gate (the same
+`STRUMMER_ALLOW_UNSAFE`/`STRUMMER_ALLOWED_HOSTS`/`STRUMMER_BLOCK_PRIVATE` the api server reads → undici
+`checkGate` + `assertSsrfAllowed`), under `STRUMMER_VERIFY_ENABLE_RUN` ∧ the capture sub-gate
+(`STRUMMER_VERIFY_ALLOW_CAPTURE` + artifacts root). A safe GET is ungated (read-only produce works with
+just the collections dir + capture gate); a mutating request stays dry-run ⇒ the non-sent guard throws ⇒
+inconclusive unless `ALLOW_UNSAFE` + an allowed host — the api server's posture, REUSED, not re-granted.
+**RATIFIED NEW ENV `STRUMMER_API_COLLECTIONS_DIR`** for server-side by-NAME resolution (the api server has
+none today — collections are passed per-call; this is the api analogue of `STRUMMER_BROWSER_FLOWS_DIR`).
+The agent supplies ONLY the target (collection + request NAME, never a path — traversal). Deny-by-default
+REGISTRATION: unmet ⇒ `gateDenied()` ⇒ `skipReason:'gate-not-set'` ⇒ inconclusive, never fetches.
+`ContractCaptureContext` gains a `produce-api` variant; routed by which target the agent supplied
+(`request` | `flow` | `harHandle`; exactly one). Provenance stays `'capture-from-HAR'` (zero verify-source
+change). `strummer verify run` gains `--request <name>`/`--collection-dir <dir>` (the human IS the
+operator), `--allow-unsafe`/`--allow-host`/`--allow-private` straight-through — the CLI thunk MUST build a
+real redactor (flag secrets ∪ run-registered) and pass it to BOTH `redactHarZip` and
+`validateCapturedTraffic` (NOT the empty `{}` the browser CLI path uses — `finalizeHar` already redacted
+on disk there, but the synthesized api HAR holds raw bytes until `redactHarZip` runs; the critics' second
+redaction blocker).
+
+### Slice plan (TDD red→green→commit, each independently green-gated)
+
+1. Extract `redactHarZip` + `summarizeHar` into `@strummer/api` `har-synth.ts` (pure, fflate-only).
+2. Browser `finalizeHar` consumes api `redactHarZip` + an import-direction guard test (acyclic; nothing
+   spawn-capable in `har-synth.ts`); browser suite green incl. the 5e attach-mimeType case.
+3. `synthesizeRedactedHarZip` (pure; redact folded in; inline text; throws on status-less; omits binary
+   postData) — round-trip through `harEntriesToFacts`.
+4. Runner `runRequestForHar`/`runSequenceForHar` out-of-band channel (per-hop records, wire request body,
+   `redirectTruncated`, `Redactor.entries()`); `RunResult` unchanged; existing tests green.
+5. Produce driver `runRequestToHar`/`runSequenceToHar` + transport-completeness guards + union-secret
+   fold; returns `{harHandle, summary, verdict}` (the FULL `CaptureContractVerdict`).
+6. Deeper `@strummer/verdict` fix — `fromCaptureVerdict` + thread the full verdict through orchestrate's
+   contract thunk + retrofit the consume + 5e browser-produce thunks (the ratified cross-pillar fix).
+7. `ContractCaptureContext` `produce-api` variant + `verify_change` input wiring (`request`/`collection`/
+   `vars`); route by target.
+8. `bin-verify` produce-api branch behind the api gate + `STRUMMER_API_COLLECTIONS_DIR` (env-matrix tests:
+   mutating-without-allow-unsafe ⇒ inconclusive; safe GET ⇒ stored union-redacted HAR; secret never in it).
+9. `strummer verify run --request` CLI (real redactor at both chokepoints) + the milestone tail (STATUS/
+   ROADMAP/memories/CLAUDE.md repo-map + this addendum marked COMPLETE; commit to `main`; push at boundary).
+
+**Invariant audit (all five survive):** (1) `@strummer/verify` `.mjs` still imports only `node:crypto` +
+`@strummer/verdict` — the verdict-shape threading is type-only, all wiring in `packages/api`/`mcp`/`cli`;
+(2) compose-never-widen — the api pillar's own gate, one ratified env for by-name resolution, operator-only
+gate inputs; (3) absence-never-a-pass — transport guards throw ⇒ inconclusive, `clean===false` folds to
+inconclusive; (4) no real fetch in `pnpm gate` — injected runner; (5) redaction before the verdict, inline
+AND stored — the union redactor (api seed ∪ verifySecrets ∪ run-registered) at both `redactHarZip` (store)
+and `validateCapturedTraffic` (findings), and synthesis never returns an un-redacted buffer.
