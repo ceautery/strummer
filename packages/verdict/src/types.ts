@@ -13,6 +13,13 @@ export type PillarName = 'contract' | 'coverage' | 'deps' | 'flake' | 'mutate'
  * - `missing` — no input was supplied for this pillar.
  *
  * `no-signal` and `missing` NEVER count as a pass (ADR 0013 §1).
+ *
+ * NOTE (ADR 0013 Addendum, milestone 5c): the run-driving orchestrator does NOT
+ * add new statuses. A pillar it tried to run but whose own gate was unmet, or that
+ * crashed, is reported as `no-signal` + a `skipReason`/`errorReason` (below); a
+ * pillar the agent did not request stays `missing`. Both already fold to
+ * `inconclusive`, so "absence is never a pass" extends to gate-blocked/errored/
+ * not-requested for free — without touching this exhaustively-switched union.
  */
 export type PillarStatus = 'pass' | 'warn' | 'fail' | 'no-signal' | 'missing'
 
@@ -30,6 +37,20 @@ export interface PillarVerdict {
    * from a captured HAR (different trust/redaction story — ADR 0013 §1).
    */
   source?: 'run' | 'capture-from-HAR'
+  /**
+   * Run-driving provenance (ADR 0013 Addendum, milestone 5c): why a requested pillar
+   * produced no usable signal. `gate-not-set` = the pillar's own operator gate was
+   * unmet (never run — "compose, never widen"); `not-requested` = the agent did not
+   * ask for it. A present `skipReason` can NEVER be laundered into a pass.
+   */
+  skipReason?: 'gate-not-set' | 'not-requested'
+  /**
+   * Run-driving provenance (ADR 0013 Addendum, milestone 5c): a requested pillar
+   * crashed/timed out. **Already routed through the operator `Redactor`** by the
+   * orchestrator before it reaches here — must not carry raw paths/secrets. A present
+   * `errorReason` can NEVER be laundered into a pass.
+   */
+  errorReason?: string
 }
 
 /** The overall posture. `inconclusive` is the honest "couldn't claim pass" state. */

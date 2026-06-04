@@ -5,7 +5,7 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: COMPLETE (both milestones; design = ADR 0013, Accepted).**
+**Phase 5 — Cross-pillar verification: 5a + 5b COMPLETE; milestone 5c (run-driving / orchestration `verify`) UNDERWAY — design = ADR 0013 Addendum (Accepted 2026-06-04); slice 1 of 6 LANDED at 1057 TS + 45 Py green.**
 _Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
 contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
 structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new
@@ -58,11 +58,33 @@ revealed a real-shape detail: attach-mode stores the **request** `postData` in a
 api/MCP/CLI GraphQL tests all consume this fixture (clean SDL ⇒ clean, `name`-dropped SDL ⇒
 graphql-validation drift); only the response-`errors[]` / no-query / operationName edge cases that one
 clean capture can't express stay hand-authored.
-**Next: Phase 5 is done — no required work remains.** Open candidates are the remaining explicitly-
-staged Phase-5 tails (ADR 0013 §5): orchestration / run-driving `verify` ("compose, never widen" gate
-composition); `verify` driving a live capture to produce the HAR; request-body/param contract
-validation; extracting the shared `Severity` scale out of deps; the Python second half. Or a new
-phase (needs a design pass/ADR). See ROADMAP Phase 5 + ADR 0013 §5._
+**MILESTONE 5c — run-driving / orchestration `verify` — UNDERWAY (design = ADR 0013 Addendum, Accepted 2026-06-04).** The
+goal: a `verify` that DRIVES the gated pillars (coverage/flake/mutate/deps + the consume-only capture
+bridge) and folds them into one verdict in a SINGLE agent call — the "is this change safe?" one-shot.
+Load-bearing contract ("compose, never widen"): verify reuses each pillar's OWN paired deny-by-default
+gate; the env model is **"both required"** — verify runs pillar P iff (P's own `STRUMMER_<PILLAR>_ALLOW_RUN`
+is set) AND a SEPARATE `STRUMMER_VERIFY_ENABLE_RUN` opt-in is set (NOT verify-scoped renames — the
+adversarial pass killed those as a drift footgun); no agent input can set `allowRun`/`allowedRoots`.
+The design was forged via the `verify-orchestration-design-research` (6 streams) → human ratification
+of 4 forks → `verify-orchestration-adversarial-critics` (3 critics) fan-outs; the critics materially
+changed the gate-env mechanism + the status model (recorded in the ADR Addendum's corrections list).
+Decisions: a NEW `@strummer/verify` runtime package (orchestration core; imports ZERO spawn-capable
+code — all runners/store/validator injected, engines `external`, so `pnpm gate` never loads
+better-sqlite3/playwright-core); a NEW sibling `verify_change` MCP tool (deny-by-default REGISTRATION,
+only when run-driving enabled) + `strummer verify run <root>` CLI (the compose-only `request_verdict` +
+`strummer verify` stay unchanged); run-driving FIRST/unscoped (diff-scoping = 5d); capture CONSUME-only
+(live capture = 5e). Per-pillar failure isolation via `Promise.allSettled`; gate-denial ⇒
+`skipReason:'gate-not-set'`, any other rejection ⇒ `errorReason` (REDACTED); injected `idFactory`
+(default `randomUUID`). **Slice 1 of 6 LANDED (1057 TS + 45 Py green):** the pure `@strummer/verdict`
+provenance fields — `PillarVerdict` gains optional `skipReason:'gate-not-set'|'not-requested'` +
+`errorReason?` (redacted); skipped/errored map to `status:'no-signal'`, not-requested to `'missing'`
+(both already ⇒ `inconclusive`); **`PillarStatus` is UNCHANGED** (adversarial correction — extending the
+exhaustively-switched union would corrupt the fold + `failsByPolicy`); `composeVerdict`'s inconclusive
+predicate widened defensively so a present `skipReason`/`errorReason` can NEVER be laundered into a pass.
+**Next action: slice 2 — scaffold the `@strummer/verify` package + the gated `orchestrate()` over
+injected seams** (`Promise.allSettled`, the `from*` adapters, injected `idFactory`/`redact`; assert the
+built `.mjs` has zero inline `better-sqlite3`/`playwright-core`/`defaultVitestRunner`). See ROADMAP
+milestone 5c (6 ordered slices) + the ADR 0013 Addendum for the full contract._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
 _(`@strummer/deps`, `@strummer/coverage`, `@strummer/flake`, `@strummer/mutate`, AND now

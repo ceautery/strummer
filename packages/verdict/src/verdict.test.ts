@@ -143,6 +143,71 @@ describe('fromFlakeVerdicts + fromMutationSummary no-signal correctness (slice 9
   })
 })
 
+describe('provenance: skipReason / errorReason (slice 1, milestone 5c)', () => {
+  it('a gate-blocked pillar (skipReason) folds to inconclusive, never pass', () => {
+    const v = composeVerdict({
+      coverage: {
+        pillar: 'coverage',
+        status: 'no-signal',
+        severity: 'none',
+        headline: 'gate not set',
+        skipReason: 'gate-not-set',
+      },
+    })
+    expect(v.ok).toBe(false)
+    expect(v.status).toBe('inconclusive')
+  })
+
+  it('an errored pillar (errorReason) folds to inconclusive, never pass', () => {
+    const v = composeVerdict({
+      mutate: {
+        pillar: 'mutate',
+        status: 'no-signal',
+        severity: 'none',
+        headline: 'runner failed',
+        errorReason: 'the mutation runner exited non-zero',
+      },
+    })
+    expect(v.ok).toBe(false)
+    expect(v.status).toBe('inconclusive')
+  })
+
+  it('a real failure beats a skipped sibling (a fail is worse than absence)', () => {
+    const v = composeVerdict({
+      coverage: { pillar: 'coverage', status: 'fail', severity: 'moderate', headline: 'uncovered' },
+      flake: {
+        pillar: 'flake',
+        status: 'no-signal',
+        severity: 'none',
+        headline: 'gate not set',
+        skipReason: 'gate-not-set',
+      },
+    })
+    expect(v.status).toBe('fail')
+    expect(v.worstPillar).toBe('coverage')
+  })
+
+  it('provenance can NEVER be laundered into a pass — a present skipReason forces inconclusive even if status is mislabeled pass', () => {
+    // Defensive: a future adapter bug must not slip a gate-blocked/errored pillar
+    // through as a passing signal (ADR 0013 Addendum — "absence is never a pass").
+    const v = composeVerdict({
+      coverage: {
+        pillar: 'coverage',
+        status: 'pass',
+        severity: 'none',
+        headline: 'ok',
+        skipReason: 'gate-not-set',
+      },
+      contract: { pillar: 'contract', status: 'pass', severity: 'none', headline: 'ok' },
+      deps: { pillar: 'deps', status: 'pass', severity: 'none', headline: 'ok' },
+      flake: { pillar: 'flake', status: 'pass', severity: 'none', headline: 'ok' },
+      mutate: { pillar: 'mutate', status: 'pass', severity: 'none', headline: 'ok' },
+    })
+    expect(v.status).toBe('inconclusive')
+    expect(v.ok).toBe(false)
+  })
+})
+
 describe('composeVerdict — real fold + policy escalation', () => {
   it('a contract fail makes the whole verdict fail regardless of policy', () => {
     const v = composeVerdict({ contract: fromContractResults([contractError]) })

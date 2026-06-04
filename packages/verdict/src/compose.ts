@@ -60,7 +60,17 @@ export function composeVerdict(
 
   const anyFail = pillars.some((p) => p.status === 'fail' || failsByPolicy(p))
   const anyWarn = pillars.some((p) => p.status === 'warn')
-  const anyInconclusive = pillars.some((p) => p.status === 'missing' || p.status === 'no-signal')
+  // `missing`/`no-signal` are absence; so is any present run-driving provenance
+  // (`skipReason`/`errorReason`). The provenance check is defensive — it ensures a
+  // gate-blocked/errored pillar can never be laundered into a pass even if a future
+  // adapter mislabels its status (ADR 0013 Addendum, milestone 5c).
+  const anyInconclusive = pillars.some(
+    (p) =>
+      p.status === 'missing' ||
+      p.status === 'no-signal' ||
+      p.skipReason !== undefined ||
+      p.errorReason !== undefined,
+  )
 
   let status: OverallStatus
   if (anyFail) status = 'fail'
