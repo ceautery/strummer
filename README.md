@@ -165,9 +165,15 @@ rehydration so one pillar can resolve another's by-handle artifact. **A Phase-5 
 GraphQL drift over captured traffic**: `validateCapturedTraffic`'s contract is now the discriminated
 `CaptureContract { openapi?, graphql?: {endpointPath, sdl} }`, GraphQL entries route to the shipped
 `validateGraphqlOperation` (never the OpenAPI validator), and absence stays non-passing (GraphQL with
-no SDL ⇒ no-signal); backed by a real Playwright `content:'attach'` capture fixture. Staged (not
-amputated): orchestration/run-driving `verify`, `verify` driving a live capture, request-body/param
-contract validation, extracting the shared `Severity` scale, and the Python second half.
+no SDL ⇒ no-signal); backed by a real Playwright `content:'attach'` capture fixture. **5c — run-driving
+`verify` has since landed** (ADR 0013 Addendum): a new `@strummer/verify` package + the `verify_change`
+MCP tool + `strummer verify run` CLI DRIVE the gated pillars (coverage/flake/mutate + the consume-only
+contract) and fold them into one verdict in a single call. The gate contract is **"compose, never
+widen"** — `verify` reuses each pillar's *own* gate plus a separate `STRUMMER_VERIFY_ENABLE_RUN`
+opt-in ("both required"); a pillar whose gate is unmet is `skipped:gate-not-set`, never run; the
+orchestrator imports zero spawn-capable code. Staged (not amputated): diff-scoping the non-coverage
+pillars + wiring deps into the run path (5d), `verify` driving a live capture to produce the HAR (5e),
+request-body/param contract validation, extracting the shared `Severity` scale, and the Python second half.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 

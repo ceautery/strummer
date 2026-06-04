@@ -187,6 +187,19 @@ vision and `ARCHITECTURE.md` for the technical design.
   capture→contract bridge half lives in `@strummer/api` `har-capture.ts` (`harEntriesToFacts` +
   `validateCapturedTraffic` reuse the shipped `validateOpenApiResponse` over a stored HAR; surfaced
   as the gated `validate_capture`)),
+  `verify` (Phase-5 milestone 5c run-driving orchestration, COMPLETE: a RUNTIME package — the gated
+  `orchestrate(request, options)` that DRIVES the pillars and folds them into one verdict in a single
+  call. Imports ZERO spawn-capable code: each requested pillar is an injected `run` thunk producing its
+  native result, mapped via `@strummer/verdict`'s `from*` adapters; the built `.mjs` imports only
+  `node:crypto` + `@strummer/verdict`. Per-pillar failure isolation (per-task catch); a rejection
+  BRANDED a gate denial via `Symbol.for('strummer.gate-denial')` ⇒ `skipReason:'gate-not-set'` (the three
+  engine `*GateError` classes set the brand — verify recognizes a real denial without importing engine
+  code, reusing `assertAllowed`, no drift), any other ⇒ redacted `errorReason`; injected `idFactory`
+  (default `randomUUID`). "Compose, never widen": `orchestrate` invokes each thunk with ZERO args and has
+  no `allowRun`/`allowedRoots` knob. Surfaced as the deny-by-default `verify_change` MCP tool +
+  `bin-verify` "both required" env gate (`STRUMMER_VERIFY_ENABLE_RUN` AND each pillar's OWN
+  `*_ALLOW_RUN` — never verify-scoped renames) + `strummer verify run` CLI. deps run-wiring + diff-scoping
+  staged to 5d. Design = ADR 0013 Addendum),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
   each a thin human wrapper over its engine; the human is the operator, so run/write
