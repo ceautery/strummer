@@ -97,6 +97,34 @@ function makeFetcher(
   }
 }
 
+/**
+ * The deps NETWORK surface from operator env — the OSV snapshot dir + an SSRF-pinned
+ * packument fetcher, gated on `STRUMMER_DEPS_ALLOW_NETWORK` (OFF by default). One source
+ * for the security-critical fetcher construction, shared by the deps server bin AND the
+ * verify bin's deps run-driving wiring (slice 5d). `fetchPackument` is undefined when
+ * network is off. Never reads a verify/run env — the verify bin composes its own
+ * `ENABLE_RUN` opt-in on top ("both required").
+ */
+export function depsNetworkConfig(env: Record<string, string | undefined> = process.env): {
+  osvDir?: string
+  allowNetwork: boolean
+  fetchPackument?: PackumentFetcher
+} {
+  const allowNetwork = bool(env.STRUMMER_DEPS_ALLOW_NETWORK)
+  return {
+    osvDir: env.STRUMMER_DEPS_OSV_DB_DIR || undefined,
+    allowNetwork,
+    fetchPackument: allowNetwork
+      ? makeFetcher(
+          env.STRUMMER_DEPS_NPM_REGISTRY || 'https://registry.npmjs.org',
+          env.STRUMMER_DEPS_PYPI_REGISTRY || 'https://pypi.org/pypi',
+          env.STRUMMER_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
+          bool(env.STRUMMER_DEPS_ALLOW_PRIVATE),
+        )
+      : undefined,
+  }
+}
+
 /** Pull an `owner/repo` out of a packument `repository` field (string or `{url}`). */
 function githubRepo(packument: Packument): { owner: string; repo: string } | undefined {
   const repo = (packument as { repository?: unknown }).repository
@@ -170,16 +198,10 @@ export function buildDepsServerFromEnv(
     rubygemsRegistry: env.STRUMMER_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
     allowPrivate: bool(env.STRUMMER_DEPS_ALLOW_PRIVATE),
   }
+  const net = depsNetworkConfig(env)
   const server = createDepsServer({
-    osvDir: config.osvDir,
-    fetchPackument: config.allowNetwork
-      ? makeFetcher(
-          config.registry,
-          config.pypiRegistry,
-          config.rubygemsRegistry,
-          config.allowPrivate,
-        )
-      : undefined,
+    osvDir: net.osvDir,
+    fetchPackument: net.fetchPackument,
     fetchChangelog: config.allowNetwork
       ? makeChangelogFetcher(
           config.registry,

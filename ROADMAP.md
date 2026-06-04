@@ -978,8 +978,12 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
         osvSnapshotLoaded, snapshotDate, errors}` — exactly the `RunDrivingOptions.deps` shape. Optional
         `names` scope (the diff-changed deps; omitted ⇒ all declared manifest deps). `audit_project`
         refactored to consume it (behavior-preserving — its tests are the regression guard).
-  - [ ] **Slice 5 — `bin-verify` `rd.deps`** gated by `STRUMMER_DEPS_ALLOW_NETWORK` composed under
-        `ENABLE_RUN` (compose, never widen).
+  - [x] **Slice 5 — `bin-verify` `rd.deps`** gated by `STRUMMER_DEPS_ALLOW_NETWORK` composed under
+        `ENABLE_RUN` (compose, never widen). Deps' OWN gate is NETWORK (it fetches packuments, never
+        runs project code), so the runner is wired iff `ENABLE_RUN` AND `STRUMMER_DEPS_ALLOW_NETWORK`.
+        Factored a shared `depsNetworkConfig(env)` in `bin-deps` (the SSRF-pinned fetcher + OSV dir,
+        single source — both bins use it). The deps runner scopes the audit to
+        `changedDependencies(ctx.diff)`; no changed deps ⇒ whole-project fallback.
   - [ ] **Slice 6 — `--deps` flag on `strummer verify run`** + STATUS/ROADMAP/memory updates; push at
         the milestone boundary.
 - [ ] *(staged, not amputated — ADR 0013 §5 + Addendum)* **5e** `verify` driving a live capture to

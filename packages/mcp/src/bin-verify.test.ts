@@ -74,6 +74,22 @@ describe('the "both required" run-driving gate (§3c / §gate(b))', () => {
     expect(await toolNames(built)).not.toContain('verify_change')
   })
 
+  it('ENABLE_RUN + STRUMMER_DEPS_ALLOW_NETWORK wires deps run-driving (registers verify_change)', async () => {
+    const built = buildVerifyServerFromEnv({
+      STRUMMER_VERIFY_ENABLE_RUN: '1',
+      STRUMMER_DEPS_ALLOW_NETWORK: '1',
+    })
+    expect(await toolNames(built)).toContain('verify_change')
+  })
+
+  it('STRUMMER_DEPS_ALLOW_NETWORK alone (no ENABLE_RUN) does NOT wire deps run-driving', async () => {
+    // The deps network grant for the deps SERVER must not silently enable THIS server to
+    // drive a deps audit — that needs the separate ENABLE_RUN opt-in (compose, never widen).
+    const built = buildVerifyServerFromEnv({ STRUMMER_DEPS_ALLOW_NETWORK: '1' })
+    expect(built.config.enableRun).toBe(false)
+    expect(await toolNames(built)).not.toContain('verify_change')
+  })
+
   it('ENABLE_RUN + the capture gate registers verify_change for the consume-only contract path', async () => {
     const built = buildVerifyServerFromEnv({
       STRUMMER_VERIFY_ENABLE_RUN: '1',

@@ -5,9 +5,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { type CaptureContract, validateCapturedTraffic } from '@strummer/api'
 import { ArtifactStore } from '@strummer/artifacts'
 import { runScoped } from '@strummer/coverage'
+import { changedDependencies } from '@strummer/deps'
 import { HistoryStore, runAndRecord } from '@strummer/flake'
 import { runMutation } from '@strummer/mutate'
 import { Redactor } from '@strummer/safety'
+import { depsNetworkConfig } from './bin-deps.js'
+import { auditProjectDependencies } from './deps.js'
 import { createVerifyServer } from './index.js'
 import type { RunDrivingOptions } from './verify.js'
 
@@ -144,6 +147,28 @@ export function buildVerifyServerFromEnv(
           { reportPath },
         )
         return r.summary
+      }
+    }
+
+    // Deps run-driving: its OWN gate is NETWORK (deps fetches packuments, it does not
+    // run project code), so it is wired under ENABLE_RUN iff STRUMMER_DEPS_ALLOW_NETWORK
+    // is set — the same single source as the deps server bin. The diff scopes the audit
+    // to the changed packages (`changedDependencies`); a diff that changed no deps (or an
+    // ecosystem whose lockfile diff is staged) falls back to the whole project.
+    const deps = depsNetworkConfig(env)
+    if (deps.allowNetwork && deps.fetchPackument) {
+      const fetchPackument = deps.fetchPackument
+      const osvDir = deps.osvDir
+      rd.deps = async (ctx) => {
+        const scoped = ctx.diff ? changedDependencies(ctx.diff, 'npm') : []
+        const { audits, osvSnapshotLoaded } = await auditProjectDependencies({
+          project: ctx.projectRoot,
+          ecosystem: 'npm',
+          names: scoped.length > 0 ? scoped : undefined,
+          osvDir,
+          fetchPackument,
+        })
+        return { audits, osvSnapshotLoaded }
       }
     }
 
