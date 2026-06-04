@@ -1,3 +1,4 @@
+export { parseCosmicRayDump } from './cosmic-ray.js'
 export { parseMutmutResults } from './mutmut.js'
 export {
   defaultStrykerRunner,

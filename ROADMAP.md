@@ -462,9 +462,16 @@ stage `reportlog`. Pure/zero-spawn slices first.
       raw.githubusercontent HEAD loop (unchanged). *(Staged: the ecosystem-aware heading-token regex
       — `SEMVER_TOKEN` still detects only X.Y.Z headings, so a PEP 440 `1.0rc1` / two-segment heading
       is missed; a detected heading is always semver-valid so every comparator orders it.)*
-- [ ] **Slice 3 — mutate `parseCosmicRayDump`** (pure) — `cosmic-ray dump` JSON-lines → MTE
-      `MutationReport`; unrecognized/null outcome → `Pending` (ambiguity rule). Real dump
-      fixture captured out-of-gate (provenance in `test/fixtures/README.md`).
+- [x] **Slice 3 — mutate `parseCosmicRayDump`** (pure) — `cosmic-ray dump` JSON-lines → MTE
+      `MutationReport`, keyed by the REAL `module_path` with real line+operator (actionable
+      survivors, unlike mutmut's line:0). Each line is `[work_item, work_result|null]`; the
+      mutation fields live nested under `work_item.mutations[]` (the research draft assumed
+      top-level — corrected against the real 8.4.6 capture). Mapping: null result → Pending;
+      `normal`+killed/survived/incompetent → Killed/Survived/RuntimeError; `no_test` → NoCoverage;
+      `skipped` → Ignored; `exception`/`abnormal` → RuntimeError; `timeout` → Timeout; anything
+      else → Pending (ambiguity ⇒ never a phantom survivor). `summarizeMutation`/`fromMutationSummary`
+      unchanged. Real dump fixture captured out-of-gate from cosmic-ray 8.4.6 (provenance +
+      synthesized rare-outcome records in `test/fixtures/README.md`).
 - [ ] **Slice 4 — flake `runAndRecordPytest`** (gated runner) — near-clone of vitest's
       `runAndRecord`; `pytest --json-report`, loop the whole suite N times (NOT `pytest-repeat`),
       ingest via the existing `parsePytestJson`. MCP `flake_run` gains `framework`; CLI `--framework`.
