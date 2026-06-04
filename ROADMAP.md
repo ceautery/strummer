@@ -880,8 +880,9 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       to the OpenAPI validator). Absence is never a pass: GraphQL-with-no-SDL ⇒ no-signal
       `graphql-sdl-not-supplied`, REST-with-no-OpenAPI ⇒ `no-contract-for-entry`, any `noSignal>0`
       blocks `clean`. Surface: `validate_capture` MCP `graphqlSchema`/`graphqlEndpoint` + CLI
-      `--graphql`/`--graphql-endpoint`. (GraphQL HARs in tests are hand-authored — a real-capture
-      fixture is a follow-up.)
+      `--graphql`/`--graphql-endpoint`. Backed by a REAL Playwright `content:'attach'` capture
+      (`packages/api/test/fixtures/graphql-capture.har.zip`) consumed by the api/MCP/CLI tests; only
+      the response-errors / no-query / operationName edge cases stay hand-authored.
 - [ ] *(staged, not amputated — ADR 0013 §5)* orchestration / run-driving `verify` ("compose, never
       widen"); `verify` driving a live capture to produce the HAR; request-body/param contract
       validation; extracting the shared `Severity` scale out of deps; artifact GC/TTL/refcounting; the

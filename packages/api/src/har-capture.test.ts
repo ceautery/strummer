@@ -12,6 +12,27 @@ const HAR = readFileSync(
   fileURLToPath(new URL('../test/fixtures/widgets-capture.har.zip', import.meta.url)),
 )
 
+// A REAL Playwright content:'attach' HAR of a browser issuing a GraphQL POST to
+// /graphql (`query Widgets { widgets { id name } }`, operationName "Widgets") with
+// the response { data: { widgets: [{id,name}, ...] } }. Generated offline against
+// an in-process GraphQL endpoint (see the gen-graphql-har.mjs generator in the
+// commit message). NOTE: attach-mode puts the request postData in a `_file` entry,
+// so this fixture exercises the attached request-body resolution path.
+const GQL_HAR = readFileSync(
+  fileURLToPath(new URL('../test/fixtures/graphql-capture.har.zip', import.meta.url)),
+)
+// The schema the captured `{ widgets { id name } }` operation conforms to.
+const GQL_SDL = `
+  type Query { widgets: [Widget!]! }
+  type Widget { id: ID!, name: String }
+`
+const GQL_REAL = { endpointPath: '/graphql', sdl: GQL_SDL }
+// Same schema with `name` removed — the captured query now drifts.
+const GQL_SDL_DRIFT = `
+  type Query { widgets: [Widget!]! }
+  type Widget { id: ID! }
+`
+
 // A tiny OpenAPI doc with a /api/v1 server base path. `/unused` is documented but
 // never exercised by the capture; `/widgets/{id}` requires an integer `id`.
 const SPEC = {
@@ -207,28 +228,76 @@ const SDL = `
 `
 const GQL = { endpointPath: '/graphql', sdl: SDL }
 
-describe('validateCapturedTraffic — GraphQL drift over capture (ADR 0013 §5)', () => {
-  it('validates a clean GraphQL operation against the SDL (clean=true)', () => {
-    const har = graphqlHar({
-      query: '{ widget(id: "1") { id name } }',
-      response: { data: { widget: { id: '1', name: 'alpha' } } },
+describe('validateCapturedTraffic — GraphQL drift over a REAL capture (ADR 0013 §5)', () => {
+  it('resolves the attached (_file) GraphQL request body into the query', () => {
+    // The real attach-mode capture stores postData in a `_file` entry.
+    const facts = harEntriesToFacts(GQL_HAR)
+    const gql = facts.find((f) => f.req.path === '/graphql')
+    expect(gql?.req.method).toBe('POST')
+    expect(gql?.req.body).toEqual({
+      query: 'query Widgets { widgets { id name } }',
+      operationName: 'Widgets',
     })
-    const v = validateCapturedTraffic(har, { graphql: GQL })
-    expect(v.entriesValidated).toBe(1)
+  })
+
+  it('validates the captured operation against a conformant SDL (clean=true)', () => {
+    const v = validateCapturedTraffic(GQL_HAR, { graphql: GQL_REAL })
+    expect(v.entriesValidated).toBe(1) // only the /graphql JSON entry (GET / is html)
     expect(v.clean).toBe(true)
     expect(v.results.every((r) => r.valid)).toBe(true)
   })
 
-  it('flags query-vs-schema drift (an unknown field) as graphql-validation', () => {
-    const har = graphqlHar({
-      query: '{ widget(id: "1") { id color } }',
-      response: { data: null },
+  it('flags query-vs-schema drift when the SDL drops a queried field', () => {
+    const v = validateCapturedTraffic(GQL_HAR, {
+      graphql: { endpointPath: '/graphql', sdl: GQL_SDL_DRIFT },
     })
-    const v = validateCapturedTraffic(har, { graphql: GQL })
     expect(v.clean).toBe(false)
     expect(v.findingsByKind['graphql-validation']).toBeGreaterThanOrEqual(1)
     expect(v.firstFailing?.kind).toBe('graphql-validation')
   })
+
+  it('detects GraphQL by the {query} request shape even without endpointPath', () => {
+    // No endpointPath given, but the request body shape is GraphQL → still routed.
+    const v = validateCapturedTraffic(GQL_HAR, { graphql: { endpointPath: '/nope', sdl: GQL_SDL } })
+    expect(v.clean).toBe(true)
+    expect(v.findingsByKind['graphql-sdl-not-supplied']).toBeUndefined()
+  })
+
+  it('a captured GraphQL entry with NO graphql contract is no-signal, never an OpenAPI fall-through', () => {
+    // openapi-only contract: the graphql POST must NOT flood missing-operation.
+    const v = validateCapturedTraffic(GQL_HAR, { openapi: SPEC })
+    expect(v.findingsByKind['graphql-sdl-not-supplied']).toBe(1)
+    expect(v.findingsByKind['missing-operation']).toBeUndefined()
+    expect(v.clean).toBe(false)
+  })
+
+  it('routes GraphQL finding messages through the operator Redactor', () => {
+    const redact = vi.fn((s: string) => s.replace(/name/gi, '‹redacted›'))
+    const v = validateCapturedTraffic(
+      GQL_HAR,
+      { graphql: { endpointPath: '/graphql', sdl: GQL_SDL_DRIFT } },
+      { redact },
+    )
+    expect(redact).toHaveBeenCalled()
+    for (const r of v.results) for (const f of r.findings) expect(f.message).not.toContain('name')
+  })
+
+  it('validates REST entries via OpenAPI without flagging GraphQL (no cross-contamination)', () => {
+    // The real REST HAR has no graphql entries: no graphql-sdl-not-supplied appears.
+    const v = validateCapturedTraffic(HAR, { openapi: SPEC })
+    expect(v.findingsByKind['graphql-sdl-not-supplied']).toBeUndefined()
+    expect(v.exercisedOperations).toContain('GET /widgets')
+  })
+})
+
+// Edge cases a single clean real capture can't express, over a hand-authored HAR
+// shaped like the real one (POST + JSON request/response).
+describe('validateCapturedTraffic — GraphQL edge cases (hand-authored HAR)', () => {
+  const SDL = `
+    type Query { widget(id: ID!): Widget }
+    type Widget { id: ID!, name: String }
+  `
+  const GQL = { endpointPath: '/graphql', sdl: SDL }
 
   it('flags a response with a top-level errors[] as graphql-errors', () => {
     const har = graphqlHar({
@@ -238,18 +307,6 @@ describe('validateCapturedTraffic — GraphQL drift over capture (ADR 0013 §5)'
     const v = validateCapturedTraffic(har, { graphql: GQL })
     expect(v.clean).toBe(false)
     expect(v.findingsByKind['graphql-errors']).toBeGreaterThanOrEqual(1)
-  })
-
-  it('a detected GraphQL entry with NO graphql contract is no-signal, never an OpenAPI fall-through', () => {
-    const har = graphqlHar({
-      query: '{ widget(id: "1") { id name } }',
-      response: { data: { widget: { id: '1' } } },
-    })
-    // openapi-only contract: the graphql POST must NOT flood missing-operation.
-    const v = validateCapturedTraffic(har, { openapi: SPEC })
-    expect(v.findingsByKind['graphql-sdl-not-supplied']).toBe(1)
-    expect(v.findingsByKind['missing-operation']).toBeUndefined()
-    expect(v.clean).toBe(false)
   })
 
   it('passes operationName through to the validator (named operation that exists)', () => {
@@ -262,23 +319,27 @@ describe('validateCapturedTraffic — GraphQL drift over capture (ADR 0013 §5)'
     expect(v.clean).toBe(true)
   })
 
-  it('routes GraphQL finding messages through the operator Redactor', () => {
-    const redact = vi.fn((s: string) => s.replace(/color/gi, '‹redacted›'))
-    const har = graphqlHar({
-      query: '{ widget(id: "1") { id color } }',
-      response: { data: null },
-    })
-    const v = validateCapturedTraffic(har, { graphql: GQL }, { redact })
-    expect(redact).toHaveBeenCalled()
-    for (const r of v.results) for (const f of r.findings) expect(f.message).not.toContain('color')
-  })
-
-  it('validates REST via OpenAPI and GraphQL via SDL in one capture (no cross-contamination)', () => {
-    // The real REST HAR + a graphql entry, both contracts supplied: the graphql entry
-    // is NOT counted as a missing OpenAPI operation, and REST drift is still caught.
-    const v = validateCapturedTraffic(HAR, { openapi: SPEC })
-    expect(v.findingsByKind['graphql-sdl-not-supplied']).toBeUndefined()
-    expect(v.exercisedOperations).toContain('GET /widgets')
+  it('a request matching the GraphQL endpoint but carrying no query is a hard finding', () => {
+    // A JSON POST to /graphql with no `query` field: matched by endpointPath, but
+    // nothing to validate → graphql-no-query, never an empty pass.
+    const har = {
+      log: {
+        entries: [
+          {
+            request: {
+              method: 'POST',
+              url: 'http://x/graphql',
+              postData: { mimeType: 'application/json', text: JSON.stringify({ notAQuery: 1 }) },
+            },
+            response: { status: 200, content: { mimeType: 'application/json', text: '{}' } },
+          },
+        ],
+      },
+    }
+    const zip = Buffer.from(zipSync({ 'har.har': strToU8(JSON.stringify(har)) }))
+    const v = validateCapturedTraffic(zip, { graphql: GQL })
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['graphql-no-query']).toBe(1)
   })
 })
 

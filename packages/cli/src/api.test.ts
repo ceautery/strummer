@@ -413,36 +413,19 @@ describe('cli api validate-capture', () => {
   })
 
   it('validates captured GraphQL traffic against an SDL and exits 1 on drift', async () => {
-    const { strToU8, zipSync } = await import('fflate')
-    const har = {
-      log: {
-        entries: [
-          {
-            request: {
-              method: 'POST',
-              url: 'http://127.0.0.1:9/graphql',
-              postData: {
-                mimeType: 'application/json',
-                text: JSON.stringify({ query: '{ user { id missingField } }' }),
-              },
-            },
-            response: { status: 200, content: { mimeType: 'application/json', text: '{}' } },
-          },
-        ],
-      },
-    }
+    // The REAL Playwright GraphQL HAR fixture; the captured query (`widgets { id name }`)
+    // drifts from this SDL (no `name` on Widget).
+    const gqlHar = resolve(here, '../../api/test/fixtures/graphql-capture.har.zip')
     const dir = mkdtempSync(join(tmpdir(), 'strummer-gqlcap-'))
-    const harPath = join(dir, 'gql.har.zip')
-    writeFileSync(harPath, Buffer.from(zipSync({ 'har.har': strToU8(JSON.stringify(har)) })))
     const sdlPath = join(dir, 'schema.graphql')
-    writeFileSync(sdlPath, 'type Query { user: User } type User { id: ID! name: String }')
+    writeFileSync(sdlPath, 'type Query { widgets: [Widget!]! } type Widget { id: ID! }')
 
     const c = capture()
     const code = await run(
-      ['api', 'validate-capture', harPath, '--graphql', sdlPath, '--graphql-endpoint', '/graphql'],
+      ['api', 'validate-capture', gqlHar, '--graphql', sdlPath, '--graphql-endpoint', '/graphql'],
       c.io,
     )
-    expect(code).toBe(1) // `missingField` is not on User — graphql drift
+    expect(code).toBe(1) // `name` is not on Widget in this SDL — graphql drift
     expect(c.out()).toContain('NOT CLEAN')
     expect(c.out()).toContain('graphql-validation')
   })
