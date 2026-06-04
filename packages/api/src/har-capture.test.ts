@@ -226,7 +226,6 @@ const SDL = `
   type Query { widget(id: ID!): Widget }
   type Widget { id: ID!, name: String }
 `
-const GQL = { endpointPath: '/graphql', sdl: SDL }
 
 describe('validateCapturedTraffic — GraphQL drift over a REAL capture (ADR 0013 §5)', () => {
   it('resolves the attached (_file) GraphQL request body into the query', () => {
