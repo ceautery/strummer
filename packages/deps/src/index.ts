@@ -47,5 +47,13 @@ export {
   pypiJsonToPackument,
   pythonManifestNames,
 } from './pypi.js'
+export {
+  CHANGELOG_FILENAMES,
+  gemRepoUrl,
+  githubOwnerRepo,
+  npmRepoUrl,
+  pypiRepoUrl,
+  type RubyGemMetadata,
+} from './repo.js'
 export { type RubyGemsVersion, rubygemsToPackument, rubyManifestNames } from './rubygems.js'
 export { loadOsvSnapshot, type OsvSnapshot } from './snapshot.js'

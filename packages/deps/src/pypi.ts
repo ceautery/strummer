@@ -28,7 +28,12 @@ export interface PyPiReleaseFile {
 
 /** The subset of the PyPI JSON API response we read. */
 export interface PyPiJson {
-  info?: { name?: string; version?: string }
+  info?: {
+    name?: string
+    version?: string
+    /** Free-form label→URL map (`Source`/`Repository`/`Homepage`…); mined for the source repo. */
+    project_urls?: Record<string, string>
+  }
   /** version string → its uploaded files (empty when a version has no upload). */
   releases?: Record<string, PyPiReleaseFile[]>
 }

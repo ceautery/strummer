@@ -421,6 +421,32 @@ describe('strummer deps MCP surface', () => {
     expect(body).not.toContain('Old release') // 4.17.15 itself is excluded
   })
 
+  it('changelog_diff drives the PyPI ecosystem (fetcher + PEP 440 comparator)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    tmpDirs.push(dir)
+    const store = new ArtifactStore(dir, 'deps')
+    const fetchPyChangelog: ChangelogFetcher = async (name, ecosystem) => {
+      expect(ecosystem).toBe('PyPI')
+      expect(name).toBe('requests')
+      return {
+        text: '## 2.32.0\n- big change\n\n## 2.31.1\n- a fix\n\n## 2.31.0\n- baseline\n',
+        source: 'https://raw.githubusercontent.com/psf/requests/HEAD/HISTORY.md',
+      }
+    }
+    const client = await connect(
+      createDepsServer({ fetchChangelog: fetchPyChangelog, artifacts: store }),
+    )
+    clients.push(client)
+
+    const res = await client.callTool({
+      name: 'changelog_diff',
+      arguments: { package: 'requests', ecosystem: 'PyPI', from: '2.31.0', to: '2.32.0' },
+    })
+    const sc = res.structuredContent as { ecosystem: string; versionsCovered: string[] }
+    expect(sc.ecosystem).toBe('PyPI')
+    expect(sc.versionsCovered).toEqual(['2.32.0', '2.31.1'])
+  })
+
   it('changelog_diff fails clearly when not enabled', async () => {
     const client = await connect(createDepsServer({ fetchPackument }))
     clients.push(client)

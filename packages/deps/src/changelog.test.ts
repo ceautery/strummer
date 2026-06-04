@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { sliceChangelog } from './changelog.js'
+import type { VersionComparator } from './comparator.js'
+import { comparatorFor } from './ecosystem.js'
 
 // Keep-a-Changelog style: `## [x.y.z] - date`, with subsection headings inside.
 const KEEP_A_CHANGELOG = `# Changelog
@@ -90,5 +92,43 @@ describe('sliceChangelog — extract the version sections between two versions',
 
   it('throws on an unparseable `from`', () => {
     expect(() => sliceChangelog(PLAIN, { from: 'not-a-version' })).toThrow(/version/i)
+  })
+})
+
+describe('sliceChangelog — injected ecosystem comparator', () => {
+  // A PyPI-flavoured changelog: plain X.Y.Z headings (the staged heading regex), PEP 440 bounds.
+  const PYPI_LOG = `## 2.32.0
+- big change
+
+## 2.31.1
+- a fix
+
+## 2.31.0
+- baseline
+`
+
+  it('slices a PyPI changelog with PEP 440 bounds via the PyPI comparator', () => {
+    const slice = sliceChangelog(PYPI_LOG, {
+      from: '2.31.0',
+      to: '2.32.0',
+      comparator: comparatorFor('PyPI'),
+    })
+    expect(slice.entries.map((e) => e.version)).toEqual(['2.32.0', '2.31.1'])
+  })
+
+  it('actually consults the injected comparator for the range filter (seam check)', () => {
+    // A comparator whose ordering is inverted: `gt`/`lte`/`compare` are flipped, so the `(from, to]`
+    // filter selects the OPPOSITE sections — proving the param drives selection, not a hardcoded semver.
+    const base = comparatorFor('npm')
+    const inverted: VersionComparator = {
+      ...base,
+      compare: (a, b) => -base.compare(a, b) as -1 | 0 | 1,
+      gt: (a, b) => base.lt(a, b),
+      lt: (a, b) => base.gt(a, b),
+      lte: (a, b) => base.gt(a, b) || base.compare(a, b) === 0,
+    }
+    const slice = sliceChangelog(PYPI_LOG, { from: '2.31.1', comparator: inverted })
+    // With inverted `gt`, "newer than 2.31.1" means strictly-lower → only 2.31.0.
+    expect(slice.entries.map((e) => e.version)).toEqual(['2.31.0'])
   })
 })

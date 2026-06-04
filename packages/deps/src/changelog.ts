@@ -15,7 +15,7 @@
  * `### Bug Fixes` — as that version's body, and select the versions in range.
  */
 
-import semver from 'semver'
+import { semverComparator, type VersionComparator } from './comparator.js'
 
 export interface ChangelogEntry {
   version: string
@@ -37,24 +37,33 @@ export interface SliceOptions {
   from: string
   /** The upgrade target (inclusive). Omit for an open upper bound (everything newer). */
   to?: string
+  /**
+   * The ecosystem version algebra (ADR 0010 addendum). Defaults to semver (npm); pass
+   * {@link comparatorFor}'s PEP 440 / Gem comparator for PyPI / RubyGems so bounds and section
+   * ordering are correct for those ecosystems. (Heading DETECTION still uses the semver-token
+   * regex — PEP 440 two-segment / `1.0rc1` headings are STAGED — so a detected version is always
+   * semver-valid and every comparator can order it; the comparator matters for the from/to bounds
+   * and the dedupe/sort.)
+   */
+  comparator?: VersionComparator
 }
 
 const HEADING = /^#{1,6}\s+(.*)$/
 const SEMVER_TOKEN = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/g
 
-/** Extract the first valid semver from a heading line, or null (dates/words ignored). */
-function headingVersion(headingText: string): string | null {
+/** Extract the first comparator-valid semver token from a heading line, or null. */
+function headingVersion(headingText: string, comparator: VersionComparator): string | null {
   const tokens = headingText.match(SEMVER_TOKEN)
   if (!tokens) return null
   for (const token of tokens) {
-    if (semver.valid(token) !== null) return token
+    if (comparator.isValid(token)) return token
   }
   return null
 }
 
-/** Coerce a caller-supplied version to comparable semver, throwing if hopeless. */
-function requireVersion(value: string, label: string): string {
-  const v = semver.valid(value) ?? semver.valid(semver.coerce(value) ?? '')
+/** Clean a caller-supplied version to a comparable string, throwing if hopeless. */
+function requireVersion(value: string, label: string, comparator: VersionComparator): string {
+  const v = comparator.clean(value)
   if (v === null) throw new Error(`${label} is not a parseable version: ${value}`)
   return v
 }
@@ -65,12 +74,12 @@ interface RawEntry {
 }
 
 /** Split the markdown into one raw entry per versioned heading (preamble dropped). */
-function parseEntries(markdown: string): RawEntry[] {
+function parseEntries(markdown: string, comparator: VersionComparator): RawEntry[] {
   const entries: RawEntry[] = []
   let current: RawEntry | undefined
   for (const line of markdown.split('\n')) {
     const heading = HEADING.exec(line)
-    const version = heading ? headingVersion(heading[1] ?? '') : null
+    const version = heading ? headingVersion(heading[1] ?? '', comparator) : null
     if (version !== null) {
       current = { version, lines: [line] }
       entries.push(current)
@@ -84,14 +93,15 @@ function parseEntries(markdown: string): RawEntry[] {
 
 /**
  * Slice a changelog to the version sections in `(from, to]` (or `> from` when `to`
- * is omitted), newest first. `from`/`to` are coerced to semver; an unparseable
- * `from`/`to` throws (a slice with the wrong bound would silently mislead).
+ * is omitted), newest first. `from`/`to` are cleaned via the (ecosystem) comparator; an
+ * unparseable `from`/`to` throws (a slice with the wrong bound would silently mislead).
  */
 export function sliceChangelog(markdown: string, opts: SliceOptions): ChangelogSlice {
-  const from = requireVersion(opts.from, 'from')
-  const to = opts.to !== undefined ? requireVersion(opts.to, 'to') : undefined
+  const comparator = opts.comparator ?? semverComparator
+  const from = requireVersion(opts.from, 'from', comparator)
+  const to = opts.to !== undefined ? requireVersion(opts.to, 'to', comparator) : undefined
 
-  const raw = parseEntries(markdown)
+  const raw = parseEntries(markdown, comparator)
   // Latest section wins if a version somehow appears twice (keep first seen by id).
   const seen = new Set<string>()
   const deduped: RawEntry[] = []
@@ -101,11 +111,13 @@ export function sliceChangelog(markdown: string, opts: SliceOptions): ChangelogS
     deduped.push(entry)
   }
 
-  const sorted = [...deduped].sort((a, b) => semver.rcompare(a.version, b.version))
+  const sorted = [...deduped].sort((a, b) => -comparator.compare(a.version, b.version))
   const allVersions = sorted.map((e) => e.version)
 
   const entries: ChangelogEntry[] = sorted
-    .filter((e) => semver.gt(e.version, from) && (to === undefined || semver.lte(e.version, to)))
+    .filter(
+      (e) => comparator.gt(e.version, from) && (to === undefined || comparator.lte(e.version, to)),
+    )
     .map((e) => ({ version: e.version, body: e.lines.join('\n').trim() }))
 
   return { from, to, entries, allVersions }

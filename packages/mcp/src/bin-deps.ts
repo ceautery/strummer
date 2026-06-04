@@ -4,10 +4,16 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
 import {
+  CHANGELOG_FILENAMES,
+  gemRepoUrl,
+  githubOwnerRepo,
   normalizePypiName,
+  npmRepoUrl,
   type Packument,
   type PyPiJson,
   pypiJsonToPackument,
+  pypiRepoUrl,
+  type RubyGemMetadata,
   type RubyGemsVersion,
   rubygemsToPackument,
 } from '@strummer/deps'
@@ -125,29 +131,21 @@ export function depsNetworkConfig(env: Record<string, string | undefined> = proc
   }
 }
 
-/** Pull an `owner/repo` out of a packument `repository` field (string or `{url}`). */
-function githubRepo(packument: Packument): { owner: string; repo: string } | undefined {
-  const repo = (packument as { repository?: unknown }).repository
-  const url = typeof repo === 'string' ? repo : (repo as { url?: string } | undefined)?.url
-  const m = url?.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?(?:[/#].*)?$/i)
-  return m ? { owner: m[1] as string, repo: m[2] as string } : undefined
+/** SSRF-pinned JSON GET (pre-flight resolve-and-refuse, then fetch). */
+async function pinnedFetchJson(url: string, allowPrivate: boolean): Promise<unknown> {
+  await resolveAndPin(new URL(url).hostname, undefined, { allowPrivate })
+  const res = await fetch(url, { headers: { accept: 'application/json' } })
+  if (!res.ok) throw new Error(`metadata fetch returned ${res.status} for ${url}`)
+  return res.json()
 }
 
-// CHANGELOG filenames seen in the wild, in priority order; first 200 wins.
-const CHANGELOG_FILES = [
-  'CHANGELOG.md',
-  'CHANGELOG.markdown',
-  'CHANGELOG',
-  'changelog.md',
-  'History.md',
-  'HISTORY.md',
-]
-
 /**
- * Build an operator-gated, SSRF-pinned changelog fetcher. Resolves the package's
- * GitHub repo from its packument, then fetches the CHANGELOG from
- * `raw.githubusercontent.com/<owner>/<repo>/HEAD/<file>` (HEAD = default branch),
- * SSRF-pinning the raw host on every attempt. Fails loud if no repo/changelog is found.
+ * Build an operator-gated, SSRF-pinned changelog fetcher (npm/PyPI/RubyGems). Resolves the
+ * package's source GitHub repo from registry metadata — npm packument `repository`, PyPI
+ * `info.project_urls`, or the RubyGems gem JSON `source_code_uri`/`homepage_uri` (a SEPARATE
+ * `/api/v1/gems/<name>.json` fetch; the packument path stays on the versions array for freshness)
+ * — then fetches the CHANGELOG from `raw.githubusercontent.com/<owner>/<repo>/HEAD/<file>`
+ * (HEAD = default branch), SSRF-pinning every request. Fails loud if no repo/changelog is found.
  */
 function makeChangelogFetcher(
   registry: string,
@@ -156,16 +154,29 @@ function makeChangelogFetcher(
   allowPrivate: boolean,
 ): ChangelogFetcher {
   const fetchPackument = makeFetcher(registry, pypiRegistry, rubygemsRegistry, allowPrivate)
-  return async (packageName, ecosystem) => {
-    if (ecosystem !== 'npm') {
-      throw new Error(`changelog fetch supports the npm ecosystem only (got "${ecosystem}")`)
+  const repoUrlFor = async (
+    packageName: string,
+    ecosystem: string,
+  ): Promise<string | undefined> => {
+    if (ecosystem === 'npm') return npmRepoUrl(await fetchPackument(packageName, 'npm'))
+    if (ecosystem === 'PyPI') {
+      const base = pypiRegistry.replace(/\/+$/, '')
+      const url = `${base}/${encodeURIComponent(normalizePypiName(packageName))}/json`
+      return pypiRepoUrl((await pinnedFetchJson(url, allowPrivate)) as PyPiJson)
     }
-    const packument = await fetchPackument(packageName, ecosystem)
-    const gh = githubRepo(packument)
+    if (ecosystem === 'RubyGems') {
+      const base = rubygemsRegistry.replace(/\/+$/, '')
+      const url = `${base}/gems/${encodeURIComponent(packageName)}.json`
+      return gemRepoUrl((await pinnedFetchJson(url, allowPrivate)) as RubyGemMetadata)
+    }
+    throw new Error(`changelog fetch supports npm, PyPI, and RubyGems (got "${ecosystem}")`)
+  }
+  return async (packageName, ecosystem) => {
+    const gh = githubOwnerRepo(await repoUrlFor(packageName, ecosystem))
     if (!gh) {
       throw new Error(`could not resolve a GitHub repository for "${packageName}"`)
     }
-    for (const file of CHANGELOG_FILES) {
+    for (const file of CHANGELOG_FILENAMES) {
       const url = `https://raw.githubusercontent.com/${gh.owner}/${gh.repo}/HEAD/${file}`
       await resolveAndPin(new URL(url).hostname, undefined, { allowPrivate })
       const res = await fetch(url)

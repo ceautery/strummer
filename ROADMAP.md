@@ -449,10 +449,19 @@ stage `reportlog`. Pure/zero-spawn slices first.
       Pure, fixture-only; the `strummer verify run --deps` CLI already threads the ecosystem.
       *(Staged within: `Pipfile.lock`/`Pipfile`; the MCP `bin-verify` deps audit stays npm-only —
       separate registry-fetcher wiring.)*
-- [ ] **Slice 2 — deps `changelog_diff` for PyPI + RubyGems.** Pure `repoUrlFromMetadata`
-      (PyPI `info.project_urls`, RubyGems `source_code_uri`/`homepage_uri` via a second
-      changelog-only fetch), reuse `sliceChangelog` with `comparatorFor(ecosystem)`. *(Staged:
-      ecosystem-aware heading-token regex — PEP 440/Gem versions won't all match `SEMVER_TOKEN`.)*
+- [x] **Slice 2 — deps `changelog_diff` for PyPI + RubyGems.** Extracted the pure repo-derivation
+      into `@strummer/deps` `repo.ts` (one source of truth, shared by the MCP bin + CLI, like
+      `ecosystem.ts`): `githubOwnerRepo` (the owner/repo regex), `npmRepoUrl` (packument
+      `repository`), `pypiRepoUrl` (`info.project_urls`, Source/Repository-labelled github link
+      preferred), `gemRepoUrl` (`source_code_uri ?? homepage_uri`), `CHANGELOG_FILENAMES`.
+      `sliceChangelog` now takes an injected `comparator` (default semver), used for the from/to
+      bounds + dedupe/sort/range filter, so PyPI/Gem versions order correctly; both surfaces pass
+      `comparatorFor(ecosystem)`. Both `makeChangelogFetcher`s resolve the repo per ecosystem (npm
+      packument; PyPI `<base>/<name>/json` project_urls; RubyGems a SEPARATE `<base>/gems/<name>.json`
+      — the packument fetch stays on the versions array for freshness), then the SSRF-pinned
+      raw.githubusercontent HEAD loop (unchanged). *(Staged: the ecosystem-aware heading-token regex
+      — `SEMVER_TOKEN` still detects only X.Y.Z headings, so a PEP 440 `1.0rc1` / two-segment heading
+      is missed; a detected heading is always semver-valid so every comparator orders it.)*
 - [ ] **Slice 3 — mutate `parseCosmicRayDump`** (pure) — `cosmic-ray dump` JSON-lines → MTE
       `MutationReport`; unrecognized/null outcome → `Pending` (ambiguity rule). Real dump
       fixture captured out-of-gate (provenance in `test/fixtures/README.md`).

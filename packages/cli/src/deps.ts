@@ -2,17 +2,23 @@ import { parseArgs } from 'node:util'
 import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
 import {
   auditDependency,
+  CHANGELOG_FILENAMES,
   comparatorFor,
   type DependencyAudit,
   dependencyNames,
+  gemRepoUrl,
+  githubOwnerRepo,
   loadOsvSnapshot,
   matchName,
   normalizePypiName,
+  npmRepoUrl,
   type OsvAdvisory,
   type OsvEcosystem,
   type Packument,
   type PyPiJson,
   pypiJsonToPackument,
+  pypiRepoUrl,
+  type RubyGemMetadata,
   type RubyGemsVersion,
   rubygemsToPackument,
   sliceChangelog,
@@ -132,33 +138,43 @@ export function makeFetcher(r: Registries): PackumentFetcher {
   }
 }
 
-/** Pull an `owner/repo` out of a packument `repository` field (string or `{url}`). */
-function githubRepo(packument: Packument): { owner: string; repo: string } | undefined {
-  const repo = (packument as { repository?: unknown }).repository
-  const url = typeof repo === 'string' ? repo : (repo as { url?: string } | undefined)?.url
-  const m = url?.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?(?:[/#].*)?$/i)
-  return m ? { owner: m[1] as string, repo: m[2] as string } : undefined
+/** SSRF-pinned JSON GET (pre-flight resolve-and-refuse, then fetch). */
+async function pinnedFetchJson(url: string, allowPrivate: boolean): Promise<unknown> {
+  await resolveAndPin(new URL(url).hostname, undefined, { allowPrivate })
+  const res = await fetch(url, { headers: { accept: 'application/json' } })
+  if (!res.ok) throw new Error(`metadata fetch returned ${res.status} for ${url}`)
+  return res.json()
 }
 
-const CHANGELOG_FILES = [
-  'CHANGELOG.md',
-  'CHANGELOG.markdown',
-  'CHANGELOG',
-  'changelog.md',
-  'History.md',
-  'HISTORY.md',
-]
-
-/** Build the SSRF-pinned, npm-only changelog fetcher (raw.githubusercontent/<repo>/HEAD/<file>). */
+/**
+ * Build the SSRF-pinned changelog fetcher (npm/PyPI/RubyGems). Resolves the source GitHub repo
+ * from registry metadata — npm packument `repository`, PyPI `info.project_urls`, or the RubyGems
+ * `/api/v1/gems/<name>.json` `source_code_uri`/`homepage_uri` — then fetches the CHANGELOG from
+ * `raw.githubusercontent.com/<owner>/<repo>/HEAD/<file>`, pinning every request.
+ */
 function makeChangelogFetcher(r: Registries): ChangelogFetcher {
   const fetchPackument = makeFetcher(r)
-  return async (packageName, ecosystem) => {
-    if (ecosystem !== 'npm') {
-      throw new Error(`changelog fetch supports the npm ecosystem only (got "${ecosystem}")`)
+  const repoUrlFor = async (
+    packageName: string,
+    ecosystem: string,
+  ): Promise<string | undefined> => {
+    if (ecosystem === 'npm') return npmRepoUrl(await fetchPackument(packageName, 'npm'))
+    if (ecosystem === 'PyPI') {
+      const base = r.pypiRegistry.replace(/\/+$/, '')
+      const url = `${base}/${encodeURIComponent(normalizePypiName(packageName))}/json`
+      return pypiRepoUrl((await pinnedFetchJson(url, r.allowPrivate)) as PyPiJson)
     }
-    const gh = githubRepo(await fetchPackument(packageName, ecosystem))
+    if (ecosystem === 'RubyGems') {
+      const base = r.rubygemsRegistry.replace(/\/+$/, '')
+      const url = `${base}/gems/${encodeURIComponent(packageName)}.json`
+      return gemRepoUrl((await pinnedFetchJson(url, r.allowPrivate)) as RubyGemMetadata)
+    }
+    throw new Error(`changelog fetch supports npm, PyPI, and RubyGems (got "${ecosystem}")`)
+  }
+  return async (packageName, ecosystem) => {
+    const gh = githubOwnerRepo(await repoUrlFor(packageName, ecosystem))
     if (!gh) throw new Error(`could not resolve a GitHub repository for "${packageName}"`)
-    for (const file of CHANGELOG_FILES) {
+    for (const file of CHANGELOG_FILENAMES) {
       const url = `https://raw.githubusercontent.com/${gh.owner}/${gh.repo}/HEAD/${file}`
       await resolveAndPin(new URL(url).hostname, undefined, { allowPrivate: r.allowPrivate })
       const res = await fetch(url)
@@ -474,7 +490,11 @@ async function cmdChangelog(
       from = detected.version
     }
     const { text: markdown, source } = await fetchChangelog(packageName, ecosystem)
-    const slice = sliceChangelog(markdown, { from, to: values.to })
+    const slice = sliceChangelog(markdown, {
+      from,
+      to: values.to,
+      comparator: comparatorFor(ecosystem),
+    })
 
     if (values.json) {
       io.out(

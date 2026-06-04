@@ -401,7 +401,11 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
           }
 
           const { text: markdown, source } = await fetchChangelog(args.package, ecosystem)
-          const slice = sliceChangelog(markdown, { from, to: args.to })
+          const slice = sliceChangelog(markdown, {
+            from,
+            to: args.to,
+            comparator: comparatorFor(ecosystem),
+          })
           const body = slice.entries.map((e) => e.body).join('\n\n')
 
           const id = safeId(`${args.package}-${slice.from}-to-${slice.to ?? 'latest'}`)
