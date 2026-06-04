@@ -42,6 +42,10 @@ one server serves many collections):
   compact per-step summary + threaded `captured`.
 - **`validate_response`** — OpenAPI 3.1 (`openapiSpec`,`method`,`path`,`status`,
   `body`) **or** GraphQL (`graphqlSchema`,`query`,`body`) → contract findings.
+- **`validate_request`** — validate a request's **body + path/query/header params**
+  against an OpenAPI 3.1 operation (`openapiSpec`,`method`,`path`,`body?`,`query?`,
+  `headers?`) → contract findings (message + path redacted). A GraphQL envelope is
+  refused, not schema-failed.
 - Resource **`strummer://run/{runId}/body`** — fetch a stored response body by
   its handle (bodies are never inlined).
 

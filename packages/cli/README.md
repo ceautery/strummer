@@ -131,6 +131,13 @@ strummer api run mycollection get-user --env Public --openapi openapi.json
 # Offline GraphQL drift check (no request sent): does a saved query still
 # conform to the current schema?
 strummer api validate --graphql schema.graphql --query query.graphql
+
+# Preflight a REQUEST (body + params) against an OpenAPI 3.1 operation, no send:
+strummer api validate-request --openapi openapi.json --method POST --path /widgets \
+  --body new-widget.json --query limit=10
+
+# Validate the traffic in a captured HAR against a contract (no request re-run):
+strummer api validate-capture run.har.zip --openapi openapi.json
 ```
 
 ### Command reference
@@ -141,6 +148,8 @@ strummer api get   <dir> <name>
 strummer api run   <dir> <name> [--var k=v]… [--env <e>] [--unsafe] [--allow-host <h>]… [--openapi <spec.json>] [--json]
 strummer api run-collection <dir> <name>… [--var k=v]… [--env <e>] [--unsafe] [--allow-host <h>]… [--stop-on-failure] [--json]
 strummer api validate --graphql <schema> --query <query> [--json]
+strummer api validate-request --openapi <spec.json> --method <M> --path </p> [--body <file>] [--query k=v]… [--header n:v]… [--json]
+strummer api validate-capture <har.zip> [--openapi <spec.json>] [--graphql <schema>] [--graphql-endpoint </p>] [--json]
 ```
 
 `<name>` is the `.bru` file stem (e.g. `get-user` for `get-user.bru`).

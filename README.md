@@ -187,8 +187,15 @@ synthesize a HAR (`@strummer/api` `har-synth.ts`: per-hop entries, the real requ
 shared `redactHarZip` pass `finalizeHar` now delegates to) → validate it, behind the api pillar's own gate
 + `STRUMMER_API_COLLECTIONS_DIR`; transport-completeness guards throw ⇒ inconclusive, and the new
 `@strummer/verdict` `fromCaptureVerdict` folds a not-`clean` capture to inconclusive (closing a latent
-absence-as-pass hole across the consume + both produce paths). Staged (not amputated): request-body/param
-contract validation, extracting the shared `Severity` scale, and the Python second half.
+absence-as-pass hole across the consume + both produce paths). **Two follow-on tails have since landed:**
+the shared **`@strummer/severity`** scale was extracted out of `@strummer/deps` into its own pure zero-dep
+leaf (`QualitativeSeverity`/`QUALITATIVE_RANK` + the verdict scale; `none`≠`unknown` kept distinct); and
+**request-body & parameter contract validation** ([ADR 0014](./docs/decisions/0014-request-contract-validation.md))
+— a new `validateOpenApiRequest` sibling validates the request half (body + path/query/header params) and
+threads into the capture→contract bridge + verdict (via an `unverified`→`noSignal` fold so a
+present-but-uncheckable request can't pass) + a direct `validate_request` MCP tool / `strummer api
+validate-request` CLI. Staged (not amputated): the live `api run --openapi` inline request check, non-scalar
+OpenAPI param serializations, and the Python second half.
 
 **The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
 
