@@ -387,3 +387,202 @@ describe('validateCapturedTraffic — slices 3/4/5 (filter, base-path, drive + d
     expect(v.clean).toBe(false)
   })
 })
+
+// ─── slices 4a/4b — request-side contract validation over the capture bridge ───
+const SPEC_REQ = {
+  openapi: '3.1.0',
+  paths: {
+    '/widgets': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string' } },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        responses: { '201': { content: { 'application/json': { schema: { type: 'object' } } } } },
+      },
+    },
+    '/search': {
+      get: {
+        parameters: [{ name: 'q', in: 'query', required: true, schema: { type: 'string' } }],
+        responses: { '200': { content: { 'application/json': { schema: { type: 'object' } } } } },
+      },
+    },
+    '/log': {
+      // declares NO requestBody.
+      post: {
+        responses: { '200': { content: { 'application/json': { schema: { type: 'object' } } } } },
+      },
+    },
+    '/keys': {
+      post: {
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['apikey'],
+                properties: { apikey: { type: 'string' } },
+              },
+            },
+          },
+        },
+        responses: { '201': { content: { 'application/json': { schema: { type: 'object' } } } } },
+      },
+    },
+  },
+}
+
+function restHar(opts: {
+  method: string
+  url: string
+  reqHeaders?: Record<string, string>
+  reqBody?: unknown
+  status: number
+  resBody: unknown
+}): Buffer {
+  const har = {
+    log: {
+      entries: [
+        {
+          request: {
+            method: opts.method,
+            url: opts.url,
+            headers: Object.entries(opts.reqHeaders ?? {}).map(([name, value]) => ({
+              name,
+              value,
+            })),
+            ...(opts.reqBody !== undefined
+              ? { postData: { mimeType: 'application/json', text: JSON.stringify(opts.reqBody) } }
+              : {}),
+          },
+          response: {
+            status: opts.status,
+            content: { mimeType: 'application/json', text: JSON.stringify(opts.resBody) },
+          },
+        },
+      ],
+    },
+  }
+  return Buffer.from(zipSync({ 'har.har': strToU8(JSON.stringify(har)) }))
+}
+
+describe('harEntriesToFacts — slice 4a (capture query + headers)', () => {
+  it('populates req.query (repeated keys → array) and lower-cased req.headers', () => {
+    const har = restHar({
+      method: 'POST',
+      url: 'https://api.test/widgets?debug=1&tag=a&tag=b',
+      reqHeaders: { 'Content-Type': 'application/json', 'X-Trace': 't' },
+      reqBody: { name: 'g' },
+      status: 201,
+      resBody: {},
+    })
+    const [e] = harEntriesToFacts(har)
+    expect(e?.req.query).toEqual({ debug: '1', tag: ['a', 'b'] })
+    expect(e?.req.headers?.['content-type']).toBe('application/json')
+    expect(e?.req.headers?.['x-trace']).toBe('t')
+  })
+})
+
+describe('validateCapturedTraffic — slice 4b (request validation folded into the verdict)', () => {
+  const json = { 'content-type': 'application/json' }
+
+  it('a request body violating the spec ⇒ clean:false + request-body-schema', () => {
+    const har = restHar({
+      method: 'POST',
+      url: 'https://api.test/widgets',
+      reqHeaders: json,
+      reqBody: { wrong: 1 },
+      status: 201,
+      resBody: {},
+    })
+    const v = validateCapturedTraffic(har, { openapi: SPEC_REQ })
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['request-body-schema']).toBeGreaterThanOrEqual(1)
+    expect(v.firstFailing?.kind).toBe('request-body-schema')
+  })
+
+  it('a valid request body keeps the capture clean (no spurious missing-required-body)', () => {
+    const har = restHar({
+      method: 'POST',
+      url: 'https://api.test/widgets',
+      reqHeaders: json,
+      reqBody: { name: 'g' },
+      status: 201,
+      resBody: {},
+    })
+    const v = validateCapturedTraffic(har, { openapi: SPEC_REQ })
+    expect(v.clean).toBe(true)
+    expect(v.findingsByKind['missing-required-body']).toBeUndefined()
+  })
+
+  it('an op with a required query param the capture lacks ⇒ noSignal, never a clean pass', () => {
+    const har = restHar({
+      method: 'GET',
+      url: 'https://api.test/search',
+      status: 200,
+      resBody: {},
+    })
+    const v = validateCapturedTraffic(har, { openapi: SPEC_REQ })
+    expect(v.noSignal).toBeGreaterThanOrEqual(1)
+    expect(v.clean).toBe(false)
+    expect(v.findingsByKind['request-unverified']).toBeGreaterThanOrEqual(1)
+    // NOT a hard finding — the capture isn't authoritative about params.
+    expect(v.findingsByKind['missing-required-param']).toBeUndefined()
+  })
+
+  it('a present-but-uncheckable body (undocumented-body) ⇒ noSignal, never a clean pass', () => {
+    const har = restHar({
+      method: 'POST',
+      url: 'https://api.test/log',
+      reqHeaders: json,
+      reqBody: { x: 1 },
+      status: 200,
+      resBody: {},
+    })
+    const v = validateCapturedTraffic(har, { openapi: SPEC_REQ })
+    expect(v.findingsByKind['undocumented-body']).toBeGreaterThanOrEqual(1)
+    expect(v.noSignal).toBeGreaterThanOrEqual(1)
+    expect(v.clean).toBe(false)
+  })
+
+  it('does not double-count missing-operation across request + response validation', () => {
+    const har = restHar({
+      method: 'POST',
+      url: 'https://api.test/ghost',
+      reqHeaders: json,
+      reqBody: { x: 1 },
+      status: 200,
+      resBody: {},
+    })
+    const v = validateCapturedTraffic(har, { openapi: SPEC_REQ })
+    expect(v.findingsByKind['missing-operation']).toBe(1)
+    expect(v.clean).toBe(false)
+  })
+
+  it('redacts a secret-bearing finding path AND message at the single chokepoint', () => {
+    const har = restHar({
+      method: 'POST',
+      url: 'https://api.test/keys',
+      reqHeaders: json,
+      reqBody: { apikey: 12345 }, // number where a string is required → /apikey error
+      status: 201,
+      resBody: {},
+    })
+    const redact = (s: string) => s.split('apikey').join('‹redacted›')
+    const v = validateCapturedTraffic(har, { openapi: SPEC_REQ }, { redact })
+    const f = v.results.flatMap((r) => r.findings).find((x) => x.kind === 'request-body-schema')
+    expect(f).toBeDefined()
+    expect(f?.message).not.toContain('apikey')
+    expect(f?.path ?? '').not.toContain('apikey') // fork-1: path is redacted too
+  })
+})

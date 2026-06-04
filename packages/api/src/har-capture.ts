@@ -15,6 +15,7 @@ import { strFromU8, unzipSync } from 'fflate'
 import { type ResponseFacts, validateOpenApiResponse } from './contract.js'
 import { validateGraphqlOperation } from './graphql.js'
 import type { ContractFinding, ContractResult } from './model.js'
+import { validateOpenApiRequest } from './request-contract.js'
 
 /** fflate is unbounded by default; cap the inflated HAR archive (ADR 0013 §3e). */
 const MAX_HAR_INFLATED_BYTES = 64 * 1024 * 1024
@@ -31,6 +32,11 @@ export interface CaptureEntry {
      * the operation `query` lives in the request, not the response (ADR 0013 §5).
      */
     body?: unknown
+    /** Decoded request query params (repeated keys → array). Captured for
+     * request-side contract validation (slice 4a); only set when non-empty. */
+    query?: Record<string, string | string[]>
+    /** Lower-cased request header names → value (last wins). Only set when present. */
+    headers?: Record<string, string>
   }
   res: ResponseFacts
   /** Lower-cased response content-type (sans parameters), e.g. `application/json`. */
@@ -51,11 +57,37 @@ interface HarContent {
 }
 
 interface HarEntry {
-  request?: { method?: string; url?: string; postData?: HarContent }
+  request?: {
+    method?: string
+    url?: string
+    postData?: HarContent
+    headers?: { name?: string; value?: string }[]
+  }
   response?: {
     status?: number
     content?: HarContent
   }
+}
+
+/** Build a decoded query record from a URL's search params (repeated keys → array). */
+function collectQuery(sp: URLSearchParams): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {}
+  for (const key of new Set(sp.keys())) {
+    const all = sp.getAll(key)
+    out[key] = all.length > 1 ? all : (all[0] ?? '')
+  }
+  return out
+}
+
+/** Lower-cased request header map (last value wins) from the HAR header array. */
+function collectHeaders(
+  hdrs: { name?: string; value?: string }[] | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const h of hdrs ?? []) {
+    if (typeof h?.name === 'string') out[h.name.toLowerCase()] = String(h.value ?? '')
+  }
+  return out
 }
 
 function findHarJson(zip: Record<string, Uint8Array>): string | undefined {
@@ -89,13 +121,18 @@ export function harEntriesToFacts(harZip: Buffer): CaptureEntry[] {
     const rawUrl = e.request?.url ?? ''
     let path = rawUrl
     let origin = ''
+    let query: Record<string, string | string[]> | undefined
     try {
       const u = new URL(rawUrl)
       path = u.pathname
       origin = u.origin
+      const q = collectQuery(u.searchParams)
+      if (Object.keys(q).length > 0) query = q
     } catch {
       // a relative/opaque url: keep it verbatim as the path
     }
+    const headersMap = collectHeaders(e.request?.headers)
+    const headers = Object.keys(headersMap).length > 0 ? headersMap : undefined
     const status = e.response?.status ?? 0
     const content = e.response?.content
     const mimeType = mimeOf(content)
@@ -152,7 +189,14 @@ export function harEntriesToFacts(harZip: Buffer): CaptureEntry[] {
     }
 
     out.push({
-      req: { method, path, origin, ...(reqBody !== undefined ? { body: reqBody } : {}) },
+      req: {
+        method,
+        path,
+        origin,
+        ...(reqBody !== undefined ? { body: reqBody } : {}),
+        ...(query ? { query } : {}),
+        ...(headers ? { headers } : {}),
+      },
       res: { status, body },
       mimeType,
       ...(unresolvedBody ? { unresolvedBody } : {}),
@@ -335,10 +379,13 @@ export function validateCapturedTraffic(
     findingsByKind[kind] = (findingsByKind[kind] ?? 0) + 1
   }
   const pushResult = (entry: CaptureEntry, raw: ContractResult, displayPath: string) => {
-    // Redact every finding message before it enters the verdict (ADR 0013 §3b).
+    // Redact every finding message AND path before it enters the verdict (ADR 0013
+    // §3b; the path-redaction widening was human-ratified — request bodies/params are
+    // secret-bearing, so `path` can carry a captured key name; cheap, one chokepoint).
     const redactedFindings: ContractFinding[] = raw.findings.map((f) => ({
       ...f,
       message: redact(f.message),
+      ...(f.path !== undefined ? { path: redact(f.path) } : {}),
     }))
     const result: ContractResult = { ...raw, findings: redactedFindings }
     results.push(result)
@@ -414,17 +461,54 @@ export function validateCapturedTraffic(
       continue
     }
     const reqPath = reconcileBasePath(entry.req.path, bases)
-    const raw = validateOpenApiResponse(
-      spec as Parameters<typeof validateOpenApiResponse>[0],
+    const typedSpec = spec as Parameters<typeof validateOpenApiResponse>[0]
+    const resRaw = validateOpenApiResponse(
+      typedSpec,
       { method: entry.req.method, path: reqPath },
       entry.res,
       { baseDir: opts.baseDir },
     )
+    // Drive REQUEST-side validation over the same entry. The capture path is NOT
+    // authoritative about body presence or param completeness (it cannot tell "no
+    // body" from a dropped non-JSON body, and may not have captured every param), so
+    // both authority flags are OMITTED — a required-but-absent body/param surfaces as
+    // `unverified`, never a false `missing-*` finding.
+    const reqRaw = validateOpenApiRequest(
+      typedSpec,
+      {
+        method: entry.req.method,
+        path: reqPath,
+        body: entry.req.body,
+        query: entry.req.query,
+        headers: entry.req.headers,
+      },
+      { baseDir: opts.baseDir },
+    )
+    // Merge into one ContractResult before the single redaction chokepoint. Drop the
+    // request side's `missing-operation` (the response side reports it once).
+    const merged: ContractResult = {
+      valid: resRaw.valid && reqRaw.valid,
+      findings: [
+        ...resRaw.findings,
+        ...reqRaw.findings.filter((f) => f.kind !== 'missing-operation'),
+      ],
+      ...((resRaw.operation ?? reqRaw.operation)
+        ? { operation: resRaw.operation ?? reqRaw.operation }
+        : {}),
+    }
     // A matched operation template is operator-authored (safe); a raw captured
     // path is not — redact it (§3b: never echo an unredacted captured path).
-    const result = pushResult(entry, raw, raw.operation?.path ?? redact(reqPath))
+    const result = pushResult(entry, merged, merged.operation?.path ?? redact(reqPath))
     if (result.operation)
       exercised.add(`${result.operation.method.toUpperCase()} ${result.operation.path}`)
+    // A present-but-uncheckable body / uncapturable required param is `unverified` —
+    // fold it into `noSignal` (out-of-band, NOT a finding in `results[]`, so it never
+    // double-counts as a warning) so it can never be laundered into a clean pass
+    // (absence-is-never-a-pass; closes the leak the design's critic proved).
+    if (reqRaw.unverified) {
+      noSignal++
+      bump('request-unverified')
+    }
   }
 
   const documented = spec ? documentedOperations(spec) : []
