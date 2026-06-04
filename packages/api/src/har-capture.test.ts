@@ -223,12 +223,6 @@ function graphqlHar(opts: {
   )
 }
 
-// A tiny schema: `widget(id)` → { id, name }. `color` does NOT exist (drift target).
-const SDL = `
-  type Query { widget(id: ID!): Widget }
-  type Widget { id: ID!, name: String }
-`
-
 describe('validateCapturedTraffic — GraphQL drift over a REAL capture (ADR 0013 §5)', () => {
   it('resolves the attached (_file) GraphQL request body into the query', () => {
     // The real attach-mode capture stores postData in a `_file` entry.
