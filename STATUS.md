@@ -5,7 +5,26 @@
 
 ## Current phase
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM serialization v1 LANDED (contract-pillar deepening, ADR 0016) — `validateOpenApiRequest` now validates query `form` arrays (explode=true) + suppresses undocumented-param around object query params; gate green (1248 TS + 45 Py). Before that: GRAPHQL-REQUEST VARIABLE validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), REQUEST-BODY/PARAM contract validation (v1, ADR 0014), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (the rest of the non-scalar param matrix [explode=false comma-arrays, path/header arrays, object reconstruction] + non-JSON body schemas — all ADR 0016; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: NON-SCALAR request-PARAM serialization — DELIMITED arrays LANDED (slice 6, ADR 0016 addendum 1) — query form/explode=false + spaceDelimited + pipeDelimited + path/header simple arrays now validated for NON-STRING scalar items (exact split); gate green (1260 TS + 45 Py). Before that: non-scalar param v1 (query form explode=true arrays + undoc-param suppression, ADR 0016), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014 close-out), REQUEST-BODY/PARAM validation (ADR 0014), `@strummer/severity` extraction. Next: pivot to a new phase, or the remaining staged tails (path label/matrix arrays + object reconstruction [ADR 0016]; non-JSON body schemas; artifact GC/TTL; the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+_**NON-SCALAR PARAM — DELIMITED ARRAYS (slice 6) — COMPLETE** (2026-06-04, all TDD red→green; gate green
+at 1260 TS + 45 Py; design = ADR 0016 addendum 1 — no new fan-out, the v1 critics already mapped this
+matrix). Un-stages the delimited (single-string) array serializations behind the soundness rule the v1
+adversarial pass established. **CHECKed:** query `form`/`explode=false` (split `,`), `spaceDelimited`
+(` `), `pipeDelimited` (`|`); path `simple` (`,`); header `simple` (`,`, each segment trimmed) — **only
+when every item type is a NON-STRING scalar** (integer/number/boolean). The delimiter provably cannot
+occur inside such an element, so the split is EXACT — element coercion AND cardinality (minItems/maxItems/
+uniqueItems) are sound; a single delimiter-free value is a 1-element array. **Still `unverified`:**
+delimited arrays with STRING/typeless items (embedded delimiter over-splits → would false-fail a per-item/
+cardinality constraint — the irreducible class, critics FP-2/FP-5/FP1) and any empty segment (trailing/
+internal delimiter). The v1 `explode=true` query-form paths (≥2 occ = the array; single-occ wrap;
+`array-values` discrete-no-split admits string items) are UNCHANGED. New internal seams: `arrayDelimiter`
+(location/style→delimiter, now also the array half of `styleSupported`), `itemTypesSplittable` (the
+non-string-scalar gate); `validateQueryArray`→`validateArrayParam` (location-agnostic). Signature +
+`RequestValidationResult` shape + finding kinds UNCHANGED; reaches the capture bridge + live `api run
+--openapi` with no surface change. Invariants held: ambiguity/unsupported ⇒ `unverified`-skip never a
+false finding, absence-never-a-pass, redaction (raw element echoed only), no real fetch in `pnpm gate`.
+**STAGED next:** path `label`/`matrix` arrays; object reconstruction (`form/explode:false` + `deepObject`
+flat scalar props); non-JSON body schemas. 12 tests added._
 _**NON-SCALAR request-PARAM serialization v1 — COMPLETE** (2026-06-04, all TDD red→green; gate green at
 1248 TS + 45 Py; design = ADR 0016, a fan-out: 3 research streams → synthesis (CHECK-vs-SKIP decision
 matrix + slice plan) → 2 adversarial critics [both ship-with-fixes, converging on the same tightening,

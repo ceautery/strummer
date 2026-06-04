@@ -739,3 +739,251 @@ describe('validateOpenApiRequest — slice 5: object-param undocumented suppress
     expect(r.unverified).toBe(true)
   })
 })
+
+// --- slice 6: DELIMITED array serializations (ADR 0016). A single delimited string is
+// split; CHECK only when items are NON-STRING scalars (integer/number/boolean) — the
+// delimiter provably can't occur inside such an element, so the split is exact and both
+// element + cardinality validation are sound. String/typeless items, empty segments,
+// and label/matrix styles stay `unverified`.
+const dspec = {
+  openapi: '3.1.0',
+  paths: {
+    '/q-form-false': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'query',
+            style: 'form',
+            explode: false,
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/q-form-false-str': {
+      get: {
+        parameters: [
+          {
+            name: 'tags',
+            in: 'query',
+            style: 'form',
+            explode: false,
+            schema: { type: 'array', items: { type: 'string' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/q-form-false-max2': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'query',
+            style: 'form',
+            explode: false,
+            schema: { type: 'array', items: { type: 'integer' }, maxItems: 2 },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/q-space': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'query',
+            style: 'spaceDelimited',
+            explode: false,
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/q-pipe': {
+      get: {
+        parameters: [
+          {
+            name: 'ns',
+            in: 'query',
+            style: 'pipeDelimited',
+            explode: false,
+            schema: { type: 'array', items: { type: 'number' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/p-simple/{ids}': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'path',
+            required: true,
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/p-label/{ids}': {
+      get: {
+        parameters: [
+          {
+            name: 'ids',
+            in: 'path',
+            required: true,
+            style: 'label',
+            schema: { type: 'array', items: { type: 'integer' } },
+          },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/h-simple': {
+      get: {
+        parameters: [
+          { name: 'X-Ids', in: 'header', schema: { type: 'array', items: { type: 'integer' } } },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+  },
+}
+
+describe('validateOpenApiRequest — slice 6: delimited array params (non-string-scalar)', () => {
+  it('query form/explode=false integer array ⇒ split on comma + validated', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/q-form-false', query: { ids: '1,2,3' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBeUndefined()
+  })
+
+  it('a single-element explode=false value (no delimiter) ⇒ [v] + validated', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/q-form-false', query: { ids: '5' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('bad element in a delimited integer array ⇒ param-schema echoing the raw element', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/q-form-false', query: { ids: '1,x' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    const f = r.findings.find((x) => x.kind === 'param-schema')
+    expect(f?.path).toBe('ids')
+    expect(f?.message).toContain('x')
+  })
+
+  it('STRING-item delimited array ⇒ unverified (embedded-delimiter is unsound)', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/q-form-false-str', query: { tags: 'a,b' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+
+  it('an empty segment (trailing/internal comma) ⇒ unverified (ambiguous)', () => {
+    expect(
+      validateOpenApiRequest(
+        dspec,
+        { method: 'GET', path: '/q-form-false', query: { ids: '1,,3' } },
+        { paramsAuthoritative: true },
+      ).unverified,
+    ).toBe(true)
+    expect(
+      validateOpenApiRequest(
+        dspec,
+        { method: 'GET', path: '/q-form-false', query: { ids: '1,' } },
+        { paramsAuthoritative: true },
+      ).unverified,
+    ).toBe(true)
+  })
+
+  it('explode=false cardinality is sound (maxItems:2 with 3 elements ⇒ param-schema)', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/q-form-false-max2', query: { ids: '1,2,3' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+
+  it('spaceDelimited integer array ⇒ split on space', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/q-space', query: { ids: '1 2 3' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('pipeDelimited number array ⇒ split on pipe', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/q-pipe', query: { ns: '1.5|2.5' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('path simple integer array ⇒ split the segment on comma', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/p-simple/1,2,3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('path simple bad element ⇒ param-schema', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/p-simple/1,x' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(false)
+    expect(r.findings.map((f) => f.kind)).toContain('param-schema')
+  })
+
+  it('header simple integer array ⇒ split on comma, trimming whitespace', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/h-simple', headers: { 'x-ids': '1, 2, 3' } },
+      { paramsAuthoritative: true },
+    )
+    expect(r.valid).toBe(true)
+    expect(r.findings).toHaveLength(0)
+  })
+
+  it('path LABEL array ⇒ unverified (staged style, never a false fail)', () => {
+    const r = validateOpenApiRequest(
+      dspec,
+      { method: 'GET', path: '/p-label/.1.2.3' },
+      { paramsAuthoritative: true },
+    )
+    expect(r.findings).toHaveLength(0)
+    expect(r.unverified).toBe(true)
+  })
+})

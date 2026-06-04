@@ -109,3 +109,32 @@ splitter and guards:
 The capture/verify path now validates exploded array query params it previously could
 only skip, with no surface change (the engine is reached through the unchanged bridge +
 live `api run --openapi`). The staged cells are recorded in `ROADMAP.md` Phase 2.
+
+## Addendum 1 — delimited array serializations (2026-06-04)
+
+Slice 6 un-stages the **delimited** (single-string) array serializations the v1 critics
+had deferred, behind the soundness rule they established (no new fan-out — the v1
+adversarial pass already mapped this exact matrix):
+
+- **CHECKed:** query `form`/`explode=false` (split `,`), `spaceDelimited` (split ` `),
+  `pipeDelimited` (split `|`); path `simple` (split `,`); header `simple` (split `,`,
+  each segment trimmed) — **only when every item type is a NON-STRING scalar**
+  (integer/number/boolean). The delimiter provably cannot occur inside such an element,
+  so the split is exact and both element coercion **and** cardinality (minItems/maxItems/
+  uniqueItems) are sound. A single delimiter-free value is a 1-element array.
+- **Still `unverified` (the irreducible class):** delimited arrays with **string** or
+  typeless items (an embedded delimiter is a legal data char that over-splits and would
+  false-fail a per-item/cardinality constraint — critics FP-2/FP-5/FP1); any empty
+  segment (trailing/internal delimiter — absence/empty-element ambiguity).
+- The `explode=true` query-form paths (≥2 occurrences = the array; single-occurrence
+  wrap) are unchanged from v1; `array-values` (discrete, no split) still admits string
+  items because nothing is split.
+
+New internal seams: `arrayDelimiter` (the location/style → delimiter predicate, now also
+the array half of `styleSupported`), `itemTypesSplittable` (the non-string-scalar gate);
+`validateQueryArray` became the location-agnostic `validateArrayParam`. Signature, result
+shape, and finding kinds still unchanged.
+
+**Still STAGED:** path `label`/`matrix` arrays; object reconstruction (`form`/`explode=false`
++ `deepObject` flat scalar props); non-JSON request **body** schemas; string-item delimited
+arrays (permanently `unverified` — the unsound class).

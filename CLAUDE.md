@@ -107,14 +107,17 @@ vision and `ARCHITECTURE.md` for the technical design.
   ALSO wired into live `api run --openapi` via `runRequestForContract` — an out-of-band
   channel surfacing the un-redacted sent request facts at prepare time, `RunResult`
   UNCHANGED, findings redacted via the run's resolved secrets, authoritative; ADR 0016
-  added NON-SCALAR params v1 — query `form` ARRAYS explode=true via `validateQueryArray`
+  added NON-SCALAR ARRAY params via `validateArrayParam` — query `form` explode=true
   (≥2 occ = the array, sound count; single occ wrapped only when comma-free + no
   cardinality, else `unverified`; `nonScalarType`/`array-values` `ParamLookup` state, a
-  scalar param that gets repeated keys folds to `unverified`) + undocumented-param
-  SUPPRESSION around object query params (form/explode object ⇒ suppress whole pass;
-  deepObject ⇒ exclude `name[...]` keys; unresolved `$ref` ⇒ suppress); rest of the
-  style/explode matrix [explode=false comma-arrays, path/header arrays, object
-  reconstruction] STAGED, no new finding kind, signature unchanged),
+  scalar param that gets repeated keys folds to `unverified`) AND (addendum 1) the
+  DELIMITED single-string arrays — query `form/explode:false`/`spaceDelimited`/
+  `pipeDelimited` + path/header `simple` (`arrayDelimiter` + the `itemTypesSplittable`
+  non-string-scalar gate: split is EXACT only for integer/number/boolean items, string/
+  typeless/empty-segment → `unverified`) + undocumented-param SUPPRESSION around object
+  query params (form/explode object ⇒ suppress whole pass; deepObject ⇒ exclude
+  `name[...]` keys; unresolved `$ref` ⇒ suppress); STAGED: path `label`/`matrix` + object
+  reconstruction; no new finding kind, signature unchanged),
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that

@@ -152,19 +152,49 @@ function hasCardinalityConstraint(schema: Record<string, unknown>): boolean {
 }
 
 /**
+ * The delimiter that joins elements of a non-exploded (single-string) array for this
+ * param's (location, style), or `undefined` when the location/style isn't a supported
+ * array serialization (cookie / deepObject / path `label`/`matrix` → STAGED). Used both
+ * as the "array serialization supported?" predicate and the split delimiter.
+ */
+function arrayDelimiter(param: ParamObject): string | undefined {
+  switch (param.in) {
+    case 'query':
+      if (param.style === undefined || param.style === 'form') return ','
+      if (param.style === 'spaceDelimited') return ' '
+      if (param.style === 'pipeDelimited') return '|'
+      return undefined
+    case 'path':
+    case 'header':
+      return param.style === undefined || param.style === 'simple' ? ',' : undefined
+    default:
+      return undefined // cookie + anything unknown
+  }
+}
+
+/** Every non-null item type is a NON-STRING scalar (integer/number/boolean). The
+ * delimiter provably cannot occur inside such an element, so a delimited split is
+ * exact — element coercion AND cardinality are sound. String/typeless items would
+ * over-split (an embedded delimiter is a legal data char), so they stay `unverified`. */
+function itemTypesSplittable(itemTypes: string[]): boolean {
+  const nonNull = itemTypes.filter((t) => t !== 'null')
+  return (
+    nonNull.length > 0 && nonNull.every((t) => t === 'integer' || t === 'number' || t === 'boolean')
+  )
+}
+
+/**
  * Which (location, style, type) serializations the validator can soundly check.
  * SCALARS: the default per location (path/header `simple`, query `form`). ARRAYS:
- * only query `form` (explode resolved later — explode=false comma-arrays are
- * `unverified`-skipped in the handler). OBJECTS and every other style/location
- * (deepObject/pipeDelimited/path-array/cookie/content-typed) are STAGED →
- * inconclusive-skip. `schema` is the NORMALIZED param schema (so the array/scalar
- * decision sees the 3.0 nullable shim). */
+ * any location/style with an `arrayDelimiter` (query form/space/pipe-delimited, path
+ * `simple`, header `simple`); explode + item-type soundness are resolved in the
+ * handler. OBJECTS and every other style/location (deepObject/path `label`/`matrix`/
+ * cookie/content-typed) are STAGED → inconclusive-skip. `schema` is the NORMALIZED
+ * param schema (so the array/scalar decision sees the 3.0 nullable shim). */
 function styleSupported(param: ParamObject, schema: Record<string, unknown> | undefined): boolean {
   if (param.content) return false
   const nonScalar = schema ? nonScalarType(schema) : undefined
-  if (nonScalar === 'array') {
-    return param.in === 'query' && (param.style === undefined || param.style === 'form')
-  }
+  if (nonScalar === 'array') return arrayDelimiter(param) !== undefined
   if (nonScalar === 'object') return false // object reconstruction is STAGED
   switch (param.in) {
     case 'query':
@@ -262,21 +292,27 @@ function lookupParamValue(
 }
 
 /**
- * Validate a query `form` ARRAY param against its declared schema. ONLY explode=true
- * is checked in v1 (explode=false comma-arrays are STAGED — embedded delimiters in a
- * string element are an irreducible false-positive class). The element COUNT is sound
- * only from ≥2 wire occurrences; a single occurrence is wrapped as a 1-element array
- * ONLY when it carries no comma (no explode-disagreement) and the schema has no
- * cardinality constraint — otherwise `unverified`. Appends `param-schema` findings;
- * returns whether the param was `unverified`-skipped.
+ * Validate an ARRAY param (query form/space/pipe-delimited, path/header `simple`)
+ * against its declared schema. Resolves the wire elements per (state, style, explode):
+ *
+ *  - `array-values` (≥2 query occurrences, explode=true) — the discrete elements, NO
+ *    split, so any scalar item type is sound.
+ *  - query `form` + explode=true, single occurrence — wrapped `[v]` ONLY when it carries
+ *    no comma (no explode-disagreement) and the schema has no cardinality constraint
+ *    (else `unverified`).
+ *  - DELIMITED single string (query explode=false form/space/pipe, path/header simple) —
+ *    split on the style delimiter, but ONLY for NON-STRING scalar items (the delimiter
+ *    can't appear inside an integer/number/boolean, so the split is exact); string/
+ *    typeless items and empty segments are `unverified` (embedded-delimiter ambiguity).
+ *
+ * Appends `param-schema` findings; returns whether the param was `unverified`-skipped.
  */
-function validateQueryArray(
+function validateArrayParam(
   param: ParamObject,
   normSchema: Record<string, unknown>,
   lk: ParamLookup,
   findings: ContractFinding[],
 ): boolean {
-  if ((param.explode ?? true) === false) return true // explode=false comma-array: STAGED
   // Tuple/heterogeneous or non-scalar items carry no element splitter we can coerce.
   const itemSchema = normSchema.items
   const itemTypes =
@@ -285,15 +321,28 @@ function validateQueryArray(
       : undefined
   if (normSchema.prefixItems !== undefined || !itemTypes) return true
 
+  const explodeTrue =
+    param.in === 'query' &&
+    (param.style === undefined || param.style === 'form') &&
+    (param.explode ?? true) === true
+
   let elements: string[]
   if (lk.state === 'array-values') {
-    elements = lk.values
-  } else if (lk.state === 'present') {
+    elements = lk.values // discrete elements — no split, string items fine
+  } else if (lk.state === 'present' && explodeTrue) {
     // Single occurrence: ambiguous unless it carries no delimiter AND no cardinality.
     if (lk.value.includes(',') || hasCardinalityConstraint(normSchema)) return true
     elements = [lk.value]
+  } else if (lk.state === 'present') {
+    // DELIMITED single string. Sound to split ONLY for non-string scalar items.
+    const delim = arrayDelimiter(param)
+    if (delim === undefined || !itemTypesSplittable(itemTypes) || lk.value === '') return true
+    const parts =
+      param.in === 'header' ? lk.value.split(delim).map((s) => s.trim()) : lk.value.split(delim)
+    if (parts.some((s) => s === '')) return true // empty/trailing segment ambiguity
+    elements = parts
   } else {
-    return true // 'multi' (composite path) — not reachable for query, skip defensively
+    return true // 'multi'/'absent' — handled upstream; skip defensively
   }
 
   const want = itemTypes.filter((t) => t !== 'null').join('|')
@@ -545,9 +594,9 @@ export function validateOpenApiRequest(
       continue
     }
 
-    // Query form array (the only non-scalar param we validate in v1).
+    // Array param (query form/space/pipe-delimited, path/header simple).
     if (nonScalar === 'array' && normSchema) {
-      if (validateQueryArray(param, normSchema, lk, findings)) unverified = true
+      if (validateArrayParam(param, normSchema, lk, findings)) unverified = true
       continue
     }
 
