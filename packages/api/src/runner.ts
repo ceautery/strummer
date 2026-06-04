@@ -4,6 +4,7 @@ import { type DnsLookup, SsrfError } from '@strummer/safety'
 import { type Dispatcher, type FormData, request } from 'undici'
 import { ArtifactStore } from './artifacts.js'
 import { evaluateAssertions, extractCaptures } from './assert.js'
+import type { HarHopRecord } from './har-synth.js'
 import type { Collection, PreparedRequest, RunResult, ScriptTest, SecretStore } from './model.js'
 import { prepareRequest } from './prepare.js'
 import { assertSsrfAllowed, checkGate, isMutating } from './safety.js'
@@ -36,6 +37,50 @@ export interface RunOptions {
 const REDIRECT_CODES = new Set([301, 302, 303, 307, 308])
 /** Headers dropped when a redirect crosses to a different host (browser-like). */
 const CROSS_ORIGIN_DROP = new Set(['authorization', 'cookie'])
+/** Cap a retained per-hop body so a hostile redirect body can't bloat the synthesized
+ * HAR (the read itself is bounded by the response; slicing a JSON body just fails to
+ * parse downstream ⇒ unresolved ⇒ inconclusive, never a false pass). 5f. */
+const MAX_HOP_BODY_BYTES = 4 * 1024 * 1024
+
+/**
+ * The PRODUCE-only out-of-band capture channel (ADR 0013 Addendum 4, 5f): the raw
+ * per-hop request/response facts a synthesized HAR is built from, plus the run-resolved
+ * secret pairs the union redactor must learn. NEVER attached to `RunResult` — raw bodies
+ * stay structurally off anything an agent sees; only `runRequestForHar` exposes it, and
+ * its consumer ({@link synthesizeRedactedHarZip} via the verify driver) redacts before
+ * store + validate.
+ */
+export interface HarCapture {
+  hops: HarHopRecord[]
+  registeredSecrets: { name: string; value: string }[]
+  /** The terminal response was still a 3xx (budget exhausted / unparseable / missing
+   * Location): the exchange did not complete to a resource ⇒ the driver throws
+   * (inconclusive), never validates a truncated chain. */
+  redirectTruncated: boolean
+}
+
+/** Append one hop's facts to the capture sink (string-only request body; binary omitted). */
+function recordHop(
+  capture: HarCapture,
+  hop: {
+    method: string
+    url: string
+    status: number
+    resContentType?: string
+    resBody?: string
+    reqBody: string | undefined
+    reqContentType: string | undefined
+  },
+): void {
+  const record: HarHopRecord = { method: hop.method, url: hop.url, status: hop.status }
+  if (hop.resContentType) record.resContentType = hop.resContentType
+  if (hop.resBody !== undefined) record.resBody = hop.resBody.slice(0, MAX_HOP_BODY_BYTES)
+  if (typeof hop.reqBody === 'string' && hop.reqContentType) {
+    record.reqContentType = hop.reqContentType
+    record.reqBody = hop.reqBody.slice(0, MAX_HOP_BODY_BYTES)
+  }
+  capture.hops.push(record)
+}
 
 function headerValue(
   headers: Record<string, string | string[] | undefined>,
@@ -100,6 +145,32 @@ export async function runRequest(
   name: string,
   opts: RunOptions = {},
 ): Promise<RunResult> {
+  return runRequestImpl(collection, name, opts)
+}
+
+/**
+ * Drive a request AND retain the raw per-hop facts a synthesized HAR is built from
+ * (ADR 0013 Addendum 4, 5f) — the verify-driven api capture path. `RunResult` is
+ * returned UNCHANGED (still fully redacted); `capture` is the produce-only raw channel
+ * (never on `RunResult`). The caller (verify driver) folds `capture.registeredSecrets`
+ * into a union redactor, then synthesizes + redacts + validates.
+ */
+export async function runRequestForHar(
+  collection: Collection,
+  name: string,
+  opts: RunOptions = {},
+): Promise<{ result: RunResult; capture: HarCapture }> {
+  const capture: HarCapture = { hops: [], registeredSecrets: [], redirectTruncated: false }
+  const result = await runRequestImpl(collection, name, opts, capture)
+  return { result, capture }
+}
+
+async function runRequestImpl(
+  collection: Collection,
+  name: string,
+  opts: RunOptions = {},
+  capture?: HarCapture,
+): Promise<RunResult> {
   const entry = collection.requests.get(name)
   if (!entry) {
     throw new Error(`no request '${name}' in collection at ${collection.dir}`)
@@ -118,6 +189,10 @@ export async function runRequest(
   }
 
   const prepared = await prepareRequest(entry.request, scope, secrets, redactor, collection.dir)
+
+  // The union redactor (verify) must learn the run-resolved {{secret:NAME}} values to
+  // scrub a synthesized HAR — the local redactor is the only place they exist (5f).
+  if (capture) capture.registeredSecrets = redactor.registeredSecrets()
 
   // Headers actually sent: add a default Content-Type for the body if unset.
   // A body with no explicit contentType (multipart) is left for undici to set,
@@ -167,6 +242,10 @@ export async function runRequest(
   let currentMethod = prepared.method
   let currentHeaders = sendHeaders
   let currentBody = prepared.body?.content
+  // The wire content-type tracked per hop for HAR synthesis (dropped when a 303/POST
+  // downgrade drops the body); only a string body becomes `postData` (5f).
+  let currentContentType = prepared.body?.contentType
+  const reqBodyStr = () => (typeof currentBody === 'string' ? currentBody : undefined)
 
   let res = await request(currentUrl, {
     method: currentMethod as Dispatcher.HttpMethod,
@@ -179,7 +258,22 @@ export async function runRequest(
   while (REDIRECT_CODES.has(res.statusCode) && redirects.length < maxRedirects) {
     const location = headerValue(res.headers, 'location')
     if (!location) break
-    await res.body.dump() // drain the intermediate response before the next hop
+    // Capture this just-arrived (legitimate) hop BEFORE vetting/dispatching the next, so
+    // a blocked next hop is never recorded as sent. Consume the body either way (5f).
+    if (capture) {
+      const hopText = await res.body.text()
+      recordHop(capture, {
+        method: currentMethod,
+        url: currentUrl,
+        status: res.statusCode,
+        resContentType: headerValue(res.headers, 'content-type'),
+        resBody: hopText,
+        reqBody: reqBodyStr(),
+        reqContentType: currentContentType,
+      })
+    } else {
+      await res.body.dump() // drain the intermediate response before the next hop
+    }
 
     let nextUrl: string
     try {
@@ -231,11 +325,32 @@ export async function runRequest(
     currentMethod = next.method
     currentHeaders = nextHeaders
     currentBody = next.body
+    // A 303 (or POST→GET) downgrade dropped the body ⇒ no request content-type for the
+    // next hop; 307/308 preserve both.
+    if (next.body === undefined) currentContentType = undefined
   }
+
+  // The loop exited with a terminal 3xx (budget exhausted / no or unparseable Location):
+  // the exchange did not complete to a resource — the driver folds this to inconclusive.
+  if (capture && REDIRECT_CODES.has(res.statusCode)) capture.redirectTruncated = true
 
   const bodyText = await res.body.text()
   const latencyMs = performance.now() - started
   const headers = flattenHeaders(res.headers)
+
+  // The terminal response is the last HAR hop (raw body — the union redactor scrubs the
+  // synthesized archive). One entry per hop, no collapsed chain (5f gap a).
+  if (capture) {
+    recordHop(capture, {
+      method: currentMethod,
+      url: currentUrl,
+      status: res.statusCode,
+      resContentType: headers['content-type'],
+      resBody: bodyText,
+      reqBody: reqBodyStr(),
+      reqContentType: currentContentType,
+    })
+  }
 
   let json: unknown
   try {

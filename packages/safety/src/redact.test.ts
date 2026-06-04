@@ -23,4 +23,13 @@ describe('Redactor', () => {
     expect(headers.authorization).toBe('Bearer [redacted:KEY]')
     expect(headers.accept).toBe('application/json')
   })
+
+  it('surfaces the registered (name, raw-value) pairs so a downstream redactor can re-register', () => {
+    // 5f: the api runner's local redactor learns {{secret:NAME}} values during prepare;
+    // verify's union redactor must learn them to scrub a SYNTHESIZED HAR. In-process only.
+    const r = new Redactor()
+    r.register('API_TOKEN', 'tok-xyz')
+    r.register('EMPTY', '') // ignored (no value registered)
+    expect(r.registeredSecrets()).toEqual([{ name: 'API_TOKEN', value: 'tok-xyz' }])
+  })
 })

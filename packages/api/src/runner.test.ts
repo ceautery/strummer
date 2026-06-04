@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ArtifactStore } from './artifacts.js'
 import { loadCollection } from './collection.js'
-import { runRequest } from './runner.js'
+import { runRequest, runRequestForHar } from './runner.js'
 import { StaticSecretStore } from './secrets.js'
-import { runSequence } from './sequence.js'
+import { runSequence, runSequenceForHar } from './sequence.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const FIXTURE = resolve(here, '../test/fixtures/sample')
@@ -373,5 +373,81 @@ describe('runRequest (offline, in-process server)', () => {
     // pre-script set `mode` = turbo, interpolated into the X-Mode header the server echoed.
     const echoed = artifacts.get(result.response?.bodyHandle ?? '')?.body ?? ''
     expect(echoed).toContain('"x-mode":"turbo"')
+  })
+
+  // ── 5f slice 4: the out-of-band HAR capture channel (runRequestForHar). RunResult is
+  // returned UNCHANGED; the raw per-hop facts + run-resolved secrets ride `capture`. ──
+  describe('runRequestForHar — produce-only capture channel', () => {
+    it('emits one hop per redirect step (no collapsed chain), terminal hop not truncated', async () => {
+      const { result, capture } = await runRequestForHar(
+        loadCollection(FIXTURE),
+        'follow-redirect',
+        {
+          vars: { baseUrl },
+          maxRedirects: 5,
+        },
+      )
+      expect(result.response?.status).toBe(200)
+      expect(capture.hops.map((h) => h.status)).toEqual([302, 200])
+      expect(capture.hops[0]?.url).toContain('/redirect')
+      expect(capture.hops[1]?.url).toContain('/health')
+      expect(capture.redirectTruncated).toBe(false)
+    })
+
+    it('flags a terminal 3xx (maxRedirects 0) as redirectTruncated', async () => {
+      const { capture } = await runRequestForHar(loadCollection(FIXTURE), 'follow-redirect', {
+        vars: { baseUrl },
+      })
+      expect(capture.hops.map((h) => h.status)).toEqual([302])
+      expect(capture.redirectTruncated).toBe(true)
+    })
+
+    it('captures the REAL wire request body + the run-resolved secret pair; RunResult stays redacted', async () => {
+      const token = 'gql-secret-789'
+      const { result, capture } = await runRequestForHar(
+        loadCollection(FIXTURE),
+        'create-thing-graphql',
+        {
+          vars: { baseUrl, thingName: 'widget', tag: 'blue' },
+          secrets: new StaticSecretStore({ API_TOKEN: token }),
+          allowUnsafe: true,
+          allowedHosts: ['127.0.0.1'],
+        },
+      )
+      expect(result.sent).toBe(true)
+      // The capture's request body is the RAW wire JSON (GraphQL query + the raw secret).
+      const hop = capture.hops.at(-1)
+      expect(hop?.reqContentType).toContain('json')
+      expect(hop?.reqBody).toContain('addThing(name: \\"widget\\")')
+      expect(hop?.reqBody).toContain(token)
+      // The union redactor learns the run-resolved secret from this channel.
+      expect(capture.registeredSecrets).toContainEqual({ name: 'API_TOKEN', value: token })
+      // RunResult is UNCHANGED: the redacted contract — no raw token, no hops field.
+      expect(JSON.stringify(result)).not.toContain(token)
+      expect((result as unknown as Record<string, unknown>).hops).toBeUndefined()
+      const resp = result.response as unknown as Record<string, unknown> | undefined
+      expect(resp?.hops).toBeUndefined()
+    })
+
+    it('a withheld (dry-run) mutating request yields NO hops (driver folds to inconclusive)', async () => {
+      const { result, capture } = await runRequestForHar(loadCollection(FIXTURE), 'create-thing', {
+        vars: { baseUrl },
+      })
+      expect(result.sent).toBe(false)
+      expect(capture.hops).toHaveLength(0)
+    })
+  })
+
+  describe('runSequenceForHar — aggregates per-step hops + the secret union', () => {
+    it('collects hops from every step and keeps each step result', async () => {
+      const { result, capture } = await runSequenceForHar(
+        loadCollection(FIXTURE),
+        ['get-health', 'get-health'],
+        { vars: { baseUrl } },
+      )
+      expect(result.steps).toHaveLength(2)
+      expect(result.steps.every((s) => s.result.sent)).toBe(true)
+      expect(capture.hops.map((h) => h.status)).toEqual([200, 200])
+    })
   })
 })

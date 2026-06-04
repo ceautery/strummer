@@ -56,7 +56,7 @@ export type {
   SecretStore,
 } from './model.js'
 export { type Prepared, type PreparedBody, prepareRequest } from './prepare.js'
-export { type RunOptions, runRequest } from './runner.js'
+export { type HarCapture, type RunOptions, runRequest, runRequestForHar } from './runner.js'
 export { checkGate, isMutating, type SafetyDecision, type SafetyOptions } from './safety.js'
 export { type SchemaError, type SchemaValidation, validateSchema } from './schema.js'
 export { runScript, type ScriptResponseView, type ScriptResult } from './script.js'
@@ -70,6 +70,7 @@ export {
 } from './secrets.js'
 export {
   runSequence,
+  runSequenceForHar,
   type SequenceOptions,
   type SequenceResult,
   type SequenceStep,
