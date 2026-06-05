@@ -34,7 +34,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['packages/*/src/**/*.test.ts'],
+    include: ['packages/*/src/**/*.test.ts', 'test/**/*.test.ts'],
     // better-sqlite3 / sqlite-vec are native CJS modules; let Node load them
     // directly instead of having Vite try to transform them.
     server: {
