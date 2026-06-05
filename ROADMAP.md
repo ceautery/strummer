@@ -1310,20 +1310,20 @@ blockers folded → corrected design). Four forks human-ratified (2026-06-05): c
 default; **repoint `strummer-mcp`** to the aggregate; **split now** (heavy engines as optional
 peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heavy-dep-when-pillar-off.
 
-- [ ] **Aggregate MCP server.** Compose all enabled pillars onto ONE `McpServer` via the existing
+- [x] **Aggregate MCP server.** Compose all enabled pillars onto ONE `McpServer` via the existing
       `register<X>Tools(server, opts)` seam; **repoint `strummer-mcp`** to it (docs-only moves to
       `strummer-docs-mcp`); keep the 8 per-pillar bins alongside. Extract `createStrummerServer` to
       `./docs.js` (pure-re-export `index.ts`) + a shared `<pillar>OptionsFromEnv(env)` out of each
       `build<X>ServerFromEnv`. Mandatory tool/resource **uniqueness guard** (SDK 1.29 throws on a dup).
-- [ ] **Selective enablement.** `STRUMMER_TOOLSETS` SUBTRACTIVE selection (never grants); unset ⇒
+- [x] **Selective enablement.** `STRUMMER_TOOLSETS` SUBTRACTIVE selection (never grants); unset ⇒
       curated read-heavy default; per-pillar gates still govern run/write tools; instructions assembled
       enabled-only.
-- [ ] **Gate/env composition — "compose, never widen".** Keep the per-pillar `STRUMMER_<PILLAR>_*`
+- [x] **Gate/env composition — "compose, never widen".** Keep the per-pillar `STRUMMER_<PILLAR>_*`
       namespace unchanged; close the bare-name widening hole (api AND verify read bare unsafe/host/keyring
       envs — both read **prefixed** `STRUMMER_API_*` in aggregate mode; standalone unchanged). One
       `STRUMMER_ARTIFACTS_ROOT` (per-pillar subtree/retention). Missing optional engine ⇒ loud disable;
       contradictory gate (LSP throws) ⇒ FATAL. Collect + fire every shutdown on SIGINT/SIGTERM.
-- [ ] **Package split for install isolation.** `@strummer/browser`/`core`/`embed`/`flake` → optional
+- [x] **Package split for install isolation.** `@strummer/browser`/`core`/`embed`/`flake` → optional
       peer-deps + dynamic `import()` per enabled pillar; drop mcp's redundant direct `playwright-core`.
       So bare `npm i @strummer/mcp` is native-free; docs/flake/browser loud-disable until their engine is
       installed. Asserted on the emitted `.mjs` (build-then-assert CI) + an install-closure test.
@@ -1333,7 +1333,7 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       `publishConfig.exports` overlay → dist (nested import/types); validate with `attw --pack` + `publint`
       on the TARBALL. ESM-only. OIDC trusted publishing from CI (Node≥22.14.0/npm≥11.5.1, `id-token:write`,
       no token), gate green first.
-- [ ] **Distribution / onboarding.** `@strummer/cli` `strummer` bin + a default bin so `npx @strummer/mcp`
+- [x] **Distribution / onboarding.** *(README + example `.mcp.json` done; per-pillar browser preflight staged)* `@strummer/cli` `strummer` bin + a default bin so `npx @strummer/mcp`
       resolves; a real resolvable `.mcp.json` example (operator-set gate envs only); browser-bin preflight
       diagnostic; README for human + agent operator. stdio only (v1).
 - [ ] *(staged, not amputated — Phase 7 candidates)* HTTP/SSE transport; MCP registry submission; an
