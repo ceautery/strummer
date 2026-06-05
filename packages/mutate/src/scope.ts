@@ -90,3 +90,44 @@ export function reconcileScope(selected: string[], summary: MutationSummary): Sc
     missing: sel.filter((p) => !seen.has(p)),
   }
 }
+
+/**
+ * Convert a Python source PATH to its dotted module form (`pkg/calc.py` → `pkg.calc`,
+ * `pkg/__init__.py` → `pkg`). The package-relative prefix is unknown here, so this is the FULL
+ * relative-path dotted form; {@link reconcileMutmutScope} matches it against mutmut's module names
+ * by suffix to tolerate src-layout projects.
+ */
+export function pyPathToModule(path: string): string {
+  let p = normalizePath(path).replace(/\.py$/, '')
+  if (p.endsWith('/__init__')) p = p.slice(0, -'/__init__'.length)
+  return p.replace(/\//g, '.')
+}
+
+/**
+ * The mutmut-specific post-spawn guard. Unlike cosmic-ray, mutmut's {@link MutationSummary} is keyed
+ * by DOTTED MODULE (`pkg.calc`), not path, AND it emits NO record for a scoped file that produced
+ * zero mutants (slice 0: seen-but-empty is INDISTINGUISHABLE from never-seen — Fork B2). So this is
+ * deliberately CONSERVATIVE: a selected file is "mutated" only if some module with ≥1 mutant matches
+ * its dotted form (equal, or a suffix either way — tolerating flat AND src layouts); every other
+ * selected file is `missing` (⇒ the runner throws inconclusive). Some false-inconclusives, ZERO
+ * false-passes (absence-is-never-a-pass). Pure.
+ */
+export function reconcileMutmutScope(
+  selectedPaths: string[],
+  summary: MutationSummary,
+): ScopeReconciliation {
+  const mutatedModules = summary.files
+    .filter((f) => f.metrics.totalMutants > 0)
+    .map((f) => normalizePath(f.path)) // mutmut paths ARE dotted modules
+  const matches = (mod: string, sel: string): boolean =>
+    mod === sel || mod.endsWith(`.${sel}`) || sel.endsWith(`.${mod}`)
+  const sel = [...new Set(selectedPaths.map(normalizePath))].sort()
+  const mutatedFiles: string[] = []
+  const missing: string[] = []
+  for (const path of sel) {
+    const mod = pyPathToModule(path)
+    if (mutatedModules.some((m) => matches(m, mod))) mutatedFiles.push(path)
+    else missing.push(path)
+  }
+  return { mutatedFiles, missing }
+}

@@ -20,18 +20,74 @@
  */
 
 import { execFile } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { cosmicModulePathRoots, synthesizeScopedCosmicRayConfig } from './config.js'
+import {
+  cosmicModulePathRoots,
+  mutmutDoNotMutate,
+  mutmutPathsToMutate,
+  planMutmutScope,
+  synthesizeScopedCosmicRayConfig,
+  synthesizeScopedMutmutPyproject,
+} from './config.js'
 import { parseCosmicRayDump } from './cosmic-ray.js'
 import { parseMutmutResults } from './mutmut.js'
-import { reconcileScope, selectMutationScope } from './scope.js'
+import { reconcileMutmutScope, reconcileScope, selectMutationScope } from './scope.js'
 import { type MutationReport, type MutationSummary, summarizeMutation } from './summarize.js'
 
 /** The zero-mutant summary returned by a pre-spawn noop (folds to no-signal ⇒ inconclusive). */
 function emptyMutationSummary(): MutationSummary {
   return summarizeMutation({ files: {} })
+}
+
+/** Read a file, or undefined if it is absent (a missing base config is not an error). */
+function readFileIfExists(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return undefined
+  }
+}
+
+/** Directories never copied into the mutmut sandbox (heavy / irrelevant / the sticky mutants cache). */
+const SANDBOX_EXCLUDE =
+  /(?:^|\/)(?:node_modules|\.git|\.venv|venv|__pycache__|mutants|\.mutmut-cache|dist|\.tox)(?:\/|$)/
+
+/** Recursively list the `.py` files under each owned root, repo-relative (FS default for runMutmut). */
+function defaultListSources(ownedRoots: string[], projectRoot: string): string[] {
+  const out: string[] = []
+  for (const root of ownedRoots) {
+    const abs = join(projectRoot, root)
+    let entries: string[]
+    try {
+      entries = readdirSync(abs, { recursive: true }) as string[]
+    } catch {
+      continue // a declared root that is a single file or absent — skip (selectMutationScope handles files)
+    }
+    for (const rel of entries) {
+      const p = rel.replace(/\\/g, '/')
+      if (p.endsWith('.py') && !SANDBOX_EXCLUDE.test(p))
+        out.push(`${root}/${p}`.replace(/\/+/g, '/'))
+    }
+  }
+  return out
+}
+
+/** Copy a project into a fresh sandbox dir, excluding heavy dirs + the sticky `mutants/` cache. */
+function copyProjectInto(from: string, to: string): void {
+  cpSync(from, to, {
+    recursive: true,
+    filter: (src) => !SANDBOX_EXCLUDE.test(src.slice(from.length).replace(/\\/g, '/')),
+  })
 }
 
 /** Thrown when the paired operator gate denies a run. */
@@ -229,18 +285,88 @@ function assertComplete(tool: string, summary: MutationSummary): void {
  */
 export async function runMutmut(
   config: RunMutationConfig,
-  _input: RunMutationInput,
-  deps: { runner?: MutationRunner } = {},
+  input: RunMutationInput,
+  deps: {
+    runner?: MutationRunner
+    /** Existence check for the selected files (FS by default; injected in tests). */
+    exists?: (path: string) => boolean
+    /** Enumerate the `.py` files under the owned roots (for `also_copy`); FS walk by default. */
+    listSourceFiles?: (ownedRoots: string[], projectRoot: string) => string[]
+    /** The fresh sandbox cwd to run in (the sticky `mutants/` cache can't leak). Default mkdtemp. */
+    sandboxDir?: string
+  } = {},
 ): Promise<RunMutationResult> {
   assertAllowed(config)
   const runner = deps.runner ?? defaultMutmutRunner
-  const opts = { cwd: config.projectRoot, timeoutMs: config.timeoutMs }
 
+  // Whole-project (today's behavior) in projectRoot when no scope is requested.
+  if (input.mutateFiles === undefined) {
+    const opts = { cwd: config.projectRoot, timeoutMs: config.timeoutMs }
+    await runner(['run'], opts)
+    const { exitCode, stdout } = await runner(['results', '--all', 'true'], opts)
+    const summary = summarizeMutation(parseMutmutResults(stdout))
+    assertComplete('mutmut', summary)
+    return { ran: true, exitCode, scopedFiles: [], tool: 'mutmut', summary }
+  }
+
+  // Diff-scoped: confine to the owned tree, then select mutable existing .py files.
+  const pyprojectPath = input.configPath ?? 'pyproject.toml'
+  const basePyproject = readFileIfExists(join(config.projectRoot, pyprojectPath)) ?? ''
+  const ownedRoots = input.ownedRoots ?? mutmutPathsToMutate(basePyproject)
+  const exists = deps.exists ?? ((p: string) => existsSync(join(config.projectRoot, p)))
+  const { files, unmatched } = selectMutationScope(input.mutateFiles, ownedRoots, exists)
+  const unmatchedOut = unmatched.length > 0 ? unmatched : undefined
+
+  // Case (a): nothing mutable in-tree remains — DO NOT spawn (noop).
+  if (files.length === 0) {
+    return {
+      ran: false,
+      exitCode: 0,
+      scopedFiles: [],
+      tool: 'mutmut',
+      summary: emptyMutationSummary(),
+      scopeEmpty: true,
+      unmatched: unmatchedOut,
+      requestedFiles: [],
+    }
+  }
+
+  // Plan the scope: paths_to_mutate = selected files; also_copy = the rest of the source tree so
+  // unscoped tests still import (slice 0); strip a colliding inherited do_not_mutate glob.
+  const listSources = deps.listSourceFiles ?? defaultListSources
+  const allSources = listSources(ownedRoots, config.projectRoot)
+  const plan = planMutmutScope(files, allSources, mutmutDoNotMutate(basePyproject))
+  const scopedPyproject = synthesizeScopedMutmutPyproject(basePyproject, plan)
+
+  // Fresh sandbox cwd (the mutants/ cache is sticky), with the scoped pyproject written over the copy.
+  const sandbox = deps.sandboxDir ?? mkdtempSync(join(tmpdir(), 'strummer-mutmut-'))
+  copyProjectInto(config.projectRoot, sandbox)
+  writeFileSync(join(sandbox, 'pyproject.toml'), scopedPyproject)
+
+  const opts = { cwd: sandbox, timeoutMs: config.timeoutMs }
   await runner(['run'], opts)
   const { exitCode, stdout } = await runner(['results', '--all', 'true'], opts)
   const summary = summarizeMutation(parseMutmutResults(stdout))
+  // A broken scoped baseline yields "not checked" ⇒ Pending ⇒ assertComplete throws (slice 0): this
+  // IS the baseline-smoke gate. Total-zero is likewise inconclusive (case b).
   assertComplete('mutmut', summary)
-  return { ran: true, exitCode, scopedFiles: [], tool: 'mutmut', summary }
+  // Case (c): mutmut emits NO record for a 0-mutant selected file (Fork B2), so a selected file with
+  // no matching mutated module was never mutated ⇒ inconclusive (conservative; never a false pass).
+  const { mutatedFiles, missing } = reconcileMutmutScope(files, summary)
+  if (missing.length > 0) {
+    throw new Error(
+      `mutmut under-scoped: ${missing.join(', ')} selected but produced no mutants — inconclusive`,
+    )
+  }
+  return {
+    ran: true,
+    exitCode,
+    scopedFiles: mutatedFiles,
+    tool: 'mutmut',
+    summary,
+    requestedFiles: files,
+    unmatched: unmatchedOut,
+  }
 }
 
 /**

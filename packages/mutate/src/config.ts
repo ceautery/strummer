@@ -145,6 +145,28 @@ export function synthesizeScopedCosmicRayConfig(
   return { toml: stringify(data), modulePath: selected, strippedExclusions }
 }
 
+/** The `[tool.mutmut]` table of a pyproject (empty when absent / unparseable-as-table). */
+function mutmutTable(basePyproject: string): Record<string, unknown> {
+  if (!basePyproject.trim()) return {}
+  const data = parse(basePyproject) as Record<string, unknown>
+  const tool = data.tool
+  if (!tool || typeof tool !== 'object') return {}
+  const m = (tool as Record<string, unknown>).mutmut
+  return m && typeof m === 'object' ? (m as Record<string, unknown>) : {}
+}
+
+/** The operator's `[tool.mutmut] paths_to_mutate` — the default `ownedRoots` for a scoped mutmut run. */
+export function mutmutPathsToMutate(basePyproject: string): string[] {
+  const v = mutmutTable(basePyproject).paths_to_mutate
+  return Array.isArray(v) ? v.map((x) => normalizePath(String(x))) : []
+}
+
+/** The operator's inherited `[tool.mutmut] do_not_mutate` globs (reconciled against the scope). */
+export function mutmutDoNotMutate(basePyproject: string): string[] {
+  const v = mutmutTable(basePyproject).do_not_mutate
+  return Array.isArray(v) ? v.map(String) : []
+}
+
 export interface MutmutScopePlan {
   /** The selected files written to `paths_to_mutate` (canonical form). */
   pathsToMutate: string[]

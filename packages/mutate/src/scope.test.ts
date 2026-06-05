@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { reconcileScope, selectMutationScope } from './scope.js'
+import {
+  pyPathToModule,
+  reconcileMutmutScope,
+  reconcileScope,
+  selectMutationScope,
+} from './scope.js'
 import type { FileSummary, MutationMetrics, MutationSummary } from './summarize.js'
 
 describe('selectMutationScope (ADR 0010 addendum 2, slice A)', () => {
@@ -126,5 +131,71 @@ describe('reconcileScope — partial-under-scope guard (ADR 0010 addendum 2, sli
       mutatedFiles: [],
       missing: [],
     })
+  })
+})
+
+describe('pyPathToModule', () => {
+  it('converts a source path to its dotted module form', () => {
+    expect(pyPathToModule('pkg/calc.py')).toBe('pkg.calc')
+    expect(pyPathToModule('a/b/c.py')).toBe('a.b.c')
+  })
+  it('maps a package __init__ to the package itself', () => {
+    expect(pyPathToModule('pkg/__init__.py')).toBe('pkg')
+  })
+  it('normalizes backslashes and leading ./', () => {
+    expect(pyPathToModule('./pkg\\calc.py')).toBe('pkg.calc')
+  })
+})
+
+describe('reconcileMutmutScope — conservative, module-keyed (ADR 0010 addendum 2, Fork B2)', () => {
+  const metrics = (totalMutants: number): MutationMetrics => ({
+    counts: {
+      killed: 0,
+      survived: 0,
+      timeout: 0,
+      noCoverage: 0,
+      compileErrors: 0,
+      runtimeErrors: 0,
+      ignored: 0,
+      pending: 0,
+    },
+    detected: 0,
+    undetected: 0,
+    covered: 0,
+    valid: totalMutants,
+    invalid: 0,
+    totalMutants,
+    mutationScore: totalMutants > 0 ? 100 : null,
+    mutationScoreBasedOnCoveredCode: null,
+  })
+  // mutmut's summary is keyed by DOTTED MODULE, not path.
+  const modSummary = (mods: [string, number][]): MutationSummary => ({
+    metrics: metrics(0),
+    files: mods.map(([path, n]) => ({ path, metrics: metrics(n) })),
+    survivors: [],
+  })
+
+  it('matches a selected PATH against the mutated MODULE (flat layout)', () => {
+    const r = reconcileMutmutScope(['pkg/calc.py'], modSummary([['pkg.calc', 3]]))
+    expect(r.mutatedFiles).toEqual(['pkg/calc.py'])
+    expect(r.missing).toEqual([])
+  })
+
+  it('tolerates a src-layout module via suffix match (src/pkg/calc.py ↔ pkg.calc)', () => {
+    const r = reconcileMutmutScope(['src/pkg/calc.py'], modSummary([['pkg.calc', 2]]))
+    expect(r.mutatedFiles).toEqual(['src/pkg/calc.py'])
+    expect(r.missing).toEqual([])
+  })
+
+  it('a selected file with NO matching mutated module is MISSING — conservative (seen-but-empty == never-seen)', () => {
+    // mutmut emits no record for a 0-mutant scoped file, so strutil is simply absent ⇒ missing.
+    const r = reconcileMutmutScope(['pkg/calc.py', 'pkg/strutil.py'], modSummary([['pkg.calc', 3]]))
+    expect(r.mutatedFiles).toEqual(['pkg/calc.py'])
+    expect(r.missing).toEqual(['pkg/strutil.py'])
+  })
+
+  it('a module with zero mutants does not count as mutated (never a false pass)', () => {
+    const r = reconcileMutmutScope(['pkg/calc.py'], modSummary([['pkg.calc', 0]]))
+    expect(r.missing).toEqual(['pkg/calc.py'])
   })
 })

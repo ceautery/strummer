@@ -151,6 +151,88 @@ describe('runMutmut', () => {
   })
 })
 
+describe('runMutmut — diff-scoped (ADR 0010 addendum 2)', () => {
+  let proj: string
+  const results = (lines: string[]): string => lines.join('\n')
+
+  beforeEach(() => {
+    proj = mkdtempSync(join(tmpdir(), 'strummer-mm-proj-'))
+    mkdirSync(join(proj, 'pkg'), { recursive: true })
+    writeFileSync(join(proj, 'pkg', '__init__.py'), '')
+    writeFileSync(join(proj, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
+    writeFileSync(join(proj, 'pkg', 'strutil.py'), 'def shout(s):\n    return s.upper()\n')
+    writeFileSync(join(proj, 'pyproject.toml'), '[tool.mutmut]\npaths_to_mutate = ["pkg"]\n')
+  })
+  afterEach(() => rmSync(proj, { recursive: true, force: true }))
+
+  const pcfg = () => cfg({ projectRoot: proj, allowedRoots: [proj] })
+
+  it('plans paths_to_mutate + also_copy into a sandbox pyproject and runs mutmut THERE', async () => {
+    const argvs: { argv: string[]; cwd: string }[] = []
+    let sandboxPyproject = ''
+    const sandbox = join(dir, 'sandbox')
+    const runner: MutationRunner = async (argv, opts) => {
+      argvs.push({ argv, cwd: opts.cwd })
+      if (argv[0] === 'run')
+        sandboxPyproject = readFileSync(join(sandbox, 'pyproject.toml'), 'utf8')
+      return {
+        exitCode: 0,
+        stdout: argv[0] === 'results' ? results(['pkg.calc.x_add__mutmut_1: killed']) : '',
+        stderr: '',
+      }
+    }
+    const result = await runMutmut(
+      pcfg(),
+      { mutateFiles: ['pkg/calc.py'] },
+      { runner, sandboxDir: sandbox },
+    )
+    expect(result.ran).toBe(true)
+    expect(result.scopedFiles).toEqual(['pkg/calc.py'])
+    // ran in the sandbox, not projectRoot
+    expect(argvs[0]?.cwd).toBe(sandbox)
+    // scoped pyproject: calc mutated, the rest of pkg also_copy'd for imports
+    expect(sandboxPyproject).toContain('paths_to_mutate = [ "pkg/calc.py" ]')
+    expect(sandboxPyproject).toContain('pkg/__init__.py')
+    expect(sandboxPyproject).toContain('pkg/strutil.py')
+  })
+
+  it('a fully out-of-tree scope is a pre-spawn noop (ran:false), never spawns', async () => {
+    const { runner, argvs } = byVerb({})
+    const result = await runMutmut(pcfg(), { mutateFiles: ['other/x.py'] }, { runner })
+    expect(result.ran).toBe(false)
+    expect(result.scopeEmpty).toBe(true)
+    expect(result.unmatched).toEqual(['other/x.py'])
+    expect(argvs).toEqual([])
+  })
+
+  it('a selected file with no mutants ⇒ inconclusive (Fork B2 conservative reconcile)', async () => {
+    // selected calc + strutil, but results only carry calc — strutil yielded no mutants ⇒ inconclusive.
+    const runner: MutationRunner = async (argv) => ({
+      exitCode: 0,
+      stdout: argv[0] === 'results' ? results(['pkg.calc.x_add__mutmut_1: killed']) : '',
+      stderr: '',
+    })
+    await expect(
+      runMutmut(
+        pcfg(),
+        { mutateFiles: ['pkg/calc.py', 'pkg/strutil.py'] },
+        { runner, sandboxDir: join(dir, 'sb2') },
+      ),
+    ).rejects.toThrow(/under-scoped|no mutants|inconclusive/i)
+  })
+
+  it('a broken scoped baseline ("not checked" ⇒ Pending) is inconclusive (the baseline-smoke gate)', async () => {
+    const runner: MutationRunner = async (argv) => ({
+      exitCode: 0,
+      stdout: argv[0] === 'results' ? results(['pkg.calc.x_add__mutmut_1: not checked']) : '',
+      stderr: '',
+    })
+    await expect(
+      runMutmut(pcfg(), { mutateFiles: ['pkg/calc.py'] }, { runner, sandboxDir: join(dir, 'sb3') }),
+    ).rejects.toThrow(/incomplete|pending|inconclusive/i)
+  })
+})
+
 describe('runCosmicRay', () => {
   const DUMP = [
     '[{"mutations":[{"module_path":"calc.py","operator_name":"core/Op1","start_pos":[2,13]}]},{"worker_outcome":"normal","test_outcome":"killed"}]',

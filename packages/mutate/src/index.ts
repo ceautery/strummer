@@ -1,5 +1,8 @@
 export {
+  cosmicModulePathRoots,
   type MutmutScopePlan,
+  mutmutDoNotMutate,
+  mutmutPathsToMutate,
   planMutmutScope,
   type ScopedCosmicRayConfig,
   ScopeEmitError,
@@ -23,6 +26,8 @@ export {
 } from './run.js'
 export {
   type MutationScope,
+  pyPathToModule,
+  reconcileMutmutScope,
   reconcileScope,
   type ScopeReconciliation,
   selectMutationScope,
