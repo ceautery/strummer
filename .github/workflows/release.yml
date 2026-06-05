@@ -1,0 +1,64 @@
+name: Release
+
+# Changesets release flow (ADR 0019 slice 13). This workflow runs on every push to main,
+# but it does NOT publish on an ordinary push:
+#   - if there are pending .changeset/*.md files, it opens/updates a "Version Packages" PR
+#     (bumps versions + writes changelogs) and stops — NO publish.
+#   - publishing happens only when that Version PR is MERGED (the next run sees bumped
+#     versions + no changesets and runs the `publish` command).
+# workflow_dispatch lets you trigger it by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # version-commit + git tags
+  pull-requests: write # open/update the Version Packages PR
+  id-token: write # OIDC trusted publishing — no npm token
+
+jobs:
+  release:
+    name: version PR / publish (Changesets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # changeset tag needs full history
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0 # ADR 0019 §18: OIDC trusted publishing needs Node >= 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm >= 11.5.1 (OIDC trusted publishing)
+        run: npm install -g npm@11.5.1
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # dist must exist before publish (the green gate has no build step). The full test gate
+      # + package-checks are enforced as REQUIRED status checks via branch protection, so
+      # nothing reaches main un-gated; here we only build.
+      - name: Build (topological)
+        run: pnpm -r build
+
+      - name: Changesets — open Version PR, or publish a merged one
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          publish: pnpm release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NO NODE_AUTH_TOKEN: OIDC trusted publishing (npm verifies the workflow identity and
+          # auto-attaches provenance — do NOT also set publishConfig.provenance, ADR §18).
+          # REQUIRES per-package trusted publishing configured on npmjs.com for this repo+workflow.
+          # If your pnpm cannot do OIDC, fall back to an automation token:
+          #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

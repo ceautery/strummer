@@ -1335,9 +1335,13 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       top-level `types`→dist overlay (the legacy-types fix attw/publint caught). **slice 2 (attw `--profile
       esm-only` + publint on the TARBALL) + slice 10 (aggregate `.mjs` lazy-boundary) shipped as the
       `package-checks` build-then-assert CI job** (`scripts/package-checks.sh` + `assert-lazy-boundary.mjs`).
-      ESM-only. **Remaining (slice 13, operator):** Changesets FIXED/lockstep + `release.yml` OIDC trusted
-      publishing (Node≥22.14.0/npm≥11.5.1, `id-token:write`, no token) — needs per-package trusted-publishing
-      enabled on npmjs.com. alpha.0 was broken (npx-symlink + static-optional-peer bugs) → deprecated.
+      ESM-only. **slice 13 SCAFFOLDED:** Changesets FIXED/lockstep (`.changeset/config.json`) +
+      `release.yml` (Node 22.14.0/npm 11.5.1, `id-token:write`, no token, provenance auto) + `scripts/release.sh`
+      (publish via pnpm so `workspace:*` rewrites; prerelease-aware dist-tag avoids the `latest` trap) — the
+      changesets/action opens a Version PR on push and publishes only when that PR is MERGED. **Operator setup
+      remaining (unverifiable in-repo):** enable per-package trusted publishing on npmjs.com + branch protection
+      (required checks = `gate` + `package-checks`) + confirm pnpm OIDC (token fallback documented in the
+      workflow). alpha.0 was broken (npx-symlink + static-optional-peer bugs) → deprecated.
 - [x] **Distribution / onboarding.** *(README + example `.mcp.json` done; per-pillar browser preflight staged)* `@sackville-mcp/cli` `sackville` bin + a default bin so `npx sackville`
       resolves; a real resolvable `.mcp.json` example (operator-set gate envs only); browser-bin preflight
       diagnostic; README for human + agent operator. stdio only (v1).
