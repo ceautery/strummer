@@ -341,4 +341,195 @@ describe('validateGraphqlOperation', () => {
       expect(r.directiveUnverified).toBeUndefined()
     })
   })
+
+  describe('custom-scalar variable coercers (ADR 0018, slice 3 / Feature B)', () => {
+    const coercerSdl = `
+      scalar DateTime
+      scalar Email
+      input Profile { joined: DateTime, name: String }
+      input Contact { email: Email, joined: DateTime }
+      type Query {
+        events(at: DateTime!): Thing
+        register(p: Profile!): Thing
+        contact(c: Contact!): Thing
+      }
+      type Thing { id: Int! }
+    `
+    // Operator coercer: a DateTime must look like YYYY-… ; throws on definite invalidity.
+    const coercers = {
+      DateTime: (v: unknown) => {
+        if (!/^\d{4}-/.test(String(v))) throw new Error('not a DateTime')
+        return v
+      },
+    }
+    const eventsQ = 'query Q($at: DateTime!) { events(at: $at) { id } }'
+
+    it('a REGISTERED coercer validates a custom-scalar variable (invalid → finding, value-free)', () => {
+      const r = validateGraphqlOperation(coercerSdl, eventsQ, {
+        variables: { at: 'nope' },
+        scalarCoercers: coercers,
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(false)
+      const f = r.findings.find((x) => x.kind === 'graphql-variable-invalid')
+      expect(f?.message).toContain('$at')
+      expect(f?.message).toContain('DateTime')
+      expect(JSON.stringify(r)).not.toContain('nope') // value never echoed
+      expect(r.unverified).toBeUndefined() // it WAS checkable → not unverified
+    })
+
+    it('a REGISTERED coercer passes a valid custom-scalar variable cleanly', () => {
+      const r = validateGraphqlOperation(coercerSdl, eventsQ, {
+        variables: { at: '2024-01-01' },
+        scalarCoercers: coercers,
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBeUndefined()
+    })
+
+    it('an UNREGISTERED custom scalar stays UNVERIFIED (C2 — unchanged ADR 0015)', () => {
+      const r = validateGraphqlOperation(coercerSdl, eventsQ, {
+        variables: { at: 'nope' }, // no scalarCoercers
+        variablesAuthoritative: true,
+      })
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBe(true)
+    })
+
+    it('an input object with ONE unregistered custom-scalar field stays UNVERIFIED (C3)', () => {
+      // Contact.email is Email (unregistered) → the whole variable is unverifiable.
+      const q = 'query Q($c: Contact!) { contact(c: $c) { id } }'
+      const r = validateGraphqlOperation(coercerSdl, q, {
+        variables: { c: { email: 'x', joined: '2024-01-01' } },
+        scalarCoercers: coercers,
+        variablesAuthoritative: true,
+      })
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBe(true)
+    })
+
+    it('an input object whose custom-scalar fields are ALL registered is CHECKABLE (value-free)', () => {
+      // Profile.joined is DateTime (registered), name is String (built-in) → checkable.
+      const q = 'query Q($p: Profile!) { register(p: $p) { id } }'
+      const r = validateGraphqlOperation(coercerSdl, q, {
+        variables: { p: { joined: 'BADDATE', name: 'Ada' } },
+        scalarCoercers: coercers,
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(false)
+      const f = r.findings.find((x) => x.kind === 'graphql-variable-invalid')
+      expect(f?.message).toContain('$p')
+      expect(JSON.stringify(r)).not.toContain('BADDATE') // nested value never echoed
+      expect(r.unverified).toBeUndefined()
+    })
+  })
+
+  describe('coercer redaction + guards (ADR 0018, slice 4)', () => {
+    const coercerSdl = `
+      scalar DateTime
+      input Profile { joined: DateTime, name: String }
+      type Query { events(at: DateTime!): Thing }
+      type Thing { id: Int! }
+    `
+    const eventsQ = 'query Q($at: DateTime!) { events(at: $at) { id } }'
+
+    it('a coercer that THROWS a secret-bearing message never leaks it into a finding', () => {
+      const secret = 'leak-me-9999'
+      const r = validateGraphqlOperation(coercerSdl, eventsQ, {
+        variables: { at: 'whatever' },
+        scalarCoercers: {
+          DateTime: (v) => {
+            throw new Error(`bad value ${secret} for ${v}`)
+          },
+        },
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(false)
+      expect(r.findings.find((x) => x.kind === 'graphql-variable-invalid')).toBeDefined()
+      expect(JSON.stringify(r)).not.toContain(secret) // reconstructed message only
+    })
+
+    it('a coercer registered for a BUILT-IN scalar is IGNORED (no false-fire on a valid value)', () => {
+      // A Boolean shadow that always throws would false-fire on a valid @skip(if:$s) variable
+      // IF it were patched — the built-in guard refuses it, so $s:true stays clean.
+      const q = 'query Q($s: Boolean!) { events(at: "2024-01-01") @skip(if: $s) { id } }'
+      const r = validateGraphqlOperation(coercerSdl, q, {
+        variables: { s: true },
+        scalarCoercers: {
+          Boolean: () => {
+            throw new Error('shadow-fire')
+          },
+        },
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(true)
+      expect(r.findings.filter((x) => x.kind === 'graphql-variable-invalid')).toEqual([])
+    })
+
+    it('a custom-scalar directive-arg LITERAL stays UNVERIFIED even with a coercer registered (BLOCKER-2)', () => {
+      const litSdl = `
+        scalar DateTime
+        directive @auth(token: DateTime) on FIELD
+        type Query { thing(id: Int!): Thing }
+        type Thing { id: Int! }
+      `
+      const r = validateGraphqlOperation(
+        litSdl,
+        '{ thing(id: 1) @auth(token: "sk-secret") { id } }',
+        {
+          scalarCoercers: {
+            DateTime: () => {
+              throw new Error('should-never-run-on-a-literal')
+            },
+          },
+        },
+      )
+      expect(r.findings).toEqual([]) // coercer never invoked on the literal (parseLiteral untouched)
+      expect(r.unverified).toBe(true)
+      expect(r.directiveUnverified).toBe(true)
+      expect(JSON.stringify(r)).not.toContain('sk-secret')
+    })
+
+    it('an absent variable with an INVALID default literal stays SILENT (default not routed through the coercer)', () => {
+      const q = 'query Q($at: DateTime! = "not-a-date") { events(at: $at) { id } }'
+      const r = validateGraphqlOperation(coercerSdl, q, {
+        variables: {},
+        scalarCoercers: {
+          DateTime: (v) => {
+            if (!/^\d{4}-/.test(String(v))) throw new Error('bad')
+            return v
+          },
+        },
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBeUndefined()
+    })
+
+    it('freshness: a later call WITHOUT coercers sees the scalar back at identity (unverified)', () => {
+      const c = {
+        DateTime: (v: unknown) => {
+          if (String(v) !== 'ok') throw new Error('bad')
+          return v
+        },
+      }
+      // Call 1: the coercer rejects an invalid value.
+      const r1 = validateGraphqlOperation(coercerSdl, eventsQ, {
+        variables: { at: 'bad' },
+        scalarCoercers: c,
+        variablesAuthoritative: true,
+      })
+      expect(r1.valid).toBe(false)
+      // Call 2: NO coercers → DateTime is back to its identity parseValue → unverified, no finding.
+      const r2 = validateGraphqlOperation(coercerSdl, eventsQ, {
+        variables: { at: 'bad' },
+        variablesAuthoritative: true,
+      })
+      expect(r2.findings).toEqual([])
+      expect(r2.unverified).toBe(true)
+    })
+  })
 })

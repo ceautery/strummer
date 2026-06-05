@@ -47,7 +47,21 @@ export interface GraphqlValidateOptions {
   /** Caller KNOWS the variable set is complete (direct surfaces hold the real request).
    * Default false: an absent required variable is `unverified`, not a finding. */
   variablesAuthoritative?: boolean
+  /** Operator-supplied custom-scalar coercers, keyed by scalar name (ADR 0018). A registered
+   * scalar's VARIABLE values become checkable (the coercer throws on definite invalidity);
+   * document literals are NEVER routed through coercers (the `parseLiteral` leak guard, §3).
+   * Built-in scalar names are silently ignored (§8.5). Operator-set — never an agent input;
+   * the MCP surface selects coercers by NAME against an operator-bound registry. */
+  scalarCoercers?: Record<string, ScalarCoercer>
 }
+
+/**
+ * A custom-scalar coercer (ADR 0018). Throws (any error) to reject a value as definitely
+ * invalid; the return value is IGNORED — only throw/no-throw is the signal. MUST throw ONLY on
+ * definite invalidity (indeterminate ⇒ do not throw, so an uncertain value never false-fires).
+ * Applies to VARIABLE values only — document literals are never routed through a coercer.
+ */
+export type ScalarCoercer = (value: unknown) => unknown
 
 export interface GraphqlValidationResult extends ContractResult {
   /** A variable set the validator could not check (custom-scalar-typed variables, a
@@ -66,24 +80,60 @@ export interface GraphqlValidationResult extends ContractResult {
 
 /** The five built-in scalars graphql-js can actually coerce. A custom scalar declared in
  * SDL via `buildSchema` uses an identity `parseValue` (validates nothing), so a variable
- * typed over one carries no signal and must be `unverified`-skipped. */
+ * typed over one carries no signal and must be `unverified`-skipped — UNLESS the operator
+ * registered a coercer for it (ADR 0018), making its `parseValue` actually validate. */
 const BUILTIN_SCALARS = new Set(['Int', 'Float', 'String', 'Boolean', 'ID'])
 
 /**
  * Does this resolved type (unwrapping NonNull/List, and transitively through input-object
- * fields) bottom out in a custom (non-built-in) scalar? Cycle-guarded by `seen` keyed on
- * the input-object type name. Uses the schema-RESOLVED `GraphQLType` (via `typeFromAST`),
- * never the AST node.
+ * fields) bottom out in a scalar that carries NO validation signal — i.e. a custom
+ * (non-built-in) scalar WITHOUT a registered coercer? Cycle-guarded by `seen` keyed on the
+ * input-object type name. Uses the schema-RESOLVED `GraphQLType` (via `typeFromAST`), never
+ * the AST node. `registered` is the set of custom scalars with an operator coercer (ADR 0018);
+ * pass an empty set for a coercer-INDEPENDENT check (e.g. the D2 directive-literal pass).
  */
-function typeInvolvesCustomScalar(type: GraphQLType, seen: Set<string>): boolean {
+function typeInvolvesCustomScalar(
+  type: GraphQLType,
+  seen: Set<string>,
+  registered: Set<string>,
+): boolean {
   const named = getNamedType(type)
-  if (isScalarType(named)) return !BUILTIN_SCALARS.has(named.name)
+  if (isScalarType(named)) return !BUILTIN_SCALARS.has(named.name) && !registered.has(named.name)
   if (isInputObjectType(named)) {
     if (seen.has(named.name)) return false
     seen.add(named.name)
-    return Object.values(named.getFields()).some((f) => typeInvolvesCustomScalar(f.type, seen))
+    return Object.values(named.getFields()).some((f) =>
+      typeInvolvesCustomScalar(f.type, seen, registered),
+    )
   }
   return false // enums (and anything else) carry signal / are handled by validate()
+}
+
+/**
+ * Patch the operator-registered custom-scalar coercers onto the freshly-built schema (ADR
+ * 0018). Overwrites `parseValue` ONLY — NEVER `parseLiteral` (the redaction-leak guard, §3:
+ * `validate()` invokes `parseLiteral` on every custom-scalar LITERAL, and a coercer throw
+ * there would land the raw value + message into a finding). Variables traverse `parseValue`
+ * via `getVariableValues`, so that is all Feature B needs. Built-in scalar names are silently
+ * ignored (§8.5 — a built-in shadow could false-fire on a valid `@skip` Boolean variable).
+ * Returns the set of scalar names actually patched (the `registered` set). Safe to mutate the
+ * schema in place: `validateGraphqlOperation` builds a fresh, never-shared schema per call.
+ */
+function patchRegisteredScalars(
+  schema: GraphQLSchema,
+  coercers: Record<string, ScalarCoercer> | undefined,
+): Set<string> {
+  const registered = new Set<string>()
+  if (!coercers) return registered
+  for (const [name, coercer] of Object.entries(coercers)) {
+    if (BUILTIN_SCALARS.has(name)) continue // built-in shadow ignored (safety-critical)
+    const t = schema.getType(name)
+    if (t && isScalarType(t)) {
+      t.parseValue = coercer // parseValue ONLY — parseLiteral deliberately untouched (§3)
+      registered.add(name)
+    }
+  }
+  return registered
 }
 
 /**
@@ -97,6 +147,7 @@ function validateVariables(
   operation: OperationDefinitionNode,
   variables: unknown,
   authoritative: boolean,
+  registered: Set<string>,
   findings: ContractFinding[],
 ): boolean {
   // A `variables` that is not a plain JSON object (array/null/scalar) can't be interpreted
@@ -116,8 +167,10 @@ function validateVariables(
     if (!resolved) continue // unknown type — already flagged by validate()
     const typeStr = print(vd.type)
 
-    // Custom-scalar-typed variable: the SDL scalar can't validate it → no signal.
-    if (typeInvolvesCustomScalar(resolved, new Set())) {
+    // A variable bottoming out in a custom scalar WITHOUT a registered coercer can't be
+    // validated → no signal. A registered coercer (patched onto `parseValue`) makes
+    // `getVariableValues` below actually validate it (ADR 0018).
+    if (typeInvolvesCustomScalar(resolved, new Set(), registered)) {
       unverified = true
       continue
     }
@@ -204,7 +257,10 @@ function hasCustomScalarDirectiveLiteral(schema: GraphQLSchema, document: Docume
         if (directiveDepth === 0) return // a FIELD arg — out of scope (S1)
         if (node.value.kind === Kind.VARIABLE) return // handled by the variable loop (D3)
         const t = typeInfo.getInputType()
-        if (t && typeInvolvesCustomScalar(t, new Set())) found = true
+        // Empty `registered` set: D2 is COERCER-INDEPENDENT (coercers validate variables via
+        // `parseValue`, never document literals — so a registered scalar's literal stays
+        // unverified all the same, ADR 0018 BLOCKER-2).
+        if (t && typeInvolvesCustomScalar(t, new Set(), new Set())) found = true
       },
     }),
   )
@@ -238,6 +294,10 @@ export function validateGraphqlOperation(
     })
     return { valid: false, findings }
   }
+
+  // Patch operator-registered custom-scalar coercers (parseValue only) onto the fresh schema;
+  // `registered` then drives whether a custom-scalar variable is checkable (ADR 0018).
+  const registered = patchRegisteredScalars(schema, opts.scalarCoercers)
 
   // Parse (syntax) then validate (semantics: unknown fields/args = drift).
   let document: ReturnType<typeof parse>
@@ -310,6 +370,7 @@ export function validateGraphqlOperation(
         targetOp,
         opts.variables,
         opts.variablesAuthoritative === true,
+        registered,
         findings,
       )
     }
