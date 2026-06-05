@@ -338,13 +338,16 @@ no real-tool dependency, gate stays green:
    out-of-tree / deleted / typo'd → `unmatched`.
 2. **`reconcileScope(selected, summary)`** — the partial-under-scope guard above.
 
-**STAGED (slice-0-gated):** the config emitters `synthesizeScopedCosmicRayConfig` /
-`planMutmutScope`+`renderMutmutConfig` (need `smol-toml` + the captures); the
-`runCosmicRay`/`runMutmut` wiring (honor `mutateFiles`, pre-spawn noop, post-spawn
-`reconcileScope`); MCP/CLI need NO change (already forward `mutateFiles`); the verify selector
-(Fork D). The Stryker-under-verify total-zero path was verified already-safe (folds
-`mutationScore===null` → `no-signal` → inconclusive via `fromMutationSummary`/`composeVerdict`);
-Stryker PARTIAL-scope reconciliation is staged (different `--mutate` mechanism).
+**LANDED 2026-06-05 (was slice-0-gated):** the config emitters `synthesizeScopedCosmicRayConfig` /
+`planMutmutScope`+`synthesizeScopedMutmutPyproject` (`smol-toml`; mutmut renders `paths_to_mutate`
++`also_copy`, NOT `renderMutmutConfig`/`only_mutate` — Fork B corrected by slice 0); the
+`runCosmicRay`/`runMutmut` wiring (honor `mutateFiles`, pre-spawn noop, post-spawn reconcile —
+`reconcileScope` for cosmic-ray, the conservative `reconcileMutmutScope` for mutmut); MCP/CLI
+unchanged; the verify selector (Fork D). All verified end-to-end against the real tools (commits
+15920b9 / d23c86e / 25b7b65 / bb85f8f / accd284). The Stryker-under-verify total-zero path was
+verified already-safe (folds `mutationScore===null` → `no-signal` → inconclusive via
+`fromMutationSummary`/`composeVerdict`); Stryker PARTIAL-scope reconciliation remains staged
+(different `--mutate` mechanism).
 
 Invariants held throughout: under-scoping (total OR partial) never silent-passes;
 absence-never-a-pass; no real spawn in `pnpm gate` (pure synthesis + injected runner);
