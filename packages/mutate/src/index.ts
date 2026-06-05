@@ -14,6 +14,12 @@ export {
   runMutmut,
 } from './run.js'
 export {
+  type MutationScope,
+  reconcileScope,
+  type ScopeReconciliation,
+  selectMutationScope,
+} from './scope.js'
+export {
   type FileSummary,
   type Mutant,
   type MutantPosition,
