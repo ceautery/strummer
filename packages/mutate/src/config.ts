@@ -82,6 +82,21 @@ function exclusionCollides(entry: string, selected: string[]): boolean {
   return selected.some((f) => re.test(f))
 }
 
+/**
+ * The operator's declared source tree, read from a cosmic-ray base config's `module-path` (a single
+ * string or a list). Used as the default `ownedRoots` to confine the diff scope (Fork C): a changed
+ * `.py` outside this tree is `unmatched` (report-gap), never silently scoped. Pure.
+ */
+export function cosmicModulePathRoots(baseToml: string): string[] {
+  const data = parse(baseToml) as Record<string, unknown>
+  const cr = data['cosmic-ray']
+  if (!cr || typeof cr !== 'object') return []
+  const mp = (cr as Record<string, unknown>)['module-path']
+  if (typeof mp === 'string') return [normalizePath(mp)]
+  if (Array.isArray(mp)) return mp.map((x) => normalizePath(String(x)))
+  return []
+}
+
 export interface ScopedCosmicRayConfig {
   /** The synthesized per-run `cosmic-ray.toml` text. */
   toml: string

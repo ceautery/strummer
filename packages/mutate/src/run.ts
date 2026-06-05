@@ -20,12 +20,19 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { cosmicModulePathRoots, synthesizeScopedCosmicRayConfig } from './config.js'
 import { parseCosmicRayDump } from './cosmic-ray.js'
 import { parseMutmutResults } from './mutmut.js'
+import { reconcileScope, selectMutationScope } from './scope.js'
 import { type MutationReport, type MutationSummary, summarizeMutation } from './summarize.js'
+
+/** The zero-mutant summary returned by a pre-spawn noop (folds to no-signal ⇒ inconclusive). */
+function emptyMutationSummary(): MutationSummary {
+  return summarizeMutation({ files: {} })
+}
 
 /** Thrown when the paired operator gate denies a run. */
 export class MutateGateError extends Error {
@@ -52,12 +59,23 @@ export interface RunMutationConfig {
 }
 
 export interface RunMutationInput {
-  /** Changed source files to scope mutation to (Stryker `--mutate`). Empty ⇒ project default. */
+  /**
+   * Changed source files to scope mutation to. Stryker → `--mutate`; the Python tools → a synthesized
+   * scoped config (cosmic-ray `module-path` list / mutmut `paths_to_mutate`). `undefined` ⇒ the
+   * project default (whole project, today's behavior); a supplied list scopes the run, and a selection
+   * that resolves to no mutable in-tree `.py` is a pre-spawn noop (`ran:false`, never a spawn).
+   */
   mutateFiles?: string[]
   /** Reuse Stryker's incremental cache (`--incremental`) — faster re-runs. */
   incremental?: boolean
   /** cosmic-ray config path (relative to projectRoot). Default `cosmic-ray.toml`. */
   configPath?: string
+  /**
+   * OPTIONAL operator source roots the diff scope is confined to (Fork C). A changed `.py` outside
+   * them is `unmatched` (report-gap), never scoped. Default: the tool config's declared source tree
+   * (cosmic-ray `module-path`).
+   */
+  ownedRoots?: string[]
 }
 
 /** Injected command runner — executes `stryker <argv>` and yields its exit status. */
@@ -79,6 +97,12 @@ export interface RunMutationResult {
    */
   reportPath?: string
   summary: MutationSummary
+  /** A scope was requested but resolved to no mutable in-tree `.py` ⇒ pre-spawn noop (case (a)). */
+  scopeEmpty?: boolean
+  /** Changed `.py` files outside the owned tree / deleted — surfaced as a gap (Fork C), never scoped. */
+  unmatched?: string[]
+  /** The files the run was SELECTED to mutate (before reconciliation) — what we asked the tool for. */
+  requestedFiles?: string[]
 }
 
 /** Stryker's default JSON-report location, relative to the project root. */
@@ -231,7 +255,14 @@ export async function runMutmut(
 export async function runCosmicRay(
   config: RunMutationConfig,
   input: RunMutationInput,
-  deps: { runner?: MutationRunner; sessionDir?: string } = {},
+  deps: {
+    runner?: MutationRunner
+    sessionDir?: string
+    /** Existence check for the selected files (FS by default; injected in tests). */
+    exists?: (path: string) => boolean
+    /** Scoped config filename written into projectRoot (relative). Default `.strummer-cosmic.toml`. */
+    scopedConfigName?: string
+  } = {},
 ): Promise<RunMutationResult> {
   assertAllowed(config)
   const runner = deps.runner ?? defaultCosmicRayRunner
@@ -240,10 +271,68 @@ export async function runCosmicRay(
   const sessionDir = deps.sessionDir ?? mkdtempSync(join(tmpdir(), 'strummer-mutate-'))
   const session = join(sessionDir, 'session.sqlite')
 
-  await runner(['init', configPath, session], opts)
-  const exec = await runner(['exec', configPath, session], opts)
-  const { stdout } = await runner(['dump', session], opts)
-  const summary = summarizeMutation(parseCosmicRayDump(stdout))
-  assertComplete('cosmic-ray', summary)
-  return { ran: true, exitCode: exec.exitCode, scopedFiles: [], tool: 'cosmic-ray', summary }
+  // Whole-project (today's behavior) when no scope is requested.
+  if (input.mutateFiles === undefined) {
+    await runner(['init', configPath, session], opts)
+    const exec = await runner(['exec', configPath, session], opts)
+    const { stdout } = await runner(['dump', session], opts)
+    const summary = summarizeMutation(parseCosmicRayDump(stdout))
+    assertComplete('cosmic-ray', summary)
+    return { ran: true, exitCode: exec.exitCode, scopedFiles: [], tool: 'cosmic-ray', summary }
+  }
+
+  // Diff-scoped: confine the changed files to the owned source tree, then select mutable existing .py.
+  const baseToml = readFileSync(join(config.projectRoot, configPath), 'utf8')
+  const ownedRoots = input.ownedRoots ?? cosmicModulePathRoots(baseToml)
+  const exists = deps.exists ?? ((p: string) => existsSync(join(config.projectRoot, p)))
+  const { files, unmatched } = selectMutationScope(input.mutateFiles, ownedRoots, exists)
+  const unmatchedOut = unmatched.length > 0 ? unmatched : undefined
+
+  // Case (a): a scope was requested but nothing mutable in-tree remains — DO NOT spawn (noop).
+  if (files.length === 0) {
+    return {
+      ran: false,
+      exitCode: 0,
+      scopedFiles: [],
+      tool: 'cosmic-ray',
+      summary: emptyMutationSummary(),
+      scopeEmpty: true,
+      unmatched: unmatchedOut,
+      requestedFiles: [],
+    }
+  }
+
+  // Synthesize a scoped config (module-path = selected files, excluded-modules reconciled). It must
+  // live in projectRoot so its RELATIVE module-path resolves there (cosmic-ray then reports relative
+  // module_path keys, which reconcileScope compares against the selected files directly).
+  const scoped = synthesizeScopedCosmicRayConfig(baseToml, files)
+  const scopedName = deps.scopedConfigName ?? '.strummer-cosmic.toml'
+  const scopedAbs = join(config.projectRoot, scopedName)
+  writeFileSync(scopedAbs, scoped.toml)
+  try {
+    await runner(['init', scopedName, session], opts)
+    const exec = await runner(['exec', scopedName, session], opts)
+    const { stdout } = await runner(['dump', session], opts)
+    const summary = summarizeMutation(parseCosmicRayDump(stdout))
+    assertComplete('cosmic-ray', summary) // case (b): total-zero / pending ⇒ inconclusive
+    // Case (c): a selected file the tool never SAW was silently never mutated ⇒ inconclusive.
+    const { mutatedFiles, missing } = reconcileScope(files, summary)
+    if (missing.length > 0) {
+      throw new Error(
+        `cosmic-ray under-scoped: ${missing.join(', ')} selected but never mutated — inconclusive`,
+      )
+    }
+    // Case (d): clean scoped run — report what was GENUINELY mutated, not what was requested.
+    return {
+      ran: true,
+      exitCode: exec.exitCode,
+      scopedFiles: mutatedFiles,
+      tool: 'cosmic-ray',
+      summary,
+      requestedFiles: files,
+      unmatched: unmatchedOut,
+    }
+  } finally {
+    rmSync(scopedAbs, { force: true })
+  }
 }

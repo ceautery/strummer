@@ -1,4 +1,12 @@
-import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -188,5 +196,91 @@ describe('runCosmicRay', () => {
     await expect(runCosmicRay(cfg(), {}, { runner, sessionDir: dir })).rejects.toThrow(
       /inconclusive|no mutants/i,
     )
+  })
+})
+
+describe('runCosmicRay — diff-scoped (ADR 0010 addendum 2)', () => {
+  let proj: string
+  /** A scoped dump keyed by relative module_path (matches what cosmic-ray reports for a relative config). */
+  const dumpFor = (paths: string[]): string =>
+    paths
+      .map(
+        (p) =>
+          `[{"mutations":[{"module_path":"${p}","operator_name":"core/Op","start_pos":[1,1]}]},{"worker_outcome":"normal","test_outcome":"killed"}]`,
+      )
+      .join('\n')
+
+  beforeEach(() => {
+    proj = mkdtempSync(join(tmpdir(), 'strummer-cr-proj-'))
+    mkdirSync(join(proj, 'pkg'), { recursive: true })
+    writeFileSync(join(proj, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
+    writeFileSync(join(proj, 'pkg', 'strutil.py'), 'def shout(s):\n    return s.upper()\n')
+    writeFileSync(
+      join(proj, 'cosmic-ray.toml'),
+      '[cosmic-ray]\nmodule-path = "pkg"\ntimeout = 30.0\nexcluded-modules = []\ntest-command = "python -m pytest -x"\n\n[cosmic-ray.distributor]\nname = "local"\n',
+    )
+  })
+  afterEach(() => rmSync(proj, { recursive: true, force: true }))
+
+  const pcfg = () => cfg({ projectRoot: proj, allowedRoots: [proj] })
+
+  it('synthesizes a scoped config (module-path = selected files) and reports what was mutated', async () => {
+    let scopedToml = ''
+    const argvs: string[][] = []
+    const runner: MutationRunner = async (argv) => {
+      argvs.push(argv)
+      if (argv[0] === 'init') scopedToml = readFileSync(join(proj, argv[1] ?? ''), 'utf8')
+      return { exitCode: 0, stdout: argv[0] === 'dump' ? dumpFor(['pkg/calc.py']) : '', stderr: '' }
+    }
+    const result = await runCosmicRay(
+      pcfg(),
+      { mutateFiles: ['pkg/calc.py'] },
+      { runner, sessionDir: dir },
+    )
+    expect(result.ran).toBe(true)
+    expect(scopedToml).toContain('module-path = [ "pkg/calc.py" ]')
+    // init/exec carry the synthesized scoped config, not the base.
+    expect(argvs[0]?.[1]).toBe('.strummer-cosmic.toml')
+    expect(result.scopedFiles).toEqual(['pkg/calc.py'])
+    expect(result.requestedFiles).toEqual(['pkg/calc.py'])
+    // the temp scoped config is cleaned up afterwards
+    expect(existsSync(join(proj, '.strummer-cosmic.toml'))).toBe(false)
+  })
+
+  it('a fully out-of-tree scope is a pre-spawn noop (ran:false, scopeEmpty), never spawns', async () => {
+    const { runner, argvs } = byVerb({ init: {}, exec: {}, dump: { stdout: dumpFor(['x']) } })
+    const result = await runCosmicRay(
+      pcfg(),
+      { mutateFiles: ['other/x.py'] },
+      { runner, sessionDir: dir },
+    )
+    expect(result.ran).toBe(false)
+    expect(result.scopeEmpty).toBe(true)
+    expect(result.unmatched).toEqual(['other/x.py'])
+    expect(argvs).toEqual([]) // never spawned
+  })
+
+  it('PARTIAL under-scope (a selected file the tool never mutated) ⇒ inconclusive (the reconcile guard)', async () => {
+    // selected calc + strutil, but the dump only carries calc — strutil was silently never mutated.
+    const { runner } = byVerb({ init: {}, exec: {}, dump: { stdout: dumpFor(['pkg/calc.py']) } })
+    await expect(
+      runCosmicRay(
+        pcfg(),
+        { mutateFiles: ['pkg/calc.py', 'pkg/strutil.py'] },
+        { runner, sessionDir: dir },
+      ),
+    ).rejects.toThrow(/under-scoped|never mutated|inconclusive/i)
+  })
+
+  it('reports a partially out-of-tree change: scopes the in-tree file, flags the rest as unmatched', async () => {
+    const { runner } = byVerb({ init: {}, exec: {}, dump: { stdout: dumpFor(['pkg/calc.py']) } })
+    const result = await runCosmicRay(
+      pcfg(),
+      { mutateFiles: ['pkg/calc.py', 'gone/y.py'] },
+      { runner, sessionDir: dir },
+    )
+    expect(result.ran).toBe(true)
+    expect(result.scopedFiles).toEqual(['pkg/calc.py'])
+    expect(result.unmatched).toEqual(['gone/y.py'])
   })
 })
