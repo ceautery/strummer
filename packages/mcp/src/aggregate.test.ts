@@ -228,3 +228,28 @@ describe('api+verify gate prefixing — compose, never widen (ADR 0019 §A8)', (
     expect(apiConfigFromEnv(apiUnsafe, { aggregate: true }).allowUnsafe).toBe(true)
   })
 })
+
+describe('strummer-mcp is repointed to the aggregate bin (ADR 0019 §A2/§11)', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
+  const pkg = JSON.parse(readFileSync(`${here}/../package.json`, 'utf8')) as any
+
+  it('strummer-mcp + the default `mcp` bin map to the aggregate (./dist/bin.mjs)', () => {
+    expect(pkg.bin['strummer-mcp']).toBe('./dist/bin.mjs')
+    expect(pkg.bin.mcp).toBe('./dist/bin.mjs') // so `npx @strummer/mcp` resolves
+  })
+
+  it('the docs-only server moved to strummer-docs-mcp', () => {
+    expect(pkg.bin['strummer-docs-mcp']).toBe('./dist/bin-docs.mjs')
+  })
+
+  it('the narrow per-pillar bins remain available', () => {
+    for (const b of ['strummer-api-mcp', 'strummer-browser-mcp', 'strummer-verify-mcp']) {
+      expect(pkg.bin[b]).toBeDefined()
+    }
+  })
+
+  it('docs.ts + bin-docs.ts are build entries (the aggregate dynamic-imports ./docs.js)', () => {
+    expect(pkg.scripts.build).toContain('src/docs.ts')
+    expect(pkg.scripts.build).toContain('src/bin-docs.ts')
+  })
+})

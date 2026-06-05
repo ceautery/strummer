@@ -6,6 +6,8 @@
   "license": "Apache-2.0",
   "bin": {
     "strummer-mcp": "./dist/bin.mjs",
+    "mcp": "./dist/bin.mjs",
+    "strummer-docs-mcp": "./dist/bin-docs.mjs",
     "strummer-api-mcp": "./dist/bin-api.mjs",
     "strummer-browser-mcp": "./dist/bin-browser.mjs",
     "strummer-deps-mcp": "./dist/bin-deps.mjs",
@@ -26,7 +28,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown src/index.ts src/bin.ts src/bin-api.ts src/bin-browser.ts src/bin-deps.ts src/bin-coverage.ts src/bin-flake.ts src/bin-mutate.ts src/bin-lsp.ts src/bin-verify.ts --dts",
+    "build": "tsdown src/index.ts src/docs.ts src/bin.ts src/bin-docs.ts src/bin-api.ts src/bin-browser.ts src/bin-deps.ts src/bin-coverage.ts src/bin-flake.ts src/bin-mutate.ts src/bin-lsp.ts src/bin-verify.ts --dts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
