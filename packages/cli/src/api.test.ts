@@ -656,6 +656,78 @@ get {
     expect(code).toBe(0)
   })
 
+  it('validate --graphql --coercers validates a custom-scalar variable (exit 1, value-free)', async () => {
+    writeFileSync(
+      join(dir, 'events-schema.graphql'),
+      'scalar DateTime\ntype Query { events(at: DateTime!): Int }',
+    )
+    writeFileSync(join(dir, 'events-query.graphql'), 'query Q($at: DateTime!) { events(at: $at) }')
+    writeFileSync(
+      join(dir, 'coercers.mjs'),
+      "export default { DateTime: (v) => { if (!/^\\d{4}-/.test(String(v))) throw new Error('bad DateTime') } }\n",
+    )
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'validate',
+        '--graphql',
+        join(dir, 'events-schema.graphql'),
+        '--query',
+        join(dir, 'events-query.graphql'),
+        '--variables',
+        '{"at":"not-a-date"}',
+        '--coercers',
+        join(dir, 'coercers.mjs'),
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out()).toContain('graphql-variable-invalid')
+    expect(c.out()).not.toContain('not-a-date') // value never echoed
+  })
+
+  it('validate --graphql WITHOUT --coercers leaves the custom-scalar variable unverified (exit 0)', async () => {
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'validate',
+        '--graphql',
+        join(dir, 'events-schema.graphql'),
+        '--query',
+        join(dir, 'events-query.graphql'),
+        '--variables',
+        '{"at":"not-a-date"}',
+        '--json',
+      ],
+      c.io,
+    )
+    expect(code).toBe(0) // unverified is not a finding → valid
+    expect(JSON.parse(c.out()).unverified).toBe(true)
+  })
+
+  it('validate --graphql --coercers FAILS LOUDLY on a missing module (non-zero, no silent pass)', async () => {
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'validate',
+        '--graphql',
+        join(dir, 'events-schema.graphql'),
+        '--query',
+        join(dir, 'events-query.graphql'),
+        '--variables',
+        '{"at":"not-a-date"}',
+        '--coercers',
+        join(dir, 'does-not-exist.mjs'),
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.err()).toContain('failed to load --coercers module')
+  })
+
   it('run --graphql flags a wrong-typed request variable (exit 1, response still clean)', async () => {
     const c = capture()
     const code = await run(

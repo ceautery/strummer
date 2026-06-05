@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import {
   ArtifactStore,
@@ -15,6 +16,7 @@ import {
   runRequest,
   runRequestForContract,
   runSequence,
+  type ScalarCoercer,
   type SecretStore,
   validateCapturedTraffic,
   validateGraphqlOperation,
@@ -22,6 +24,34 @@ import {
   validateOpenApiResponse,
 } from '@strummer/api'
 import type { CliIO } from './index.js'
+
+/**
+ * Load an operator-supplied custom-scalar coercer module (ADR 0018 slice 6). The human is the
+ * operator, so a real module path is permitted. Returns the coercer record, or `undefined` on
+ * ANY failure (missing/throwing module, or a non-object default export) AFTER writing a loud
+ * error — the caller MUST then exit non-zero, never silently fall back to no coercers (which
+ * would look clean — an absence-laundering hazard).
+ */
+async function loadCoercers(
+  file: string,
+  io: CliIO,
+): Promise<Record<string, ScalarCoercer> | undefined> {
+  let exported: unknown
+  try {
+    const mod = (await import(pathToFileURL(resolve(file)).href)) as { default?: unknown }
+    exported = mod.default
+  } catch (err) {
+    io.err(`api validate: failed to load --coercers module ${file}: ${(err as Error).message}\n`)
+    return undefined
+  }
+  if (!exported || typeof exported !== 'object') {
+    io.err(
+      `api validate: --coercers module ${file} must default-export an object of scalar coercers\n`,
+    )
+    return undefined
+  }
+  return exported as Record<string, ScalarCoercer>
+}
 
 /** Matches `{{secret:NAME}}` references; captures the NAME only (never a value). */
 const SECRET_RE = /\{\{\s*secret:\s*([^}\s]+)\s*\}\}/g
@@ -69,7 +99,7 @@ export async function runApi(args: string[], io: CliIO): Promise<number> {
     case 'run-collection':
       return cmdRunCollection(rest, io)
     case 'validate':
-      return cmdValidate(rest, io)
+      return await cmdValidate(rest, io)
     case 'validate-request':
       return cmdValidateRequest(rest, io)
     case 'validate-capture':
@@ -425,7 +455,7 @@ function cmdImport(args: string[], io: CliIO): number {
   return 0
 }
 
-function cmdValidate(args: string[], io: CliIO): number {
+async function cmdValidate(args: string[], io: CliIO): Promise<number> {
   const { values } = parseArgs({
     args,
     allowPositionals: true,
@@ -434,6 +464,7 @@ function cmdValidate(args: string[], io: CliIO): number {
       query: { type: 'string' },
       operation: { type: 'string' },
       variables: { type: 'string' },
+      coercers: { type: 'string' },
       json: { type: 'boolean' },
     },
   })
@@ -453,8 +484,16 @@ function cmdValidate(args: string[], io: CliIO): number {
       variables = JSON.parse(readFileSync(values.variables, 'utf8'))
     }
   }
+  // --coercers loads an operator module of custom-scalar coercers (ADR 0018). A load failure
+  // is LOUD + non-zero — never a silent fall-through to no-coercer `unverified` (which looks clean).
+  let scalarCoercers: Record<string, ScalarCoercer> | undefined
+  if (values.coercers !== undefined) {
+    scalarCoercers = await loadCoercers(values.coercers, io)
+    if (scalarCoercers === undefined) return 1
+  }
   const contract = validateGraphqlOperation(sdl, query, {
     operationName: values.operation,
+    ...(scalarCoercers ? { scalarCoercers } : {}),
     ...(variables !== undefined ? { variables, variablesAuthoritative: true } : {}),
   })
 
