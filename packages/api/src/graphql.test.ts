@@ -274,4 +274,71 @@ describe('validateGraphqlOperation', () => {
       expect(r.unverified).toBeUndefined()
     })
   })
+
+  describe('custom-scalar directive-arg LITERAL → unverified (ADR 0018, slice 2 / D2)', () => {
+    // A custom-scalar directive-arg LITERAL is validated by nothing (identity parseLiteral,
+    // which we deliberately never patch), so it carries no signal and must fold to
+    // `unverified` — never a finding (the literal may carry an inline secret), and never a
+    // silent pass. Confined to DIRECTIVE-arg position; field-arg literals stay out of scope.
+    const d2Sdl = `
+      scalar DateTime
+      directive @auth(token: DateTime) on FIELD
+      directive @tags(values: [DateTime]) on FIELD
+      input Filter { since: DateTime, name: String }
+      directive @filter(by: Filter) on FIELD
+      type Query { thing(id: Int!): Thing, events(at: DateTime!): Thing }
+      type Thing { id: Int! }
+    `
+
+    it('a custom-scalar directive-arg scalar literal is UNVERIFIED, no finding, no value echo', () => {
+      const r = validateGraphqlOperation(
+        d2Sdl,
+        '{ thing(id: 1) @auth(token: "sk-secret-123") { id } }',
+      )
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBe(true)
+      expect(r.directiveUnverified).toBe(true)
+      expect(JSON.stringify(r)).not.toContain('sk-secret-123')
+    })
+
+    it('a custom-scalar directive-arg LIST literal is UNVERIFIED (transitive)', () => {
+      const r = validateGraphqlOperation(d2Sdl, '{ thing(id: 1) @tags(values: ["a", "b"]) { id } }')
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBe(true)
+      expect(r.directiveUnverified).toBe(true)
+    })
+
+    it('a directive-arg INPUT-OBJECT literal with a nested custom scalar is UNVERIFIED (transitive)', () => {
+      const r = validateGraphqlOperation(
+        d2Sdl,
+        '{ thing(id: 1) @filter(by: { since: "2024-01-01", name: "x" }) { id } }',
+      )
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBe(true)
+      expect(r.directiveUnverified).toBe(true)
+    })
+
+    it('a FIELD-arg custom-scalar literal is UNCHANGED — directive-only confinement (S1 staged)', () => {
+      const r = validateGraphqlOperation(d2Sdl, '{ events(at: "2024-01-01") { id } }')
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBeUndefined()
+      expect(r.directiveUnverified).toBeUndefined()
+    })
+
+    it('a BUILT-IN-scalar directive-arg literal does NOT trigger D2', () => {
+      const r = validateGraphqlOperation(d2Sdl, '{ thing(id: 1) @skip(if: true) { id } }')
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBeUndefined()
+      expect(r.directiveUnverified).toBeUndefined()
+    })
+
+    it('does NOT run when the query has a drift error (queryClean gate)', () => {
+      // Unknown field → validate() errors → D2 must not run (its walk would be unreliable).
+      const r = validateGraphqlOperation(d2Sdl, '{ thing(id: 1) @auth(token: "x") { nope } }')
+      expect(r.valid).toBe(false)
+      expect(r.directiveUnverified).toBeUndefined()
+    })
+  })
 })

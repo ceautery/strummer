@@ -8,6 +8,7 @@
  */
 import {
   buildSchema,
+  type DocumentNode,
   GraphQLError,
   type GraphQLSchema,
   type GraphQLType,
@@ -16,11 +17,15 @@ import {
   isInputObjectType,
   isNonNullType,
   isScalarType,
+  Kind,
   type OperationDefinitionNode,
   parse,
   print,
+  TypeInfo,
   typeFromAST,
   validate,
+  visit,
+  visitWithTypeInfo,
 } from 'graphql'
 import type { ContractFinding, ContractResult } from './model.js'
 
@@ -47,10 +52,16 @@ export interface GraphqlValidateOptions {
 export interface GraphqlValidationResult extends ContractResult {
   /** A variable set the validator could not check (custom-scalar-typed variables, a
    * non-object `variables`, an ambiguous multi-operation target, or an absent required
-   * variable the caller is not authoritative about). Additive/optional — the verdict shape
-   * is UNCHANGED; the capture bridge folds this into `noSignal` so it can never become a
-   * pass (absence-is-never-a-pass). Omitted when everything relevant was verifiable. */
+   * variable the caller is not authoritative about) — OR a custom-scalar directive-arg
+   * literal (ADR 0018 D2). Additive/optional — the verdict shape is UNCHANGED; the capture
+   * bridge folds this into `noSignal` so it can never become a pass (absence-is-never-a-pass).
+   * Omitted when everything relevant was verifiable. */
   unverified?: boolean
+  /** The `unverified` flag was (at least partly) caused by a custom-scalar directive-arg
+   * LITERAL (ADR 0018 D2), as distinct from an unverifiable variable. Additive/optional; lets
+   * the capture bridge bump the distinct `graphql-directive-unverified` summary key (ADR 0018
+   * §8.4) instead of mislabeling it `graphql-variable-unverified`. Omitted otherwise. */
+  directiveUnverified?: boolean
 }
 
 /** The five built-in scalars graphql-js can actually coerce. A custom scalar declared in
@@ -159,6 +170,48 @@ function validateVariables(
 }
 
 /**
+ * D2 (ADR 0018): does the document attach a directive-arg LITERAL whose type bottoms out in a
+ * custom (non-built-in) scalar? Such a literal is validated by NOTHING — a `buildSchema` custom
+ * scalar has an identity `parseLiteral` which we DELIBERATELY never patch (the redaction-leak
+ * guard, ADR 0018 §3) — so it carries no signal and must fold to `unverified`, never a finding
+ * (the literal may carry an inline secret) and never a silent pass.
+ *
+ * COERCER-INDEPENDENT (ADR 0018 BLOCKER-2): a registered variable coercer validates VARIABLE
+ * values via `parseValue`, never document literals, so this check passes NO `registered` set —
+ * a registered scalar's literal stays `unverified` all the same.
+ *
+ * Confined to DIRECTIVE-arg position (field-arg literals are out of scope, ADR 0018 S1); a
+ * variable-valued directive arg is handled by the variable loop, so it is skipped here. Reuses
+ * the transitive `typeInvolvesCustomScalar` so a list/input-object directive-arg literal with a
+ * nested custom scalar folds correctly. Caller must gate on a structurally-clean query.
+ */
+function hasCustomScalarDirectiveLiteral(schema: GraphQLSchema, document: DocumentNode): boolean {
+  const typeInfo = new TypeInfo(schema)
+  let directiveDepth = 0
+  let found = false
+  visit(
+    document,
+    visitWithTypeInfo(typeInfo, {
+      Directive: {
+        enter: () => {
+          directiveDepth++
+        },
+        leave: () => {
+          directiveDepth--
+        },
+      },
+      Argument: (node) => {
+        if (directiveDepth === 0) return // a FIELD arg — out of scope (S1)
+        if (node.value.kind === Kind.VARIABLE) return // handled by the variable loop (D3)
+        const t = typeInfo.getInputType()
+        if (t && typeInvolvesCustomScalar(t, new Set())) found = true
+      },
+    }),
+  )
+  return found
+}
+
+/**
  * Validate a GraphQL `query` against a schema `sdl`; if `opts.json` is supplied,
  * also check the response payload for returned `errors`. With `opts.operationName`
  * the root-type drift check is scoped to that operation (which must exist). When
@@ -236,27 +289,33 @@ export function validateGraphqlOperation(
     }
   }
 
+  // D2 + variable validation both run only on a structurally-clean query (validate() found
+  // nothing) — otherwise the TypeInfo walk / variable payload can't be trusted/attributed.
+  const queryClean = findings.every((f) => f.severity !== 'error')
+
+  // --- D2: custom-scalar directive-arg LITERALS (ADR 0018) ---
+  // Independent of `opts.variables` — it inspects the query's directive literals.
+  const directiveUnverified = queryClean && hasCustomScalarDirectiveLiteral(schema, document)
+
   // --- Request-variable validation (ADR 0015) ---
-  let unverified = false
-  if (opts.variables !== undefined) {
-    // Only run on a structurally-clean query (validate() found nothing) and a SINGLE
-    // resolved target operation — otherwise a variable payload can't be attributed.
-    const queryClean = findings.every((f) => f.severity !== 'error')
+  let variableUnverified = false
+  if (opts.variables !== undefined && queryClean) {
+    // Require a SINGLE resolved target operation — otherwise a variable payload can't be attributed.
     const targetOp = targets.length === 1 ? targets[0] : undefined
-    if (queryClean) {
-      if (!targetOp) {
-        unverified = true // ambiguous (multi-op, no operationName) or unresolved
-      } else {
-        unverified = validateVariables(
-          schema,
-          targetOp,
-          opts.variables,
-          opts.variablesAuthoritative === true,
-          findings,
-        )
-      }
+    if (!targetOp) {
+      variableUnverified = true // ambiguous (multi-op, no operationName) or unresolved
+    } else {
+      variableUnverified = validateVariables(
+        schema,
+        targetOp,
+        opts.variables,
+        opts.variablesAuthoritative === true,
+        findings,
+      )
     }
   }
+
+  const unverified = directiveUnverified || variableUnverified
 
   const payload = opts.json as GraphqlPayload | undefined
   if (payload?.errors && payload.errors.length > 0) {
@@ -272,5 +331,6 @@ export function validateGraphqlOperation(
     valid: findings.every((f) => f.severity !== 'error'),
     findings,
     ...(unverified ? { unverified: true } : {}),
+    ...(directiveUnverified ? { directiveUnverified: true } : {}),
   }
 }

@@ -269,6 +269,26 @@ describe('validateCapturedTraffic — GraphQL drift over a REAL capture (ADR 001
     expect(v.findingsByKind['graphql-variable-unverified']).toBeGreaterThanOrEqual(1)
   })
 
+  it('folds a captured custom-scalar directive-arg LITERAL into noSignal under the DISTINCT key (ADR 0018)', () => {
+    // A custom-scalar directive-arg literal is validated by nothing → unverified → noSignal,
+    // surfaced under graphql-directive-unverified (NOT mislabeled graphql-variable-unverified).
+    const sdl = `
+      scalar DateTime
+      directive @auth(token: DateTime) on FIELD
+      type Query { thing(id: Int!): Thing }
+      type Thing { id: Int! }
+    `
+    const har = graphqlHar({
+      query: '{ thing(id: 1) @auth(token: "sk-secret") { id } }',
+      response: { data: { thing: { id: 1 } } },
+    })
+    const v = validateCapturedTraffic(har, { graphql: { endpointPath: '/graphql', sdl } })
+    expect(v.clean).toBe(false)
+    expect(v.noSignal).toBeGreaterThanOrEqual(1)
+    expect(v.findingsByKind['graphql-directive-unverified']).toBeGreaterThanOrEqual(1)
+    expect(v.findingsByKind['graphql-variable-unverified']).toBeUndefined()
+  })
+
   it('flags a captured GraphQL variable whose present value is the wrong type', () => {
     const sdl = `
       type Query { thing(id: Int!): Thing }

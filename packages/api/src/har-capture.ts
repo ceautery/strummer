@@ -543,7 +543,11 @@ export function validateCapturedTraffic(
       // (absence-is-never-a-pass; mirrors the REST `request-unverified` fold).
       if (raw.unverified) {
         noSignal++
-        bump('graphql-variable-unverified')
+        // A custom-scalar directive-arg literal (ADR 0018 D2) gets the distinct summary key
+        // so it is not mislabeled as an unverifiable variable (ADR 0018 §8.4).
+        bump(
+          raw.directiveUnverified ? 'graphql-directive-unverified' : 'graphql-variable-unverified',
+        )
       }
       continue
     }
