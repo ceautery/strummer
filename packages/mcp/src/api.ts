@@ -7,6 +7,7 @@ import {
   type RequestEntry,
   runRequest,
   runSequence,
+  type ScalarCoercer,
   type SecretStore,
   validateCapturedTraffic,
   validateGraphqlOperation,
@@ -42,6 +43,13 @@ export interface ApiToolsOptions {
   verifyRedact?: (value: string) => string
   /** Injected: persist the full capture verdict detail by handle; returns the handle. */
   storeVerifyDetail?: (id: string, kind: string, body: string, contentType: string) => string
+  /**
+   * OPERATOR-bound custom-scalar coercer registry, keyed by scalar name (ADR 0018). An agent
+   * may only SELECT names via `validate_response.enableScalarCoercers`; it can never supply a
+   * coercer function (a never-throwing coercer would launder `unverified` into a false pass, a
+   * value-echoing throw would leak — the same trust boundary as secrets/SSRF). Never an agent input.
+   */
+  scalarCoercers?: Record<string, ScalarCoercer>
 }
 
 const INSTRUCTIONS = `Strummer drives version-pinned API tests from a Bruno collection on disk.
@@ -263,14 +271,29 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
             'GraphQL request variables to validate against the operation’s declared types ' +
               '(authoritative — this surface holds the real request)',
           ),
+        enableScalarCoercers: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'NAMES of operator-registered custom-scalar coercers to apply to GraphQL variable ' +
+              'values (ADR 0018). Unknown names are ignored. Coercers are operator-bound on the ' +
+              'server — an agent can only select them by name, never supply one.',
+          ),
       },
     },
     (args) => {
       let result: import('@strummer/api').ContractResult
       if (args.graphqlSchema !== undefined) {
+        // Resolve the selected names against the OPERATOR-bound registry (unknown → ignored).
+        const selected: Record<string, ScalarCoercer> = {}
+        for (const name of args.enableScalarCoercers ?? []) {
+          const coercer = opts.scalarCoercers?.[name]
+          if (coercer) selected[name] = coercer
+        }
         result = validateGraphqlOperation(args.graphqlSchema, args.query ?? '', {
           json: args.body,
           operationName: args.operationName,
+          ...(Object.keys(selected).length > 0 ? { scalarCoercers: selected } : {}),
           // Findings are reconstructed from variable name + declared type (never the value),
           // so they are value-free; authoritative because the caller supplies the request.
           ...(args.variables !== undefined

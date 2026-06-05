@@ -245,6 +245,77 @@ describe('strummer API MCP tools', () => {
     const res = await client.callTool({ name: 'validate_response', arguments: {} })
     expect(res.isError).toBe(true)
   })
+
+  describe('enableScalarCoercers — operator-bound registry, agent selects by name (ADR 0018)', () => {
+    const SECRET = 'leak-me-via-coercer-7777'
+    // The OPERATOR binds the registry on the server; an agent may only SELECT a name.
+    const opCoercers = {
+      DateTime: (v: unknown) => {
+        if (!/^\d{4}-/.test(String(v))) throw new Error(`bad DateTime ${SECRET}: ${v}`)
+        return v
+      },
+    }
+    const sdl = 'scalar DateTime\ntype Query { events(at: DateTime!): Int }'
+    const q = 'query Q($at: DateTime!) { events(at: $at) }'
+
+    async function connect(opts: ApiToolsOptions) {
+      const api = createApiServer(opts)
+      const [ct, st] = InMemoryTransport.createLinkedPair()
+      const c = new Client({ name: 'test', version: '0.0.0' })
+      await Promise.all([api.connect(st), c.connect(ct)])
+      return c
+    }
+
+    it('a selected coercer validates a custom-scalar variable (invalid → finding, no leak)', async () => {
+      const c = await connect({ scalarCoercers: opCoercers })
+      const res = await c.callTool({
+        name: 'validate_response',
+        arguments: {
+          graphqlSchema: sdl,
+          query: q,
+          variables: { at: 'nope' },
+          enableScalarCoercers: ['DateTime'],
+        },
+      })
+      const sc = res.structuredContent as { valid: boolean; findings: { kind: string }[] }
+      expect(sc.valid).toBe(false)
+      expect(sc.findings.map((f) => f.kind)).toContain('graphql-variable-invalid')
+      // End-to-end: validate_response has NO verifyRedact backstop, so value-free
+      // reconstruction is the sole guard — the coercer's secret-bearing throw must not leak.
+      expect(JSON.stringify(res)).not.toContain(SECRET)
+      expect(JSON.stringify(res)).not.toContain('nope')
+      await c.close()
+    })
+
+    it('without selecting the coercer the same variable stays UNVERIFIED (not a pass)', async () => {
+      const c = await connect({ scalarCoercers: opCoercers })
+      const res = await c.callTool({
+        name: 'validate_response',
+        arguments: { graphqlSchema: sdl, query: q, variables: { at: 'nope' } },
+      })
+      const sc = res.structuredContent as { valid: boolean; unverified?: boolean }
+      expect(sc.unverified).toBe(true)
+      await c.close()
+    })
+
+    it('an UNKNOWN enable name is silently ignored (no error)', async () => {
+      const c = await connect({ scalarCoercers: opCoercers })
+      const res = await c.callTool({
+        name: 'validate_response',
+        arguments: {
+          graphqlSchema: sdl,
+          query: q,
+          variables: { at: '2024-01-01' },
+          enableScalarCoercers: ['NopeScalar'],
+        },
+      })
+      expect(res.isError).toBeFalsy()
+      const sc = res.structuredContent as { valid: boolean; unverified?: boolean }
+      // DateTime was NOT enabled → still unverified (the unknown name resolved to nothing).
+      expect(sc.unverified).toBe(true)
+      await c.close()
+    })
+  })
 })
 
 describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)', () => {

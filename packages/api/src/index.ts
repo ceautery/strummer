@@ -10,7 +10,12 @@ export {
   resolveOpenApiOperation,
   validateOpenApiResponse,
 } from './contract.js'
-export { type GraphqlValidateOptions, validateGraphqlOperation } from './graphql.js'
+export {
+  type GraphqlValidateOptions,
+  type GraphqlValidationResult,
+  type ScalarCoercer,
+  validateGraphqlOperation,
+} from './graphql.js'
 export {
   type CaptureContract,
   type CaptureContractVerdict,
