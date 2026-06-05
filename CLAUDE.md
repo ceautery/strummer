@@ -196,8 +196,15 @@ vision and `ARCHITECTURE.md` for the technical design.
   (no `@stryker-mutator` import) → mutationScore + survivors; gated diff-scoped `runMutation`
   spawning `stryker run` (injected runner, not a gate dep) PLUS Python `runMutmut` + `runCosmicRay`
   (stdout-fed `parseMutmutResults`/`parseCosmicRayDump`; `reportPath` optional; transport-completeness
-  guard ⇒ zero-mutant/Pending = inconclusive; ADR 0010 addendum); `mutate_summarize`/`mutate_run`
-  (`tool: stryker|mutmut|cosmic-ray`) MCP surface),
+  guard ⇒ zero-mutant/Pending = inconclusive; ADR 0010 addendum); ALL THREE are now DIFF-SCOPED via
+  `mutateFiles` (ADR 0010 addendum 2) — pure `config.ts` emitters (`synthesizeScopedCosmicRayConfig`
+  module-path file-list + reconciled `excluded-modules`; `planMutmutScope`/`synthesizeScopedMutmutPyproject`
+  `paths_to_mutate`+`also_copy` in a fresh sandbox, NOT `only_mutate` — slice-0-captured; `smol-toml`) +
+  the pure `scope.ts` guards (`selectMutationScope` owned-tree confine; post-spawn `reconcileScope` /
+  conservative module-keyed `reconcileMutmutScope` ⇒ partial under-scope is inconclusive, never a
+  silent pass); `mutate_summarize`/`mutate_run`
+  (`tool: stryker|mutmut|cosmic-ray`) MCP surface,
+  verify selector via `STRUMMER_MUTATE_TOOL`/`--mutate-tool` (Fork D)),
   `lsp` (Phase-4, COMPLETE (engine + agent surface) — semantic code navigation via a live LSP
   subprocess; the documented, fenced exception to ARCHITECTURE §1's no-live-RPC rule, design = ADR 0011.
   Slice 1 landed: pure `encoding.ts` (the position-encoding correctness core, utf-8/16/32)
