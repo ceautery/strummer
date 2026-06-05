@@ -17,5 +17,8 @@
   "scripts": {
     "build": "tsdown src/index.ts --dts",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "smol-toml": "^1.6.1"
   }
 }

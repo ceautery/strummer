@@ -1,3 +1,11 @@
+export {
+  type MutmutScopePlan,
+  planMutmutScope,
+  type ScopedCosmicRayConfig,
+  ScopeEmitError,
+  synthesizeScopedCosmicRayConfig,
+  synthesizeScopedMutmutPyproject,
+} from './config.js'
 export { parseCosmicRayDump } from './cosmic-ray.js'
 export { parseMutmutResults } from './mutmut.js'
 export {
