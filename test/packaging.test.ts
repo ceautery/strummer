@@ -45,6 +45,13 @@ describe('package publish hygiene (ADR 0019)', () => {
         expect(overlay?.import?.default).toBe('./dist/index.mjs')
       })
 
+      it('overlays the legacy top-level `types` onto dist (attw/publint: no unshipped types)', () => {
+        // The dev top-level `types` points at ./src (no-build resolution); the shipped tarball
+        // must point it at the emitted .d.mts, or node10/legacy resolvers + publint see an
+        // unshipped types file (caught by scripts/package-checks.sh; locked here, ADR 0019 §16).
+        expect(pkg.publishConfig?.types).toBe('./dist/index.d.mts')
+      })
+
       it('ships the dist directory', () => {
         expect(pkg.files).toContain('dist')
       })

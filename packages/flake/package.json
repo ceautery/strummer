@@ -25,6 +25,7 @@
   },
   "publishConfig": {
     "access": "public",
+    "types": "./dist/index.d.mts",
     "exports": {
       ".": {
         "import": {

@@ -54,3 +54,27 @@ jobs:
       # Ensure every package still builds.
       - name: Build
         run: pnpm build
+
+  # Build-then-assert PACKAGING checks (ADR 0019 slices 2 + 10) — kept OUT of `pnpm gate`
+  # because they need a real build + packed tarballs. No browsers/Python required.
+  package-checks:
+    name: package checks (attw + publint + lazy boundary)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Builds, packs every publishable package, runs `attw --profile esm-only` + `publint`
+      # on each tarball, then asserts the aggregate bin.mjs startup closure is native-free.
+      - name: Packaging checks
+        run: pnpm package-checks

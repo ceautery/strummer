@@ -16,12 +16,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "pnpm -r --if-present build",
-    "gate": "bash scripts/gate.sh"
+    "gate": "bash scripts/gate.sh",
+    "package-checks": "bash scripts/package-checks.sh"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.3",
     "@biomejs/biome": "^2.4.16",
     "@types/node": "^25.9.1",
     "@vitest/coverage-v8": "^4.1.7",
+    "publint": "^0.3.21",
     "tsdown": "^0.22.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
