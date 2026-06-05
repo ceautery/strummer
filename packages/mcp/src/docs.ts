@@ -3,12 +3,14 @@ import {
   detectInstalledVersion,
   getDoc,
   listVersions,
+  openDb,
   resolveVersion,
   searchDocs,
 } from '@strummer/core'
-import type { Embedder } from '@strummer/embed'
+import { type Embedder, QueryEmbedder } from '@strummer/embed'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
+import type { PillarSetup } from './pillars.js'
 
 export interface ServerOptions {
   /** When provided, queries are embedded and fused with FTS (hybrid search). */
@@ -290,4 +292,28 @@ export function createStrummerServer(
   )
   registerDocsTools(server, { db, embedder: options.embedder })
   return server
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): open the configured index + query
+ * embedder and return a {@link PillarSetup} that registers the docs tools onto a
+ * (possibly shared) server. The docs pillar OWNS the sqlite handle, so its
+ * `shutdown` closes it. Returns `undefined` (a LOUD DISABLE) when no
+ * `STRUMMER_INDEX` is configured — the curated default enables docs, but without
+ * an index there is nothing to serve, so the aggregate logs it and skips (the
+ * effective zero-config default is api+deps+verify until an index is present).
+ */
+export function setupDocsFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): PillarSetup | undefined {
+  const indexPath = env.STRUMMER_INDEX
+  if (!indexPath) return undefined
+  const db = openDb(indexPath)
+  const embedder = new QueryEmbedder()
+  return {
+    register: (server) => registerDocsTools(server, { db, embedder }),
+    shutdown: () => {
+      db.close()
+    },
+  }
 }
