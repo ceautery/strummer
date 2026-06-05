@@ -25,6 +25,11 @@ jobs:
   release:
     name: version PR / publish (Changesets)
     runs-on: ubuntu-latest
+    # Scopes OIDC trusted publishing to this named GitHub Actions environment — npm only
+    # accepts a publish whose token carries this environment claim. Must match the environment
+    # name in the npmjs.com trusted-publisher config exactly. (No protection rules needed:
+    # merging the "Version Packages" PR is already the human gate.)
+    environment: npm
     steps:
       - uses: actions/checkout@v4
         with:
