@@ -1,0 +1,5 @@
+    pkg.calc.x_add__mutmut_1: killed
+    pkg.calc.x_sub__mutmut_1: killed
+    pkg.strutil.x_shout__mutmut_1: no tests
+    pkg.strutil.x_shout__mutmut_2: no tests
+    pkg.strutil.x_shout__mutmut_3: no tests

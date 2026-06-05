@@ -306,6 +306,28 @@ config keys (Fork F), the `only_mutate` whitespace/glob form, and mutmut's seen-
 distinguishability (Fork B2). The tools are **not in the dev container** (captured once, committed,
 per the addendum-1 / LSP fixture convention).
 
+#### Slice 0 RESULTS (captured 2026-06-05, cosmic-ray 8.4.6 / mutmut 3.5.0)
+
+Provisioned via `uv` in a reference env; fixtures committed under
+`packages/mutate/test/fixtures/` (`cosmic-ray-scoped-dump.jsonl`, `mutmut-scoped-results.txt`,
+provenance in that dir's `README.md`).
+
+- **cosmic-ray — Fork A holds, A2 NOT needed.** `module-path` accepts a list of file paths and
+  scopes `init` to exactly those files. `excluded-modules` accepts exact paths AND fnmatch globs
+  and **subtracts** from the scope (blocker #3 confirmed real — reconcile, never copy blind). The
+  scoped dump is keyed by `module_path` = a path (`pkg/calc.py`).
+- **mutmut — Fork B was WRONG; corrected here.** 3.5.0 has **NO `only_mutate` and NO
+  `source_paths`** (confirmed by reading the installed `Config`/`load_config`). The real scoping
+  key is **`paths_to_mutate`** (list of paths); exclusion is **`do_not_mutate`** (fnmatch globs).
+  Critic 2's "drop `paths_to_mutate`" was backwards — it is the *only* path-scope key. **Per Fork F
+  the emitter emits only these slice-0-verified keys.** Scoping a subset breaks test collection for
+  tests importing unscoped siblings → the emitter must `also_copy` the rest of the package + run in
+  a fresh sandbox cwd behind a baseline-smoke gate.
+- **mutmut — Fork B2 confirmed.** A scoped file with zero mutable code leaves no trace in `mutmut
+  results --all true` (seen-but-empty == never-seen). ⇒ mutmut's `reconcileScope` is the
+  conservative variant (throw inconclusive on ANY selected file with 0 mutants). The mutmut summary
+  is keyed by dotted module (`pkg.calc`), so the runner maps selected paths → modules first.
+
 ### What lands NOW vs STAGED (sequencing fork, ratified)
 
 The two **pure, tool-agnostic safety primitives** ship first against hand-authored fixtures —
