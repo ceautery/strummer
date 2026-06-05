@@ -165,33 +165,35 @@ installed version Z" and get a precise, cited answer over MCP.
         `unverified`-skips the body; honoring it re-introduces the full param style/explode
         ambiguity matrix inside the body (mostly the irreducible embedded-delimiter class) for a
         rare feature. **The ADR 0016 tail list is now genuinely EMPTY.**
-- [ ] **GraphQL directive-arg validation + custom-scalar variable coercers (ADR 0018)** —
+- [x] **GraphQL directive-arg validation + custom-scalar variable coercers (ADR 0018)** —
       deepens the GraphQL contract pillar (ADR 0015 follow-on). Design = a research→synthesis→
       2-critic fan-out (both ship-with-fixes; 3 blockers folded in); 5 forks human-ratified.
       Headline finding: graphql-js `validate()` + the usage-agnostic `getVariableValues` loop
       ALREADY cover directive-arg variables, so Feature A is mostly a regression-lock + the one
       residual literal case. Cardinal rule: anything `validate()` covers is SKIP-by-us (no
-      double-report). 8 TDD slices, engine → MCP → CLI → live-run.
-  - [ ] **slice 1 (tests-only)** — directive-arg variable regression lock: `@skip(if:$s)`, a
+      double-report). 8 TDD slices, engine → MCP → CLI → live-run. **COMPLETE.**
+  - [x] **slice 1 (tests-only)** — directive-arg variable regression lock: `@skip(if:$s)`, a
         custom directive arg, AND a variable feeding both a field arg and a directive arg ⇒
         EXACTLY ONE `graphql-variable-invalid`. Green with no prod change (proves D3/D7).
-  - [ ] **slice 2** — D2: custom-scalar directive-arg LITERAL ⇒ `unverified` (no finding —
+  - [x] **slice 2** — D2: custom-scalar directive-arg LITERAL ⇒ `unverified` (no finding —
         may carry an inline secret). `visitWithTypeInfo` pass CONFINED to a `DirectiveNode`
         parent, skipping `Variable` nodes, reusing the TRANSITIVE `typeInvolvesCustomScalar`
         (list/input-object nested customs fold). Field-arg literals UNCHANGED (S1 stays staged).
-  - [ ] **slice 3** — `ScalarCoercer` + `patchRegisteredScalars` (**patch `parseValue` ONLY,
+        Bridge surfaces the distinct `graphql-directive-unverified` key via an additive
+        `directiveUnverified?` flag (§8.4).
+  - [x] **slice 3** — `ScalarCoercer` + `patchRegisteredScalars` (**patch `parseValue` ONLY,
         never `parseLiteral`** — BLOCKER-1 leak) + built-in shadow guard + `scalarCoercers?` opt
         + thread `registered` into `typeInvolvesCustomScalar`/`validateVariables`/the D2 pass.
-  - [ ] **slice 4** — coercer redaction (`Error(secret)` ⇒ no leak), built-in-shadow refusal
+  - [x] **slice 4** — coercer redaction (`Error(secret)` ⇒ no leak), built-in-shadow refusal
         (no false-fire on a valid `@skip` Boolean var), D2 coercer-INDEPENDENCE (BLOCKER-2),
         variable-with-invalid-default silence, freshness (call-2-without-coercers restores identity).
-  - [ ] **slice 5** — MCP `validate_response` `enableScalarCoercers?: string[]` over an
+  - [x] **slice 5** — MCP `validate_response` `enableScalarCoercers?: string[]` over an
         operator-bound registry (agent selects by NAME only) + end-to-end MCP redaction test
         (no `verifyRedact` backstop on this surface — value-free reconstruction is the sole guard).
-  - [ ] **slice 6** — CLI `api validate --graphql --coercers <file.js>`; fail LOUDLY (non-zero
+  - [x] **slice 6** — CLI `api validate --graphql --coercers <file.js>`; fail LOUDLY (non-zero
         exit) on a missing/throwing module — never a silent drop to no-coercer `unverified`.
-  - [ ] **slice 7** — live `api run --graphql` threads coercers (the second wire point).
-  - [ ] **slice 8 (docs)** — ADR 0018 final, STATUS/ROADMAP/memories, mark resolved ADR-0015
+  - [x] **slice 7** — live `api run --graphql` threads coercers (the second wire point).
+  - [x] **slice 8 (docs)** — ADR 0018 final, STATUS/ROADMAP/memories, mark resolved ADR-0015
         staged items; milestone push.
   - **Staged (this arc defers):** S1 custom-scalar FIELD-arg literals; S2 coercers on the
         capture bridge; S3 inline-literal coercion surfacing findings; S4 fragment-only/
