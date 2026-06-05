@@ -210,4 +210,68 @@ describe('validateGraphqlOperation', () => {
       expect(r.findings.filter((f) => f.kind.startsWith('graphql-variable'))).toEqual([])
     })
   })
+
+  describe('directive-arg variable validation — regression lock (ADR 0018, slice 1)', () => {
+    // The decisive ADR-0018 finding: graphql-js `getVariableValues` is USAGE-AGNOSTIC — it
+    // coerces each variable against its DECLARED type off `operation.variableDefinitions`,
+    // with no knowledge of where the variable is used. So the ADR-0015 variable loop already
+    // validates the value of a variable feeding a DIRECTIVE arg, for free and exactly once.
+    // This block locks that behavior so Feature A needs no new code for variable-fed args.
+    const dirSdl = `
+      directive @auth(level: Int!) on FIELD
+      type Query { thing(id: Int!): Thing }
+      type Thing { id: Int! }
+    `
+
+    it('validates a built-in @skip(if: $s) directive-arg variable (wrong type → invalid)', () => {
+      const q = 'query Q($id: Int!, $s: Boolean!) { thing(id: $id) @skip(if: $s) { id } }'
+      const r = validateGraphqlOperation(dirSdl, q, {
+        variables: { id: 1, s: 'nope' }, // $s is a string, not a Boolean
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(false)
+      const f = r.findings.find((x) => x.kind === 'graphql-variable-invalid')
+      expect(f?.message).toContain('$s')
+      expect(f?.message).toContain('Boolean!')
+      expect(JSON.stringify(r.findings)).not.toContain('nope') // value never echoed
+    })
+
+    it('validates a CUSTOM directive-arg variable (wrong type → invalid)', () => {
+      const q = 'query Q($lvl: Int!) { thing(id: 1) @auth(level: $lvl) { id } }'
+      const r = validateGraphqlOperation(dirSdl, q, {
+        variables: { lvl: 'high' }, // $lvl is a string, not an Int
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(false)
+      const f = r.findings.find((x) => x.kind === 'graphql-variable-invalid')
+      expect(f?.message).toContain('$lvl')
+      expect(f?.message).toContain('Int!')
+      expect(JSON.stringify(r.findings)).not.toContain('high')
+    })
+
+    it('a variable feeding BOTH a field arg AND a directive arg yields EXACTLY ONE finding', () => {
+      // $v is used twice in the document, but the loop is over variableDEFINITIONS, so it is
+      // coerced once → no double-report (the usage-agnostic guarantee).
+      const q = 'query Q($v: Int!) { thing(id: $v) @auth(level: $v) { id } }'
+      const r = validateGraphqlOperation(dirSdl, q, {
+        variables: { v: 'bad' },
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(false)
+      const invalids = r.findings.filter((x) => x.kind === 'graphql-variable-invalid')
+      expect(invalids).toHaveLength(1)
+      expect(invalids[0]?.message).toContain('$v')
+    })
+
+    it('passes a conformant directive-arg variable', () => {
+      const q = 'query Q($s: Boolean!) { thing(id: 1) @skip(if: $s) { id } }'
+      const r = validateGraphqlOperation(dirSdl, q, {
+        variables: { s: true },
+        variablesAuthoritative: true,
+      })
+      expect(r.valid).toBe(true)
+      expect(r.findings).toEqual([])
+      expect(r.unverified).toBeUndefined()
+    })
+  })
 })
