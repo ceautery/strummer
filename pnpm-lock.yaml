@@ -259,12 +259,6 @@ importers:
       '@strummer/artifacts':
         specifier: workspace:*
         version: link:../artifacts
-      '@strummer/browser':
-        specifier: workspace:*
-        version: link:../browser
-      '@strummer/core':
-        specifier: workspace:*
-        version: link:../core
       '@strummer/coverage':
         specifier: workspace:*
         version: link:../coverage
@@ -274,12 +268,6 @@ importers:
       '@strummer/diff':
         specifier: workspace:*
         version: link:../diff
-      '@strummer/embed':
-        specifier: workspace:*
-        version: link:../embed
-      '@strummer/flake':
-        specifier: workspace:*
-        version: link:../flake
       '@strummer/lsp':
         specifier: workspace:*
         version: link:../lsp
@@ -295,19 +283,31 @@ importers:
       '@strummer/verify':
         specifier: workspace:*
         version: link:../verify
-      playwright-core:
-        specifier: 1.60.0
-        version: 1.60.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@strummer/browser':
+        specifier: workspace:*
+        version: link:../browser
+      '@strummer/core':
+        specifier: workspace:*
+        version: link:../core
+      '@strummer/embed':
+        specifier: workspace:*
+        version: link:../embed
+      '@strummer/flake':
+        specifier: workspace:*
+        version: link:../flake
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      playwright-core:
+        specifier: 1.60.0
+        version: 1.60.0
 
   packages/mutate:
     dependencies:

@@ -13,7 +13,6 @@ import {
 import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
 import { runScoped } from '@strummer/coverage'
 import { changedDependencies } from '@strummer/deps'
-import { HistoryStore, runAndRecord } from '@strummer/flake'
 import { runCosmicRay, runMutation, runMutmut } from '@strummer/mutate'
 import { Redactor } from '@strummer/safety'
 import { gateDenied } from '@strummer/verify'
@@ -179,6 +178,11 @@ function parseVerify(
     if (bool(env.STRUMMER_FLAKE_ALLOW_RUN) && flakeRoots.length > 0 && flakeDb) {
       const timeoutMs = num(env.STRUMMER_FLAKE_TIMEOUT_MS)
       rd.flake = async (ctx) => {
+        // Lazy: only pull @strummer/flake (better-sqlite3) when a flake run actually
+        // fires — so the api+deps+verify default works in an install that did NOT add
+        // the optional @strummer/flake engine (ADR 0019 split). Mirrors the lazy
+        // @strummer/browser import in the produce-capture path.
+        const { HistoryStore, runAndRecord } = await import('@strummer/flake')
         const store = HistoryStore.open(flakeDb)
         try {
           const r = await runAndRecord(

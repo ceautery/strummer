@@ -1,7 +1,6 @@
 {
   "name": "@strummer/mcp",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
@@ -35,26 +34,51 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@strummer/api": "workspace:*",
     "@strummer/artifacts": "workspace:*",
-    "@strummer/browser": "workspace:*",
-    "@strummer/core": "workspace:*",
     "@strummer/coverage": "workspace:*",
     "@strummer/deps": "workspace:*",
     "@strummer/diff": "workspace:*",
-    "@strummer/embed": "workspace:*",
-    "@strummer/flake": "workspace:*",
     "@strummer/lsp": "workspace:*",
     "@strummer/mutate": "workspace:*",
     "@strummer/safety": "workspace:*",
     "@strummer/verdict": "workspace:*",
     "@strummer/verify": "workspace:*",
-    "playwright-core": "1.60.0",
     "zod": "^4.4.3"
   },
+  "peerDependencies": {
+    "@strummer/browser": "workspace:*",
+    "@strummer/core": "workspace:*",
+    "@strummer/embed": "workspace:*",
+    "@strummer/flake": "workspace:*",
+    "playwright-core": "1.60.0"
+  },
+  "peerDependenciesMeta": {
+    "@strummer/browser": {
+      "optional": true
+    },
+    "@strummer/core": {
+      "optional": true
+    },
+    "@strummer/embed": {
+      "optional": true
+    },
+    "@strummer/flake": {
+      "optional": true
+    },
+    "playwright-core": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@strummer/browser": "workspace:*",
+    "@strummer/core": "workspace:*",
+    "@strummer/embed": "workspace:*",
+    "@strummer/flake": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "playwright-core": "1.60.0"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "import": {
@@ -63,5 +87,10 @@
         }
       }
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ceautery/strummer.git",
+    "directory": "packages/mcp"
   }
 }

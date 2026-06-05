@@ -1,7 +1,6 @@
 {
   "name": "@strummer/browser",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -38,6 +37,7 @@
     "@types/pngjs": "6.0.5"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "import": {
@@ -46,5 +46,10 @@
         }
       }
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ceautery/strummer.git",
+    "directory": "packages/browser"
   }
 }

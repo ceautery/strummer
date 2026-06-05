@@ -48,6 +48,36 @@ describe('package publish hygiene (ADR 0019)', () => {
       it('ships the dist directory', () => {
         expect(pkg.files).toContain('dist')
       })
+
+      it('is publishable: no private flag, public access, repository directory set', () => {
+        expect(pkg.private).not.toBe(true)
+        expect(pkg.publishConfig?.access).toBe('public')
+        // repository.directory + a case-exact url are required for npm provenance.
+        expect(pkg.repository?.directory).toBe(`packages/${dir}`)
+        expect(pkg.repository?.url).toBe('git+https://github.com/ceautery/strummer.git')
+      })
     })
   }
+})
+
+describe('@strummer/mcp install isolation — heavy engines are OPTIONAL peers (ADR 0019 §B)', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
+  const mcp = readPackageJson('mcp') as any
+  const HEAVY = ['@strummer/browser', '@strummer/core', '@strummer/embed', '@strummer/flake']
+
+  it('does NOT list the heavy engines (or playwright-core) as hard dependencies', () => {
+    const deps = Object.keys(mcp.dependencies ?? {})
+    for (const h of [...HEAVY, 'playwright-core']) expect(deps).not.toContain(h)
+  })
+
+  it('declares them as OPTIONAL peer dependencies (so a bare install is native-free)', () => {
+    for (const h of [...HEAVY, 'playwright-core']) {
+      expect(mcp.peerDependencies?.[h]).toBeDefined()
+      expect(mcp.peerDependenciesMeta?.[h]?.optional).toBe(true)
+    }
+  })
+
+  it('keeps them as devDependencies so the workspace still resolves them for build/test', () => {
+    for (const h of HEAVY) expect(mcp.devDependencies?.[h]).toBeDefined()
+  })
 })

@@ -179,6 +179,21 @@ describe('no bin imports the index barrel (ADR 0019 §A4)', () => {
   }
 })
 
+describe('verify does not statically pull an optional-peer engine (ADR 0019 §B6)', () => {
+  // verify is in the curated default set, so importing bin-verify.ts must NOT load
+  // an OPTIONAL-PEER engine (@strummer/flake → better-sqlite3, @strummer/browser →
+  // playwright-core) at module top level — else the api+deps+verify default would
+  // fail in an install that didn't add that engine. Those runs use a lazy
+  // `await import(...)`; `import type` is fine (erased at build).
+  const src = readFileSync(`${here}/bin-verify.ts`, 'utf8')
+  for (const pkg of ['flake', 'browser']) {
+    it(`bin-verify.ts has no value import of @strummer/${pkg}`, () => {
+      const valueImport = new RegExp(`import\\s+(?!type\\b)[\\w{},*\\s]+from\\s+'@strummer/${pkg}'`)
+      expect(src).not.toMatch(valueImport)
+    })
+  }
+})
+
 describe('api+verify gate prefixing — compose, never widen (ADR 0019 §A8)', () => {
   // The api gate is read through ONE shared helper used by BOTH the api pillar and
   // verify's produce-api capture path. In aggregate mode it must read the api pillar's

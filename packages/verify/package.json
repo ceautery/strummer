@@ -1,7 +1,6 @@
 {
   "name": "@strummer/verify",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -29,6 +28,7 @@
     "@strummer/mutate": "workspace:*"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "import": {
@@ -37,5 +37,10 @@
         }
       }
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ceautery/strummer.git",
+    "directory": "packages/verify"
   }
 }

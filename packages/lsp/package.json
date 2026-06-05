@@ -1,7 +1,6 @@
 {
   "name": "@strummer/lsp",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -23,6 +22,7 @@
     "vscode-languageserver-protocol": "^3.17.5"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "import": {
@@ -31,5 +31,10 @@
         }
       }
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ceautery/strummer.git",
+    "directory": "packages/lsp"
   }
 }
