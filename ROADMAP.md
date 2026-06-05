@@ -540,6 +540,36 @@ stage `reportlog`. Pure/zero-spawn slices first.
 - [ ] *(staged, this arc defers)* Ruby coverage (SimpleCov) + mutation (`mutant`/`mutest`) runners,
       gated on a `mutant` licensing investigation; a Python `pytest-reportlog` aggregating parser.
 
+- [~] **Python MUTATION diff-scoping (cosmic-ray + mutmut)** — *ADR 0010 addendum 2; in progress.*
+      Closes the diff-scoping asymmetry: TS `runMutation` scopes via `--mutate`, but the Python
+      runners drop `mutateFiles`. Design = a research→synthesis→2-critic fan-out (Critic 1
+      *needs-rework*, 5 blockers folded; Critic 2 *ship-with-fixes*); forks A/A2/B/B2/C/D/E/F
+      ratified. The critical catch: `assertComplete` only sees TOTAL-zero mutants, so PARTIAL
+      under-scope (tool mutates a subset, clean score, unmutated changed files) is a latent
+      absence-as-a-pass — closed by a new post-spawn `reconcileScope` guard.
+  - [x] **Safety core (lands NOW, pure, fixture-tested, no real tool):**
+    - [ ] `selectMutationScope(mutateFiles, ownedRoots, exists)` → `{files, unmatched}` —
+          mirrors `selectPytestScope` incl. the injected existence predicate; out-of-tree/
+          deleted → `unmatched` (report-gap), never silently scoped.
+    - [ ] `reconcileScope(selected, MutationSummary)` → `{mutatedFiles, missing}` — the
+          partial-under-scope guard: a selected file ABSENT from `summary.files` ⇒ `missing` ⇒
+          the runner throws ⇒ inconclusive; seen-but-empty is benign.
+  - [ ] **STAGED — slice-0-gated (need cosmic-ray 8.4.6 / mutmut 3.5.0 fixtures from the
+        reference env; tools absent from the dev container):**
+    - [ ] **slice 0** — empirically capture: `module-path` file-list shape (Fork A2), mutmut
+          config keys (Fork F), `only_mutate` form, seen-vs-unseen distinguishability (Fork B2).
+    - [ ] **emitters** — `synthesizeScopedCosmicRayConfig` (override `module-path`, reconcile
+          inherited exclusions; `smol-toml`) + `planMutmutScope`/`renderMutmutConfig` (fresh
+          sandbox cwd + baseline smoke).
+    - [ ] **runner wiring** — `runCosmicRay`/`runMutmut` honor `mutateFiles` (pre-spawn noop on
+          empty, whole-project on `undefined`/`no-scope`, post-spawn `reconcileScope`); additive
+          `RunMutationResult` fields (`scopeEmpty`/`unmatched`/`requestedFiles`). MCP/CLI need NO
+          change (already forward `mutateFiles`).
+    - [ ] **verify selector (Fork D)** — `STRUMMER_MUTATE_TOOL` + `STRUMMER_MUTATE_CONFIG_PATH`
+          (bin-verify) + `--mutate-tool`/`--mutate-config` (verify CLI); route `changedFiles`.
+    - **Staged beyond this arc:** cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/`
+          cache reuse; Stryker PARTIAL-scope reconciliation; flake diff-scoping.
+
 - [x] **Dependency/version intelligence** (`@strummer/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
       Cleanest architectural fit: pure offline verdict core + an operator-provisioned
       on-disk OSV advisory snapshot (file-as-data); extends shipped

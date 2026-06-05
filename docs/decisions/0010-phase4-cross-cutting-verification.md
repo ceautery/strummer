@@ -234,3 +234,96 @@ runners + pure deps diff-scoping.
 5. **mutate Python mutation runner** (cosmic-ray primary + mutmut) — depends on slice 3.
 6. **coverage `runScopedPython`** (pytest + coverage.py) — needs a coverage.json fixture
    (out-of-gate).
+
+## Addendum 2 — 2026-06-05: Python MUTATION diff-scoping (cosmic-ray + mutmut)
+
+Forged via the `python-mutation-diff-scoping-design` fan-out (3 research streams →
+synthesis → 2 adversarial critics → corrected design; Critic 1 returned *needs-rework*
+with 5 blockers, all folded in; Critic 2 *ship-with-fixes*). The human ratified the
+forks below. **Still no new architectural boundary** — same injected-runner /
+file-on-disk-config / pure-synthesis shape as `runScopedPython`/`selectPytestScope`
+(addendum 1) and TS `runMutation`/`--mutate`. **Recorded as a 0010 addendum, not a new ADR.**
+
+### The gap
+
+The TS mutation runner is diff-scoped (`mutateFiles → stryker --mutate`); the shipped
+Python runners (`runCosmicRay` = PRIMARY, its dump carries real `file:line:operator`;
+`runMutmut` = lightweight) **drop `mutateFiles`** (`scopedFiles: []`). pytest+coverage.py
+scoping already shipped (`runScopedPython`); this closes the **mutation** half.
+
+### The load-bearing correction (Critic 1, blocker #1)
+
+The draft's safety rested on "N≥1 selected + `totalMutants===0` ⇒ inconclusive." That is
+**false**: `assertComplete` (`run.ts:188`) fires only on TOTAL-zero or `pending>0`, so it is
+blind to **PARTIAL under-scope** — synthesis selects 3 changed files, the tool mutates 1,
+those mutants are killed, `totalMutants>0`, the score reads clean, and 2 changed files were
+silently never mutated: **absence-as-a-pass.** The fix is a NEW pure **post-spawn
+`reconcileScope` guard**: `MutationSummary.files[]` carries a per-file record for every file
+the tool SAW (even one with zero mutants). A selected file present in the summary with 0
+mutants is *seen-but-empty* (benign — no mutable code); a selected file **absent** from the
+summary was never mutated — the partial-scope sentinel — and the runner throws ⇒ inconclusive.
+`scopedFiles` then reports what was **genuinely mutated**, never what was merely requested.
+
+### The zero-mutant resolution (the crux), four end states
+
+| Case | Condition | Decision |
+|------|-----------|----------|
+| (a) legit empty scope | `mutateFiles` supplied; selection ⇒ 0 mutable existing in-tree `.py` | early-return-noop, **DO NOT spawn** (`ran:false`); folds no-signal → inconclusive |
+| (b) total-empty/failed | N≥1, spawned, `totalMutants===0` / `pending>0` | `assertComplete` throws (unchanged) |
+| (c) **partial under-scope** | N≥1, `totalMutants>0`, a selected file absent from `summary.files` | **`reconcileScope` throws** (the new guard) |
+| (d) clean scoped run | N≥1, every selected file seen | report `scopedFiles = mutatedFiles`, fold normally |
+
+`mutateFiles === undefined` ⇒ whole-project (today's behavior; MCP zod is `.optional()` with
+**no `.default([])`**, so an omitting caller is `undefined`, not `[]`). cosmic-ray `no_test`
+→ `NoCoverage` is a *survivor* (warn), not pending — a changed file with no test is a real gap.
+
+### Per-tool mechanism (resolved forks)
+
+- **cosmic-ray (PRIMARY, Fork A):** synthesize a per-run `cosmic-ray.toml` overriding
+  `module-path` to the selected file list (Critic 2 confirmed 8.x accepts a file list); SINGLE
+  session, no dump-merge, `parseCosmicRayDump` untouched. Inherited `excluded-modules`/filters
+  are **reconciled against the scope** (stripped when they'd subtract a selected file, else
+  `exclusion-collision` ⇒ inconclusive), **never copied blind** (blocker #3). **Fork A2:** if the
+  pinned cosmic-ray won't honor a file-list `module-path`, fall back to
+  `excluded-modules`-subtraction (still single-session, still in-boundary), never an unverified list.
+- **mutmut (Fork B):** synthesize `[tool.mutmut] source_paths` + `only_mutate` (space-separated
+  globs) in a **fresh sandbox cwd** (the sticky `mutants/` cache can't leak) gated by a
+  baseline-smoke check; smoke-fail ⇒ inconclusive. **`paths_to_mutate` dropped** (Critic 2:
+  unverified in 3.5.0). **Fork B2:** if mutmut can't distinguish seen-but-empty from never-seen,
+  `reconcileScope` for mutmut throws on ANY selected 0-mutant file (conservative — some
+  false-inconclusive, zero false-pass). **Fork F:** emit only slice-0-verified keys.
+- **Fork C:** a changed `.py` outside the operator's owned tree ⇒ `unmatched` (report-gap default;
+  widen opt-in) — never silently scoped, never auto-extended.
+- **Fork D:** extend verify — `STRUMMER_MUTATE_TOOL` (`stryker`|`cosmic-ray`|`mutmut`, default
+  stryker) + `STRUMMER_MUTATE_CONFIG_PATH` in `bin-verify`, `--mutate-tool`/`--mutate-config` in
+  the verify CLI; route `ctx.changedFiles → mutateFiles`. Operator-set, never extension-inferred.
+
+### Slice 0 — the empirical tool-fact gate (out-of-gate, reference env)
+
+The emitters MUST be pinned to **captured behavior of the installed cosmic-ray 8.4.6 / mutmut
+3.5.0**, not doc-derived guesses: the `module-path` file-list shape (Fork A2), mutmut's exact
+config keys (Fork F), the `only_mutate` whitespace/glob form, and mutmut's seen-vs-unseen
+distinguishability (Fork B2). The tools are **not in the dev container** (captured once, committed,
+per the addendum-1 / LSP fixture convention).
+
+### What lands NOW vs STAGED (sequencing fork, ratified)
+
+The two **pure, tool-agnostic safety primitives** ship first against hand-authored fixtures —
+no real-tool dependency, gate stays green:
+
+1. **`selectMutationScope(mutateFiles, ownedRoots, exists)`** — mirrors `selectPytestScope`
+   incl. its injected existence predicate (blocker #4): `.py`-only, in-tree, existing → `files`;
+   out-of-tree / deleted / typo'd → `unmatched`.
+2. **`reconcileScope(selected, summary)`** — the partial-under-scope guard above.
+
+**STAGED (slice-0-gated):** the config emitters `synthesizeScopedCosmicRayConfig` /
+`planMutmutScope`+`renderMutmutConfig` (need `smol-toml` + the captures); the
+`runCosmicRay`/`runMutmut` wiring (honor `mutateFiles`, pre-spawn noop, post-spawn
+`reconcileScope`); MCP/CLI need NO change (already forward `mutateFiles`); the verify selector
+(Fork D). The Stryker-under-verify total-zero path was verified already-safe (folds
+`mutationScore===null` → `no-signal` → inconclusive via `fromMutationSummary`/`composeVerdict`);
+Stryker PARTIAL-scope reconciliation is staged (different `--mutate` mechanism).
+
+Invariants held throughout: under-scoping (total OR partial) never silent-passes;
+absence-never-a-pass; no real spawn in `pnpm gate` (pure synthesis + injected runner);
+compose-never-widen (`mutateFiles` reused; `RunMutationResult` additive); operator gate untouched.
