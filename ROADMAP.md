@@ -1301,6 +1301,45 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@strumme
       for PyPI/Gem lockfiles; deps `changelog_diff` for PyPI/RubyGems; a mutate cosmic-ray/`runMutmut` adapter;
       LSP recursive/dir delete + the full toolchain cross-version matrix.
 
+## Phase 6 — Packaging & distribution  *(IN PROGRESS — design = ADR 0019, Accepted; turns the monorepo into a product)*
+
+Goal: one front-door MCP server + a publishable `@strummer/*` set, so an agent/operator can adopt
+the whole toolkit from a single `.mcp.json` block instead of wiring nine bins. Design forged by the
+`packaging-distribution-design` fan-out (5 research streams → synthesis → 2 adversarial critics, 5
+blockers folded → corrected design). Four forks human-ratified (2026-06-05): curated read-heavy
+default; **repoint `strummer-mcp`** to the aggregate; **split now** (heavy engines as optional
+peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heavy-dep-when-pillar-off.
+
+- [ ] **Aggregate MCP server.** Compose all enabled pillars onto ONE `McpServer` via the existing
+      `register<X>Tools(server, opts)` seam; **repoint `strummer-mcp`** to it (docs-only moves to
+      `strummer-docs-mcp`); keep the 8 per-pillar bins alongside. Extract `createStrummerServer` to
+      `./docs.js` (pure-re-export `index.ts`) + a shared `<pillar>OptionsFromEnv(env)` out of each
+      `build<X>ServerFromEnv`. Mandatory tool/resource **uniqueness guard** (SDK 1.29 throws on a dup).
+- [ ] **Selective enablement.** `STRUMMER_TOOLSETS` SUBTRACTIVE selection (never grants); unset ⇒
+      curated read-heavy default; per-pillar gates still govern run/write tools; instructions assembled
+      enabled-only.
+- [ ] **Gate/env composition — "compose, never widen".** Keep the per-pillar `STRUMMER_<PILLAR>_*`
+      namespace unchanged; close the bare-name widening hole (api AND verify read bare unsafe/host/keyring
+      envs — both read **prefixed** `STRUMMER_API_*` in aggregate mode; standalone unchanged). One
+      `STRUMMER_ARTIFACTS_ROOT` (per-pillar subtree/retention). Missing optional engine ⇒ loud disable;
+      contradictory gate (LSP throws) ⇒ FATAL. Collect + fire every shutdown on SIGINT/SIGTERM.
+- [ ] **Package split for install isolation.** `@strummer/browser`/`core`/`embed`/`flake` → optional
+      peer-deps + dynamic `import()` per enabled pillar; drop mcp's redundant direct `playwright-core`.
+      So bare `npm i @strummer/mcp` is native-free; docs/flake/browser loud-disable until their engine is
+      installed. Asserted on the emitted `.mjs` (build-then-assert CI) + an install-closure test.
+- [ ] **npm publish pipeline.** Remove `private`; add `repository{url,directory}` case-exact +
+      `publishConfig{access:public,provenance}`. Changesets FIXED/lockstep, publish **through pnpm**
+      (rewrites `workspace:*`). Keep raw `exports.types=src` (no-build gate) + a pack-time
+      `publishConfig.exports` overlay → dist (nested import/types); validate with `attw --pack` + `publint`
+      on the TARBALL. ESM-only. OIDC trusted publishing from CI (Node≥22.14.0/npm≥11.5.1, `id-token:write`,
+      no token), gate green first.
+- [ ] **Distribution / onboarding.** `@strummer/cli` `strummer` bin + a default bin so `npx @strummer/mcp`
+      resolves; a real resolvable `.mcp.json` example (operator-set gate envs only); browser-bin preflight
+      diagnostic; README for human + agent operator. stdio only (v1).
+- [ ] *(staged, not amputated — Phase 7 candidates)* HTTP/SSE transport; MCP registry submission; an
+      MCPB/DXT desktop bundle; Homebrew tap / single-binary CLI; the end-to-end **"verify a PR" GitHub
+      Action** (the natural capstone now that the entrypoint is unified).
+
 ## Ongoing
 
 - [ ] Distribution: Homebrew tap; single-binary CLI for macOS.
