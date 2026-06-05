@@ -187,7 +187,7 @@ describe('synthesizeRedactedHarZip — RunResult → consume-bridge-shaped HAR (
   })
 })
 
-// har-synth.ts is the leaf that creates the new `@sackville/browser → @sackville/api`
+// har-synth.ts is the leaf that creates the new `@sackville-mcp/browser → @sackville-mcp/api`
 // dep edge (slice 2: browser's finalizeHar delegates here). It must import ONLY fflate,
 // so that edge can never drag runner/undici/spawn-capable code into the browser pillar.
 describe('har-synth.ts — pure leaf, fflate-only imports (5f slice 2 guard)', () => {

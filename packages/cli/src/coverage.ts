@@ -13,11 +13,11 @@ import {
   type ScopeMode,
   type TestRunner,
   uncoveredInDiff,
-} from '@sackville/coverage'
+} from '@sackville-mcp/coverage'
 import type { CliIO } from './index.js'
 
 /**
- * `sackville coverage` — the human surface over `@sackville/coverage`.
+ * `sackville coverage` — the human surface over `@sackville-mcp/coverage`.
  *
  * `uncovered-in-diff` is the pure forgotten-assertion catch: classify a diff's new lines
  * against an istanbul or coverage.py report and surface the executable-but-unhit ones.

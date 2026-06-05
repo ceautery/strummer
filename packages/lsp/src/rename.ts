@@ -349,7 +349,7 @@ export interface LspRenameEngineOptions {
    * inactive (no scan); the bin/CLI/MCP wire `defaultListFiles` to turn it on (cf. `redact`). */
   listFiles?: ProjectFileLister
   writer?: RenameWriter
-  /** Secret redaction over every surfaced hunk (default identity; the bin wires @sackville/safety). */
+  /** Secret redaction over every surfaced hunk (default identity; the bin wires @sackville-mcp/safety). */
   redact?: (text: string) => string
 }
 

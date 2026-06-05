@@ -6,8 +6,8 @@ import {
   openDb,
   resolveVersion,
   searchDocs,
-} from '@sackville/core'
-import { type Embedder, QueryEmbedder } from '@sackville/embed'
+} from '@sackville-mcp/core'
+import { type Embedder, QueryEmbedder } from '@sackville-mcp/embed'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
 import type { PillarSetup } from './pillars.js'
@@ -280,7 +280,7 @@ export function registerDocsTools(server: McpServer, opts: DocsToolsOptions): vo
 
 /**
  * Build a standalone Sackville docs MCP server over an open index. The caller owns
- * the db handle (open it with `openDb` from `@sackville/core`) and its lifecycle.
+ * the db handle (open it with `openDb` from `@sackville-mcp/core`) and its lifecycle.
  */
 export function createSackvilleServer(
   db: DatabaseType.Database,

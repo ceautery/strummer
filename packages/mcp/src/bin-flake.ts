@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { HistoryStore } from '@sackville/flake'
+import { HistoryStore } from '@sackville-mcp/flake'
 import { createFlakeServer, type FlakeToolsOptions, registerFlakeTools } from './flake.js'
+import { isMainModule } from './is-main.js'
 import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the flake MCP bin (set at launch). */
@@ -121,7 +121,7 @@ export function buildFlakeServerFromEnv(
 }
 
 // Executable tail: only run when invoked directly (not when imported by a test).
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   const { server } = buildFlakeServerFromEnv()
   await server.connect(new StdioServerTransport())
 }

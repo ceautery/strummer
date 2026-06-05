@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util'
-import { detectInstalledVersion, type Ecosystem } from '@sackville/core'
+import { detectInstalledVersion, type Ecosystem } from '@sackville-mcp/core'
 import {
   auditDependency,
   CHANGELOG_FILENAMES,
@@ -22,8 +22,8 @@ import {
   type RubyGemsVersion,
   rubygemsToPackument,
   sliceChangelog,
-} from '@sackville/deps'
-import { resolveAndPin } from '@sackville/safety'
+} from '@sackville-mcp/deps'
+import { resolveAndPin } from '@sackville-mcp/safety'
 import type { CliIO } from './index.js'
 
 /** Injected (so tests stay offline) registry-metadata fetcher; the real one is SSRF-pinned. */
@@ -34,7 +34,7 @@ type ChangelogFetcher = (
   ecosystem: OsvEcosystem,
 ) => Promise<{ text: string; source: string }>
 
-/** Map an OSV ecosystem to the `@sackville/core` installed-version detection ecosystem. */
+/** Map an OSV ecosystem to the `@sackville-mcp/core` installed-version detection ecosystem. */
 const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
   npm: 'node',
   PyPI: 'python',
@@ -42,13 +42,13 @@ const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
 }
 
 /**
- * `sackville deps` — the human surface over `@sackville/deps`. Answers deprecation /
+ * `sackville deps` — the human surface over `@sackville-mcp/deps`. Answers deprecation /
  * vulnerability / freshness for the version ACTUALLY INSTALLED in a project (not "latest").
  *
  * The human invoked the audit, so the CLI fetches by default (operator intent), with the
  * same SSRF pre-flight the bins use (`resolveAndPin`: metadata/link-local always refused,
  * private registries gated by `--allow-private`). Network + comparator dispatch reuse the
- * ecosystem helpers lifted into `@sackville/deps`. `audit`/`audit-project` exit 1 on a
+ * ecosystem helpers lifted into `@sackville-mcp/deps`. `audit`/`audit-project` exit 1 on a
  * security or deprecation finding (CI-actionable); `changelog` is informational.
  */
 export async function runDeps(

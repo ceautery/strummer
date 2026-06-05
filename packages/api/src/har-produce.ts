@@ -1,6 +1,6 @@
 /**
  * The verify-DRIVEN API capture driver (ADR 0013 Addendum 4, milestone 5f). Drives the
- * `@sackville/api` runner for an operator-authored request (or sequence), SYNTHESIZES a
+ * `@sackville-mcp/api` runner for an operator-authored request (or sequence), SYNTHESIZES a
  * HAR from the run, redacts + stores it, and validates it against the contract via the
  * SHIPPED {@link validateCapturedTraffic} — the api-runner analogue of the browser
  * pillar's `driveBrowserFlowToHar` (5e). Unlike `har-synth.ts` this is NOT a pure leaf
@@ -10,7 +10,7 @@
  * (⇒ the verify thunk rejects ⇒ inconclusive, mirroring `driveBrowserFlowToHar`): a
  * withheld/dry-run/blocked request, a non-sent step in a sequence, or a truncated
  * redirect chain never yields a validatable HAR. CONTRACT completeness (the verdict's
- * `clean` flag) is folded to inconclusive downstream by `@sackville/verdict`
+ * `clean` flag) is folded to inconclusive downstream by `@sackville-mcp/verdict`
  * `fromCaptureVerdict` (slice 6) — this driver returns the FULL verdict so that fold can.
  *
  * Redaction: the driver folds the run-resolved `{{secret:NAME}}` pairs (off the runner's
@@ -28,13 +28,13 @@ import type { Redactor } from './secrets.js'
 import { runSequenceForHar, type SequenceOptions } from './sequence.js'
 
 /** The minimal artifact store the driver writes the redacted HAR to — satisfied by the
- * verify-prefix `@sackville/artifacts` `ArtifactStore` (kept structural so `@sackville/api`
- * needn't depend on `@sackville/artifacts`). */
+ * verify-prefix `@sackville-mcp/artifacts` `ArtifactStore` (kept structural so `@sackville-mcp/api`
+ * needn't depend on `@sackville-mcp/artifacts`). */
 export interface HarArtifactSink {
   put(runId: string, kind: string, body: string | Buffer, contentType: string): string
 }
 
-/** Compact HAR summary (shape-compatible with `@sackville/browser` `HarSummary`). */
+/** Compact HAR summary (shape-compatible with `@sackville-mcp/browser` `HarSummary`). */
 export interface ProducedHarSummary {
   handle: string
   byteSize: number

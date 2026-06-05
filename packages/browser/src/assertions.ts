@@ -1,4 +1,4 @@
-import { type AssertionOp, applyOp } from '@sackville/assert'
+import { type AssertionOp, applyOp } from '@sackville-mcp/assert'
 import type { Locator, Page } from 'playwright-core'
 
 type Role = Parameters<Page['getByRole']>[0]
@@ -16,7 +16,7 @@ export type BrowserAssertionSource =
 
 /** A declarative browser assertion. Element sources target via a snapshot `ref`
  * OR a `role` (+ optional accessible `name`). The operator vocabulary (`op`) is
- * the shared `@sackville/assert` set — one assertion engine across pillars. */
+ * the shared `@sackville-mcp/assert` set — one assertion engine across pillars. */
 export interface BrowserAssertionSpec {
   source: BrowserAssertionSource
   op: AssertionOp

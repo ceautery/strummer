@@ -18,9 +18,9 @@ Two concrete gaps block adoption:
    stdio MCP bins** (`sackville-mcp` = docs, plus `bin-api`/`-browser`/`-coverage`/`-deps`/
    `-flake`/`-lsp`/`-mutate`/`-verify`), each its own process with its own `SACKVILLE_<PILLAR>_*`
    env namespace and its own gate. There is no single server that exposes the whole toolkit.
-2. **Nothing is publishable.** Every `@sackville/*` package is `"private": true` at
+2. **Nothing is publishable.** Every `@sackville-mcp/*` package is `"private": true` at
    `"version": "0.0.0"`. The bare `sackville` npm name is taken, so packages ship under
-   `@sackville/*`.
+   `@sackville-mcp/*`.
 
 Ground truth established by the fan-out (verified in-repo):
 
@@ -36,16 +36,16 @@ Ground truth established by the fan-out (verified in-repo):
 - **Conditional, gate-driven tool registration already exists** per pillar (coverage registers
   `run_scoped` only when `allowRun && allowedRoots.length`; flake/api/lsp/verify gate their
   run/write tools). Selective enablement is therefore *partly intrinsic*.
-- **Lazy-load precedent already ships:** `bin-verify` does `await import('@sackville/browser')`
+- **Lazy-load precedent already ships:** `bin-verify` does `await import('@sackville-mcp/browser')`
   only on the produce-capture path, so consume-only operators never load playwright-core.
 - **tsdown externalizes** all deps (built `.mjs` keeps bare `import` statements). So a STATIC
   top-level import of a heavy engine runs its module-init at process start; a dynamic
   `await import()` defers it. **But deferral is RUNTIME-only — it does not stop `npm install`
   from pulling the dependency.** Install isolation requires a *package-graph* change.
 - **Native/heavy install closure** flows through exactly four engine packages:
-  `@sackville/browser` (`playwright-core`, `lighthouse`, `chrome-launcher`, `pixelmatch`,
-  `pngjs`), `@sackville/core` (`better-sqlite3`, docs), `@sackville/embed` (`onnxruntime` via
-  transformers.js, docs), `@sackville/flake` (`better-sqlite3`). **`sackville` carries a
+  `@sackville-mcp/browser` (`playwright-core`, `lighthouse`, `chrome-launcher`, `pixelmatch`,
+  `pngjs`), `@sackville-mcp/core` (`better-sqlite3`, docs), `@sackville-mcp/embed` (`onnxruntime` via
+  transformers.js, docs), `@sackville-mcp/flake` (`better-sqlite3`). **`sackville` carries a
   redundant direct `playwright-core` dep** (only `browser` needs it). The light pillars
   (api/deps/coverage/mutate/lsp/verify + the pure leaves) pull no native binary at install.
 
@@ -78,19 +78,19 @@ Ground truth established by the fan-out (verified in-repo):
 ### B. Package split for install isolation (ratified fork: "split now")
 
 6. **The four heavy engines become OPTIONAL PEER dependencies of `sackville`** (and likewise
-   reconsidered for `@sackville/cli`): `@sackville/browser`, `@sackville/core`, `@sackville/embed`,
-   `@sackville/flake` move from `dependencies` to `peerDependencies` +
+   reconsidered for `@sackville-mcp/cli`): `@sackville-mcp/browser`, `@sackville-mcp/core`, `@sackville-mcp/embed`,
+   `@sackville-mcp/flake` move from `dependencies` to `peerDependencies` +
    `peerDependenciesMeta: { optional: true }`. **Drop mcp's redundant direct `playwright-core`.**
    The aggregate **dynamically `import()`s** each engine only when its pillar is enabled.
 7. **Missing optional engine ⇒ LOUD DISABLE; contradictory gate ⇒ FATAL.** A pillar whose
    engine package is not installed (the dynamic import throws `ERR_MODULE_NOT_FOUND`) is
-   disabled with a clear diagnostic ("pillar X disabled: install `@sackville/core`"), the server
+   disabled with a clear diagnostic ("pillar X disabled: install `@sackville-mcp/core`"), the server
    still starts. A pillar whose *gate* is internally contradictory (e.g. LSP `ALLOW_WRITE`
    without `ALLOW_RUN`, which the engine throws on) is **fatal to the whole aggregate** — these
    throws are anti-widening guards; swallowing them would be fail-open.
 8. **Consequence for the default set:** a bare `npm i sackville` (no heavy peers) is
    **fully native-free**, so the *effective* zero-extra-install default is **api+deps+verify**.
-   **docs** (needs `@sackville/core`+`@sackville/embed` *and* an operator-provided index) and
+   **docs** (needs `@sackville-mcp/core`+`@sackville-mcp/embed` *and* an operator-provided index) and
    **flake**/**browser** loud-disable until their engine is installed. The ratified
    **curated read-heavy default (docs+api+deps+verify)** therefore holds *in intent* — docs
    joins the default the moment its engine + index are present.
@@ -141,7 +141,7 @@ Ground truth established by the fan-out (verified in-repo):
     `NODE_AUTH_TOKEN`**, provenance auto-attached (do **not** also set `provenance:true` in a way
     that double-sets — reconcile with §15), green gate first. Trusted publishing fails silently
     otherwise.
-19. **`@sackville/cli` exposes a `sackville` bin**; a scoped package can provide an unscoped bin.
+19. **`@sackville-mcp/cli` exposes a `sackville` bin**; a scoped package can provide an unscoped bin.
     Add a **default bin** so `npx sackville` resolves, plus document `npx -p`. No CLI feature
     work — the CLI is already unified; only onboarding docs.
 
@@ -220,7 +220,7 @@ transitive graph** (forced — tsdown externalizes `workspace:*`); **add a defau
 - **No heavy dep when a pillar is off:** runtime via dynamic import (§6, asserted on emitted
   `.mjs`, §slice 10) *and* install via optional peer-deps (§slice 12). The verdict/verify
   invariant is re-stated precisely as **zero NATIVE/heavy deps in the `.mjs` closure** (their
-  runtime `@sackville/severity`/`@sackville/diff` imports are pure and fine).
+  runtime `@sackville-mcp/severity`/`@sackville-mcp/diff` imports are pure and fine).
 - **No real spawn/fetch/network/native binary in `pnpm gate`:** every publish/lazy-boundary
   assertion is a build-then-assert CI job or a `--dry` run, never in the gate; composition tests
   use `InMemoryTransport` + stubbed opts.

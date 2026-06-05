@@ -1,8 +1,8 @@
 # ADR 0013 — Phase 5: cross-pillar verification — the capture→contract bridge + the unified change-verdict
 
-- **Status:** Accepted (2026-06-04) — the human reviewed and confirmed all five open questions, each ratifying a choice the ADR already made: (1) ship **5a then 5b** as separate milestones; (2) **no baked-in `failAtOrAbove` default** — the operator/agent must declare the cut; (3) the capture gate is a **single `SACKVILLE_VERIFY_ALLOW_CAPTURE` boolean atop the existing browser artifact gate**; (4) **`@sackville/verdict` is a new package** (accepted package-count cost for gate-independence); (5) the **exercised-operations spec-walk ships in 5a** (slice 5), accepted as net-new code.
+- **Status:** Accepted (2026-06-04) — the human reviewed and confirmed all five open questions, each ratifying a choice the ADR already made: (1) ship **5a then 5b** as separate milestones; (2) **no baked-in `failAtOrAbove` default** — the operator/agent must declare the cut; (3) the capture gate is a **single `SACKVILLE_VERIFY_ALLOW_CAPTURE` boolean atop the existing browser artifact gate**; (4) **`@sackville-mcp/verdict` is a new package** (accepted package-count cost for gate-independence); (5) the **exercised-operations spec-walk ships in 5a** (slice 5), accepted as net-new code.
 - **Date:** 2026-06-04
-- **Relates to:** ADR 0010 (Phase-4 sequencing, shared `@sackville/artifacts`, the paired deny-by-default gate, "TS first / Python staged"), ADR 0005 (api contract validation, no remote `$ref`), ADR 0006–0009 (browser pillar, HAR capture & redaction), the `@sackville/safety` / `@sackville/assert` / `@sackville/artifacts` extraction precedent.
+- **Relates to:** ADR 0010 (Phase-4 sequencing, shared `@sackville-mcp/artifacts`, the paired deny-by-default gate, "TS first / Python staged"), ADR 0005 (api contract validation, no remote `$ref`), ADR 0006–0009 (browser pillar, HAR capture & redaction), the `@sackville-mcp/safety` / `@sackville-mcp/assert` / `@sackville-mcp/artifacts` extraction precedent.
 - **Derivation:** this file is the corrected distillation of the internal design-fan-out synthesis after three adversarial critics. The corrections **materially changed the answer** (slice ordering, gate posture, the artifacts disk-path model, GraphQL scope, the empty-fold verdict) and are recorded below rather than trusted as-proposed, mirroring ADR 0010's method. *(It does not supersede ADR 0012 — that is the separate, Accepted deps version-algebra design.)*
 
 ## Context
@@ -41,15 +41,15 @@ The load-bearing correctness rule, lifted from deps' `osvSnapshotLoaded:false` h
 
 Decisive split — **two packages, two concerns**:
 
-- **`@sackville/verdict`** — the pure composition core. **Type-only imports** of each pillar's result interface (`DependencyAudit`, `DiffCoverageReport`, `FlakeVerdict`, `MutationSummary`, `ContractResult`); it must **never** import a pillar *runtime* (that would drag `better-sqlite3` in via flake, `playwright-core` via browser, and break the independent-gate posture). Houses `Severity` / `SEVERITY_RANK` / `maxSeverity`, the `PillarVerdict` / `CompositeVerdict` / `VerdictPolicy` types, the five `from*` adapters, and `composeVerdict`. No I/O.
+- **`@sackville-mcp/verdict`** — the pure composition core. **Type-only imports** of each pillar's result interface (`DependencyAudit`, `DiffCoverageReport`, `FlakeVerdict`, `MutationSummary`, `ContractResult`); it must **never** import a pillar *runtime* (that would drag `better-sqlite3` in via flake, `playwright-core` via browser, and break the independent-gate posture). Houses `Severity` / `SEVERITY_RANK` / `maxSeverity`, the `PillarVerdict` / `CompositeVerdict` / `VerdictPolicy` types, the five `from*` adapters, and `composeVerdict`. No I/O.
 
-- **The capture→contract bridge lives in `@sackville/api`** — new file `packages/api/src/har-capture.ts`, next to `validateOpenApiResponse` / `importHar`. It is API-pillar knowledge (HAR entries, OpenAPI path matching, GraphQL routing); placing it here lands it on the **api** green gate and reuses `matchPath`/`pathToRegex` rather than reinventing path templating. `@sackville/verdict` stays contract-agnostic — it consumes the resulting `ContractResult[]`, never HAR.
+- **The capture→contract bridge lives in `@sackville-mcp/api`** — new file `packages/api/src/har-capture.ts`, next to `validateOpenApiResponse` / `importHar`. It is API-pillar knowledge (HAR entries, OpenAPI path matching, GraphQL routing); placing it here lands it on the **api** green gate and reuses `matchPath`/`pathToRegex` rather than reinventing path templating. `@sackville-mcp/verdict` stays contract-agnostic — it consumes the resulting `ContractResult[]`, never HAR.
 
 - **MCP surface** — a new `packages/mcp/src/verify.ts` + `sackville-verify-mcp` bin, mirroring `packages/mcp/src/deps.ts`: compact `CompositeVerdict` inline as `structuredContent`, full per-pillar detail by handle, one `ResourceTemplate('sackville://verify/{id}/{kind}')`. Plus `validate_capture` (the bridge surface) co-located on the **api** MCP server next to `validate_response`. **Both gated — see §3.**
 
 - **CLI** — a `verify` case in `packages/cli/src/index.ts` + `packages/cli/src/verify.ts`, straight-through human flags, exit codes `0 pass / 1 fail / 2 inconclusive`.
 
-The shared `Severity` scale is **defined in `@sackville/verdict`** (`'critical'|'high'|'moderate'|'low'|'none'`), seeded from deps' `SeverityBucket` vocabulary but *not* importing it. Extracting deps' scale into a shared package is **staged** — duplicating a small union is cheaper than a refactor that touches the deps gate now. Crucially, **deps' `'unknown'` maps to `no-signal` / advisory, never silently to `low` or `none`** — a tested invariant (§6, slice 6), not a policy footnote.
+The shared `Severity` scale is **defined in `@sackville-mcp/verdict`** (`'critical'|'high'|'moderate'|'low'|'none'`), seeded from deps' `SeverityBucket` vocabulary but *not* importing it. Extracting deps' scale into a shared package is **staged** — duplicating a small union is cheaper than a refactor that touches the deps gate now. Crucially, **deps' `'unknown'` maps to `no-signal` / advisory, never silently to `low` or `none`** — a tested invariant (§6, slice 6), not a policy footnote.
 
 ### 3. The operator-gate composition story (the central safety decision)
 
@@ -59,7 +59,7 @@ The synthesis draft claimed validating an already-redacted HAR is "free, like a 
 - The bin requires the operator to have configured the artifacts root **and** an explicit `SACKVILLE_VERIFY_ALLOW_CAPTURE` opt-in before `validate_capture` will resolve+parse a browser HAR handle. Read of a *freely-readable* artifact (one the producing pillar already deemed ungated) needs no extra opt-in; a HAR is not such an artifact.
 - **Inherited trust is enforced as code, not asserted as prose:** the `sackville://verify/<id>/verdict` handle is served only behind the **same** artifact gate as the HAR it references — a consumer cannot read the verdict (and its embedded findings) at lower trust than the source HAR. A verdict referencing a HAR is **unresolvable without the browser artifact gate set** (red test).
 
-**3b. No raw secret bytes enter the verdict, and every finding string is redacted.** The bridge extracts only `status` + the **parsed body** needed for schema validation — it MUST NOT copy raw request/response headers or cookies into the envelope. Every finding `message`, every echoed path, and any operation string is passed through the **operator `Redactor`** (`@sackville/safety`) before entering the `CompositeVerdict`, and reference paths use `matched.template` (not `req.path`). Red test: a HAR carrying an unregistered `Set-Cookie` / bearer token produces a verdict whose inline content **and** stored bytes contain neither the cookie nor the token.
+**3b. No raw secret bytes enter the verdict, and every finding string is redacted.** The bridge extracts only `status` + the **parsed body** needed for schema validation — it MUST NOT copy raw request/response headers or cookies into the envelope. Every finding `message`, every echoed path, and any operation string is passed through the **operator `Redactor`** (`@sackville-mcp/safety`) before entering the `CompositeVerdict`, and reference paths use `matched.template` (not `req.path`). Red test: a HAR carrying an unregistered `Set-Cookie` / bearer token produces a verdict whose inline content **and** stored bytes contain neither the cookie nor the token.
 
 **3c. No run gate exists in the first milestone, and no per-pillar run-gate env is pre-read.** Because nothing spawns, the v1 bin reads **only** `SACKVILLE_ARTIFACTS_ROOT` + `SACKVILLE_VERIFY_ALLOW_CAPTURE`. It does **not** speculatively read `SACKVILLE_COVERAGE_ALLOW_RUN` / `SACKVILLE_FLAKE_ALLOW_RUN` / `SACKVILLE_MUTATE_ALLOW_RUN` — wiring those now would silently grant a future verify code path an operator's per-pillar runner grant via a shared env name. They are read **only** in the staged orchestration slice that actually spawns.
 
@@ -71,7 +71,7 @@ The synthesis draft claimed validating an already-redacted HAR is "free, like a 
 
 The verdict is **itself a stored artifact**: `sackville://verify/<verdictId>/verdict` (`application/json`), inheriting `sha256` / `byteSize` / by-handle resolution. It embeds foreign handles **by reference + sha256**, never inlined bytes.
 
-The critics found the real blocker, and a deeper one the draft missed: **the handle prefix is not on disk.** `put()` writes to `join(baseDir, runId, kind)` (`store.ts:49–51`); the prefix only appears in the handle string. So the draft's "pillar prefixes namespace the `<id>` space on disk" is **false** — two stores over one `baseDir` with the same `id` silently clobber, and a foreign-prefix handle is not resolvable by reconstructing a path from the *resolving* store's prefix. The corrected, security-hardened first-milestone fix (all on the already-green `@sackville/artifacts` gate):
+The critics found the real blocker, and a deeper one the draft missed: **the handle prefix is not on disk.** `put()` writes to `join(baseDir, runId, kind)` (`store.ts:49–51`); the prefix only appears in the handle string. So the draft's "pillar prefixes namespace the `<id>` space on disk" is **false** — two stores over one `baseDir` with the same `id` silently clobber, and a foreign-prefix handle is not resolvable by reconstructing a path from the *resolving* store's prefix. The corrected, security-hardened first-milestone fix (all on the already-green `@sackville-mcp/artifacts` gate):
 
 1. **Prefix-qualify the disk path.** Write bytes to `<baseDir>/<prefix>/<id>/<kind>` (prefix INTO the path). A single shared `baseDir` is then genuinely collision-free across pillars, and a foreign handle is resolvable by reconstructing its full path from **the handle's own `prefix`+`id`** (parsed from the handle), not the resolving store's prefix.
 2. **Rehydrate on miss / construction.** On a `get()` miss, parse the handle, stat `<baseDir>/<prefix>/<id>/<kind>`, read bytes, recompute `sha256`/`byteSize`. **Harden this read** — it is now a filesystem read addressed by an agent-supplied string:
@@ -92,7 +92,7 @@ The bridge is the high-leverage cross-pillar **win** (it reuses 100% shipped val
 - `validate_capture` MCP tool (api server) + CLI, behind the §3a capture gate.
 
 **Milestone 5b — the unified verdict reducer:**
-- `@sackville/verdict` pure core + the five `from*` adapters + `composeVerdict`.
+- `@sackville-mcp/verdict` pure core + the five `from*` adapters + `composeVerdict`.
 - `request_verdict` MCP tool (`packages/mcp/src/verify.ts`) + `sackville-verify-mcp` bin + `sackville verify` CLI.
 - ADR 0013 + STATUS/ROADMAP/memory updates.
 
@@ -112,7 +112,7 @@ The bridge is the high-leverage cross-pillar **win** (it reuses 100% shipped val
 
 **Milestone 5a:**
 
-1. **`@sackville/artifacts` prefix-qualified, hardened, cross-prefix resolution.** Red: (i) a store with prefix `verify` resolves a handle **minted with prefix `browser/run`** over a shared `baseDir` and gets the right bytes; (ii) two stores using the **same `id` but different prefixes** do NOT clobber; (iii) a handle whose `id`/`kind` contains `..` / a separator / an absolute path **throws**; (iv) a realpath escaping `baseDir` is refused. *(The draft's same-prefix red test would never catch the real cross-pillar case — this is the load-bearing primitive.)* Green: write to `<baseDir>/<prefix>/<id>/<kind>`; `safeId`-validate + realpath-confine in `put()` and rehydrate; rehydrate-on-miss by parsing the handle's own prefix+id; write the `<kind>.meta.json` sidecar; legacy-no-sidecar ⇒ `application/octet-stream` + `contentTypeInferred`.
+1. **`@sackville-mcp/artifacts` prefix-qualified, hardened, cross-prefix resolution.** Red: (i) a store with prefix `verify` resolves a handle **minted with prefix `browser/run`** over a shared `baseDir` and gets the right bytes; (ii) two stores using the **same `id` but different prefixes** do NOT clobber; (iii) a handle whose `id`/`kind` contains `..` / a separator / an absolute path **throws**; (iv) a realpath escaping `baseDir` is refused. *(The draft's same-prefix red test would never catch the real cross-pillar case — this is the load-bearing primitive.)* Green: write to `<baseDir>/<prefix>/<id>/<kind>`; `safeId`-validate + realpath-confine in `put()` and rehydrate; rehydrate-on-miss by parsing the handle's own prefix+id; write the `<kind>.meta.json` sidecar; legacy-no-sidecar ⇒ `application/octet-stream` + `contentTypeInferred`.
 
 2. **`harEntriesToFacts` — attach/zip body resolution (the PRIMARY path).** Red: a real Playwright-emitted `content:'attach'` HAR `.zip` fixture — one entry `GET /widgets` 200 whose body is a **separate archive entry** referenced by `_file`/sha1 — resolves to `[{req:{method:'GET',path:'/widgets'}, res:{status:200, headers:{…}, body:{id:1}}}]` (body JSON-**parsed**; URL reduced to `URL().pathname`). A second entry whose attached body is **unresolved** produces a hard **finding**, NOT an empty-body pass. Green: unzip (size-bounded, fflate, mirroring `trace.ts`) + entry-walk; inline `response.content.text` is the fallback (`content:'embed'`, which the browser pillar does not emit).
 
@@ -138,9 +138,9 @@ The bridge is the high-leverage cross-pillar **win** (it reuses 100% shipped val
 
 - **§1 agent-first / large artifacts by handle, never inlined** — *honored.* Compact inline + per-pillar detail by `sackville://verify/<id>/<kind>`; foreign bytes referenced, never re-inlined.
 - **§1 no-live-RPC polyglot boundary (SQLite file)** — *untouched.* All composition is over on-disk handles; no RPC, no new live subprocess; the LSP/browser subprocess fences are not extended; the verdict is a plain stored artifact, not a SQLite store.
-- **Version-pinned, not latest** — *honored.* The bridge validates against the **operator-supplied spec for the installed API version**; no auto-generation/auto-patching of the contract from observed traffic. `@sackville/verdict` adds no new runtime dep (type-only pillar imports); the bridge reuses api's already-pinned `fflate`/`yaml`.
+- **Version-pinned, not latest** — *honored.* The bridge validates against the **operator-supplied spec for the installed API version**; no auto-generation/auto-patching of the contract from observed traffic. `@sackville-mcp/verdict` adds no new runtime dep (type-only pillar imports); the bridge reuses api's already-pinned `fflate`/`yaml`.
 - **Deny-by-default, operator-set, never agent-settable** — *honored.* No run gate in v1 (compose-only), and `validate_capture`/the verdict handle are gated by the inherited HAR trust (`SACKVILLE_VERIFY_ALLOW_CAPTURE` + the source artifact gate), NOT advertised as free. No per-pillar run-gate env is pre-wired. The staged orchestration's "compose, never widen" rule keeps each per-pillar gate independent.
-- **Independent green gates per package/language** — *honored.* `@sackville/verdict` is pure with type-only imports; the bridge lands on the api gate; the artifacts fix lands on the artifacts gate. No real spawn enters `pnpm gate`.
+- **Independent green gates per package/language** — *honored.* `@sackville-mcp/verdict` is pure with type-only imports; the bridge lands on the api gate; the artifacts fix lands on the artifacts gate. No real spawn enters `pnpm gate`.
 
 **Files this design creates or edits:** `packages/artifacts/src/store.ts` (prefix-qualified path + hardened rehydrate + sidecar), new `packages/verdict/*`, new `packages/api/src/har-capture.ts` (+ `validate_capture` in the api MCP module), new `packages/mcp/src/verify.ts` + `packages/mcp/src/bin-verify.ts`, `packages/cli/src/index.ts` + new `packages/cli/src/verify.ts`, and this ADR.
 
@@ -180,7 +180,7 @@ The whole design turns on one rule from §3d — **"compose, never widen"**: ver
 
 ### Decisions (4 forks, human-ratified 2026-06-04)
 
-1. **Placement — a NEW runtime package `@sackville/verify`.** A run-driving orchestrator must import the runtime engines, so it **cannot** live in the pure, type-only `@sackville/verdict` (which must keep its zero-import `.mjs` so it never drags in `better-sqlite3`/`playwright-core`). `@sackville/verify` houses a gated `orchestrate()` over `Promise.allSettled`, its opts/config types, and the per-pillar result→`PillarVerdict` mapping; it depends on `@sackville/verdict` (pure fold) + the engine packages **for types and the injected-seam interfaces only**. `packages/mcp/src/verify.ts` and `packages/cli/src/verify.ts` are thin wrappers over it. *(Mirrors the project's "engine in a package, thin surfaces" shape and ADR 0013 §2's accepted package-count-for-isolation tradeoff.)*
+1. **Placement — a NEW runtime package `@sackville-mcp/verify`.** A run-driving orchestrator must import the runtime engines, so it **cannot** live in the pure, type-only `@sackville-mcp/verdict` (which must keep its zero-import `.mjs` so it never drags in `better-sqlite3`/`playwright-core`). `@sackville-mcp/verify` houses a gated `orchestrate()` over `Promise.allSettled`, its opts/config types, and the per-pillar result→`PillarVerdict` mapping; it depends on `@sackville-mcp/verdict` (pure fold) + the engine packages **for types and the injected-seam interfaces only**. `packages/mcp/src/verify.ts` and `packages/cli/src/verify.ts` are thin wrappers over it. *(Mirrors the project's "engine in a package, thin surfaces" shape and ADR 0013 §2's accepted package-count-for-isolation tradeoff.)*
 
 2. **Surface — a NEW sibling MCP tool `verify_change`,** alongside the unchanged compose-only `request_verdict`. Registered **only when run-driving is enabled** (deny-by-default registration, mirroring `run_scoped`/`flake_run`/`mutate_run`). CLI: `sackville verify run <root>`; bare `sackville verify` stays compose-only. *(Mirrors deps' `audit_dependency`/`audit_project` dual-tool split; keeps the three ADR-0013 milestones as distinct code paths.)*
 
@@ -204,7 +204,7 @@ The whole design turns on one rule from §3d — **"compose, never widen"**: ver
 
 **(d) No NEW egress; errors are redacted (adversarial correction).** Runner failures leak temp paths (e.g. `coverage/run.ts` throws "did not produce a coverage report at `${coveragePath}`"). `orchestrate()` takes a **`redact` callback** (mirroring the HAR bridge's `ValidateCaptureOptions.redact`); every `errorReason` is run through it before entering the `CompositeVerdict` (inline **and** stored bytes). The consume-only contract path keeps the §3b redaction it already has.
 
-**(e) `@sackville/verify` imports ZERO spawn-capable code (adversarial correction).** No module-level import of `defaultVitestRunner`/`defaultStrykerRunner`/`HistoryStore`/the capture bridge. Runners, the flake history store, and the capture validator are **all required-injected**; engine packages are `external` in tsdown. The bin/CLI wires the real implementations; the gate test injects fakes (incl. a fake/in-memory history store), so `better-sqlite3`/`playwright-core` never load in `pnpm gate`. Verified by inspecting the built `.mjs` for inline native requires.
+**(e) `@sackville-mcp/verify` imports ZERO spawn-capable code (adversarial correction).** No module-level import of `defaultVitestRunner`/`defaultStrykerRunner`/`HistoryStore`/the capture bridge. Runners, the flake history store, and the capture validator are **all required-injected**; engine packages are `external` in tsdown. The bin/CLI wires the real implementations; the gate test injects fakes (incl. a fake/in-memory history store), so `better-sqlite3`/`playwright-core` never load in `pnpm gate`. Verified by inspecting the built `.mjs` for inline native requires.
 
 ### Verdict model: provenance fields, NOT new statuses (adversarial correction)
 
@@ -217,12 +217,12 @@ The draft proposed extending `PillarStatus` with `'errored'`/`'skipped'`. **The 
 ### Execution, determinism, failure isolation
 
 - **Parallel via `Promise.allSettled`** — one pillar's crash/timeout never sinks the verdict. Per-pillar wall-clock reuses each runner's own `timeoutMs`; an **aggregate deadline is staged**.
-- **Gate-denial vs error are distinguishable without importing spawn-capable code.** A pillar's own `assertAllowed` denial ⇒ `skipped: gate-not-set`; any other rejection ⇒ `errored` (redacted). Mechanism (to settle in the first slice): a small **structural brand** on the four `*GateError` classes that `@sackville/verify` can detect without `instanceof`-importing each class (preferred — reuses the real gate), or the bin pre-validating each gate and passing only runnable pillars to `orchestrate()` (fallback). deps' "absent fetcher" and flake's "absent DB" are gate-ish and must map to `skipped: gate-not-set`, not `errored`.
+- **Gate-denial vs error are distinguishable without importing spawn-capable code.** A pillar's own `assertAllowed` denial ⇒ `skipped: gate-not-set`; any other rejection ⇒ `errored` (redacted). Mechanism (to settle in the first slice): a small **structural brand** on the four `*GateError` classes that `@sackville-mcp/verify` can detect without `instanceof`-importing each class (preferred — reuses the real gate), or the bin pre-validating each gate and passing only runnable pillars to `orchestrate()` (fallback). deps' "absent fetcher" and flake's "absent DB" are gate-ish and must map to `skipped: gate-not-set`, not `errored`.
 - **Injected `idFactory`, default `randomUUID` (adversarial correction).** A content-hash id collides-and-clobbers in the artifact store (no dedup ⇒ last-write-wins). Keep `randomUUID` in production (collision-safe per write); tests inject a deterministic stub to assert handle equality.
 
 ### What stays staged (5d/5e and beyond)
 
-- **5d — diff-scoping the non-coverage pillars:** a shared changed-set primitive (extend coverage's `parseUnifiedDiff` or extract `@sackville/diff`); expose flake's existing `files`; pure `changedDependencies(diff, ecosystem)` for deps; mutate already done.
+- **5d — diff-scoping the non-coverage pillars:** a shared changed-set primitive (extend coverage's `parseUnifiedDiff` or extract `@sackville-mcp/diff`); expose flake's existing `files`; pure `changedDependencies(diff, ecosystem)` for deps; mutate already done.
 - **5e — `verify` driving a live capture** to *produce* the HAR (browser-spawn behind the browser gate; and/or an API-runner capture path once the runner records redirect hops + request bodies).
 - Request-body/param contract validation; extracting the shared `Severity` scale out of deps; artifact GC/TTL; the Python second half.
 
@@ -230,7 +230,7 @@ The draft proposed extending `PillarStatus` with `'errored'`/`'skipped'`. **The 
 
 - **Verify-scoped env names are the WRONG guard** — they create a second grant vector that drifts. Replaced with the "reuse the pillar's own gate as the single source of truth + a separate `SACKVILLE_VERIFY_ENABLE_RUN` opt-in" model (both required). *(§ gate-composition (b).)*
 - **Do NOT extend `PillarStatus`** — exhaustive switches + `failsByPolicy`'s `warn|fail` guard would silently mishandle new values. Use optional provenance fields + `status:'no-signal'`/`'missing'`. *(§ verdict model.)*
-- **`@sackville/verify` must import zero spawn-capable code** — a runtime dep on the engines does not by itself break the spawn-free gate, but importing `defaultVitestRunner`/`HistoryStore`/etc. would. All injected; engines `external`; verify the built `.mjs`. *(§ gate-composition (e).)*
+- **`@sackville-mcp/verify` must import zero spawn-capable code** — a runtime dep on the engines does not by itself break the spawn-free gate, but importing `defaultVitestRunner`/`HistoryStore`/etc. would. All injected; engines `external`; verify the built `.mjs`. *(§ gate-composition (e).)*
 - **Mandatory error redaction** — runner errors echo temp paths; `orchestrate()` redacts every `errorReason`. *(§ gate-composition (d).)*
 - **Deny-by-default registration, not just runtime** — `verify_change` registers only when run-driving is enabled. *(§ gate-composition (c).)*
 - **`idFactory` default `randomUUID`, not content-hash** — content-hash clobbers identical verdicts in the store. *(§ execution.)*
@@ -241,10 +241,10 @@ The draft proposed extending `PillarStatus` with `'errored'`/`'skipped'`. **The 
 ## Addendum 3 (2026-06-04): Milestone 5e — verify-driven LIVE capture (browser-spawn)
 
 **Status: COMPLETE** (2026-06-04) — all 8 slices landed TDD red→green; 1122 TS + 45 Py green. The
-load-bearing flow-completeness correction shipped in `@sackville/browser` `driveBrowserFlowToHar`; the
+load-bearing flow-completeness correction shipped in `@sackville-mcp/browser` `driveBrowserFlowToHar`; the
 attach-body redaction leak (Fork 2) was confirmed by test and fixed (`finalizeHar` redacts by declared
 mimeType). One deviation from the slice plan, human-ratified: `driveBrowserFlowToHar` was extracted to
-`@sackville/browser` (not kept in `packages/mcp`) so the MCP bin AND the `sackville verify run --flow` CLI
+`@sackville-mcp/browser` (not kept in `packages/mcp`) so the MCP bin AND the `sackville verify run --flow` CLI
 share ONE flow-completeness guard (the CLI cannot import `sackville`). 5f (API-runner capture + the
 older tails) stays staged.
 
@@ -255,10 +255,10 @@ research record.
 
 5e turns the **consume-only** capture→contract bridge (5a/5b: the agent produces a HAR, verify validates
 it by handle) into a **verify-DRIVEN** one: a single gated call drives a browser flow, captures the HAR,
-and validates it against the contract. The `@sackville/verify` **core is untouched** — the injected
+and validates it against the contract. The `@sackville-mcp/verify` **core is untouched** — the injected
 contract-runner seam (`OrchestrateRequest.contract.run: () => Promise<ContractResult[]>`) is opaque to
 whether the runner consumes a stored HAR or drives a live one. All new code lives in `packages/mcp`
-(surface) — invariant 1 (core `.mjs` imports only `node:crypto` + `@sackville/verdict`) holds trivially
+(surface) — invariant 1 (core `.mjs` imports only `node:crypto` + `@sackville-mcp/verdict`) holds trivially
 (the source-scan only covers `packages/verify/src/`).
 
 ### Ratified forks
@@ -347,10 +347,10 @@ operator-authored flow; the allowlist bounds the HOST (not the path/query — st
 
 ### Lazy import — keep the heaviest gate out of everyone else's critical path
 
-`bin-verify` importing `@sackville/browser`/`playwright-core` does **not** break invariant 1 (the core is
+`bin-verify` importing `@sackville-mcp/browser`/`playwright-core` does **not** break invariant 1 (the core is
 clean), and `bin-verify` already imports the coverage/flake/mutate spawners. But to avoid making *every*
 verify deployment (incl. `request_verdict`-only / API-only operators) carry a browser-binary cold-start,
-the capture module **`await import('@sackville/browser')` lazily** — only when the produce branch is
+the capture module **`await import('@sackville-mcp/browser')` lazily** — only when the produce branch is
 actually wired and invoked.
 
 ### TDD slice plan (each `pnpm gate`-green; no real browser in the gate)
@@ -365,7 +365,7 @@ actually wired and invoked.
 4. **`driveBrowserFlowToHar` + the FLOW-COMPLETENESS guard** (injected runtime/launch). Red tests:
    resolves a flow by NAME; reads the STORED redacted artifact (handle starts `sackville://verify/`); a
    flow with any `ok:false` step ⇒ **throws** (⇒ inconclusive); empty HAR ⇒ throws; `proxy.stop()` in the
-   `finally`. Lazy `@sackville/browser` import.
+   `finally`. Lazy `@sackville-mcp/browser` import.
 5. **Union redactor + the attach-body redaction test** (Fork 2): a registered secret in an attach-mode
    response body must not survive the stored HAR; widen `finalizeHar` by `mimeType` iff it leaks. Assert
    the same union redactor scrubs both a `SACKVILLE_BROWSER_SECRET_*` and an HTTP-creds password.
@@ -381,11 +381,11 @@ unmet gate ⇒ `gate-not-set`, incomplete flow ⇒ throw ⇒ inconclusive; (4) n
 injected runtime/launch; (5) redaction before the verdict, inline AND stored — union redactor at both
 `finalizeHar` and `validateCapturedTraffic`.
 
-## Addendum 4 (2026-06-04): Milestone 5f — verify-driven LIVE capture from the @sackville/api RUNNER
+## Addendum 4 (2026-06-04): Milestone 5f — verify-driven LIVE capture from the @sackville-mcp/api RUNNER
 
 **Status: COMPLETE** (2026-06-04) — all 9 slices landed TDD red→green; 1160 TS + 45 Py green, pushed to
 `main`. Both ratified forks shipped: `SACKVILLE_API_COLLECTIONS_DIR` (by-NAME, traversal refused) and the
-deeper `@sackville/verdict` `fromCaptureVerdict` fix — which CONFIRMED + closed a latent absence-as-pass
+deeper `@sackville-mcp/verdict` `fromCaptureVerdict` fix — which CONFIRMED + closed a latent absence-as-pass
 hole in the shipped 5e produce + consume paths (a valid entry rode a sibling no-signal/unresolved entry to
 a pass because the contract thunk handed the adapter only `.results`). The critics' two blockers were
 folded in test-first: the sequence guard is `step.result.sent` (not the always-undefined `step.sent`), and
@@ -397,7 +397,7 @@ durable distillation; the workflow transcript is the research record. Addendum 3
 API-runner path here.
 
 5f adds a SECOND verify-driven produce source: instead of (5e) spawning a browser to produce the HAR, a
-single gated call drives the **`@sackville/api` runner** for an operator-authored request (by NAME),
+single gated call drives the **`@sackville-mcp/api` runner** for an operator-authored request (by NAME),
 SYNTHESIZES a HAR from the run, and validates it against the contract via the SHIPPED
 `validateCapturedTraffic` — full **REST + GraphQL** parity. Closes the three correctness gaps Addendum 3
 flagged (ratified fork 1): (a) per-hop HAR entries in the redirect loop (no collapsed chains), (b) the
@@ -406,14 +406,14 @@ redaction pass extracted to shared code.
 
 ### Primitive placement (the user-flagged non-obvious fork — resolved)
 
-Both new primitives live in **`@sackville/api`** in a new pure leaf module `har-synth.ts`; nothing new
-in `@sackville/verify` (its source is the only thing scanned for invariant 1):
+Both new primitives live in **`@sackville-mcp/api`** in a new pure leaf module `har-synth.ts`; nothing new
+in `@sackville-mcp/verify` (its source is the only thing scanned for invariant 1):
 - `redactHarZip(zip: Buffer, redact): Buffer` — the PURE Buffer→Buffer blanket-redaction pass, lifted
-  from `@sackville/browser` `finalizeHar`'s core (unzip → collect text-attach `_file` bodies by DECLARED
+  from `@sackville-mcp/browser` `finalizeHar`'s core (unzip → collect text-attach `_file` bodies by DECLARED
   mimeType → redact `.har` JSON + text-extension members + those attach members → re-zip). NO file I/O.
   Imports ONLY `fflate`. Browser's `finalizeHar` keeps its `readFileSync`/`unlink`/`store` wrapper but
   delegates the transform to this — ONE redaction code path (the 5e attach-mimeType fix is inherited).
-  New dep edge `@sackville/browser → @sackville/api` (acyclic — api deps are only assert/safety today).
+  New dep edge `@sackville-mcp/browser → @sackville-mcp/api` (acyclic — api deps are only assert/safety today).
 - `synthesizeRedactedHarZip(records, redact): Buffer` — builds `{log:{entries:[…]}}` with ONLY the six
   fields the consume bridge reads (`request.method`/`url`, `request.postData.{mimeType,text}`,
   `response.status`, `response.content.{mimeType,text}`), INLINE `text` bodies (no `_file` attach — we
@@ -454,7 +454,7 @@ guards, each ⇒ inconclusive, BEFORE trusting the synthesized HAR:
   CONFIRMED latent hole in the SHIPPED 5e produce path AND the consume path. **Fix (ratified fork 2):
   thread the full `CaptureContractVerdict` through orchestrate's contract thunk (optional `clean`/
   `noSignal`/`unresolvedBodies`/`entriesValidated`, type-only — invariant 1 holds) + a
-  `fromCaptureVerdict` mapping in `@sackville/verdict` that folds `clean===false` (no errors) to
+  `fromCaptureVerdict` mapping in `@sackville-mcp/verdict` that folds `clean===false` (no errors) to
   `inconclusive`, never pass.** Retrofitted into the consume-by-handle + 5e browser-produce thunks too —
   one consistent absence posture across consume + both produce sources.
 
@@ -481,7 +481,7 @@ redaction blocker).
 
 ### Slice plan (TDD red→green→commit, each independently green-gated)
 
-1. Extract `redactHarZip` + `summarizeHar` into `@sackville/api` `har-synth.ts` (pure, fflate-only).
+1. Extract `redactHarZip` + `summarizeHar` into `@sackville-mcp/api` `har-synth.ts` (pure, fflate-only).
 2. Browser `finalizeHar` consumes api `redactHarZip` + an import-direction guard test (acyclic; nothing
    spawn-capable in `har-synth.ts`); browser suite green incl. the 5e attach-mimeType case.
 3. `synthesizeRedactedHarZip` (pure; redact folded in; inline text; throws on status-less; omits binary
@@ -490,7 +490,7 @@ redaction blocker).
    `redirectTruncated`, `Redactor.entries()`); `RunResult` unchanged; existing tests green.
 5. Produce driver `runRequestToHar`/`runSequenceToHar` + transport-completeness guards + union-secret
    fold; returns `{harHandle, summary, verdict}` (the FULL `CaptureContractVerdict`).
-6. Deeper `@sackville/verdict` fix — `fromCaptureVerdict` + thread the full verdict through orchestrate's
+6. Deeper `@sackville-mcp/verdict` fix — `fromCaptureVerdict` + thread the full verdict through orchestrate's
    contract thunk + retrofit the consume + 5e browser-produce thunks (the ratified cross-pillar fix).
 7. `ContractCaptureContext` `produce-api` variant + `verify_change` input wiring (`request`/`collection`/
    `vars`); route by target.
@@ -499,8 +499,8 @@ redaction blocker).
 9. `sackville verify run --request` CLI (real redactor at both chokepoints) + the milestone tail (STATUS/
    ROADMAP/memories/CLAUDE.md repo-map + this addendum marked COMPLETE; commit to `main`; push at boundary).
 
-**Invariant audit (all five survive):** (1) `@sackville/verify` `.mjs` still imports only `node:crypto` +
-`@sackville/verdict` — the verdict-shape threading is type-only, all wiring in `packages/api`/`mcp`/`cli`;
+**Invariant audit (all five survive):** (1) `@sackville-mcp/verify` `.mjs` still imports only `node:crypto` +
+`@sackville-mcp/verdict` — the verdict-shape threading is type-only, all wiring in `packages/api`/`mcp`/`cli`;
 (2) compose-never-widen — the api pillar's own gate, one ratified env for by-name resolution, operator-only
 gate inputs; (3) absence-never-a-pass — transport guards throw ⇒ inconclusive, `clean===false` folds to
 inconclusive; (4) no real fetch in `pnpm gate` — injected runner; (5) redaction before the verdict, inline

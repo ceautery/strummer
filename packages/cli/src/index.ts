@@ -7,8 +7,8 @@ import {
   openDb,
   resolveVersion,
   searchDocs,
-} from '@sackville/core'
-import type { Embedder } from '@sackville/embed'
+} from '@sackville-mcp/core'
+import type { Embedder } from '@sackville-mcp/embed'
 import type DatabaseType from 'better-sqlite3'
 import { runApi } from './api.js'
 import { runBrowser } from './browser.js'

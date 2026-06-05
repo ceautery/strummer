@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import type { ContractResult } from '@sackville/api'
-import type { DiffCoverageReport } from '@sackville/coverage'
-import type { DependencyAudit } from '@sackville/deps'
-import type { FlakeVerdict } from '@sackville/flake'
-import type { MutationSummary } from '@sackville/mutate'
+import type { ContractResult } from '@sackville-mcp/api'
+import type { DiffCoverageReport } from '@sackville-mcp/coverage'
+import type { DependencyAudit } from '@sackville-mcp/deps'
+import type { FlakeVerdict } from '@sackville-mcp/flake'
+import type { MutationSummary } from '@sackville-mcp/mutate'
 import {
   type CaptureVerdictFacts,
   type ComposeInputs,
@@ -18,14 +18,14 @@ import {
   type PillarName,
   type PillarVerdict,
   type VerdictPolicy,
-} from '@sackville/verdict'
+} from '@sackville-mcp/verdict'
 import { isGateDenial } from './gate.js'
 
 /**
  * Per-pillar run request. Each present pillar carries an async `run` thunk that
  * produces that pillar's NATIVE result — the orchestrator maps it via the existing
- * `@sackville/verdict` `from*` adapter. The thunk is wired by the surface (bin/CLI)
- * to the pillar's own gated runner, so `@sackville/verify` itself imports zero
+ * `@sackville-mcp/verdict` `from*` adapter. The thunk is wired by the surface (bin/CLI)
+ * to the pillar's own gated runner, so `@sackville-mcp/verify` itself imports zero
  * spawn-capable engine code (§ gate (e)). A rejection branded as a gate denial maps
  * to `skipReason:'gate-not-set'`; any other rejection to a redacted `errorReason`.
  */

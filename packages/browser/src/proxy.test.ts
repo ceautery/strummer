@@ -1,6 +1,6 @@
 import { createServer, request as httpRequest, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { DnsLookup } from '@sackville/safety'
+import type { DnsLookup } from '@sackville-mcp/safety'
 import { type Browser, chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createSsrfProxy } from './proxy.js'

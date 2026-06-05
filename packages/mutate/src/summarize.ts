@@ -1,5 +1,5 @@
 /**
- * Pure mutation-report summarizer — the first slice of `@sackville/mutate`, and the one
+ * Pure mutation-report summarizer — the first slice of `@sackville-mcp/mutate`, and the one
  * with no I/O and no Stryker dependency.
  *
  * Mutation testing asks "are the tests meaningful?" — it perturbs the source (a `+`

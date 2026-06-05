@@ -1,8 +1,8 @@
-import type { ContractResult } from '@sackville/api'
-import type { DiffCoverageReport } from '@sackville/coverage'
-import type { DependencyAudit } from '@sackville/deps'
-import type { FlakeVerdict } from '@sackville/flake'
-import type { MutationSummary } from '@sackville/mutate'
+import type { ContractResult } from '@sackville-mcp/api'
+import type { DiffCoverageReport } from '@sackville-mcp/coverage'
+import type { DependencyAudit } from '@sackville-mcp/deps'
+import type { FlakeVerdict } from '@sackville-mcp/flake'
+import type { MutationSummary } from '@sackville-mcp/mutate'
 import { describe, expect, it } from 'vitest'
 import {
   type CaptureVerdictFacts,

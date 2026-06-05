@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville/artifacts'
-import { detectInstalledVersion, type Ecosystem } from '@sackville/core'
+import {
+  ArtifactStore,
+  DEFAULT_SWEEP_INTERVAL_MS,
+  retentionFromEnv,
+} from '@sackville-mcp/artifacts'
+import { detectInstalledVersion, type Ecosystem } from '@sackville-mcp/core'
 import {
   defaultListFiles,
   LanguageServerManager,
@@ -11,7 +14,8 @@ import {
   LspRenameEngine,
   parseServerRegistry,
   type ServerRegistry,
-} from '@sackville/lsp'
+} from '@sackville-mcp/lsp'
+import { isMainModule } from './is-main.js'
 import {
   createLspServer,
   type LspToolsOptions,
@@ -245,7 +249,7 @@ export function setupLspFromEnv(
 }
 
 // Executable tail: only run when invoked directly (not when imported by a test).
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   const { server, manager } = buildLspServerFromEnv()
   manager?.startReaper(60_000)
   const shutdown = async () => {

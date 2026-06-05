@@ -26,7 +26,7 @@ snapshot serializer produced byte-identical `- button "Go"` output). So
 
 Add engine **selection** at the launch seam, leaving the engine-agnostic core
 (`BrowserManager` takes an injected `launch()` thunk) untouched. New
-`@sackville/browser` `engine.ts`:
+`@sackville-mcp/browser` `engine.ts`:
 
 - `BrowserEngine = 'chromium' | 'firefox' | 'webkit'`; `resolveEngine(name)`
   (default chromium, **throws** on an unknown value so an operator typo fails loud

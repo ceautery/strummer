@@ -2,10 +2,9 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville/artifacts'
+import { DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville-mcp/artifacts'
 import {
   ArtifactStore,
   auditPerf,
@@ -17,10 +16,11 @@ import {
   engineLaunchOptions,
   resolveEngine,
   type SsrfProxy,
-} from '@sackville/browser'
-import { Redactor } from '@sackville/safety'
+} from '@sackville-mcp/browser'
+import { Redactor } from '@sackville-mcp/safety'
 import { chromium } from 'playwright-core'
 import { type BrowserToolsOptions, createBrowserServer, registerBrowserTools } from './browser.js'
+import { isMainModule } from './is-main.js'
 import type { PillarSetup } from './pillars.js'
 
 /**
@@ -451,8 +451,7 @@ export async function buildBrowserServerFromEnv(
 }
 
 // Run as a server only when invoked directly (not when imported by a test).
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
+const invokedDirectly = isMainModule(import.meta.url)
 if (invokedDirectly) {
   const { server, manager, config, shutdown } = await buildBrowserServerFromEnv()
   manager.startReaper(config.reaperIntervalMs)

@@ -10,7 +10,7 @@ import {
   runAndRecordPytest,
   type TestRunner,
   type VitestJsonReport,
-} from '@sackville/flake'
+} from '@sackville-mcp/flake'
 import { z } from 'zod'
 
 export interface FlakeToolsOptions {

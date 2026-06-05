@@ -13,7 +13,7 @@ import {
   validateGraphqlOperation,
   validateOpenApiRequest,
   validateOpenApiResponse,
-} from '@sackville/api'
+} from '@sackville-mcp/api'
 import { z } from 'zod'
 
 export interface ApiToolsOptions {
@@ -282,7 +282,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
       },
     },
     (args) => {
-      let result: import('@sackville/api').ContractResult
+      let result: import('@sackville-mcp/api').ContractResult
       if (args.graphqlSchema !== undefined) {
         // Resolve the selected names against the OPERATOR-bound registry (unknown → ignored).
         const selected: Record<string, ScalarCoercer> = {}
@@ -439,9 +439,12 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
         }
         const bytes = resolveHar(args.harHandle)
         if (!bytes) throw new Error(`no stored HAR for ${args.harHandle}`)
-        const contract: import('@sackville/api').CaptureContract = {
+        const contract: import('@sackville-mcp/api').CaptureContract = {
           ...(args.openapiSpec !== undefined
-            ? { openapi: args.openapiSpec as import('@sackville/api').CaptureContract['openapi'] }
+            ? {
+                openapi:
+                  args.openapiSpec as import('@sackville-mcp/api').CaptureContract['openapi'],
+              }
             : {}),
           ...(args.graphqlSchema !== undefined
             ? {

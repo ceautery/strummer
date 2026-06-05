@@ -15,7 +15,7 @@ folded into the synthesis recorded here.
 ## Synthesis (the recommended design)
 
 Phase 3 adds Sackville's browser/UI testing pillar as a **new pure-TypeScript
-package, `@sackville/browser`, built thin on stable `playwright-core` 1.60.0** —
+package, `@sackville-mcp/browser`, built thin on stable `playwright-core` 1.60.0** —
 NOT a wrap of `@playwright/mcp`. The pillar reimplements the API pillar's house
 pattern (a pure engine that owns the safety gate + artifact plumbing, consumed
 by thin `mcp` + `cli` adapters) for a browser: a long-lived headless Chromium
@@ -42,7 +42,7 @@ file, version-pinned browser binaries.
 
 ### Numbered decisions (→ ADR 0006)
 
-1. **New package `@sackville/browser`, thin on `playwright-core`; engine owns the
+1. **New package `@sackville-mcp/browser`, thin on `playwright-core`; engine owns the
    safety gate.** Do not wrap/embed `@playwright/mcp` as a runtime dependency.
    *Alt rejected:* wrap as primary (alpha core pin, inline artifacts, churny
    0.0.x line); embed as optional backend via `createConnection()` (deferred to
@@ -110,12 +110,12 @@ file, version-pinned browser binaries.
 ### Cross-pillar refactor
 
 Lift the SSRF/private-IP range classifier (`ipaddr.js`-based) and the
-secret-resolution + redaction boundary out of `@sackville/api` into a small
-shared **`@sackville/safety`** module consumed by both `api` and `browser`, so one
+secret-resolution + redaction boundary out of `@sackville-mcp/api` into a small
+shared **`@sackville-mcp/safety`** module consumed by both `api` and `browser`, so one
 allow/deny + redaction policy governs both pillars. The artifact handle store is
 *extended, not reused verbatim*: today's `packages/api/src/artifacts.ts` is an
 in-memory `Map` of strings; browser artifacts are large/binary, so
-`@sackville/browser` gets an **on-disk-backed** `ArtifactStore` keyed
+`@sackville-mcp/browser` gets an **on-disk-backed** `ArtifactStore` keyed
 `sackville://browser/run/<id>/<kind>[/<sub>]` storing
 `{path, contentType, byteSize, sha256}`.
 
@@ -242,7 +242,7 @@ testdino.com/blog/playwright-mcp-troubleshooting.
 ### Stream B — Agent driving / authoring model
 
 Hybrid imperative step tools over ARIA-snapshot ref-ids; reuse the
-`@sackville/api` assertion engine (add `text`/`element-visible`/`value`/`url`/
+`@sackville-mcp/api` assertion engine (add `text`/`element-visible`/`value`/`url`/
 `ariaSnapshot` sources, auto-waiting); `.bru`-style steps file + sidecar using
 semantic locators (refs invalidate). Reject autonomous record/replay for v1.
 

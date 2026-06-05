@@ -15,14 +15,14 @@ import {
   PageDriver,
   resolveEngine,
   runFlow,
-} from '@sackville/browser'
-import { Redactor } from '@sackville/safety'
+} from '@sackville-mcp/browser'
+import { Redactor } from '@sackville-mcp/safety'
 import type { Browser, Page } from 'playwright-core'
 import type { CliIO } from './index.js'
 
 /**
  * Human-facing `sackville browser …` — single-shot page-inspection commands over
- * the `@sackville/browser` engine. Each command navigates once and reads, so the
+ * the `@sackville-mcp/browser` engine. Each command navigates once and reads, so the
  * per-snapshot refs never need to outlive the process (unlike the stateful MCP
  * surface). The egress boundary mirrors the server bin: navigation is gated by an
  * allowlist (the typed host is auto-allowed, since the human explicitly asked for

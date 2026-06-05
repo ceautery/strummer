@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { resolveSecretStore } from '@sackville/api'
-import { ArtifactStore } from '@sackville/artifacts'
-import { Redactor } from '@sackville/safety'
+import { resolveSecretStore } from '@sackville-mcp/api'
+import { ArtifactStore } from '@sackville-mcp/artifacts'
+import { Redactor } from '@sackville-mcp/safety'
 import { type ApiToolsOptions, createApiServer, registerApiTools } from './api.js'
+import { isMainModule } from './is-main.js'
 import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the API MCP bin (set at launch). */
@@ -166,7 +166,7 @@ export function buildApiServerFromEnv(
 }
 
 // Executable tail: only run when invoked directly (not when imported by a test).
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   const { server } = buildApiServerFromEnv()
   await server.connect(new StdioServerTransport())
 }

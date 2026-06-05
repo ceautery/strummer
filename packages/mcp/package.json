@@ -1,6 +1,6 @@
 {
-  "name": "sackville",
-  "version": "0.0.0",
+  "name": "sackville-mcp",
+  "version": "0.0.1-alpha.1",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
@@ -32,36 +32,36 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@sackville/api": "workspace:*",
-    "@sackville/artifacts": "workspace:*",
-    "@sackville/coverage": "workspace:*",
-    "@sackville/deps": "workspace:*",
-    "@sackville/diff": "workspace:*",
-    "@sackville/lsp": "workspace:*",
-    "@sackville/mutate": "workspace:*",
-    "@sackville/safety": "workspace:*",
-    "@sackville/verdict": "workspace:*",
-    "@sackville/verify": "workspace:*",
+    "@sackville-mcp/api": "workspace:*",
+    "@sackville-mcp/artifacts": "workspace:*",
+    "@sackville-mcp/coverage": "workspace:*",
+    "@sackville-mcp/deps": "workspace:*",
+    "@sackville-mcp/diff": "workspace:*",
+    "@sackville-mcp/lsp": "workspace:*",
+    "@sackville-mcp/mutate": "workspace:*",
+    "@sackville-mcp/safety": "workspace:*",
+    "@sackville-mcp/verdict": "workspace:*",
+    "@sackville-mcp/verify": "workspace:*",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@sackville/browser": "workspace:*",
-    "@sackville/core": "workspace:*",
-    "@sackville/embed": "workspace:*",
-    "@sackville/flake": "workspace:*",
+    "@sackville-mcp/browser": "workspace:*",
+    "@sackville-mcp/core": "workspace:*",
+    "@sackville-mcp/embed": "workspace:*",
+    "@sackville-mcp/flake": "workspace:*",
     "playwright-core": "1.60.0"
   },
   "peerDependenciesMeta": {
-    "@sackville/browser": {
+    "@sackville-mcp/browser": {
       "optional": true
     },
-    "@sackville/core": {
+    "@sackville-mcp/core": {
       "optional": true
     },
-    "@sackville/embed": {
+    "@sackville-mcp/embed": {
       "optional": true
     },
-    "@sackville/flake": {
+    "@sackville-mcp/flake": {
       "optional": true
     },
     "playwright-core": {
@@ -69,10 +69,10 @@
     }
   },
   "devDependencies": {
-    "@sackville/browser": "workspace:*",
-    "@sackville/core": "workspace:*",
-    "@sackville/embed": "workspace:*",
-    "@sackville/flake": "workspace:*",
+    "@sackville-mcp/browser": "workspace:*",
+    "@sackville-mcp/core": "workspace:*",
+    "@sackville-mcp/embed": "workspace:*",
+    "@sackville-mcp/flake": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "fflate": "^0.8.3",
     "playwright-core": "1.60.0"

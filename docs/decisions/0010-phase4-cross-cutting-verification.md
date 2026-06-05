@@ -24,18 +24,18 @@ so it is captured here rather than trusted as-proposed.
 
 Two independent tracks, then the test-quality chain, then LSP last:
 
-1. **`@sackville/deps` — dependency/version intelligence** *(track B, built first)*
-2. **`@sackville/coverage` — uncovered-new-line + impact-scoped runner** *(track A)*
-3. **`@sackville/flake` — flaky-test detection & quarantine**
-4. **`@sackville/mutate` — mutation testing** *(gated on a Stryker/Vitest-4 compat spike first)*
-5. **`@sackville/lsp` — semantic code navigation** *(last)*
+1. **`@sackville-mcp/deps` — dependency/version intelligence** *(track B, built first)*
+2. **`@sackville-mcp/coverage` — uncovered-new-line + impact-scoped runner** *(track A)*
+3. **`@sackville-mcp/flake` — flaky-test detection & quarantine**
+4. **`@sackville-mcp/mutate` — mutation testing** *(gated on a Stryker/Vitest-4 compat spike first)*
+5. **`@sackville-mcp/lsp` — semantic code navigation** *(last)*
 
 Rationale for the head of the list: **deps** has the cleanest architectural fit of
 the five — its core is fully offline-deterministic via an operator-provisioned
 on-disk OSV advisory snapshot (a true file-as-data boundary, the most
 Sackville-idiomatic shape), it has no test-runner-reentrancy hazard, and it extends
 already-shipped trusted assets (`detectInstalledVersion`/`resolveVersion` in
-`@sackville/core`). It answers upgrade/EOL/CVE — a question **nothing** in the repo
+`@sackville-mcp/core`). It answers upgrade/EOL/CVE — a question **nothing** in the repo
 already covers and which agents get wrong unprompted ("upgrade to latest"), with no
 TDD habit protecting them. **coverage** is the parallel opener for the test-quality
 track; its *leverage was downgraded* (under our TDD prime directive the agent
@@ -47,14 +47,14 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
 
 ### Cross-cutting decisions (apply to every Phase-4 pillar)
 
-- **Shared `@sackville/artifacts`.** Today's `ArtifactStore` lives **inside**
-  `@sackville/browser` and hardcodes the `sackville://browser/run/<id>/<kind>` prefix
+- **Shared `@sackville-mcp/artifacts`.** Today's `ArtifactStore` lives **inside**
+  `@sackville-mcp/browser` and hardcodes the `sackville://browser/run/<id>/<kind>` prefix
   — it cannot be reused as-is. Before the first handle-emitting Phase-4 slice, we
   **extract** it into a new shared package with a **parameterized prefix** (browser
   keeps emitting its existing handles; coverage/deps emit `sackville://coverage/...`
   / `sackville://deps/...`). The cost is paid **once** rather than duplicated
   per pillar; the refactor touches the browser pillar's green gate and is done under
-  TDD (behavior-preserving, mirroring the `@sackville/safety` / `@sackville/assert`
+  TDD (behavior-preserving, mirroring the `@sackville-mcp/safety` / `@sackville-mcp/assert`
   extractions).
 - **Explicit version pins — no transitive imports.** `istanbul-lib-coverage`,
   `fflate`, etc. appear in the lockfile **only as transitive deps** of other
@@ -105,7 +105,7 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
   mutation a subprocess output-scraper (effort L→XL). The spike runs before slot 4
   is committed.
 - **Wrong API reference:** the deps research cited `assertSsrfAllowed` from
-  `@sackville/safety`, which **does not exist** — the real symbols are
+  `@sackville-mcp/safety`, which **does not exist** — the real symbols are
   `resolveAndPin` / `isBlockedHost` / `classifyAddress` / `SsrfError`. All
   deps/changelog egress routes through `resolveAndPin` + an operator allowlist.
 - **flake owns a second SQLite database** (a private run-history table via
@@ -115,9 +115,9 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
 
 ## Consequences
 
-- Phase 4 opens with `@sackville/deps` (slice 1: a pure, offline `auditDeprecation`
-  reducer over a committed npm-packument fixture), with `@sackville/coverage` as the
-  parallel track. The shared `@sackville/artifacts` extraction lands with the first
+- Phase 4 opens with `@sackville-mcp/deps` (slice 1: a pure, offline `auditDeprecation`
+  reducer over a committed npm-packument fixture), with `@sackville-mcp/coverage` as the
+  parallel track. The shared `@sackville-mcp/artifacts` extraction lands with the first
   handle-emitting slice.
 - Relates to ADR 0004/0005 (api), ADR 0006–0009 (browser). The research +
   adversarial transcript is the workflow `phase4-design-research`; this ADR is its
@@ -136,7 +136,7 @@ L→XL).
 
 Two design consequences this firms up:
 
-- **Stryker is NOT a gate dependency / not pinned into `@sackville/mutate`.** A real
+- **Stryker is NOT a gate dependency / not pinned into `@sackville-mcp/mutate`.** A real
   mutation run mutates the source and re-runs the whole suite per mutant — slow and
   inherently non-deterministic, so it fails the "no out-of-gate tier" determinism bar.
   Mirroring flake/coverage, the live run is an **injected runner** (default spawns the

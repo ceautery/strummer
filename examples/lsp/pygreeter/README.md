@@ -10,7 +10,7 @@ against a live Language Server — the Python counterpart of [`../greeter`](../g
   (so `references`/`type-definition`/`rename` cross files).
 
 The LSP engine is **language-agnostic** — there is no Python-specific code in
-[`@sackville/lsp`](../../../packages/lsp). All you change versus the greeter quickstart is the
+[`@sackville-mcp/lsp`](../../../packages/lsp). All you change versus the greeter quickstart is the
 operator-bound server registry ([`servers.json`](./servers.json) binds `python` to
 `pyright-langserver`). The recorded fixtures the gate replays for this server live in
 [`packages/lsp/test/fixtures/README.md`](../../../packages/lsp/test/fixtures/README.md)

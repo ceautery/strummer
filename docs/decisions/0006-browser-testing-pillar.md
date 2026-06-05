@@ -20,18 +20,18 @@ flaky/network-dependent tests.
 
 ## Decisions
 
-### 1. New package `@sackville/browser`, thin on `playwright-core`
+### 1. New package `@sackville-mcp/browser`, thin on `playwright-core`
 
 A pure-TS engine (browser/context/page lifecycle, ARIA-snapshot capture, step
 tools, assertions, artifact capture, safety gate, audits) consumed by thin `mcp`
-+ `cli` adapters — mirroring `@sackville/api`. Built directly on **stable
++ `cli` adapters — mirroring `@sackville-mcp/api`. Built directly on **stable
 `playwright-core` 1.60.0**. We do **not** wrap or embed `@playwright/mcp` as a
 runtime dependency: `@playwright/mcp@0.0.75` hard-pins an **alpha**
 `playwright-core` (`1.61.0-alpha-…`), inlines large artifacts, and rides a churny
 0.0.x line — all disqualifying. It is used as a **design reference** for the tool
 taxonomy + ARIA-snapshot model, and its Apache-2.0 ARIA serializer may be
 **copied with attribution** (playwright-core's `_snapshotForAI` is private). The
-**safety gate lives in `@sackville/browser`**, so every surface enforces it
+**safety gate lives in `@sackville-mcp/browser`**, so every surface enforces it
 identically.
 
 ### 2. Driving model: ARIA-snapshot-first, imperative step tools over ref-ids
@@ -114,10 +114,10 @@ the hardened profile disables WebRTC (scheduled).
 > allowlisted), and making the block unconditional would break the **primary
 > localhost-testing use case** — an operator deliberately allowlisting
 > `127.0.0.1` to test a local app. The IP-range classifier (`isBlockedIp`/
-> `isBlockedHost`/`resolveAndPin` in `@sackville/safety`) therefore belongs to
+> `isBlockedHost`/`resolveAndPin` in `@sackville-mcp/safety`) therefore belongs to
 > **Tier-2** (connection-time, where the resolved IP is visible and
 > allowlisted-hostname DNS-rebinding is the real threat). The shared SSRF
-> classifier + the `Redactor` now live in **`@sackville/safety`**, consumed by
+> classifier + the `Redactor` now live in **`@sackville-mcp/safety`**, consumed by
 > both pillars. Implemented: `packages/safety/src/ssrf.ts`,
 > `packages/browser/src/routes.ts` (Tier-1).
 
@@ -274,7 +274,7 @@ scheduled follow-up.
 ### Cross-pillar refactor
 
 Lift the SSRF/private-IP range classifier (`ipaddr.js`) and the secret-resolution
-+ redaction boundary out of `@sackville/api` into a shared **`@sackville/safety`**
++ redaction boundary out of `@sackville-mcp/api` into a shared **`@sackville-mcp/safety`**
 module consumed by both pillars, so one allow/deny + redaction policy governs
 `api` and `browser`.
 

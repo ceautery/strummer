@@ -19,12 +19,12 @@ import {
   RunRecorder,
   runFlow,
   type VideoSummary,
-} from '@sackville/browser'
+} from '@sackville-mcp/browser'
 import type { Page } from 'playwright-core'
 import { z } from 'zod'
 
 /**
- * Agent-facing MCP surface over the `@sackville/browser` engine (ADR 0006; the
+ * Agent-facing MCP surface over the `@sackville-mcp/browser` engine (ADR 0006; the
  * `browser-mcp-design` fan-out). Stateful, session-oriented: an agent opens a
  * session, drives it over a sequence of stateless tool calls, and closes it.
  *

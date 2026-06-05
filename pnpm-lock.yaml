@@ -32,10 +32,10 @@ importers:
       '@napi-rs/keyring':
         specifier: ^1.3.0
         version: 1.3.0
-      '@sackville/assert':
+      '@sackville-mcp/assert':
         specifier: workspace:*
         version: link:../assert
-      '@sackville/safety':
+      '@sackville-mcp/safety':
         specifier: workspace:*
         version: link:../safety
       '@usebruno/lang':
@@ -75,16 +75,16 @@ importers:
       '@axe-core/playwright':
         specifier: 4.11.3
         version: 4.11.3(playwright-core@1.60.0)
-      '@sackville/api':
+      '@sackville-mcp/api':
         specifier: workspace:*
         version: link:../api
-      '@sackville/artifacts':
+      '@sackville-mcp/artifacts':
         specifier: workspace:*
         version: link:../artifacts
-      '@sackville/assert':
+      '@sackville-mcp/assert':
         specifier: workspace:*
         version: link:../assert
-      '@sackville/safety':
+      '@sackville-mcp/safety':
         specifier: workspace:*
         version: link:../safety
       '@usebruno/lang':
@@ -121,43 +121,43 @@ importers:
 
   packages/cli:
     dependencies:
-      '@sackville/api':
+      '@sackville-mcp/api':
         specifier: workspace:*
         version: link:../api
-      '@sackville/artifacts':
+      '@sackville-mcp/artifacts':
         specifier: workspace:*
         version: link:../artifacts
-      '@sackville/browser':
+      '@sackville-mcp/browser':
         specifier: workspace:*
         version: link:../browser
-      '@sackville/core':
+      '@sackville-mcp/core':
         specifier: workspace:*
         version: link:../core
-      '@sackville/coverage':
+      '@sackville-mcp/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@sackville/deps':
+      '@sackville-mcp/deps':
         specifier: workspace:*
         version: link:../deps
-      '@sackville/embed':
+      '@sackville-mcp/embed':
         specifier: workspace:*
         version: link:../embed
-      '@sackville/flake':
+      '@sackville-mcp/flake':
         specifier: workspace:*
         version: link:../flake
-      '@sackville/lsp':
+      '@sackville-mcp/lsp':
         specifier: workspace:*
         version: link:../lsp
-      '@sackville/mutate':
+      '@sackville-mcp/mutate':
         specifier: workspace:*
         version: link:../mutate
-      '@sackville/safety':
+      '@sackville-mcp/safety':
         specifier: workspace:*
         version: link:../safety
-      '@sackville/verdict':
+      '@sackville-mcp/verdict':
         specifier: workspace:*
         version: link:../verdict
-      '@sackville/verify':
+      '@sackville-mcp/verify':
         specifier: workspace:*
         version: link:../verify
       playwright-core:
@@ -192,7 +192,7 @@ importers:
 
   packages/coverage:
     dependencies:
-      '@sackville/diff':
+      '@sackville-mcp/diff':
         specifier: workspace:*
         version: link:../diff
 
@@ -204,10 +204,10 @@ importers:
       '@renovatebot/ruby-semver':
         specifier: 5.0.0
         version: 5.0.0
-      '@sackville/diff':
+      '@sackville-mcp/diff':
         specifier: workspace:*
         version: link:../diff
-      '@sackville/severity':
+      '@sackville-mcp/severity':
         specifier: workspace:*
         version: link:../severity
       fflate:
@@ -253,50 +253,50 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
-      '@sackville/api':
+      '@sackville-mcp/api':
         specifier: workspace:*
         version: link:../api
-      '@sackville/artifacts':
+      '@sackville-mcp/artifacts':
         specifier: workspace:*
         version: link:../artifacts
-      '@sackville/coverage':
+      '@sackville-mcp/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@sackville/deps':
+      '@sackville-mcp/deps':
         specifier: workspace:*
         version: link:../deps
-      '@sackville/diff':
+      '@sackville-mcp/diff':
         specifier: workspace:*
         version: link:../diff
-      '@sackville/lsp':
+      '@sackville-mcp/lsp':
         specifier: workspace:*
         version: link:../lsp
-      '@sackville/mutate':
+      '@sackville-mcp/mutate':
         specifier: workspace:*
         version: link:../mutate
-      '@sackville/safety':
+      '@sackville-mcp/safety':
         specifier: workspace:*
         version: link:../safety
-      '@sackville/verdict':
+      '@sackville-mcp/verdict':
         specifier: workspace:*
         version: link:../verdict
-      '@sackville/verify':
+      '@sackville-mcp/verify':
         specifier: workspace:*
         version: link:../verify
       zod:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
-      '@sackville/browser':
+      '@sackville-mcp/browser':
         specifier: workspace:*
         version: link:../browser
-      '@sackville/core':
+      '@sackville-mcp/core':
         specifier: workspace:*
         version: link:../core
-      '@sackville/embed':
+      '@sackville-mcp/embed':
         specifier: workspace:*
         version: link:../embed
-      '@sackville/flake':
+      '@sackville-mcp/flake':
         specifier: workspace:*
         version: link:../flake
       '@types/better-sqlite3':
@@ -325,45 +325,45 @@ importers:
 
   packages/verdict:
     dependencies:
-      '@sackville/severity':
+      '@sackville-mcp/severity':
         specifier: workspace:*
         version: link:../severity
     devDependencies:
-      '@sackville/api':
+      '@sackville-mcp/api':
         specifier: workspace:*
         version: link:../api
-      '@sackville/coverage':
+      '@sackville-mcp/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@sackville/deps':
+      '@sackville-mcp/deps':
         specifier: workspace:*
         version: link:../deps
-      '@sackville/flake':
+      '@sackville-mcp/flake':
         specifier: workspace:*
         version: link:../flake
-      '@sackville/mutate':
+      '@sackville-mcp/mutate':
         specifier: workspace:*
         version: link:../mutate
 
   packages/verify:
     dependencies:
-      '@sackville/verdict':
+      '@sackville-mcp/verdict':
         specifier: workspace:*
         version: link:../verdict
     devDependencies:
-      '@sackville/api':
+      '@sackville-mcp/api':
         specifier: workspace:*
         version: link:../api
-      '@sackville/coverage':
+      '@sackville-mcp/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@sackville/deps':
+      '@sackville-mcp/deps':
         specifier: workspace:*
         version: link:../deps
-      '@sackville/flake':
+      '@sackville-mcp/flake':
         specifier: workspace:*
         version: link:../flake
-      '@sackville/mutate':
+      '@sackville-mcp/mutate':
         specifier: workspace:*
         version: link:../mutate
 

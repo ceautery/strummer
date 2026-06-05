@@ -2,7 +2,7 @@
 node_modules/
 dist/
 build/
-# Coverage report output anywhere — but NOT the @sackville/coverage source package.
+# Coverage report output anywhere — but NOT the @sackville-mcp/coverage source package.
 coverage/
 !packages/coverage/
 *.tsbuildinfo

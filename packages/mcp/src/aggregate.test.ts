@@ -181,15 +181,15 @@ describe('no bin imports the index barrel (ADR 0019 §A4)', () => {
 
 describe('verify does not statically pull an optional-peer engine (ADR 0019 §B6)', () => {
   // verify is in the curated default set, so importing bin-verify.ts must NOT load
-  // an OPTIONAL-PEER engine (@sackville/flake → better-sqlite3, @sackville/browser →
+  // an OPTIONAL-PEER engine (@sackville-mcp/flake → better-sqlite3, @sackville-mcp/browser →
   // playwright-core) at module top level — else the api+deps+verify default would
   // fail in an install that didn't add that engine. Those runs use a lazy
   // `await import(...)`; `import type` is fine (erased at build).
   const src = readFileSync(`${here}/bin-verify.ts`, 'utf8')
   for (const pkg of ['flake', 'browser']) {
-    it(`bin-verify.ts has no value import of @sackville/${pkg}`, () => {
+    it(`bin-verify.ts has no value import of @sackville-mcp/${pkg}`, () => {
       const valueImport = new RegExp(
-        `import\\s+(?!type\\b)[\\w{},*\\s]+from\\s+'@sackville/${pkg}'`,
+        `import\\s+(?!type\\b)[\\w{},*\\s]+from\\s+'@sackville-mcp/${pkg}'`,
       )
       expect(src).not.toMatch(valueImport)
     })

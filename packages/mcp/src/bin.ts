@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { buildAggregateServer } from './aggregate.js'
+import { isMainModule } from './is-main.js'
 
 // The AGGREGATE Sackville MCP server (`sackville-mcp`, repointed per ADR 0019): one
 // stdio process exposing every ENABLED pillar. Pillars are loaded by dynamic import,
@@ -9,7 +9,7 @@ import { buildAggregateServer } from './aggregate.js'
 // with SACKVILLE_TOOLSETS (unset ⇒ the curated read-heavy default); each pillar reads
 // its own SACKVILLE_<PILLAR>_* gate. The narrow single-pillar bins (sackville-docs-mcp,
 // sackville-api-mcp, …) remain available for minimal deployments.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   const { server, shutdown, enabled, disabled } = await buildAggregateServer()
   process.stderr.write(
     `sackville-mcp: enabled [${enabled.join(', ')}]` +

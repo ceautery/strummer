@@ -98,7 +98,7 @@ export interface PageDriverOptions {
    * surface always supplies one). */
   gate?: BrowserGate
   /** Redactor applied to the dry-run preview (both `url` and `postData`) before it
-   * surfaces. Default identity; the server bin wires the real `@sackville/safety`
+   * surfaces. Default identity; the server bin wires the real `@sackville-mcp/safety`
    * `Redactor` here so registered secrets never leak via a query string or body. */
   redact?: (value: string) => string
   /** Operator download-quarantine dir. When set (and the context was created with
@@ -608,7 +608,7 @@ export class PageDriver {
    * Evaluate declarative assertions against the live page (a free read — no
    * re-snapshot, refs preserved). Each assertion **auto-waits** up to its timeout,
    * so a condition that only becomes true after an async update still passes. Uses
-   * the shared `@sackville/assert` operator vocabulary (one engine across pillars);
+   * the shared `@sackville-mcp/assert` operator vocabulary (one engine across pillars);
    * observed string values are redacted before they surface.
    */
   async assert(specs: BrowserAssertionSpec[]): Promise<BrowserAssertionResult[]> {

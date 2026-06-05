@@ -197,7 +197,7 @@ committing to real adapters, embeddings, or RRF tuning.
 
 ---
 
-## 9. Pillar 2 — Web API testing (`@sackville/api`)
+## 9. Pillar 2 — Web API testing (`@sackville-mcp/api`)
 
 Decisions in ADR 0004; research in `docs/research/2026-05-31-pillar2-api-testing.md`.
 All TypeScript — collections are git-friendly files, no Python/SQLite.
@@ -247,7 +247,7 @@ validation, and MCP/CLI wiring layer on next.
 
 ---
 
-## 10. Pillar 3 — Browser / UI testing (`@sackville/browser`)
+## 10. Pillar 3 — Browser / UI testing (`@sackville-mcp/browser`)
 
 Decisions in ADR 0006; research in `docs/research/2026-05-31-pillar3-browser-testing.md`.
 All TypeScript, built **thin on stable `playwright-core` 1.60.0** (NOT a wrap of
@@ -263,7 +263,7 @@ packages/browser/src/
   steps/       # imperative step tools over ref-ids -> semantic locators
                # (navigate/click/fill/select/press/wait_for/snapshot/query/get_*)
   assert/      # browser assertion sources (text/element-visible/value/url/
-               # ariaSnapshot) — REUSES @sackville/api's declarative engine
+               # ariaSnapshot) — REUSES @sackville-mcp/api's declarative engine
   safety/      # deny-by-default action gate; interception-based mutation dry-run;
                # Tier-1 route allowlist; Tier-2 loopback DNS-pinning SSRF proxy
   artifacts/   # ON-DISK ArtifactStore: sackville://browser/run/<id>/<kind>

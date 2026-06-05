@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { TestRunner } from '@sackville/flake'
+import type { TestRunner } from '@sackville-mcp/flake'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runFlake } from './flake.js'
 

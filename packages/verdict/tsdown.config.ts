@@ -1,17 +1,17 @@
 import { defineConfig } from 'tsdown'
 
-// `@sackville/verdict` type-imports the pillar result interfaces and has exactly
-// ONE runtime workspace import — the pure, zero-dep `@sackville/severity` leaf (the
-// shared severity scale). Keep all `@sackville/*` EXTERNAL in both the JS and the
+// `@sackville-mcp/verdict` type-imports the pillar result interfaces and has exactly
+// ONE runtime workspace import — the pure, zero-dep `@sackville-mcp/severity` leaf (the
+// shared severity scale). Keep all `@sackville-mcp/*` EXTERNAL in both the JS and the
 // dts: the pillar references are `import type` only (nothing bundled, no pillar
 // runtime ever pulled in — the gate-independence posture, ADR 0013 §2), and
-// `@sackville/severity` resolves as a normal workspace dependency in any consumer.
+// `@sackville-mcp/severity` resolves as a normal workspace dependency in any consumer.
 // So the emitted `.mjs` imports only that one pure leaf (it still drags in no heavy
 // runtime — better-sqlite3/playwright-core stay out), and the published `.d.ts`
-// keeps `import type { … } from '@sackville/api'` references, which resolve in any
+// keeps `import type { … } from '@sackville-mcp/api'` references, which resolve in any
 // consumer (mcp/cli) that already depends on the pillars.
 export default defineConfig({
   entry: ['src/index.ts'],
   dts: true,
-  external: [/^@sackville\//],
+  external: [/^@sackville-mcp\//],
 })

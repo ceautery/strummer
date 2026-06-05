@@ -1,6 +1,6 @@
 {
-  "name": "@sackville/browser",
-  "version": "0.0.0",
+  "name": "@sackville-mcp/browser",
+  "version": "0.0.1-alpha.1",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -19,10 +19,10 @@
   },
   "dependencies": {
     "@axe-core/playwright": "4.11.3",
-    "@sackville/api": "workspace:*",
-    "@sackville/artifacts": "workspace:*",
-    "@sackville/assert": "workspace:*",
-    "@sackville/safety": "workspace:*",
+    "@sackville-mcp/api": "workspace:*",
+    "@sackville-mcp/artifacts": "workspace:*",
+    "@sackville-mcp/assert": "workspace:*",
+    "@sackville-mcp/safety": "workspace:*",
     "@usebruno/lang": "^0.36.0",
     "axe-core": "4.11.4",
     "chrome-launcher": "1.2.1",

@@ -31,7 +31,7 @@ License the Sackville software under the **Apache License 2.0**. Copyright
 
 ## Consequences
 
-- All published packages carry `Apache-2.0`: `package.json` (`@sackville/*`),
+- All published packages carry `Apache-2.0`: `package.json` (`@sackville-mcp/*`),
   `pyproject.toml`.
 - Distributions must retain `LICENSE` + `NOTICE`; downstreams must propagate the
   NOTICE attributions per §4(d).

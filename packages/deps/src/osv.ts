@@ -20,7 +20,7 @@
  * RubyGems=Gem), so the caller passes the matching comparator; it defaults to semver (npm).
  */
 
-import { QUALITATIVE_RANK, type QualitativeSeverity } from '@sackville/severity'
+import { QUALITATIVE_RANK, type QualitativeSeverity } from '@sackville-mcp/severity'
 import { semverComparator, type VersionComparator } from './comparator.js'
 import { cvssV3BaseScore } from './cvss.js'
 
@@ -66,7 +66,7 @@ export interface OsvAdvisory {
 
 /**
  * A fixed, bucketed severity scale so output is stable across snapshots and source
- * schemas. Built on the shared `@sackville/severity` qualitative base: the four common
+ * schemas. Built on the shared `@sackville-mcp/severity` qualitative base: the four common
  * buckets plus deps' own `'unknown'` (severity indeterminable). `'unknown'` is
  * DELIBERATELY distinct from the verdict scale's `'none'` — it maps to a `no-signal`
  * pillar, never to `low`/`none` (the absence-is-never-a-pass invariant).

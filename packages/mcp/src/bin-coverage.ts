@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
@@ -7,6 +6,7 @@ import {
   createCoverageServer,
   registerCoverageTools,
 } from './coverage.js'
+import { isMainModule } from './is-main.js'
 import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the coverage MCP bin (set at launch). */
@@ -87,7 +87,7 @@ export function buildCoverageServerFromEnv(
 }
 
 // Executable tail: only run when invoked directly (not when imported by a test).
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   const { server } = buildCoverageServerFromEnv()
   await server.connect(new StdioServerTransport())
 }

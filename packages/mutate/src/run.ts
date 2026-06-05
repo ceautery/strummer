@@ -1,5 +1,5 @@
 /**
- * The gated, diff-scoped mutation run — the live half of `@sackville/mutate`. It **spawns**
+ * The gated, diff-scoped mutation run — the live half of `@sackville-mcp/mutate`. It **spawns**
  * Stryker (`stryker run`, an injected subprocess like flake's `vitest` and coverage's
  * `vitest related`), then reads the JSON report Stryker writes and feeds it to the pure
  * {@link summarizeMutation}.
@@ -96,7 +96,7 @@ export class MutateGateError extends Error {
     super(message)
     this.name = 'MutateGateError'
     // Brand as a gate DENIAL (ADR 0013 Addendum, milestone 5c): the run-driving
-    // `@sackville/verify` reads this global-registry symbol via `isGateDenial` to map a
+    // `@sackville-mcp/verify` reads this global-registry symbol via `isGateDenial` to map a
     // denial to `skipReason:'gate-not-set'` (never `errored`) WITHOUT importing engine
     // code. The `Symbol.for` key string is the cross-package contract.
     ;(this as unknown as Record<symbol, unknown>)[Symbol.for('sackville.gate-denial')] = true

@@ -1,5 +1,5 @@
 /**
- * Pure flakiness classifier — the first slice of `@sackville/flake`, and the only one
+ * Pure flakiness classifier — the first slice of `@sackville-mcp/flake`, and the only one
  * that touches no I/O. Given each test's run history (an ordered list of pass/fail
  * outcomes), it labels the test and quantifies *how* flaky it is with a binomial
  * confidence bound, so a later operator-gated quarantine slice has a defensible,

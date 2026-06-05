@@ -1,6 +1,6 @@
 {
-  "name": "@sackville/cli",
-  "version": "0.0.0",
+  "name": "@sackville-mcp/cli",
+  "version": "0.0.1-alpha.1",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
@@ -21,19 +21,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sackville/api": "workspace:*",
-    "@sackville/artifacts": "workspace:*",
-    "@sackville/browser": "workspace:*",
-    "@sackville/core": "workspace:*",
-    "@sackville/coverage": "workspace:*",
-    "@sackville/deps": "workspace:*",
-    "@sackville/embed": "workspace:*",
-    "@sackville/flake": "workspace:*",
-    "@sackville/lsp": "workspace:*",
-    "@sackville/mutate": "workspace:*",
-    "@sackville/safety": "workspace:*",
-    "@sackville/verdict": "workspace:*",
-    "@sackville/verify": "workspace:*",
+    "@sackville-mcp/api": "workspace:*",
+    "@sackville-mcp/artifacts": "workspace:*",
+    "@sackville-mcp/browser": "workspace:*",
+    "@sackville-mcp/core": "workspace:*",
+    "@sackville-mcp/coverage": "workspace:*",
+    "@sackville-mcp/deps": "workspace:*",
+    "@sackville-mcp/embed": "workspace:*",
+    "@sackville-mcp/flake": "workspace:*",
+    "@sackville-mcp/lsp": "workspace:*",
+    "@sackville-mcp/mutate": "workspace:*",
+    "@sackville-mcp/safety": "workspace:*",
+    "@sackville-mcp/verdict": "workspace:*",
+    "@sackville-mcp/verify": "workspace:*",
     "playwright-core": "1.60.0"
   },
   "devDependencies": {

@@ -4,7 +4,7 @@
  * verdict about the version of a package that is *actually installed*.
  *
  * Like the rest of the pillar's core it is pure: the caller gathers the inputs (detect
- * the installed version from the project via `@sackville/core`'s
+ * the installed version from the project via `@sackville-mcp/core`'s
  * `detectInstalledVersion`, load advisories via `loadOsvSnapshot`, fetch the
  * packument) and `auditDependency` reduces them. This keeps it deterministic and
  * trivially testable; the I/O + operator gating live at the bin/MCP layer.

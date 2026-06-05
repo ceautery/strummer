@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { Redactor } from '@sackville/safety'
+import { Redactor } from '@sackville-mcp/safety'
 import { type Browser, type BrowserContext, chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PageDriver } from './driver.js'
@@ -24,7 +24,7 @@ describe('BrowserGate policy (pure, operator-set)', () => {
   })
 
   it('brands GateError as a gate denial via the global symbol (5e: cross-package, no import)', () => {
-    // The run-driving @sackville/verify reads Symbol.for('sackville.gate-denial') to map a
+    // The run-driving @sackville-mcp/verify reads Symbol.for('sackville.gate-denial') to map a
     // gate denial to skipReason:'gate-not-set' WITHOUT importing engine code — matching
     // CoverageGateError/FlakeGateError/MutationGateError. Inert for runFlow-swallowed
     // in-flow denials (gate on flow completeness instead), but load-bearing for the

@@ -2,7 +2,12 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { LspQueryInput, LspQueryResult, LspRenameInput, LspRenameResult } from '@sackville/lsp'
+import type {
+  LspQueryInput,
+  LspQueryResult,
+  LspRenameInput,
+  LspRenameResult,
+} from '@sackville-mcp/lsp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from './index.js'
 import { runLsp } from './lsp.js'

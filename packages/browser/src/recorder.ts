@@ -98,7 +98,7 @@ export interface RunRecorderOptions {
   runId: string
   store: ArtifactStore
   /** Applied to every text artifact before it is written. Default identity; the
-   * server bin wires the real `@sackville/safety` `Redactor` here. */
+   * server bin wires the real `@sackville-mcp/safety` `Redactor` here. */
   redact?: (value: string) => string
   /** Capture a Playwright trace.zip. Default true. */
   trace?: boolean

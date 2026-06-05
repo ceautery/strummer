@@ -1,6 +1,6 @@
 import { readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { redactHarZip, summarizeHar } from '@sackville/api'
+import { redactHarZip, summarizeHar } from '@sackville-mcp/api'
 import { strFromU8, unzipSync } from 'fflate'
 import type { ArtifactStore } from './artifacts.js'
 
@@ -20,7 +20,7 @@ import type { ArtifactStore } from './artifacts.js'
  * stays operator-gated rather than on by default.
  */
 
-// The blanket-redaction pass + the `.har` tally live in `@sackville/api` `har-synth.ts`
+// The blanket-redaction pass + the `.har` tally live in `@sackville-mcp/api` `har-synth.ts`
 // (extracted 5f slice 1) so both this file wrapper AND a SYNTHESIZED in-memory api HAR
 // share ONE redaction code path (incl. the attach-by-declared-mimeType coverage).
 
@@ -54,7 +54,7 @@ export interface FinalizeHarOptions {
   runId: string
   store: ArtifactStore
   /** Applied to every text entry before write. Default identity; the server bin
-   * wires the real `@sackville/safety` `Redactor` here. */
+   * wires the real `@sackville-mcp/safety` `Redactor` here. */
   redact?: (value: string) => string
 }
 

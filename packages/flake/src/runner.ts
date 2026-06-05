@@ -5,7 +5,7 @@
  * reads the JSON report, and records every outcome into the {@link HistoryStore}. Run the
  * suite `repeat` times to actually surface flakiness, then classify.
  *
- * Two ADR-0010 constraints, mirroring `@sackville/coverage`'s `runScoped`:
+ * Two ADR-0010 constraints, mirroring `@sackville-mcp/coverage`'s `runScoped`:
  * 1. **It runs code**, so it is behind a *paired* deny-by-default operator gate — an
  *    `allowRun` boolean AND an `allowedRoots` allowlist (load-bearing on its own), with a
  *    wall-clock cap. All operator-set; no caller input self-authorizes.
@@ -30,7 +30,7 @@ export class FlakeGateError extends Error {
     super(message)
     this.name = 'FlakeGateError'
     // Brand as a gate DENIAL (ADR 0013 Addendum, milestone 5c): the run-driving
-    // `@sackville/verify` reads this global-registry symbol via `isGateDenial` to map a
+    // `@sackville-mcp/verify` reads this global-registry symbol via `isGateDenial` to map a
     // denial to `skipReason:'gate-not-set'` (never `errored`) WITHOUT importing engine
     // code. The `Symbol.for` key string is the cross-package contract.
     ;(this as unknown as Record<symbol, unknown>)[Symbol.for('sackville.gate-denial')] = true

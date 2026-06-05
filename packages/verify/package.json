@@ -1,6 +1,6 @@
 {
-  "name": "@sackville/verify",
-  "version": "0.0.0",
+  "name": "@sackville-mcp/verify",
+  "version": "0.0.1-alpha.1",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -18,14 +18,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sackville/verdict": "workspace:*"
+    "@sackville-mcp/verdict": "workspace:*"
   },
   "devDependencies": {
-    "@sackville/api": "workspace:*",
-    "@sackville/coverage": "workspace:*",
-    "@sackville/deps": "workspace:*",
-    "@sackville/flake": "workspace:*",
-    "@sackville/mutate": "workspace:*"
+    "@sackville-mcp/api": "workspace:*",
+    "@sackville-mcp/coverage": "workspace:*",
+    "@sackville-mcp/deps": "workspace:*",
+    "@sackville-mcp/flake": "workspace:*",
+    "@sackville-mcp/mutate": "workspace:*"
   },
   "publishConfig": {
     "access": "public",

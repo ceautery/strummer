@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { QueryEmbedder } from '@sackville/embed'
+import { QueryEmbedder } from '@sackville-mcp/embed'
 import { run } from './index.js'
 
 const code = await run(process.argv.slice(2), {

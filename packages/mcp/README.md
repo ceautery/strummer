@@ -1,4 +1,4 @@
-# sackville
+# sackville-mcp
 
 The Sackville MCP server — exposes Sackville's pillars to an LLM agent as MCP tools
 and resources. **`sackville-mcp` is the AGGREGATE server**: one stdio process that
@@ -13,9 +13,9 @@ Add one block to your MCP client config (see [`examples/mcp/.mcp.json`](../../ex
 ```jsonc
 {
   "mcpServers": {
-    "sackville": {
+    "sackville-mcp": {
       "command": "npx",
-      "args": ["-y", "sackville"],
+      "args": ["-y", "sackville-mcp"],
       "env": {
         // Pick which pillars to expose (unset ⇒ the curated default docs+api+deps+verify).
         "SACKVILLE_TOOLSETS": "api,deps,verify",
@@ -30,9 +30,9 @@ Add one block to your MCP client config (see [`examples/mcp/.mcp.json`](../../ex
 - **Selecting pillars** — `SACKVILLE_TOOLSETS` is a comma list of pillar names; unset
   enables the curated read-heavy default. It only *selects* — it never grants a
   capability (each pillar still reads its own `SACKVILLE_<PILLAR>_*` gate).
-- **Install isolation** — a bare `npm i sackville` is **native-free**. The heavy
-  engines (`@sackville/browser` → playwright, `@sackville/core`/`@sackville/embed` → the
-  docs index, `@sackville/flake` → SQLite) are **optional peers**: install the ones whose
+- **Install isolation** — a bare `npm i sackville-mcp` is **native-free**. The heavy
+  engines (`@sackville-mcp/browser` → playwright, `@sackville-mcp/core`/`@sackville-mcp/embed` → the
+  docs index, `@sackville-mcp/flake` → SQLite) are **optional peers**: install the ones whose
   pillars you enable. A pillar whose engine isn't installed (or, for docs, whose
   `SACKVILLE_INDEX` is unset) is *loud-disabled* at startup — the server still starts.
 - **Compose, never widen** — in the aggregate the api + verify pillars read the prefixed
@@ -104,7 +104,7 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   read-like; reads are redacted and don't invalidate refs.
 - **`browser_assert`** — evaluate declarative assertions against the live page
   (a free read). Page sources `url`/`title`/`ariaSnapshot`; element sources
-  `text`/`value`/`visible`/`count` (by ref or role+name); the shared `@sackville/assert`
+  `text`/`value`/`visible`/`count` (by ref or role+name); the shared `@sackville-mcp/assert`
   operator set (`equals`/`contains`/`matches`/`gt`/…). Each **auto-waits** to its
   timeout; observed values are redacted. Returns `{pass, results}`.
 - **`browser_audit_a11y`** — axe-core audit; compact summary + report by handle.

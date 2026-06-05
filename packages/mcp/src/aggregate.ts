@@ -35,16 +35,16 @@ export type PillarRegistry = Record<string, PillarEntry>
  */
 export const DEFAULT_PILLARS: PillarRegistry = {
   // Curated read-heavy default set (the ratified fork). docs needs an index +
-  // @sackville/core/@sackville/embed, so without them it loud-disables (effective
+  // @sackville-mcp/core/@sackville-mcp/embed, so without them it loud-disables (effective
   // zero-config default = api+deps+verify).
   docs: {
     default: true,
-    pkg: '@sackville/core',
+    pkg: '@sackville-mcp/core',
     load: async () => (await import('./docs.js')).setupDocsFromEnv,
   },
   api: {
     default: true,
-    pkg: '@sackville/api',
+    pkg: '@sackville-mcp/api',
     load: async () => {
       const m = await import('./bin-api.js')
       return (env) => m.setupApiFromEnv(env, { aggregate: true })
@@ -52,12 +52,12 @@ export const DEFAULT_PILLARS: PillarRegistry = {
   },
   deps: {
     default: true,
-    pkg: '@sackville/deps',
+    pkg: '@sackville-mcp/deps',
     load: async () => (await import('./bin-deps.js')).setupDepsFromEnv,
   },
   verify: {
     default: true,
-    pkg: '@sackville/verify',
+    pkg: '@sackville-mcp/verify',
     load: async () => {
       const m = await import('./bin-verify.js')
       return (env) => m.setupVerifyFromEnv(env, { aggregate: true })
@@ -66,27 +66,27 @@ export const DEFAULT_PILLARS: PillarRegistry = {
   // Opt-in (heavier / specialized) pillars.
   browser: {
     default: false,
-    pkg: '@sackville/browser',
+    pkg: '@sackville-mcp/browser',
     load: async () => (await import('./bin-browser.js')).setupBrowserFromEnv,
   },
   coverage: {
     default: false,
-    pkg: '@sackville/coverage',
+    pkg: '@sackville-mcp/coverage',
     load: async () => (await import('./bin-coverage.js')).setupCoverageFromEnv,
   },
   flake: {
     default: false,
-    pkg: '@sackville/flake',
+    pkg: '@sackville-mcp/flake',
     load: async () => (await import('./bin-flake.js')).setupFlakeFromEnv,
   },
   lsp: {
     default: false,
-    pkg: '@sackville/lsp',
+    pkg: '@sackville-mcp/lsp',
     load: async () => (await import('./bin-lsp.js')).setupLspFromEnv,
   },
   mutate: {
     default: false,
-    pkg: '@sackville/mutate',
+    pkg: '@sackville-mcp/mutate',
     load: async () => (await import('./bin-mutate.js')).setupMutateFromEnv,
   },
 }

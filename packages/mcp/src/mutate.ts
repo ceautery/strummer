@@ -8,7 +8,7 @@ import {
   runMutation,
   runMutmut,
   summarizeMutation,
-} from '@sackville/mutate'
+} from '@sackville-mcp/mutate'
 import { z } from 'zod'
 
 export interface MutateToolsOptions {

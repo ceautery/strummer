@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ArtifactStore } from '@sackville/artifacts'
+import { ArtifactStore } from '@sackville-mcp/artifacts'
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserFlow, FlowResult } from './flow.js'
 import type { HarSummary } from './har.js'

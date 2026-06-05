@@ -8,7 +8,7 @@ import {
   type Severity,
 } from './index.js'
 
-describe('@sackville/severity — the shared qualitative scale', () => {
+describe('@sackville-mcp/severity — the shared qualitative scale', () => {
   it('ranks the four qualitative buckets worst-to-best', () => {
     expect(QUALITATIVE_RANK.critical).toBeGreaterThan(QUALITATIVE_RANK.high)
     expect(QUALITATIVE_RANK.high).toBeGreaterThan(QUALITATIVE_RANK.moderate)
@@ -18,7 +18,7 @@ describe('@sackville/severity — the shared qualitative scale', () => {
   })
 
   // The whole point of the extraction: the verdict scale (with `none`) and the deps
-  // scale (with `unknown`, built in @sackville/deps) must share ONE source of truth for
+  // scale (with `unknown`, built in @sackville-mcp/deps) must share ONE source of truth for
   // the four common buckets, so their ranks can never silently drift apart.
   it('SEVERITY_RANK derives the qualitative entries from QUALITATIVE_RANK, with none at 0', () => {
     expect(SEVERITY_RANK.none).toBe(0)

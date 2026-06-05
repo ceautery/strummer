@@ -11,7 +11,7 @@ that make the project resumable and aspirational.
 
 - [x] Decisions captured (stack, surface, first pillar, polyglot boundary, name).
 - [x] Design research fan-out → `ARCHITECTURE.md` with exact stack & versions.
-- [x] pnpm workspace scaffold: `@sackville/core` (mcp/cli land in Phase 1 with
+- [x] pnpm workspace scaffold: `@sackville-mcp/core` (mcp/cli land in Phase 1 with
       real behavior — no fake-stub packages).
 - [x] Python `ingest` package scaffold (uv-managed).
 - [x] Biome + Ruff configured; Vitest + pytest wired.
@@ -41,8 +41,8 @@ installed version Z" and get a precise, cited answer over MCP.
 - [x] **Detect the installed version from a project** — `detectInstalledVersion`
       (node_modules/lockfile/package.json); `detect_version` tool + `search_docs
       project` input (auto-pin with zero ceremony).
-- [x] `@sackville/cli` thin human entry over `core` (`search`/`get`/`versions`/
-      `detect`); query embedder extracted to `@sackville/embed`.
+- [x] `@sackville-mcp/cli` thin human entry over `core` (`search`/`get`/`versions`/
+      `detect`); query embedder extracted to `@sackville-mcp/embed`.
 - [x] **Second source adapter: Dash docsets** — `dash.iter_fragments` reads a
       `.docset` bundle (`searchIndex` + `Documents/*.html`), reuses
       `split_sections`/`symbol_from_heading`, `normalize_dash_type` for the type
@@ -60,7 +60,7 @@ installed version Z" and get a precise, cited answer over MCP.
 
 ## Phase 2 — API testing pillar  *(COMPLETE — core + tail; design = ADR 0004 + 0005)*
 
-- [x] `@sackville/api` package + Bruno `.bru` format (via `@usebruno/lang`) +
+- [x] `@sackville-mcp/api` package + Bruno `.bru` format (via `@usebruno/lang`) +
       thin domain model; Sackville assertions/captures in `*.sackville.yml` sidecar.
 - [x] Declarative assertion engine (status/statusText/header/jsonpath/responseTime/
       schema) + undici runner + resource-handle artifacts.
@@ -68,7 +68,7 @@ installed version Z" and get a precise, cited answer over MCP.
       chained), fail-closed, value-redaction (raw + base64/url encodings).
 - [x] Mutation safety gate: dry-run by default; send only with `allowUnsafe` +
       host allowlist. **+ SSRF range-block on every request** (reuses
-      `@sackville/safety` `resolveAndPin`; metadata/link-local always refused,
+      `@sackville-mcp/safety` `resolveAndPin`; metadata/link-local always refused,
       loopback/private gated by `allowPrivate`, default permissive for local
       testing — `SACKVILLE_BLOCK_PRIVATE` / CLI `--block-private` to harden) **+
       opt-in redirect following (`maxRedirects`) with per-hop re-check** (SSRF +
@@ -201,7 +201,7 @@ installed version Z" and get a precise, cited answer over MCP.
 
 ## Phase 3 — Browser / UI testing pillar  *(FEATURE-COMPLETE — engine + safety + artifacts + MCP + CLI + multi-engine; live-view dropped per ADR 0008; only the explicitly-aspirational bucket remains; design = ADR 0006/0008/0009 + ARCHITECTURE §10)*
 
-New pure-TS `@sackville/browser`, thin on **stable `playwright-core` 1.60.0** (not
+New pure-TS `@sackville-mcp/browser`, thin on **stable `playwright-core` 1.60.0** (not
 a wrap of `@playwright/mcp`). Design grounded by a 5-stream research workflow with
 adversarial verification (`docs/research/2026-05-31-pillar3-browser-testing.md`).
 Staged below; aspirational items are scheduled, not cut.
@@ -209,7 +209,7 @@ Staged below; aspirational items are scheduled, not cut.
 - [x] **Slice 1 (first red→green):** a11y-audit summarizer + on-disk
       `ArtifactStore` + handle resolution, against an in-process `node:http`
       fixture (no pixels/perf/network).
-- [x] **Scaffold `@sackville/browser`** (Apache-2.0, ESM, tsdown, Biome+Vitest);
+- [x] **Scaffold `@sackville-mcp/browser`** (Apache-2.0, ESM, tsdown, Biome+Vitest);
       add to the pnpm workspace + `pnpm gate` + CI; pin `playwright-core` 1.60.0
       and `mcr.microsoft.com/playwright:v1.60.0-noble` in lockstep.
 - [x] **Browser lifecycle manager** (`BrowserManager`) — lazy single shared
@@ -243,10 +243,10 @@ Staged below; aspirational items are scheduled, not cut.
       `StepResult.dialogs`; `BrowserGate.allowDialogs` (bin `ALLOW_DIALOGS`) flips to
       accept. Auth = origin-scoped `httpCredentials` (done). Downloads/uploads gating
       still scheduled — see the Downloads-quarantine bullet.)_
-- [x] **Factor `@sackville/safety`** — shared SSRF range classifier (`isBlockedIp`/
+- [x] **Factor `@sackville-mcp/safety`** — shared SSRF range classifier (`isBlockedIp`/
       `isBlockedHost`/`isBlockedHostLiteral`, `ipaddr.js`, fail-closed) +
       `resolveAndPin` (DNS resolve → refuse blocked range → pinned IP) + the
-      `Redactor` (moved from `@sackville/api`, re-exported there). Consumed by both
+      `Redactor` (moved from `@sackville-mcp/api`, re-exported there). Consumed by both
       pillars.
 - [x] **Tier-1 route allowlist** (`installSafetyRoutes`, wired into
       `BrowserManager` when a gate is set) — `browserContext.route` deny-by-default
@@ -294,7 +294,7 @@ Staged below; aspirational items are scheduled, not cut.
       **mandatory** SSRF proxy + `--proxy-bypass-list=<-loopback>`, trace-off
       default, sandbox-on default. Safety is operator-set; no tool input flips a
       flag.
-- [x] **Human `sackville browser` CLI** (`@sackville/cli` `browser snapshot|audit|
+- [x] **Human `sackville browser` CLI** (`@sackville-mcp/cli` `browser snapshot|audit|
       screenshot <url>`, `packages/cli/src/browser.ts`) — single-shot page
       inspection over the engine (navigate once + read; refs needn't persist across
       the process). Reuses the bin's egress boundary: a gated `BrowserManager` +
@@ -320,8 +320,8 @@ Staged below; aspirational items are scheduled, not cut.
       MCP `browser_trace_query` reads the stored (already-redacted) trace by runId —
       no live session needed (query after close). Schema probed against the pin.
 - [x] **Browser assertions** — one assertion engine across pillars. Factored the
-      operator core into **`@sackville/assert`** (`AssertionOp` + `applyOp`, extracted
-      from `@sackville/api`, which now consumes it). `@sackville/browser` `assertions.ts`
+      operator core into **`@sackville-mcp/assert`** (`AssertionOp` + `applyOp`, extracted
+      from `@sackville-mcp/api`, which now consumes it). `@sackville-mcp/browser` `assertions.ts`
       + `PageDriver.assert` evaluate `url`/`title`/`ariaSnapshot` (page) +
       `text`/`value`/`visible`/`count` (element, by ref or role+name) with
       **auto-waiting** (fast count-gated poll, not Playwright's default timeout);
@@ -400,7 +400,7 @@ Staged below; aspirational items are scheduled, not cut.
       `--remote-debugging-port` DevTools attach. (The CLI's single-shot `--headed`
       launch flag stays as a trivial escape hatch where a display exists; it is not
       a live-view feature.) See ADR 0008.
-- [x] **Visual regression** — `@sackville/browser` `visual.ts` `compareScreenshots`
+- [x] **Visual regression** — `@sackville-mcp/browser` `visual.ts` `compareScreenshots`
       (pixelmatch 7.2.0 + pngjs 7.0.0): a **pure, deterministic** pixel diff —
       diff-pixel count/ratio, `maxDiffPixelRatio`/`maxDiffPixels` budget, pixel-rect
       `mask[]` for dynamic regions, size-mismatch hard-fail, diff PNG. `PageDriver.
@@ -454,7 +454,7 @@ Staged below; aspirational items are scheduled, not cut.
 
 Sequence decided by the `phase4-design-research` fan-out (5 research streams →
 synthesis → 3 adversarial critics → corrected synthesis); see **ADR 0010** for the
-ranking, the cross-cutting decisions (shared `@sackville/artifacts` extraction;
+ranking, the cross-cutting decisions (shared `@sackville-mcp/artifacts` extraction;
 explicit pins / no transitive imports; paired deny-by-default operator gate; TS-first
 with Python staged), and the per-candidate corrections the adversarial pass forced.
 Two independent tracks, then the test-quality chain, then LSP last:
@@ -483,7 +483,7 @@ stage `reportlog`. Pure/zero-spawn slices first.
       *(Staged within: `Pipfile.lock`/`Pipfile`; the MCP `bin-verify` deps audit stays npm-only —
       separate registry-fetcher wiring.)*
 - [x] **Slice 2 — deps `changelog_diff` for PyPI + RubyGems.** Extracted the pure repo-derivation
-      into `@sackville/deps` `repo.ts` (one source of truth, shared by the MCP bin + CLI, like
+      into `@sackville-mcp/deps` `repo.ts` (one source of truth, shared by the MCP bin + CLI, like
       `ecosystem.ts`): `githubOwnerRepo` (the owner/repo regex), `npmRepoUrl` (packument
       `repository`), `pypiRepoUrl` (`info.project_urls`, Source/Repository-labelled github link
       preferred), `gemRepoUrl` (`source_code_uri ?? homepage_uri`), `CHANGELOG_FILENAMES`.
@@ -573,7 +573,7 @@ stage `reportlog`. Pure/zero-spawn slices first.
         cache reuse; Stryker PARTIAL-scope reconciliation; flake diff-scoping; src-layout module
         mapping precision for `reconcileMutmutScope` (currently conservative-safe via suffix match).
 
-- [x] **Dependency/version intelligence** (`@sackville/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
+- [x] **Dependency/version intelligence** (`@sackville-mcp/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
       Cleanest architectural fit: pure offline verdict core + an operator-provisioned
       on-disk OSV advisory snapshot (file-as-data); extends shipped
       `detectInstalledVersion`/`resolveVersion`; answers deprecation/EOL/CVE/freshness
@@ -628,8 +628,8 @@ stage `reportlog`. Pure/zero-spawn slices first.
         private blocked by default) packument fetcher. Safety/network operator-set,
         never agent inputs. (TDD: real OSV-snapshot zip + temp `node_modules` project +
         injected fetcher.)
-  - [x] **Shared `@sackville/artifacts` extraction** (ADR 0010 cross-cutting) — the
-        on-disk `ArtifactStore` moved out of `@sackville/browser` into a new shared
+  - [x] **Shared `@sackville-mcp/artifacts` extraction** (ADR 0010 cross-cutting) — the
+        on-disk `ArtifactStore` moved out of `@sackville-mcp/browser` into a new shared
         package with a **parameterized** `sackville://<prefix>/<id>/<kind>` handle prefix
         (browser bakes in `browser/run`; deps/coverage emit their own). Behavior-
         preserving (browser suite is the regression guard); unblocks the first
@@ -638,12 +638,12 @@ stage `reportlog`. Pure/zero-spawn slices first.
         (versioned ATX headings, Keep-a-Changelog + plain `## vX.Y.Z`; sections in
         `(from, to]` newest-first; semver-ordered) + the `changelog_diff` MCP tool: an
         **injected** changelog fetcher → slice → store the sliced markdown **by handle**
-        in `@sackville/artifacts` (`deps` prefix), compact summary; new
+        in `@sackville-mcp/artifacts` (`deps` prefix), compact summary; new
         `sackville://deps/{id}/{kind}` resource. Deny-by-default (registers only with both
         a fetcher + artifact store). Bin: `SACKVILLE_DEPS_ARTIFACT_DIR` + a SSRF-pinned
         GitHub-raw CHANGELOG fetcher (packument repo → `raw.githubusercontent.com/HEAD`,
         `resolveAndPin` per attempt). **First handle-emitting deps slice** — first
-        consumer of the extracted `@sackville/artifacts`.
+        consumer of the extracted `@sackville-mcp/artifacts`.
   - [x] **by-handle full `audit_project` detail** — when an artifact store is configured,
         `audit_project` stores the full per-package `DependencyAudit` verdicts (vulnerability
         lists, deprecation messages, freshness) as one JSON blob by handle and surfaces
@@ -669,9 +669,9 @@ stage `reportlog`. Pure/zero-spawn slices first.
   - [x] **`sackville deps` human CLI** — `audit`/`audit-project`/`changelog`; exits 1 on a
         security/deprecation finding. The pure ecosystem-dispatch helpers (`comparatorFor`/
         `matchName`/`dependencyNames` + `OsvEcosystem`) were lifted out of the MCP surface into
-        `@sackville/deps` `ecosystem.ts` (one source of truth, shared by the surface + CLI;
+        `@sackville-mcp/deps` `ecosystem.ts` (one source of truth, shared by the surface + CLI;
         behavior-preserving). The CLI builds its own SSRF-pinned fetcher from `resolveAndPin`.
-- [x] **Coverage-aware, impact-scoped test runner** (`@sackville/coverage`) — *track A, COMPLETE (engine + agent surface + CLI; coverage.py adapter).*
+- [x] **Coverage-aware, impact-scoped test runner** (`@sackville-mcp/coverage`) — *track A, COMPLETE (engine + agent surface + CLI; coverage.py adapter).*
       Run only what a diff touches; coverage deltas; **uncovered-new-line** detection
       (the forgotten-assertion catch — the genuinely novel win under our TDD gate).
   - [x] **Slice 1 — pure `uncoveredNewLines` differ.** Classifies each diff-added line
@@ -715,7 +715,7 @@ stage `reportlog`. Pure/zero-spawn slices first.
         gated `run-scoped`; exits 1 when a new line is uncovered.
   - [ ] *(staged)* pin `istanbul-lib-coverage` if `CoverageMap` merging/summaries are needed;
         a Python `run_scoped` (pytest --cov argv) sibling.
-- [x] **Flaky-test detection & quarantine** (`@sackville/flake`) — **COMPLETE (engine +
+- [x] **Flaky-test detection & quarantine** (`@sackville-mcp/flake`) — **COMPLETE (engine +
       agent surface).** Protects the deterministic green gate. Pure Wilson/binomial
       classifier over a run-history fixture first; quarantine **writes** operator-gated
       (paired) with mandatory expiry. Opens its own private `better-sqlite3` history DB (a
@@ -759,7 +759,7 @@ stage `reportlog`. Pure/zero-spawn slices first.
         (vitest|pytest, no spawn — the suite already ran; the only way to feed pytest history).
   - [x] **`sackville flake` human CLI** — always-on `status`/`candidates`/`ingest`/`release`;
         gated `run` + `quarantine` (the two paired gates as straight-through flags).
-- [x] **Mutation testing** (`@sackville/mutate`) — **COMPLETE (engine + agent surface).**
+- [x] **Mutation testing** (`@sackville-mcp/mutate`) — **COMPLETE (engine + agent surface).**
       Are the tests meaningful? **Stryker/Vitest-4 compat spike resolved** (ADR 0010 update
       2026-06-01: vitest-runner 9.x declares `vitest >=2.0.0` + ships Vitest 4/4.1 support —
       thin-wrap viable, no command-runner fallback; Stryker stays an injected, operator-
@@ -781,7 +781,7 @@ stage `reportlog`. Pure/zero-spawn slices first.
         gained a `format: stryker|mutmut` discriminator (mutmut input = the results text, no spawn).
   - [x] **`sackville mutate` human CLI** — `summarize` (stryker|mutmut) + gated `run`.
   - [ ] *(staged)* a cosmic-ray adapter; a gated `runMutmut` spawner.
-- [x] **LSP bridge** (`@sackville/lsp`) — semantic code navigation. **COMPLETE (engine +
+- [x] **LSP bridge** (`@sackville-mcp/lsp`) — semantic code navigation. **COMPLETE (engine +
       agent surface), slices 1–5.** Highest *raw*
       leverage but **last**: the documented exception to ARCHITECTURE §1's no-live-RPC
       rule (a live, version-coupled subprocess). **Design DONE — ADR 0011** (3-stream
@@ -1038,14 +1038,14 @@ that contract sub-verdict folds with the four Phase-4 signals (deps/coverage/fla
 ONE structured verdict an agent requests for a change. Two compose-only / zero-spawn milestones
 (ADR 0013 §5–6). Decisive choices the adversarial pass forced: **absence is never a pass**
 (missing/no-signal ⇒ `inconclusive`, never `pass`); reading an operator-gated HAR **inherits its
-gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackville/verdict` is a
+gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackville-mcp/verdict` is a
 **pure, type-only-import** package (never pulls a pillar runtime).
 
 - [x] **Milestone 5a — the capture→contract bridge: COMPLETE** (the cross-pillar win; reuses 100%
       of the shipped `validateOpenApiResponse`). Engine (`packages/api/src/har-capture.ts`) + gated
       MCP `validate_capture` (api server) + human `sackville api validate-capture` CLI; verified
       against a REAL Playwright-emitted `content:'attach'` HAR `.zip` fixture.
-  - [x] **Slice 1 — `@sackville/artifacts` prefix-qualified, hardened, cross-prefix resolution.**
+  - [x] **Slice 1 — `@sackville-mcp/artifacts` prefix-qualified, hardened, cross-prefix resolution.**
         On-disk layout moved to `<baseDir>/<prefix>/<id>/<kind>` (prefix INTO the path) so one
         shared `baseDir` is collision-free across pillars and a store **rehydrates a foreign-prefix
         handle it never `put()`** (the cross-pillar read). Hardened: per-segment allowlist (refuses
@@ -1066,8 +1066,8 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
   - [x] **Slice 6 — `validate_capture` MCP (api server) + CLI**, behind the §3a capture gate
         (`SACKVILLE_VERIFY_ALLOW_CAPTURE` + the source artifact gate); a HAR with an unregistered
         cookie/token yields a verdict whose inline + stored bytes contain neither.
-- [x] **Milestone 5b — the unified verdict reducer: COMPLETE.** New pure `@sackville/verdict` package (type-only pillar imports; zero runtime pillar deps) + `request_verdict` MCP + `sackville-verify-mcp` bin + `sackville verify` CLI.
-  - [x] **Slice 7 — `@sackville/verdict` Severity core + empty-fold = `inconclusive`** (NOT `pass`).
+- [x] **Milestone 5b — the unified verdict reducer: COMPLETE.** New pure `@sackville-mcp/verdict` package (type-only pillar imports; zero runtime pillar deps) + `request_verdict` MCP + `sackville-verify-mcp` bin + `sackville verify` CLI.
+  - [x] **Slice 7 — `@sackville-mcp/verdict` Severity core + empty-fold = `inconclusive`** (NOT `pass`).
   - [x] **Slice 8 — `fromContractResults`/`fromDiffCoverage`/`fromDependencyAudits` + a real fold**
         (deps `'unknown'` ⇒ `no-signal`, never `low`/`none`; no OSV snapshot ⇒ `inconclusive`).
   - [x] **Slice 9 — `fromFlakeVerdicts`/`fromMutationSummary` no-signal correctness** (mutation
@@ -1086,7 +1086,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
       (`packages/api/test/fixtures/graphql-capture.har.zip`) consumed by the api/MCP/CLI tests; only
       the response-errors / no-query / operationName edge cases stay hand-authored.
 - [x] **Milestone 5c — run-driving / orchestration `verify`: COMPLETE** *(design = ADR 0013 Addendum
-      2026-06-04, Accepted; "compose, never widen").* A new `@sackville/verify` runtime package + a sibling
+      2026-06-04, Accepted; "compose, never widen").* A new `@sackville-mcp/verify` runtime package + a sibling
       `verify_change` MCP tool + `sackville verify run` CLI that DRIVE the gated pillars and fold them
       into one `CompositeVerdict` in a single agent call. **First cut runs the pillars unscoped**
       (diff-scoping is 5d); **capture stays consume-only** (live capture is 5e). All TDD red→green;
@@ -1095,7 +1095,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
       contract**; **deps run-wiring is carried to 5d** (its `audit_project` pipeline has no single
       exported runner — deps stays reachable via the deps server's `audit_project` → `request_verdict`).
       Ordered slices:
-  - [x] **Slice 1 — `@sackville/verdict` provenance fields (pure, no new statuses).** Red: a
+  - [x] **Slice 1 — `@sackville-mcp/verdict` provenance fields (pure, no new statuses).** Red: a
         `PillarVerdict` carrying `skipReason:'gate-not-set'` folds to `inconclusive` (never `pass`);
         a present `errorReason` likewise; a `{coverage:fail, flake:skipReason:'gate-not-set'}` fold
         stays `fail` (a real failure beats absence). Green: add optional `skipReason`/`errorReason` to
@@ -1103,8 +1103,8 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
         widen the `inconclusive` predicate to also recognize a present `skipReason`/`errorReason`.
         **`PillarStatus` is UNCHANGED** (exhaustive switches + `failsByPolicy`'s `warn|fail` guard must
         not see a new value).
-  - [x] **Slice 2 — `@sackville/verify` scaffold + the gated `orchestrate()` over injected seams.**
-        New package (depends on `@sackville/verdict` + engine packages for types/seams; engines
+  - [x] **Slice 2 — `@sackville-mcp/verify` scaffold + the gated `orchestrate()` over injected seams.**
+        New package (depends on `@sackville-mcp/verdict` + engine packages for types/seams; engines
         `external` in tsdown). Red: `orchestrate()` with ALL runners injected as fakes runs the
         requested pillars concurrently (`Promise.allSettled`), maps each native result via the
         existing `from*` adapters, and **never imports a spawn-capable default** (assert the built
@@ -1136,7 +1136,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
         (`bin-verify` reads no per-pillar `ALLOW_RUN`) keeps passing; only the new entrypoint reads
         them. Green: the run-driving bin wiring (reuses the pillar gate as the single source of truth
         + the separate `ENABLE_RUN` opt-in, no verify-scoped renames, no umbrella).
-  - [x] **Slice 6 — `sackville verify run <root>` CLI** (thin human wrapper over `@sackville/verify`;
+  - [x] **Slice 6 — `sackville verify run <root>` CLI** (thin human wrapper over `@sackville-mcp/verify`;
         gates as straight-through flags `--enable-run` + per-pillar `--allow-*`; runners injectable so
         the suite never spawns). Exit codes `0 pass / 1 fail|warn / 2 inconclusive`; a gate-blocked
         pillar ⇒ `2` (absence, not misconfig). Then STATUS/ROADMAP/memory updates; push at the
@@ -1151,24 +1151,24 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
       `bin-verify` (gated by `SACKVILLE_DEPS_ALLOW_NETWORK`, composed under `ENABLE_RUN`) + a `--deps`
       flag to `sackville verify run`. Naturally paired with `changedDependencies` so a PR audits only the
       changed packages. Ordered slices:
-  - [x] **Slice 1 — extract `@sackville/diff` (the human-ratified placement fork).** Move coverage's
-        pure `parseUnifiedDiff` into a new **zero-dependency** `@sackville/diff` package + add
+  - [x] **Slice 1 — extract `@sackville-mcp/diff` (the human-ratified placement fork).** Move coverage's
+        pure `parseUnifiedDiff` into a new **zero-dependency** `@sackville-mcp/diff` package + add
         `changedFiles(diff)` (all non-deleted touched paths — the scope primitive; includes
         removal-only modifications `parseUnifiedDiff` omits). Coverage re-exports for back-compat +
         consumes via `report.ts` (behavior-preserving; coverage suite is the regression guard). Chosen
-        over keeping it in coverage because `@sackville/verify` must RUNTIME-call the parser to scope
+        over keeping it in coverage because `@sackville-mcp/verify` must RUNTIME-call the parser to scope
         pillars and its source-scanned "imports zero spawn-capable code" invariant forbids a runtime
         import from the engine-listed coverage (re-exports `runScoped`→`child_process`); a pure shared
         package keeps that invariant provable. Mirrors the safety/assert/artifacts extractions.
-  - [x] **Slice 2 — `changedDependencies(diff, ecosystem)` in `@sackville/deps`** (pure; npm
-        `package.json` dependency-name diff first; PyPI/Gem lockfiles staged) over `@sackville/diff`.
+  - [x] **Slice 2 — `changedDependencies(diff, ecosystem)` in `@sackville-mcp/deps`** (pure; npm
+        `package.json` dependency-name diff first; PyPI/Gem lockfiles staged) over `@sackville-mcp/diff`.
         Block-aware: tracks the open `dependencies`/`devDependencies`/`peerDependencies`/
         `optionalDependencies` block so a changed `version`/`engines.node`/`packageManager`/`scripts`
         value (which also *looks* like a version) is never mistaken for a dependency. Under-scopes
         (never invents a dep) when a deep dependency's block header is outside the diff context —
         documented; the caller falls back to a whole-project audit.
   - [x] **Slice 3 — `verify_change` scopes the file-scoped pillars from one diff.** When the agent
-        supplies a `diff` but no explicit `changedFiles`, derive the set via `@sackville/diff`
+        supplies a `diff` but no explicit `changedFiles`, derive the set via `@sackville-mcp/diff`
         `changedFiles` so coverage (`vitest related`), mutate (`mutateFiles`), and flake (`files`) are
         all scoped from ONE diff (explicit `changedFiles` still wins). Deps scoping is delegated to its
         runner (slice 4), which owns the ecosystem and computes `changedDependencies(ctx.diff, …)`
@@ -1197,13 +1197,13 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
       streams → synthesis → 3 adversarial critics, all `sound-with-fixes`; human-ratified forks).* Turns
       the consume-only bridge into a verify-DRIVEN one: one gated call drives a browser flow → captures
       the HAR → validates it against the contract. **Browser-spawn ONLY** (API-runner staged to 5f);
-      `@sackville/verify` core untouched (the injected contract-runner seam is opaque to consume-vs-produce);
+      `@sackville-mcp/verify` core untouched (the injected contract-runner seam is opaque to consume-vs-produce);
       all new code in `packages/mcp`. The critics' load-bearing correction: **gate on FLOW COMPLETENESS,
       not HAR emptiness** (`runFlow` swallows step errors → a partial HAR could validate to a PASS;
       `driveBrowserFlowToHar` throws if `flow.passed===false` or any step `ok:false`). Egress safety via a
       single-source `buildBrowserRuntimeFromEnv()` (proxy started + hardening args + gate installed) +
       `proxy.stop()` in `finally`; gate model "both required, no new env"; one union redactor at both
-      `finalizeHar` and `validateCapturedTraffic`; verify-prefix HAR handle; lazy `@sackville/browser`
+      `finalizeHar` and `validateCapturedTraffic`; verify-prefix HAR handle; lazy `@sackville-mcp/browser`
       import. Ordered slices:
   - [x] **Slice 1 — brand the browser `GateError`** (`Symbol.for('sackville.gate-denial')`; consistency
         nicety for the pre-`runFlow` `checkNavigation` path).
@@ -1219,35 +1219,35 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
   - [x] **Slice 6 — `bin-verify` produce-branch wiring** behind the full gate (env-matrix tests).
   - [x] **Slice 7 — `verify_change` MCP input** (`contract:{flow,vars}`) + surface the verify HAR handle.
   - [x] **Slice 8 — `sackville verify run --flow <name>` CLI** + the milestone tail (notes + push).
-- [x] **Milestone 5f — `verify` driving the @sackville/api RUNNER to *produce* the HAR: COMPLETE** (1160 TS
+- [x] **Milestone 5f — `verify` driving the @sackville-mcp/api RUNNER to *produce* the HAR: COMPLETE** (1160 TS
       + 45 Py green; design = ADR 0013 Addendum 4, the `verify-api-capture-5f-design` fan-out → human
       ratified 2 forks). The SECOND produce source (after 5e's browser-spawn): a single gated call drives
       the api runner for an operator-authored request (by NAME), SYNTHESIZES a HAR, and validates it via the
       shipped `validateCapturedTraffic` — REST + GraphQL parity. Closes Addendum 3's 3 gaps: per-hop HAR
       entries in the redirect loop, the real request body as `postData`, and a `finalizeHar`-style
-      blanket-redaction pass extracted to `@sackville/api` `har-synth.ts` (shared so browser's `finalizeHar`
+      blanket-redaction pass extracted to `@sackville-mcp/api` `har-synth.ts` (shared so browser's `finalizeHar`
       delegates to it). 9 TDD slices: `redactHarZip`/`summarizeHar` extract → browser delegation →
       `synthesizeRedactedHarZip` → runner `runRequestForHar`/`runSequenceForHar` out-of-band channel →
       `runRequestToHar`/`runSequenceToHar` driver + transport guards (throw ⇒ inconclusive) →
-      **`@sackville/verdict` `fromCaptureVerdict`** (the ratified deeper fix: `clean===false` ⇒ inconclusive,
+      **`@sackville-mcp/verdict` `fromCaptureVerdict`** (the ratified deeper fix: `clean===false` ⇒ inconclusive,
       closing a CONFIRMED latent absence-as-pass hole in the shipped 5e produce + consume paths) →
       `verify_change` `produce-api` variant → `bin-verify` branch behind the api gate +
       `SACKVILLE_API_COLLECTIONS_DIR` → `sackville verify run --request`. Invariants held (compose-never-widen,
       absence-never-a-pass, redaction before the verdict, no real fetch in `pnpm gate`, core `.mjs`
       untouched).
-- [x] **Tail — extract the shared `Severity` scale into `@sackville/severity`: COMPLETE** (1164 TS + 45 Py
-      green; behavior-preserving). A new pure ZERO-dependency leaf (mirrors `@sackville/diff`/`assert`/
+- [x] **Tail — extract the shared `Severity` scale into `@sackville-mcp/severity`: COMPLETE** (1164 TS + 45 Py
+      green; behavior-preserving). A new pure ZERO-dependency leaf (mirrors `@sackville-mcp/diff`/`assert`/
       `artifacts`) owning the qualitative vocabulary: `QualitativeSeverity` ('critical'|'high'|'moderate'|
       'low') + `QUALITATIVE_RANK` (the single source of truth) + the verdict scale `Severity` (=
       `QualitativeSeverity | 'none'`) + `SEVERITY_RANK` (derived from `QUALITATIVE_RANK`, never re-typed) +
-      `maxSeverity`/`atLeast`. `@sackville/verdict`'s `severity.ts` is now a thin re-export shim (public
-      surface + internal `./severity.js` imports unchanged); `@sackville/deps` builds `SeverityBucket` (=
+      `maxSeverity`/`atLeast`. `@sackville-mcp/verdict`'s `severity.ts` is now a thin re-export shim (public
+      surface + internal `./severity.js` imports unchanged); `@sackville-mcp/deps` builds `SeverityBucket` (=
       `QualitativeSeverity | 'unknown'`) + `BUCKET_RANK` (= `{...QUALITATIVE_RANK, unknown:0}`) on the same
       base, and `audit.ts` now imports `BUCKET_RANK` from `osv.ts` (killed the byte-identical duplicate rank
       map). **The load-bearing `none` ≠ `unknown` distinction is preserved** — deps' `'unknown'` stays a
       separate member that maps to a `no-signal` pillar, never to `none`/`low` (absence-is-never-a-pass).
       verdict gains one runtime workspace import (the pure leaf), dragging in no heavy deps. New
-      `@sackville/severity` alias in `vitest.config.ts`; runtime dep of verdict + deps.
+      `@sackville-mcp/severity` alias in `vitest.config.ts`; runtime dep of verdict + deps.
 - [x] **Request-body & parameter contract validation: COMPLETE (v1)** (1202 TS + 45 Py green; design =
       ADR 0014, the `request-contract-validation-design` fan-out → all 4 forks human-ratified). The contract
       pillar now validates the REQUEST half of an exchange. New `validateOpenApiRequest` SIBLING (placement
@@ -1285,7 +1285,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
       MCP `validate_response.variables` + CLI `api validate --graphql --variables` + live `api run --graphql
       <schema>` (the symmetric parallel to `api run --openapi`). New finding kinds `graphql-variable-missing`/
       `-invalid` (error) + `graphql-undocumented-variable` (warning).
-- [x] **Artifact retention / GC (ADR 0017)** — the shared `@sackville/artifacts` store was append-only;
+- [x] **Artifact retention / GC (ADR 0017)** — the shared `@sackville-mcp/artifacts` store was append-only;
       a long-running server grew its dir without bound. Added an opt-in `RetentionPolicy`
       (`maxAgeMs`/`maxEntries`/`maxBytes`) applied by a disk-based `sweep()` scoped to the store's own
       `<baseDir>/<prefix>` subtree (never a foreign pillar), oldest-first by mtime, confinement-checked
@@ -1303,7 +1303,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
 
 ## Phase 6 — Packaging & distribution  *(IN PROGRESS — design = ADR 0019, Accepted; turns the monorepo into a product)*
 
-Goal: one front-door MCP server + a publishable `@sackville/*` set, so an agent/operator can adopt
+Goal: one front-door MCP server + a publishable `@sackville-mcp/*` set, so an agent/operator can adopt
 the whole toolkit from a single `.mcp.json` block instead of wiring nine bins. Design forged by the
 `packaging-distribution-design` fan-out (5 research streams → synthesis → 2 adversarial critics, 5
 blockers folded → corrected design). Four forks human-ratified (2026-06-05): curated read-heavy
@@ -1323,7 +1323,7 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       envs — both read **prefixed** `SACKVILLE_API_*` in aggregate mode; standalone unchanged). One
       `SACKVILLE_ARTIFACTS_ROOT` (per-pillar subtree/retention). Missing optional engine ⇒ loud disable;
       contradictory gate (LSP throws) ⇒ FATAL. Collect + fire every shutdown on SIGINT/SIGTERM.
-- [x] **Package split for install isolation.** `@sackville/browser`/`core`/`embed`/`flake` → optional
+- [x] **Package split for install isolation.** `@sackville-mcp/browser`/`core`/`embed`/`flake` → optional
       peer-deps + dynamic `import()` per enabled pillar; drop mcp's redundant direct `playwright-core`.
       So bare `npm i sackville` is native-free; docs/flake/browser loud-disable until their engine is
       installed. Asserted on the emitted `.mjs` (build-then-assert CI) + an install-closure test.
@@ -1333,7 +1333,7 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       `publishConfig.exports` overlay → dist (nested import/types); validate with `attw --pack` + `publint`
       on the TARBALL. ESM-only. OIDC trusted publishing from CI (Node≥22.14.0/npm≥11.5.1, `id-token:write`,
       no token), gate green first.
-- [x] **Distribution / onboarding.** *(README + example `.mcp.json` done; per-pillar browser preflight staged)* `@sackville/cli` `sackville` bin + a default bin so `npx sackville`
+- [x] **Distribution / onboarding.** *(README + example `.mcp.json` done; per-pillar browser preflight staged)* `@sackville-mcp/cli` `sackville` bin + a default bin so `npx sackville`
       resolves; a real resolvable `.mcp.json` example (operator-set gate envs only); browser-bin preflight
       diagnostic; README for human + agent operator. stdio only (v1).
 - [ ] *(staged, not amputated — Phase 7 candidates)* HTTP/SSE transport; MCP registry submission; an

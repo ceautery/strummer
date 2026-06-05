@@ -13,7 +13,7 @@ ephemeral per-snapshot refs — so a saved flow stays valid across runs.
 - [`login.sackville.yml`](./login/login.sackville.yml) — the steps.
 
 Step kinds: `navigate`, `click`, `fill`, `select`, `press`, `wait_for`, and
-`assert` (a list of declarative assertions over the shared `@sackville/assert`
+`assert` (a list of declarative assertions over the shared `@sackville-mcp/assert`
 operators — page sources `url`/`title`/`ariaSnapshot`, element sources
 `text`/`value`/`visible`/`count`).
 

@@ -1,15 +1,15 @@
-# ADR 0012 — `@sackville/deps`: multi-ecosystem version algebra (PyPI / RubyGems)
+# ADR 0012 — `@sackville-mcp/deps`: multi-ecosystem version algebra (PyPI / RubyGems)
 
 - **Status:** Accepted (design; first slice is the `VersionComparator` seam)
 - **Date:** 2026-06-01
 - **Relates to:** ADR 0010 (Phase-4 sequencing + cross-cutting decisions: explicit
-  pins / no transitive imports; TS-first, Python staged), the shipped `@sackville/deps`
+  pins / no transitive imports; TS-first, Python staged), the shipped `@sackville-mcp/deps`
   pillar (slices 1–5 + `changelog_diff`), `core.detectInstalledVersion` (already
   ecosystem-dispatching node/python/ruby), ARCHITECTURE §"version-pinned, not latest".
 
 ## Context
 
-`@sackville/deps` answers deprecation / vulnerability / freshness **for the installed
+`@sackville-mcp/deps` answers deprecation / vulnerability / freshness **for the installed
 version** of a dependency. It ships complete for **npm** but is npm-only: `audit_project`
 hard-rejects other ecosystems, and — more dangerously — the version algebra is hardcoded
 to **`semver`**. A fan-out research pass (two external streams: PEP 440 / Gem comparison

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { isMainModule } from './is-main.js'
 import { createMutateServer, type MutateToolsOptions, registerMutateTools } from './mutate.js'
 import type { PillarSetup } from './pillars.js'
 
@@ -87,7 +87,7 @@ export function buildMutateServerFromEnv(
 }
 
 // Executable tail: only run when invoked directly (not when imported by a test).
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   const { server } = buildMutateServerFromEnv()
   await server.connect(new StdioServerTransport())
 }

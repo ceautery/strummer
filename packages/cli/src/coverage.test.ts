@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { FileCoverage, TestRunner } from '@sackville/coverage'
+import type { FileCoverage, TestRunner } from '@sackville-mcp/coverage'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runCoverage } from './coverage.js'
 import { run } from './index.js'

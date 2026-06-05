@@ -1,4 +1,4 @@
-import { applyOp } from '@sackville/assert'
+import { applyOp } from '@sackville-mcp/assert'
 import { JSONPath } from 'jsonpath-plus'
 import type { AssertionResult, AssertionSpec, CaptureSpec } from './model.js'
 import { validateSchema } from './schema.js'

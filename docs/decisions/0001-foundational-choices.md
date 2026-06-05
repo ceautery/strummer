@@ -28,13 +28,13 @@ owns the GitHub org.
 - The bare **`sackville`** npm package **is the aggregate MCP server**, so client
   onboarding is the clean `npx -y sackville` in `.mcp.json` (its primary bin is
   `sackville`; `sackville-mcp` is an alias; per-pillar bins are `sackville-<pillar>-mcp`).
-- The **library graph + the human CLI publish under `@sackville/*`** (`@sackville/core`,
-  `@sackville/api`, …, `@sackville/cli` whose bin is `sackville-cli` to avoid colliding
+- The **library graph + the human CLI publish under `@sackville-mcp/*`** (`@sackville-mcp/core`,
+  `@sackville-mcp/api`, …, `@sackville-mcp/cli` whose bin is `sackville-cli` to avoid colliding
   with the server's bare `sackville` bin).
 - Homebrew remains a candidate **secondary** channel for the CLI.
 
 Mechanics of the rename (blast radius, the `SACKVILLE_*` env / `sackville://` URI /
-`@sackville/*` scope / `sackville_ingest` Python package) were a single gate-verified
+`@sackville-mcp/*` scope / `sackville_ingest` Python package) were a single gate-verified
 pass; see the project memory + STATUS.
 
 ### 2. Stack: **Polyglot core**

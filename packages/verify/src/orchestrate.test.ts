@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { DependencyAudit } from '@sackville/deps'
+import type { DependencyAudit } from '@sackville-mcp/deps'
 import { describe, expect, it, vi } from 'vitest'
 import { gateDenied, isGateDenial } from './gate.js'
 import { orchestrate } from './orchestrate.js'
@@ -213,12 +213,12 @@ describe('orchestrate — gate composition: compose, never widen (slice 3)', () 
 describe('orchestrate — imports zero spawn-capable engine code (slice 2)', () => {
   it('every @sackville engine import is type-only; no runner/store/native module is reachable', () => {
     const ENGINES = [
-      '@sackville/api',
-      '@sackville/coverage',
-      '@sackville/deps',
-      '@sackville/flake',
-      '@sackville/mutate',
-      '@sackville/browser',
+      '@sackville-mcp/api',
+      '@sackville-mcp/coverage',
+      '@sackville-mcp/deps',
+      '@sackville-mcp/flake',
+      '@sackville-mcp/mutate',
+      '@sackville-mcp/browser',
     ]
     for (const file of sourceFiles()) {
       const text = readFileSync(join(SRC_DIR, file), 'utf8')

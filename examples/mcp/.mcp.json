@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "sackville": {
+    "sackville-mcp": {
       "command": "npx",
-      "args": ["-y", "sackville"],
+      "args": ["-y", "sackville-mcp"],
       "env": {
         "SACKVILLE_TOOLSETS": "api,deps,verify",
         "SACKVILLE_API_ALLOWED_HOSTS": "api.example.com",

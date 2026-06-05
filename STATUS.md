@@ -5,20 +5,26 @@
 
 ## Current phase
 
-**PROJECT RENAMED: Strummer → SACKVILLE (2026-06-05) — see ADR 0001. The bare `strummer` npm name was taken by a dormant validation lib (`tabdigital`, 2019) + offshoots; `sackville` (LOTR Sackville-Baggins) has the bare name AND the `@sackville` scope verified-available (registry 404, no offshoots). NAMING SHAPE: the BARE `sackville` npm package IS the aggregate MCP server (`.mcp.json` = `npx -y sackville`; bin `sackville` + alias `sackville-mcp` + per-pillar `sackville-<pillar>-mcp`); the lib graph + CLI are `@sackville/*` (`@sackville/cli` bin = `sackville-cli`, distinct to avoid colliding with the server's bare `sackville` bin). Env prefix `SACKVILLE_*`; URI scheme `sackville://`; Python pkg `sackville_ingest` (`py/sackville_ingest`); schema `schema/sackville.schema.{sql,json}`; sidecars `*.sackville.yml`. EXECUTED as ONE gate-verified pass: 3 case-preserving content subs across 251 files + file/dir `git mv`s + the `golden.sqlite` fixture REGENERATED via `uv run sackville-ingest build-fixture` (the table name `sackville_meta` lived inside the binary — a text replace can't reach it; this was the only non-text spot, caught by the gate). Gate green 1571 TS + 45 Py; bare `sackville` bin smoke-verified on the built artifact (`enabled [api,deps,verify]; disabled [docs]`). PUSHED to **`github.com/ceautery/sackville`** (repo renamed; the existing token worked — a repo rename keeps creds). FOLLOW-UPS done after the rename commit: (a) `snapshot.ts` + `lsp/manager.ts` each used a raw-NUL delimiter in a Map key, which made git classify them BINARY → my `git grep -lI` rename pass (the `-I` flag skips binary) silently missed `snapshot.ts` (had 3 stale strummer refs) and would hide future grep tooling; both NUL delimiters swapped to `\x1f` (unit separator, equally collision-proof, keeps the files plain text) + the 3 refs fixed (commits 66f8229, 3e65237); (b) rebuilt the gitignored `data/react.sqlite` (old `strummer_meta` schema → new `sackville_meta`; React 19.2, 1279 fragments, fastembed; verified via a live CLI search returning `sackville://doc/...`). Only residual `strummer` = the intentional rename-doc in this file + ADR 0001. HEAD 3e65237, gate green 1571 TS + 45 Py.
+**ALPHA NPM PUBLISH — DONE (2026-06-05). All 18 packages are live on npm at `0.0.1-alpha.1`, dist-tag `alpha`, `latest` → alpha.1, under scope `@sackville-mcp` + unscoped aggregate `sackville-mcp` (`npx -y sackville-mcp`). Gate green 1583 TS + 45 Py. Verified end-to-end: real `npx -y sackville-mcp@alpha` prints `sackville-mcp: enabled [api, deps, verify]; disabled [docs]`.**
 
-**QUEUED NEXT ACTION — ALPHA NPM PUBLISH (do NOT auto-run; operator kicks it off in a fresh session).** A token-based MANUAL first-publish (the full OIDC-CI path = ADR 0019 slices 2/10/13 stays deferred for automation later). OPERATOR PREREQS at the start of the publish session: an npm account with a publish **automation token** (`NPM_TOKEN` / `npm login`), AND the **`sackville` npm org created** (required for the `@sackville/*` scope; the bare `sackville` mcp package publishes too) — re-verify `sackville` bare + `@sackville` scope still free (were, 2026-06-05). STEPS: (1) confirm gate green + clean tree; (2) version-bump all 18 PUBLISHABLE packages 0.0.0 → `0.0.1-alpha.0` FIXED/lockstep (root stays private/unversioned) — can hand-bump or wire `@changesets/cli` (fixed mode) if preferred; (3) `pnpm -r build` (topological); (4) DRY-RUN `pnpm -r publish --tag alpha --no-git-checks --dry-run` and eyeball that `workspace:*` deps rewrite to `0.0.1-alpha.0` + `access:public` (already in each `publishConfig`); (5) real publish `pnpm -r publish --tag alpha --no-git-checks` (pnpm publishes in dependency order + rewrites `workspace:*`); (6) verify `npm view sackville@alpha` + smoke `npx -y sackville@alpha` in a scratch dir (should print `sackville-mcp: enabled [api,deps,verify]; disabled [docs]`); (7) commit the version bump + push + tag `v0.0.1-alpha.0`. PUBLISHING IS OUTWARD-FACING + HARD TO UNDO (npm 72h unpublish window) — get explicit go before the REAL publish (step 5); the dry-run is safe. The heavy-engine OPTIONAL-PEER split means a bare `npm i sackville` is native-free; document that alpha consumers add `@sackville/browser`/`core`/`embed`/`flake` to enable those pillars. — — — NOW: Phase 6 — PACKAGING & DISTRIBUTION (ADR 0019, Accepted) — AGGREGATE + SPLIT + ONBOARDING COMPLETE; only the publish-CI tail remains (gated on operator npm/OIDC setup) (2026-06-05; gate green 1571 TS + 45 Py; renamed-from HEAD 87c0fe5). DONE since the aggregate milestone: slice 12 (package-graph SPLIT — heavy engines `@sackville/browser`/`core`/`embed`/`flake` + `playwright-core` moved from `sackville` deps → OPTIONAL peerDependencies [kept as devDeps for workspace resolution]; `bin-verify.ts`'s `@sackville/flake` import made LAZY (inside the flake run thunk) so the api+deps+verify default loads without flake installed; verify.ts's flake/browser imports were already type-only; publishability sweep — removed `private`, added `repository{url,directory}` case-exact + `publishConfig.access:public` across all 18 packages [root stays private]; guards: install-isolation + per-package publishability + verify-no-static-optional-peer-import; verified: build OK + aggregate default = enabled[api,deps,verify]); slice 14 (onboarding — aggregate-first `packages/mcp/README.md` rewrite + `examples/mcp/.mcp.json` [npx sackville, operator gate envs only] + guard that the documented npx command maps to a REAL bin [the npx trap]). Commits: 3ec77d7 (slice 12), 87c0fe5 (slice 14). NEXT ACTION (publish-CI tail — REQUIRES network installs of dev tooling + the operator's npm/GitHub-org setup; NOTHING publishes without explicit operator go): slice 2 = add `@arethetypeswrong/cli` (attw) + `publint` as dev tooling, run `attw --pack` + `publint` on a packed leaf TARBALL (build-then-assert CI, not gate); slice 10 = assert the aggregate's emitted `.mjs` keeps playwright/sqlite/onnx/transformers in await-import chunks ONLY (build-then-assert CI); slice 13 = `@changesets/cli` FIXED/lockstep config + `.github/workflows/release.yml` (topo `pnpm -r build` → `changeset publish` via pnpm; OIDC trusted publishing: cloud runner, `id-token:write`, Node≥22.14.0/npm≥11.5.1, NO token) + a `changeset publish --dry` check — BUT OIDC trusted-publishing must be configured on npmjs.com per-package by the operator (chicken-and-egg: the @sackville/* packages don't exist on npm until the first publish), so this slice needs the operator. STAGED REFINEMENT (minor, deferred): a browser-bin PREFLIGHT diagnostic — catch playwright's "executable doesn't exist" at launch and print a clear "run `npx playwright install chromium`" message (ADR 0019 §14; browser-pillar runtime path). See ADR 0019 slice plan + ROADMAP Phase 6. — — — PRIOR: Python MUTATION diff-scoping (cosmic-ray + mutmut) — COMPLETE (ADR 0010 addendum 2, 2026-06-05; gate green 1456 TS + 45 Py; HEAD fe30584, pushed). The full arc landed AND was verified end-to-end against the real cosmic-ray 8.4.6 + mutmut 3.5.0 (provisioned via `uv` in this container; NOT in the dev container). The Python mutation runners now honor `mutateFiles` like TS `runMutation`'s `--mutate`. (1) SLICE 0 capture (commit 15920b9): the load-bearing finding — mutmut 3.5.0 has NO `only_mutate`/`source_paths` (the ratified Fork B was doc-derived & WRONG); real keys are `paths_to_mutate` (scope) + `do_not_mutate` (fnmatch-glob exclusion), confirmed by reading the installed `Config`/`load_config`. cosmic-ray `module-path` accepts a FILE LIST (Fork A holds; A2 not needed); `excluded-modules` subtracts via exact path AND fnmatch glob (blocker #3 real); mutmut can't distinguish seen-but-empty from never-seen (Fork B2 ⇒ conservative reconcile). Fixtures `cosmic-ray-scoped-dump.jsonl` + `mutmut-scoped-results.txt` + README provenance + the Fork B correction in ADR 0010 §"Slice 0 RESULTS". (2) EMITTERS (commit d23c86e, `config.ts`, 15 tests, `smol-toml` ^1.6.1 added): `synthesizeScopedCosmicRayConfig` (override `module-path` to selected list, strip any inherited `excluded-modules` entry that fnmatch-matches a selected file); `planMutmutScope`+`synthesizeScopedMutmutPyproject` (`paths_to_mutate`=selected; `also_copy`=rest of the tree so unscoped tests still import; strip a colliding `do_not_mutate`). Python-fnmatch matcher (star crosses `/`). Verified by driving the real tools with the emitters' actual output. (3) RUNNER WIRING — `runCosmicRay` (commit 25b7b65, 7 tests): scoped config written into projectRoot so its RELATIVE module-path resolves (cosmic-ray then reports relative module_path keys, matched directly by `reconcileScope`); cleaned up in `finally`. `runMutmut` (commit bb85f8f, 14 tests): runs in a FRESH SANDBOX copy (excludes node_modules/.git/.venv/mutants/etc.) with the scoped pyproject; baseline-smoke is FREE (broken baseline → mutmut "not checked" → Pending → `assertComplete` inconclusive); new `reconcileMutmutScope` (mutmut summary is MODULE-keyed not path + emits NO record for a 0-mutant scoped file, so CONSERVATIVE — a selected file with no matching mutated module ⇒ inconclusive; suffix match tolerates src layouts; ZERO false-passes) + `pyPathToModule`. Four end-states (a noop ran:false; b total-zero/pending→assertComplete; c partial under-scope→reconcile throws; d clean→scopedFiles=mutatedFiles). Additive `RunMutationResult` fields (`scopeEmpty`/`unmatched`/`requestedFiles`) + optional `RunMutationInput.ownedRoots`; MCP/CLI unchanged. (4) VERIFY SELECTOR (Fork D, commit accd284): `SACKVILLE_MUTATE_TOOL`(stryker|cosmic-ray|mutmut, default stryker) + `SACKVILLE_MUTATE_CONFIG_PATH` (bin-verify); `--mutate-tool`/`--mutate-config` (verify CLI, unknown ⇒ exit 2); routes `changedFiles → mutateFiles`. E2E (real tools, out-of-gate): runCosmicRay scoped calc+strutil → 22 killed + 11 survived (66.7%), reconcile passed; runMutmut scoped calc → 2 killed; a truly-0-mutant `nomut.py` → correctly inconclusive. NO real spawn in `pnpm gate` (pure synthesis + injected runner / real-temp-project + fake runner). Invariants held: under-scoping (total OR partial) never silent-passes; absence-never-a-pass; compose-never-widen; operator gate untouched. RESUME / NEXT: arc DONE + committed to `main` (push at this milestone). Pick the next direction with the human — a NEW phase (packaging/distribution: publish `@sackville/*`, unified aggregate MCP server / single CLI; or an end-to-end "verify a PR" recipe / GitHub Action) or a staged tail (cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/` cache reuse; Stryker PARTIAL-scope reconciliation; flake diff-scoping; src-layout precision for `reconcileMutmutScope`; ecosystem-aware changelog heading regex; Ruby coverage/mutation [license first]; pytest-reportlog parser; LSP recursive/dir delete + toolchain matrix). Re-run the real-tool checks next session via `uv venv` + `uv pip install 'cosmic-ray==8.4.6' 'mutmut==3.5.0' pytest`. See ADR 0010 addendum 2 + ROADMAP. — — — PRIOR (slice-0-gated snapshot — SUPERSEDED, the arc above is DONE): Closes the diff-scoping asymmetry: TS `runMutation` scopes via `--mutate`, but the Python runners (`runCosmicRay` PRIMARY / `runMutmut`) DROP `mutateFiles` (`scopedFiles: []`). pytest+coverage.py scoping already shipped (`runScopedPython`); this is the MUTATION half. Design = a research→synthesis→2-critic fan-out (Critic 1 needs-rework → 5 blockers folded; Critic 2 ship-with-fixes); forks A/A2/B/B2/C/D/E/F ratified. THE LOAD-BEARING CATCH: `assertComplete` (run.ts:188) only throws on TOTAL-zero mutants, so PARTIAL under-scope (synthesis selects 3 changed files, the tool mutates 1, those are killed, score reads clean, 2 changed files silently never mutated) is a latent absence-as-a-pass. SHIPPED THIS SESSION (pure, fixture-tested, no real tool in the gate; `packages/mutate/src/scope.ts`, 14 tests, commit 39e353f): (1) `selectMutationScope(mutateFiles, ownedRoots, exists)` → `{files, unmatched}` — mirrors `selectPytestScope` incl. the injected existence predicate; `.py`-only + in-tree + existing → `files`, out-of-tree/deleted/typo → `unmatched` (report-gap, never silently scoped); (2) `reconcileScope(selected, MutationSummary)` → `{mutatedFiles, missing}` — the post-spawn guard: a selected file ABSENT from `summary.files` was never mutated (the partial-scope sentinel → the staged runner throws → inconclusive); seen-but-empty (0 mutants) is benign. Both exported from the mutate index. ZERO-MUTANT RESOLUTION (4 states): (a) legit-empty-scope → early-return-noop, don't spawn; (b) total-empty/failed → `assertComplete` throws; (c) partial under-scope → `reconcileScope` throws; (d) clean → `scopedFiles = mutatedFiles` (what was genuinely mutated, not requested). STAGED — SLICE-0-GATED (the tools — cosmic-ray 8.4.6 / mutmut 3.5.0 — are ABSENT from the dev container; emitters MUST be pinned to captured behavior, NOT doc guesses; capture out-of-gate in the reference env per the addendum-1/LSP convention): slice 0 (capture `module-path` file-list shape [Fork A2], mutmut config keys [Fork F], `only_mutate` form, seen-vs-unseen [Fork B2]); the config emitters (`synthesizeScopedCosmicRayConfig` override `module-path` + reconcile inherited exclusions via `smol-toml`; `planMutmutScope`/`renderMutmutConfig` fresh-sandbox-cwd + baseline-smoke); the `runCosmicRay`/`runMutmut` wiring (honor `mutateFiles`: pre-spawn noop on empty, whole-project on `undefined`/`no-scope`, post-spawn `reconcileScope`; additive `RunMutationResult` fields); MCP/CLI need NO change (already forward `mutateFiles`); the verify selector (Fork D: `SACKVILLE_MUTATE_TOOL` + `SACKVILLE_MUTATE_CONFIG_PATH` in bin-verify, `--mutate-tool`/`--mutate-config` in the verify CLI). Stryker-under-verify total-zero path verified already-safe (`mutationScore===null` → `no-signal` → inconclusive via `fromMutationSummary`/`composeVerdict`); Stryker PARTIAL-scope reconciliation staged. Resume (AGREED PLAN): read ADR 0010 addendum 2 + ROADMAP "Python MUTATION diff-scoping"; **PROVISION cosmic-ray 8.4.6 + mutmut 3.5.0 (+ pytest) via `uv` in this container**, then do SLICE 0 (capture the `module-path` file-list shape [A2], mutmut config keys [F], `only_mutate` form, seen-vs-unseen [B2]), commit those fixtures, THEN build the emitters→`runCosmicRay`/`runMutmut` wiring→verify selector against the captures. The pure safety core (`selectMutationScope`/`reconcileScope`) already shipped; do NOT write the emitters from doc-derived guesses. Commits: docs a5b9e81 + safety core 39e353f. — — — PRIOR ARC: GraphQL directive-arg validation + custom-scalar variable coercers — COMPLETE (ADR 0018, 2026-06-05; gate green 1410 TS + 45 Py; all 7 implementation slices + docs landed TDD red→green; 3 critic blockers folded in pre-build; 5 forks human-ratified). A staged-tail arc deepening the GraphQL contract pillar (ADR 0015 follow-on). The decisive finding reshaped scope: graphql-js `validate()` (KnownDirectives/KnownArgumentNamesOnDirectives/ProvidedRequiredArgumentsOnDirectives/ValuesOfCorrectType) + the usage-agnostic `getVariableValues` loop ALREADY cover directive args + the VALUES of variables feeding them (exactly once, even when a variable also feeds a field arg) — so Feature A (directive args) is mostly a regression-LOCK (slice 1, tests-only). Cardinal rule held: anything `validate()` covers is SKIP-by-us (no double-report). TWO genuine new pieces: (D2) a custom-scalar directive-arg LITERAL folds to `unverified` (identity `parseLiteral`, never patched — may carry an inline secret; `visitWithTypeInfo` pass CONFINED to a `DirectiveNode` parent, skips `Variable` nodes, reuses the transitive `typeInvolvesCustomScalar`; field-arg literals UNCHANGED, S1 staged; COERCER-INDEPENDENT, BLOCKER-2) surfaced on the capture bridge under the distinct `graphql-directive-unverified` key (§8.4, additive `directiveUnverified?` flag); and (Feature B) operator-supplied custom-scalar variable COERCERS — `patchRegisteredScalars` overwrites `parseValue` ONLY (NEVER `parseLiteral`, the BLOCKER-1 redaction-leak guard), built-in names silently ignored (§8.5), `typeInvolvesCustomScalar` gains a `registered` set (registered scalar checkable; unregistered or input-object-with-any-unregistered-field stays `unverified`); fresh-per-call schema makes in-place patching safe. Coercers OPERATOR-SET (§8.1): MCP `validate_response.enableScalarCoercers: string[]` selects by NAME against an operator-bound registry; CLI `api validate/run --graphql --coercers <file.js>` loads an operator module (fail-LOUD non-zero on a bad module — never a silent no-coercer pass). Invariants held: ambiguity⇒unverified-skip, absence-never-a-pass (new unverified rides the existing bridge noSignal fold), redaction (findings RECONSTRUCTED from name+type, coercer throw consumed as a BOOLEAN; `validate_response` has NO verifyRedact backstop so value-free reconstruction is the SOLE guard — tested end-to-end through MCP), compose-never-widen (zero new `ContractFindingKind`, one additive `scalarCoercers?` opt + `directiveUnverified?` field), no real spawn/fetch in `pnpm gate`. STAGED: S1 custom-scalar FIELD-arg literals; S2 bridge coercers; S3 inline-literal coercion (NOT partially built — `parseLiteral` never patched); S4 fragment-only/cross-op vars; S5 indeterminate-coercer sentinel; S6 schema-cache × patch. Commits: docs ADR 0018 (6124b3d) + slices 1–7 (46fa5f2/00e5440/75a51fb/159d2d1/e414736/5d82ad1). Next: pick the next direction with the human — a NEW phase (packaging/distribution; an end-to-end "verify a PR" recipe/Action) or another staged tail (cosmic-ray/mutmut/pytest diff-scoping; ecosystem-aware changelog heading regex; Ruby coverage/mutation [license check first]; pytest-reportlog parser; LSP recursive/dir delete + toolchain matrix). See ADR 0018 + ROADMAP Phase 2.**
+**SCOPE CORRECTION (load-bearing): the `@sackville` scope is NOT ours — it is owned by the npm user `~sackville`.** The rename milestone's "`@sackville` scope verified-available" claim was WRONG: a package-name registry 404 does NOT prove the scope is free (an npm username silently reserves `@username`). So the published scope is **`@sackville-mcp`** (the org the operator owns) and the bare aggregate is the unscoped **`sackville-mcp`**. The fix was a literal `@sackville/` → `@sackville-mcp/` swap across 147 files + a surgical bare `sackville` → `sackville-mcp` rename (package `name`/`.mcp.json`/README only); **`SACKVILLE_*` env, `sackville://` URIs, `sackville_ingest` (Python), and the GitHub repo `ceautery/sackville` are UNCHANGED.** NOTE: that `@sackville/` sed also rewrote historical mentions in the docs below (incl. the rename narrative in the next paragraph) to `@sackville-mcp/` — read those as the corrected scope; THIS block is authoritative on naming.
+
+**alpha.0 was BROKEN, superseded + deprecated.** The first publish (alpha.0) failed its smoke test two ways, both fixed in alpha.1 (TDD red→green): (1) **npx entrypoint dead** — all 10 mcp bins guarded server-start with `import.meta.url === pathToFileURL(process.argv[1]).href`, FALSE under symlink/npx invocation (Node realpaths `import.meta.url` but not `argv[1]`); replaced with a realpath-resolving `isMainModule()` (`packages/mcp/src/is-main.ts`; symlink regression test). (2) **default pillars collapsed to [api]** — `packages/mcp/src/deps.ts` statically value-imported the OPTIONAL peer `@sackville-mcp/core`, so the dynamically-imported deps chunk threw `ERR_MODULE_NOT_FOUND` on a native-free install, taking deps+verify down with it; `core` is now a guarded lazy `await import()` (graceful degrade to "version not detected"). Added a packaging guard test: no default-pillar wiring (api/deps/verify/aggregate) statically value-imports an optional peer. Validated pre-publish via a faithful native-free install (file: tarballs, optional peers absent) through the `.bin` symlink. `latest` repointed alpha.0→alpha.1 on all 18; alpha.0 `npm deprecate`d ("use 0.0.1-alpha.1 or later"). **2FA wall:** publishing required a GRANULAR token with "Bypass 2FA" enabled — a web-login session AND a no-bypass granular token both 403'd. NEXT: the OIDC publish-CI tail (ADR 0019 slices 2/10/13) stays deferred; alpha consumers add `@sackville-mcp/browser`/`core`/`embed`/`flake` to enable those pillars.**
+
+**PROJECT RENAMED: Strummer → SACKVILLE (2026-06-05) — see ADR 0001. The bare `strummer` npm name was taken by a dormant validation lib (`tabdigital`, 2019) + offshoots; `sackville` (LOTR Sackville-Baggins) has the bare name AND the `@sackville` scope verified-available (registry 404, no offshoots). NAMING SHAPE: the BARE `sackville` npm package IS the aggregate MCP server (`.mcp.json` = `npx -y sackville`; bin `sackville` + alias `sackville-mcp` + per-pillar `sackville-<pillar>-mcp`); the lib graph + CLI are `@sackville-mcp/*` (`@sackville-mcp/cli` bin = `sackville-cli`, distinct to avoid colliding with the server's bare `sackville` bin). Env prefix `SACKVILLE_*`; URI scheme `sackville://`; Python pkg `sackville_ingest` (`py/sackville_ingest`); schema `schema/sackville.schema.{sql,json}`; sidecars `*.sackville.yml`. EXECUTED as ONE gate-verified pass: 3 case-preserving content subs across 251 files + file/dir `git mv`s + the `golden.sqlite` fixture REGENERATED via `uv run sackville-ingest build-fixture` (the table name `sackville_meta` lived inside the binary — a text replace can't reach it; this was the only non-text spot, caught by the gate). Gate green 1571 TS + 45 Py; bare `sackville` bin smoke-verified on the built artifact (`enabled [api,deps,verify]; disabled [docs]`). PUSHED to **`github.com/ceautery/sackville`** (repo renamed; the existing token worked — a repo rename keeps creds). FOLLOW-UPS done after the rename commit: (a) `snapshot.ts` + `lsp/manager.ts` each used a raw-NUL delimiter in a Map key, which made git classify them BINARY → my `git grep -lI` rename pass (the `-I` flag skips binary) silently missed `snapshot.ts` (had 3 stale strummer refs) and would hide future grep tooling; both NUL delimiters swapped to `\x1f` (unit separator, equally collision-proof, keeps the files plain text) + the 3 refs fixed (commits 66f8229, 3e65237); (b) rebuilt the gitignored `data/react.sqlite` (old `strummer_meta` schema → new `sackville_meta`; React 19.2, 1279 fragments, fastembed; verified via a live CLI search returning `sackville://doc/...`). Only residual `strummer` = the intentional rename-doc in this file + ADR 0001. HEAD 3e65237, gate green 1571 TS + 45 Py.
+
+**ALPHA NPM PUBLISH — DONE (see the authoritative top block; published `0.0.1-alpha.1` under `@sackville-mcp`/`sackville-mcp`). The historical plan follows.** A token-based MANUAL first-publish (the full OIDC-CI path = ADR 0019 slices 2/10/13 stays deferred for automation later). OPERATOR PREREQS at the start of the publish session: an npm account with a publish **automation token** (`NPM_TOKEN` / `npm login`), AND the **`sackville` npm org created** (required for the `@sackville-mcp/*` scope; the bare `sackville` mcp package publishes too) — re-verify `sackville` bare + `@sackville` scope still free (were, 2026-06-05). STEPS: (1) confirm gate green + clean tree; (2) version-bump all 18 PUBLISHABLE packages 0.0.0 → `0.0.1-alpha.0` FIXED/lockstep (root stays private/unversioned) — can hand-bump or wire `@changesets/cli` (fixed mode) if preferred; (3) `pnpm -r build` (topological); (4) DRY-RUN `pnpm -r publish --tag alpha --no-git-checks --dry-run` and eyeball that `workspace:*` deps rewrite to `0.0.1-alpha.0` + `access:public` (already in each `publishConfig`); (5) real publish `pnpm -r publish --tag alpha --no-git-checks` (pnpm publishes in dependency order + rewrites `workspace:*`); (6) verify `npm view sackville@alpha` + smoke `npx -y sackville@alpha` in a scratch dir (should print `sackville-mcp: enabled [api,deps,verify]; disabled [docs]`); (7) commit the version bump + push + tag `v0.0.1-alpha.0`. PUBLISHING IS OUTWARD-FACING + HARD TO UNDO (npm 72h unpublish window) — get explicit go before the REAL publish (step 5); the dry-run is safe. The heavy-engine OPTIONAL-PEER split means a bare `npm i sackville` is native-free; document that alpha consumers add `@sackville-mcp/browser`/`core`/`embed`/`flake` to enable those pillars. — — — NOW: Phase 6 — PACKAGING & DISTRIBUTION (ADR 0019, Accepted) — AGGREGATE + SPLIT + ONBOARDING COMPLETE; only the publish-CI tail remains (gated on operator npm/OIDC setup) (2026-06-05; gate green 1571 TS + 45 Py; renamed-from HEAD 87c0fe5). DONE since the aggregate milestone: slice 12 (package-graph SPLIT — heavy engines `@sackville-mcp/browser`/`core`/`embed`/`flake` + `playwright-core` moved from `sackville` deps → OPTIONAL peerDependencies [kept as devDeps for workspace resolution]; `bin-verify.ts`'s `@sackville-mcp/flake` import made LAZY (inside the flake run thunk) so the api+deps+verify default loads without flake installed; verify.ts's flake/browser imports were already type-only; publishability sweep — removed `private`, added `repository{url,directory}` case-exact + `publishConfig.access:public` across all 18 packages [root stays private]; guards: install-isolation + per-package publishability + verify-no-static-optional-peer-import; verified: build OK + aggregate default = enabled[api,deps,verify]); slice 14 (onboarding — aggregate-first `packages/mcp/README.md` rewrite + `examples/mcp/.mcp.json` [npx sackville, operator gate envs only] + guard that the documented npx command maps to a REAL bin [the npx trap]). Commits: 3ec77d7 (slice 12), 87c0fe5 (slice 14). NEXT ACTION (publish-CI tail — REQUIRES network installs of dev tooling + the operator's npm/GitHub-org setup; NOTHING publishes without explicit operator go): slice 2 = add `@arethetypeswrong/cli` (attw) + `publint` as dev tooling, run `attw --pack` + `publint` on a packed leaf TARBALL (build-then-assert CI, not gate); slice 10 = assert the aggregate's emitted `.mjs` keeps playwright/sqlite/onnx/transformers in await-import chunks ONLY (build-then-assert CI); slice 13 = `@changesets/cli` FIXED/lockstep config + `.github/workflows/release.yml` (topo `pnpm -r build` → `changeset publish` via pnpm; OIDC trusted publishing: cloud runner, `id-token:write`, Node≥22.14.0/npm≥11.5.1, NO token) + a `changeset publish --dry` check — BUT OIDC trusted-publishing must be configured on npmjs.com per-package by the operator (chicken-and-egg: the @sackville-mcp/* packages don't exist on npm until the first publish), so this slice needs the operator. STAGED REFINEMENT (minor, deferred): a browser-bin PREFLIGHT diagnostic — catch playwright's "executable doesn't exist" at launch and print a clear "run `npx playwright install chromium`" message (ADR 0019 §14; browser-pillar runtime path). See ADR 0019 slice plan + ROADMAP Phase 6. — — — PRIOR: Python MUTATION diff-scoping (cosmic-ray + mutmut) — COMPLETE (ADR 0010 addendum 2, 2026-06-05; gate green 1456 TS + 45 Py; HEAD fe30584, pushed). The full arc landed AND was verified end-to-end against the real cosmic-ray 8.4.6 + mutmut 3.5.0 (provisioned via `uv` in this container; NOT in the dev container). The Python mutation runners now honor `mutateFiles` like TS `runMutation`'s `--mutate`. (1) SLICE 0 capture (commit 15920b9): the load-bearing finding — mutmut 3.5.0 has NO `only_mutate`/`source_paths` (the ratified Fork B was doc-derived & WRONG); real keys are `paths_to_mutate` (scope) + `do_not_mutate` (fnmatch-glob exclusion), confirmed by reading the installed `Config`/`load_config`. cosmic-ray `module-path` accepts a FILE LIST (Fork A holds; A2 not needed); `excluded-modules` subtracts via exact path AND fnmatch glob (blocker #3 real); mutmut can't distinguish seen-but-empty from never-seen (Fork B2 ⇒ conservative reconcile). Fixtures `cosmic-ray-scoped-dump.jsonl` + `mutmut-scoped-results.txt` + README provenance + the Fork B correction in ADR 0010 §"Slice 0 RESULTS". (2) EMITTERS (commit d23c86e, `config.ts`, 15 tests, `smol-toml` ^1.6.1 added): `synthesizeScopedCosmicRayConfig` (override `module-path` to selected list, strip any inherited `excluded-modules` entry that fnmatch-matches a selected file); `planMutmutScope`+`synthesizeScopedMutmutPyproject` (`paths_to_mutate`=selected; `also_copy`=rest of the tree so unscoped tests still import; strip a colliding `do_not_mutate`). Python-fnmatch matcher (star crosses `/`). Verified by driving the real tools with the emitters' actual output. (3) RUNNER WIRING — `runCosmicRay` (commit 25b7b65, 7 tests): scoped config written into projectRoot so its RELATIVE module-path resolves (cosmic-ray then reports relative module_path keys, matched directly by `reconcileScope`); cleaned up in `finally`. `runMutmut` (commit bb85f8f, 14 tests): runs in a FRESH SANDBOX copy (excludes node_modules/.git/.venv/mutants/etc.) with the scoped pyproject; baseline-smoke is FREE (broken baseline → mutmut "not checked" → Pending → `assertComplete` inconclusive); new `reconcileMutmutScope` (mutmut summary is MODULE-keyed not path + emits NO record for a 0-mutant scoped file, so CONSERVATIVE — a selected file with no matching mutated module ⇒ inconclusive; suffix match tolerates src layouts; ZERO false-passes) + `pyPathToModule`. Four end-states (a noop ran:false; b total-zero/pending→assertComplete; c partial under-scope→reconcile throws; d clean→scopedFiles=mutatedFiles). Additive `RunMutationResult` fields (`scopeEmpty`/`unmatched`/`requestedFiles`) + optional `RunMutationInput.ownedRoots`; MCP/CLI unchanged. (4) VERIFY SELECTOR (Fork D, commit accd284): `SACKVILLE_MUTATE_TOOL`(stryker|cosmic-ray|mutmut, default stryker) + `SACKVILLE_MUTATE_CONFIG_PATH` (bin-verify); `--mutate-tool`/`--mutate-config` (verify CLI, unknown ⇒ exit 2); routes `changedFiles → mutateFiles`. E2E (real tools, out-of-gate): runCosmicRay scoped calc+strutil → 22 killed + 11 survived (66.7%), reconcile passed; runMutmut scoped calc → 2 killed; a truly-0-mutant `nomut.py` → correctly inconclusive. NO real spawn in `pnpm gate` (pure synthesis + injected runner / real-temp-project + fake runner). Invariants held: under-scoping (total OR partial) never silent-passes; absence-never-a-pass; compose-never-widen; operator gate untouched. RESUME / NEXT: arc DONE + committed to `main` (push at this milestone). Pick the next direction with the human — a NEW phase (packaging/distribution: publish `@sackville-mcp/*`, unified aggregate MCP server / single CLI; or an end-to-end "verify a PR" recipe / GitHub Action) or a staged tail (cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/` cache reuse; Stryker PARTIAL-scope reconciliation; flake diff-scoping; src-layout precision for `reconcileMutmutScope`; ecosystem-aware changelog heading regex; Ruby coverage/mutation [license first]; pytest-reportlog parser; LSP recursive/dir delete + toolchain matrix). Re-run the real-tool checks next session via `uv venv` + `uv pip install 'cosmic-ray==8.4.6' 'mutmut==3.5.0' pytest`. See ADR 0010 addendum 2 + ROADMAP. — — — PRIOR (slice-0-gated snapshot — SUPERSEDED, the arc above is DONE): Closes the diff-scoping asymmetry: TS `runMutation` scopes via `--mutate`, but the Python runners (`runCosmicRay` PRIMARY / `runMutmut`) DROP `mutateFiles` (`scopedFiles: []`). pytest+coverage.py scoping already shipped (`runScopedPython`); this is the MUTATION half. Design = a research→synthesis→2-critic fan-out (Critic 1 needs-rework → 5 blockers folded; Critic 2 ship-with-fixes); forks A/A2/B/B2/C/D/E/F ratified. THE LOAD-BEARING CATCH: `assertComplete` (run.ts:188) only throws on TOTAL-zero mutants, so PARTIAL under-scope (synthesis selects 3 changed files, the tool mutates 1, those are killed, score reads clean, 2 changed files silently never mutated) is a latent absence-as-a-pass. SHIPPED THIS SESSION (pure, fixture-tested, no real tool in the gate; `packages/mutate/src/scope.ts`, 14 tests, commit 39e353f): (1) `selectMutationScope(mutateFiles, ownedRoots, exists)` → `{files, unmatched}` — mirrors `selectPytestScope` incl. the injected existence predicate; `.py`-only + in-tree + existing → `files`, out-of-tree/deleted/typo → `unmatched` (report-gap, never silently scoped); (2) `reconcileScope(selected, MutationSummary)` → `{mutatedFiles, missing}` — the post-spawn guard: a selected file ABSENT from `summary.files` was never mutated (the partial-scope sentinel → the staged runner throws → inconclusive); seen-but-empty (0 mutants) is benign. Both exported from the mutate index. ZERO-MUTANT RESOLUTION (4 states): (a) legit-empty-scope → early-return-noop, don't spawn; (b) total-empty/failed → `assertComplete` throws; (c) partial under-scope → `reconcileScope` throws; (d) clean → `scopedFiles = mutatedFiles` (what was genuinely mutated, not requested). STAGED — SLICE-0-GATED (the tools — cosmic-ray 8.4.6 / mutmut 3.5.0 — are ABSENT from the dev container; emitters MUST be pinned to captured behavior, NOT doc guesses; capture out-of-gate in the reference env per the addendum-1/LSP convention): slice 0 (capture `module-path` file-list shape [Fork A2], mutmut config keys [Fork F], `only_mutate` form, seen-vs-unseen [Fork B2]); the config emitters (`synthesizeScopedCosmicRayConfig` override `module-path` + reconcile inherited exclusions via `smol-toml`; `planMutmutScope`/`renderMutmutConfig` fresh-sandbox-cwd + baseline-smoke); the `runCosmicRay`/`runMutmut` wiring (honor `mutateFiles`: pre-spawn noop on empty, whole-project on `undefined`/`no-scope`, post-spawn `reconcileScope`; additive `RunMutationResult` fields); MCP/CLI need NO change (already forward `mutateFiles`); the verify selector (Fork D: `SACKVILLE_MUTATE_TOOL` + `SACKVILLE_MUTATE_CONFIG_PATH` in bin-verify, `--mutate-tool`/`--mutate-config` in the verify CLI). Stryker-under-verify total-zero path verified already-safe (`mutationScore===null` → `no-signal` → inconclusive via `fromMutationSummary`/`composeVerdict`); Stryker PARTIAL-scope reconciliation staged. Resume (AGREED PLAN): read ADR 0010 addendum 2 + ROADMAP "Python MUTATION diff-scoping"; **PROVISION cosmic-ray 8.4.6 + mutmut 3.5.0 (+ pytest) via `uv` in this container**, then do SLICE 0 (capture the `module-path` file-list shape [A2], mutmut config keys [F], `only_mutate` form, seen-vs-unseen [B2]), commit those fixtures, THEN build the emitters→`runCosmicRay`/`runMutmut` wiring→verify selector against the captures. The pure safety core (`selectMutationScope`/`reconcileScope`) already shipped; do NOT write the emitters from doc-derived guesses. Commits: docs a5b9e81 + safety core 39e353f. — — — PRIOR ARC: GraphQL directive-arg validation + custom-scalar variable coercers — COMPLETE (ADR 0018, 2026-06-05; gate green 1410 TS + 45 Py; all 7 implementation slices + docs landed TDD red→green; 3 critic blockers folded in pre-build; 5 forks human-ratified). A staged-tail arc deepening the GraphQL contract pillar (ADR 0015 follow-on). The decisive finding reshaped scope: graphql-js `validate()` (KnownDirectives/KnownArgumentNamesOnDirectives/ProvidedRequiredArgumentsOnDirectives/ValuesOfCorrectType) + the usage-agnostic `getVariableValues` loop ALREADY cover directive args + the VALUES of variables feeding them (exactly once, even when a variable also feeds a field arg) — so Feature A (directive args) is mostly a regression-LOCK (slice 1, tests-only). Cardinal rule held: anything `validate()` covers is SKIP-by-us (no double-report). TWO genuine new pieces: (D2) a custom-scalar directive-arg LITERAL folds to `unverified` (identity `parseLiteral`, never patched — may carry an inline secret; `visitWithTypeInfo` pass CONFINED to a `DirectiveNode` parent, skips `Variable` nodes, reuses the transitive `typeInvolvesCustomScalar`; field-arg literals UNCHANGED, S1 staged; COERCER-INDEPENDENT, BLOCKER-2) surfaced on the capture bridge under the distinct `graphql-directive-unverified` key (§8.4, additive `directiveUnverified?` flag); and (Feature B) operator-supplied custom-scalar variable COERCERS — `patchRegisteredScalars` overwrites `parseValue` ONLY (NEVER `parseLiteral`, the BLOCKER-1 redaction-leak guard), built-in names silently ignored (§8.5), `typeInvolvesCustomScalar` gains a `registered` set (registered scalar checkable; unregistered or input-object-with-any-unregistered-field stays `unverified`); fresh-per-call schema makes in-place patching safe. Coercers OPERATOR-SET (§8.1): MCP `validate_response.enableScalarCoercers: string[]` selects by NAME against an operator-bound registry; CLI `api validate/run --graphql --coercers <file.js>` loads an operator module (fail-LOUD non-zero on a bad module — never a silent no-coercer pass). Invariants held: ambiguity⇒unverified-skip, absence-never-a-pass (new unverified rides the existing bridge noSignal fold), redaction (findings RECONSTRUCTED from name+type, coercer throw consumed as a BOOLEAN; `validate_response` has NO verifyRedact backstop so value-free reconstruction is the SOLE guard — tested end-to-end through MCP), compose-never-widen (zero new `ContractFindingKind`, one additive `scalarCoercers?` opt + `directiveUnverified?` field), no real spawn/fetch in `pnpm gate`. STAGED: S1 custom-scalar FIELD-arg literals; S2 bridge coercers; S3 inline-literal coercion (NOT partially built — `parseLiteral` never patched); S4 fragment-only/cross-op vars; S5 indeterminate-coercer sentinel; S6 schema-cache × patch. Commits: docs ADR 0018 (6124b3d) + slices 1–7 (46fa5f2/00e5440/75a51fb/159d2d1/e414736/5d82ad1). Next: pick the next direction with the human — a NEW phase (packaging/distribution; an end-to-end "verify a PR" recipe/Action) or another staged tail (cosmic-ray/mutmut/pytest diff-scoping; ecosystem-aware changelog heading regex; Ruby coverage/mutation [license check first]; pytest-reportlog parser; LSP recursive/dir delete + toolchain matrix). See ADR 0018 + ROADMAP Phase 2.**
 
 ---
 
-**PRIOR: Polyglot push (Python half) — COMPLETE (ADR 0010 addendum, 2026-06-04; gate was green 1382 TS + 45 Py). All 6 slices landed; 4 forks ratified by the human (cosmic-ray primary, keep mutmut; coverage scoping fallback = both modes operator-visible, default report-gap, testmon opt-in only; Ruby = deps lockfile-diff only this arc; pytest = json-report now, stage reportlog). No new architectural boundary — one-shot Python spawn-and-parse is the established vitest/stryker injected-runner pattern (ADR 0010 addendum), not the §1 docs-SQLite boundary nor the LSP fence. The Python verification half is now language-symmetric with the TS half: deps diff-scoping + changelog for PyPI/RubyGems, pytest flake runner, cosmic-ray/mutmut mutation runners, and pytest+coverage.py run-scoping — all gated, injected-runner, no real spawn/fetch in `pnpm gate`. Next: pick a NEW direction, or a remaining staged tail (GraphQL directive-arg validation + custom-scalar coercers; cosmic-ray/mutmut + pytest diff-scoping; the ecosystem-aware changelog heading regex; Ruby coverage/mutation [SimpleCov/mutant — license investigation first]; pytest-reportlog parser; LSP recursive/dir delete + toolchain matrix). SLICE 6: coverage `runScopedPython` (pytest+coverage.py) — mirrors `runScoped` (shared `assertAllowed`); `selectPytestScope` (changed test = selector; source → mirrored test via injected `testExists`); ratified no-test fallback report-gap(default)/widen, operator-visible, testmon OUT; pytest exit 5/2/3/4 → inconclusive (never a clean report); MCP `py_run_scoped` + CLI `coverage run-scoped --python`; coverage.py 7.14.1 coverage.json fixture out-of-gate. SLICES 1–5 also landed. SLICE 5: mutate Python mutation runner — `runMutmut` (`mutmut run`→`mutmut results` stdout→`parseMutmutResults`) + `runCosmicRay` (operator-config `init`→`exec`→`dump` over a throwaway session, dump stdout→`parseCosmicRayDump`) as siblings of `runMutation`, sharing the gate + `MutationRunner` seam. STDOUT-fed ⇒ `RunMutationResult.reportPath` optional + `tool` field. Transport-completeness guard `assertComplete` (zero mutants OR any Pending ⇒ throw inconclusive, never a clean pass). MCP `mutate_run`/CLI `mutate run` gain `tool: stryker|mutmut|cosmic-ray` (+ cosmic-ray `configPath`). Injected runner ⇒ no real spawn. Staged: cosmic-ray/mutmut diff-scoping. SLICE 4: flake `runAndRecordPytest` (gated runner) — refactored `runAndRecord` onto a framework-agnostic core (`FrameworkAdapter`); vitest behavior-preserving; pytest spawns `pytest --json-report` + ingests via the existing `parsePytestJson`; repeats re-run the whole suite (NOT pytest-repeat — nodeid fragmentation). MCP `flake_run` + CLI `flake run` gain `framework: vitest|pytest` (agent-supplied tool choice; the allowRun+allowlist gate still governs whether to spawn). Injected runner ⇒ no real spawn in the gate. SLICE 3: mutate `parseCosmicRayDump` (pure) — `cosmic-ray dump` JSON-lines → MTE `MutationReport`, keyed by the real `module_path` with real line+operator (actionable survivors). Each line is `[work_item, work_result|null]`; mutation fields nest under `work_item.mutations[]` (corrected vs the draft, against a real 8.4.6 capture). Mapping folds ambiguity/null → Pending (never a phantom survivor); no_test→NoCoverage, incompetent/exception/abnormal→RuntimeError, skipped→Ignored. summarizeMutation unchanged. Real dump fixture captured out-of-gate (provenance in mutate/test/fixtures/README.md). SLICE 2: deps `changelog_diff` for PyPI + RubyGems — extracted pure repo-derivation into `@sackville/deps` `repo.ts` (`githubOwnerRepo`/`npmRepoUrl`/`pypiRepoUrl`/`gemRepoUrl`/`CHANGELOG_FILENAMES`, shared by MCP bin + CLI); `sliceChangelog` now takes an injected `comparator` (default semver) so PyPI/Gem versions order via `comparatorFor(ecosystem)`; both fetchers resolve the source repo per ecosystem (npm packument; PyPI `info.project_urls`; RubyGems a separate `/gems/<name>.json` — packument stays on the versions array for freshness). Staged: the ecosystem-aware heading-token regex (SEMVER_TOKEN still detects only X.Y.Z headings). SLICE 1: deps `changedDependencies` for PyPI + RubyGems — generalized the npm block-aware walker into per-file *classifiers* selected by basename, unioning names. PyPI: pyproject.toml (PEP 621 arrays w/ `]`-outside-quotes close detection + Poetry tables, python skipped), requirements*.txt, TOML `[[package]]` lockfiles (uv/poetry/pylock; name-from-context named-block), PEP 503-normalized so manifest+lockfile dedupe. RubyGems: Gemfile + Gemfile.lock 4-space concrete-version spec rows (operator/transitive rows excluded). Under-scope-safe. The `sackville verify run --deps` CLI already threads the ecosystem; MCP bin-verify deps audit stays npm-only (separate fetcher wiring). Next action: the polyglot-push arc is DONE and pushed. Pick the next direction with the human — a NEW phase (e.g. packaging/distribution: publish `@sackville/*`, a unified aggregate MCP server / single CLI; or an end-to-end "verify a PR" agent recipe / GitHub Action) or a remaining staged tail (see the staged list in the NOW block + ROADMAP). Hold the load-bearing invariants. See ROADMAP "Python (+Ruby) second half" + ADR 0010 addendum.**
+**PRIOR: Polyglot push (Python half) — COMPLETE (ADR 0010 addendum, 2026-06-04; gate was green 1382 TS + 45 Py). All 6 slices landed; 4 forks ratified by the human (cosmic-ray primary, keep mutmut; coverage scoping fallback = both modes operator-visible, default report-gap, testmon opt-in only; Ruby = deps lockfile-diff only this arc; pytest = json-report now, stage reportlog). No new architectural boundary — one-shot Python spawn-and-parse is the established vitest/stryker injected-runner pattern (ADR 0010 addendum), not the §1 docs-SQLite boundary nor the LSP fence. The Python verification half is now language-symmetric with the TS half: deps diff-scoping + changelog for PyPI/RubyGems, pytest flake runner, cosmic-ray/mutmut mutation runners, and pytest+coverage.py run-scoping — all gated, injected-runner, no real spawn/fetch in `pnpm gate`. Next: pick a NEW direction, or a remaining staged tail (GraphQL directive-arg validation + custom-scalar coercers; cosmic-ray/mutmut + pytest diff-scoping; the ecosystem-aware changelog heading regex; Ruby coverage/mutation [SimpleCov/mutant — license investigation first]; pytest-reportlog parser; LSP recursive/dir delete + toolchain matrix). SLICE 6: coverage `runScopedPython` (pytest+coverage.py) — mirrors `runScoped` (shared `assertAllowed`); `selectPytestScope` (changed test = selector; source → mirrored test via injected `testExists`); ratified no-test fallback report-gap(default)/widen, operator-visible, testmon OUT; pytest exit 5/2/3/4 → inconclusive (never a clean report); MCP `py_run_scoped` + CLI `coverage run-scoped --python`; coverage.py 7.14.1 coverage.json fixture out-of-gate. SLICES 1–5 also landed. SLICE 5: mutate Python mutation runner — `runMutmut` (`mutmut run`→`mutmut results` stdout→`parseMutmutResults`) + `runCosmicRay` (operator-config `init`→`exec`→`dump` over a throwaway session, dump stdout→`parseCosmicRayDump`) as siblings of `runMutation`, sharing the gate + `MutationRunner` seam. STDOUT-fed ⇒ `RunMutationResult.reportPath` optional + `tool` field. Transport-completeness guard `assertComplete` (zero mutants OR any Pending ⇒ throw inconclusive, never a clean pass). MCP `mutate_run`/CLI `mutate run` gain `tool: stryker|mutmut|cosmic-ray` (+ cosmic-ray `configPath`). Injected runner ⇒ no real spawn. Staged: cosmic-ray/mutmut diff-scoping. SLICE 4: flake `runAndRecordPytest` (gated runner) — refactored `runAndRecord` onto a framework-agnostic core (`FrameworkAdapter`); vitest behavior-preserving; pytest spawns `pytest --json-report` + ingests via the existing `parsePytestJson`; repeats re-run the whole suite (NOT pytest-repeat — nodeid fragmentation). MCP `flake_run` + CLI `flake run` gain `framework: vitest|pytest` (agent-supplied tool choice; the allowRun+allowlist gate still governs whether to spawn). Injected runner ⇒ no real spawn in the gate. SLICE 3: mutate `parseCosmicRayDump` (pure) — `cosmic-ray dump` JSON-lines → MTE `MutationReport`, keyed by the real `module_path` with real line+operator (actionable survivors). Each line is `[work_item, work_result|null]`; mutation fields nest under `work_item.mutations[]` (corrected vs the draft, against a real 8.4.6 capture). Mapping folds ambiguity/null → Pending (never a phantom survivor); no_test→NoCoverage, incompetent/exception/abnormal→RuntimeError, skipped→Ignored. summarizeMutation unchanged. Real dump fixture captured out-of-gate (provenance in mutate/test/fixtures/README.md). SLICE 2: deps `changelog_diff` for PyPI + RubyGems — extracted pure repo-derivation into `@sackville-mcp/deps` `repo.ts` (`githubOwnerRepo`/`npmRepoUrl`/`pypiRepoUrl`/`gemRepoUrl`/`CHANGELOG_FILENAMES`, shared by MCP bin + CLI); `sliceChangelog` now takes an injected `comparator` (default semver) so PyPI/Gem versions order via `comparatorFor(ecosystem)`; both fetchers resolve the source repo per ecosystem (npm packument; PyPI `info.project_urls`; RubyGems a separate `/gems/<name>.json` — packument stays on the versions array for freshness). Staged: the ecosystem-aware heading-token regex (SEMVER_TOKEN still detects only X.Y.Z headings). SLICE 1: deps `changedDependencies` for PyPI + RubyGems — generalized the npm block-aware walker into per-file *classifiers* selected by basename, unioning names. PyPI: pyproject.toml (PEP 621 arrays w/ `]`-outside-quotes close detection + Poetry tables, python skipped), requirements*.txt, TOML `[[package]]` lockfiles (uv/poetry/pylock; name-from-context named-block), PEP 503-normalized so manifest+lockfile dedupe. RubyGems: Gemfile + Gemfile.lock 4-space concrete-version spec rows (operator/transitive rows excluded). Under-scope-safe. The `sackville verify run --deps` CLI already threads the ecosystem; MCP bin-verify deps audit stays npm-only (separate fetcher wiring). Next action: the polyglot-push arc is DONE and pushed. Pick the next direction with the human — a NEW phase (e.g. packaging/distribution: publish `@sackville-mcp/*`, a unified aggregate MCP server / single CLI; or an end-to-end "verify a PR" agent recipe / GitHub Action) or a remaining staged tail (see the staged list in the NOW block + ROADMAP). Hold the load-bearing invariants. See ROADMAP "Python (+Ruby) second half" + ADR 0010 addendum.**
 
 ---
 
-**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: ARTIFACT RETENTION / GC LANDED (ADR 0017) — the shared `@sackville/artifacts` store was append-only (a long-running server grew its dir without bound); it now has an opt-in `RetentionPolicy` (`maxAgeMs`/`maxEntries`/`maxBytes`) applied by a disk-based `sweep()` scoped to the store's own prefix subtree, triggered opportunistically + throttled on `put()` (injected clock), wired into every long-running server bin (browser/deps/lsp/verify) via `SACKVILLE_<PILLAR>_ARTIFACT_MAX_*` env; no policy ⇒ no GC (backward-compatible); gate green (1330 TS + 45 Py). Before that: the ADR 0016 STAGED PAIR resolved (HAR-capture form bodies validated non-authoritatively + per-property `encoding` permanently-out — the ADR 0016 tail list is EMPTY), non-JSON request BODY validation v1 (addendum 4), non-scalar param OBJECT/array matrix (slices 4–8), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014), `@sackville/severity` extraction. Next: pivot to a new phase, or a remaining tail (the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
+**Phase 5 — Cross-pillar verification: 5a–5f COMPLETE. Most recent: ARTIFACT RETENTION / GC LANDED (ADR 0017) — the shared `@sackville-mcp/artifacts` store was append-only (a long-running server grew its dir without bound); it now has an opt-in `RetentionPolicy` (`maxAgeMs`/`maxEntries`/`maxBytes`) applied by a disk-based `sweep()` scoped to the store's own prefix subtree, triggered opportunistically + throttled on `put()` (injected clock), wired into every long-running server bin (browser/deps/lsp/verify) via `SACKVILLE_<PILLAR>_ARTIFACT_MAX_*` env; no policy ⇒ no GC (backward-compatible); gate green (1330 TS + 45 Py). Before that: the ADR 0016 STAGED PAIR resolved (HAR-capture form bodies validated non-authoritatively + per-property `encoding` permanently-out — the ADR 0016 tail list is EMPTY), non-JSON request BODY validation v1 (addendum 4), non-scalar param OBJECT/array matrix (slices 4–8), GraphQL-request variable validation (ADR 0015), live `api run --openapi` REQUEST validation (ADR 0014), `@sackville-mcp/severity` extraction. Next: pivot to a new phase, or a remaining tail (the Python second half; `changedDependencies`/`changelog_diff` for PyPI/Gem; a mutate cosmic-ray/`runMutmut` adapter; LSP recursive/dir delete + toolchain matrix).**
 _**ARTIFACT RETENTION / GC (ADR 0017) — COMPLETE** (2026-06-04, all TDD red→green; gate green at 1330 TS +
 45 Py; human ratified both forks: opportunistic-on-put-throttled + exposed `sweep()`, and wire all
-long-running server bins). Closes a real operational gap: the disk-backed `@sackville/artifacts` store was
+long-running server bins). Closes a real operational gap: the disk-backed `@sackville-mcp/artifacts` store was
 append-only, so a long-running MCP server grew its artifact dir (browser traces/video/HAR, deps/lsp/verify
 detail) without bound. **Slice 1 — engine:** an opt-in `RetentionPolicy {maxAgeMs?, maxEntries?, maxBytes?}`
 applied by a DISK-based `sweep(now?)` (cold-process-safe — the in-process Map is empty after a restart),
@@ -252,29 +258,29 @@ never echoed — only the raw substring), no-real-fetch-in-gate (pure validator;
 **One surface STAGED (honest, not amputated):** the live `api run --openapi` inline request check — `RunResult`
 exposes only the REDACTED `PreparedRequest`, so it needs the runner to surface the un-redacted sent request
 (pairs with the existing `runRequestForHar` channel). 9 surface + 38 engine/bridge tests added._
-_**TAIL — `@sackville/severity` extraction — COMPLETE** (2026-06-04, behavior-preserving, gate green at
+_**TAIL — `@sackville-mcp/severity` extraction — COMPLETE** (2026-06-04, behavior-preserving, gate green at
 1164 TS + 45 Py; the human ratified the "unify the qualitative base" depth fork). A new pure ZERO-dependency
-leaf `@sackville/severity` (mirrors `@sackville/diff`/`assert`/`artifacts`) owns the shared severity vocabulary:
+leaf `@sackville-mcp/severity` (mirrors `@sackville-mcp/diff`/`assert`/`artifacts`) owns the shared severity vocabulary:
 `QualitativeSeverity` ('critical'|'high'|'moderate'|'low') + `QUALITATIVE_RANK` (single source of truth) + the
 verdict scale `Severity` (= `QualitativeSeverity | 'none'`) + `SEVERITY_RANK` (DERIVED from `QUALITATIVE_RANK`,
-not re-typed, so the common buckets can't drift) + `maxSeverity`/`atLeast`. **`@sackville/verdict`'s
+not re-typed, so the common buckets can't drift) + `maxSeverity`/`atLeast`. **`@sackville-mcp/verdict`'s
 `severity.ts` is now a thin re-export shim** — its public surface AND every internal `./severity.js` import are
 unchanged (verdict suite = the regression guard); verdict gains exactly ONE runtime workspace import (the pure
-leaf — no heavy dep dragged in; the tsdown comment updated to say so). **`@sackville/deps` builds `SeverityBucket`
+leaf — no heavy dep dragged in; the tsdown comment updated to say so). **`@sackville-mcp/deps` builds `SeverityBucket`
 (= `QualitativeSeverity | 'unknown'`) + `BUCKET_RANK` (= `{...QUALITATIVE_RANK, unknown:0}`) on the same base**,
 and `audit.ts` now imports `BUCKET_RANK` from `osv.ts` (killed the byte-identical duplicate rank map that lived
 in both osv.ts and audit.ts). **The load-bearing `none` ≠ `unknown` distinction is PRESERVED** — deps' `'unknown'`
 stays a deliberately separate member that maps to a `no-signal` pillar, never to `none`/`low`
-(absence-is-never-a-pass). New `@sackville/severity` alias in `vitest.config.ts`; runtime dep of verdict + deps. 4
+(absence-is-never-a-pass). New `@sackville-mcp/severity` alias in `vitest.config.ts`; runtime dep of verdict + deps. 4
 new severity tests (incl. a no-drift lock: `SEVERITY_RANK`'s qualitative entries === `QUALITATIVE_RANK`)._
 _**MILESTONE 5f — verify-driven API-RUNNER capture — COMPLETE** (2026-06-04, all TDD red→green; design =
 ADR 0013 Addendum 4, the `verify-api-capture-5f-design` fan-out; human ratified 2 forks: ADD
-`SACKVILLE_API_COLLECTIONS_DIR`, and the DEEPER `@sackville/verdict` fix). Adds a SECOND verify-driven
-produce source: a single gated call drives the **`@sackville/api` runner** for an operator-authored request
+`SACKVILLE_API_COLLECTIONS_DIR`, and the DEEPER `@sackville-mcp/verdict` fix). Adds a SECOND verify-driven
+produce source: a single gated call drives the **`@sackville-mcp/api` runner** for an operator-authored request
 (by NAME), SYNTHESIZES a HAR from the run, and validates it via the SHIPPED `validateCapturedTraffic` —
 full REST + GraphQL parity. Closes the 3 gaps Addendum 3 staged: (a) per-hop HAR entries in the redirect
 loop, (b) the real request body as `postData` (GraphQL), (c) a `finalizeHar`-style blanket-redaction pass
-extracted to shared code. 9 slices: (1) extract pure `redactHarZip`+`summarizeHar` into `@sackville/api`
+extracted to shared code. 9 slices: (1) extract pure `redactHarZip`+`summarizeHar` into `@sackville-mcp/api`
 `har-synth.ts` (fflate-only leaf); (2) browser `finalizeHar` delegates to it (acyclic browser→api edge,
 ONE redaction path, the 5e attach-mimeType fix inherited); (3) `synthesizeRedactedHarZip` (pure; inline
 text; redact folded in so no un-redacted buffer escapes; THROWS on a status-less record); (4) runner
@@ -284,7 +290,7 @@ run-resolved secret pairs; `RunResult` UNCHANGED); (5) the `runRequestToHar`/`ru
 driver + TRANSPORT-completeness guards that THROW ⇒ inconclusive (a withheld/dry-run/blocked request, any
 non-sent step per `step.result.sent` [the critics' blocker, NOT `step.sent`], a truncated redirect chain)
 + the secret-union fold; returns the FULL `CaptureContractVerdict`; (6) **the ratified deeper fix** —
-`@sackville/verdict` `fromCaptureVerdict` folds `clean===false` ⇒ inconclusive (closing a CONFIRMED latent
+`@sackville-mcp/verdict` `fromCaptureVerdict` folds `clean===false` ⇒ inconclusive (closing a CONFIRMED latent
 absence-as-pass hole in the shipped 5e produce + consume paths: a valid REST entry rode a sibling
 no-signal/unresolved entry to a PASS because the thunk handed the adapter only `.results`), threaded
 through orchestrate's contract thunk (`ContractResult[] | CaptureVerdictFacts`, type-only — invariant 1
@@ -302,7 +308,7 @@ ratified env, agent supplies only the target NAME), absence-never-a-pass (transp
 is the api pillar's accepted style), redaction (union) before the verdict inline AND stored._
 _**MILESTONE 5e — verify-driven LIVE capture (browser-spawn) — COMPLETE** (2026-06-04, all TDD red→green;
 design = ADR 0013 Addendum 3, human-ratified forks: browser-spawn only / API-runner→5f; test-first
-attach-body redaction; keep `source:'capture-from-HAR'`; live-capture extracted to `@sackville/browser`).
+attach-body redaction; keep `source:'capture-from-HAR'`; live-capture extracted to `@sackville-mcp/browser`).
 Turns the consume-only capture→contract bridge into a verify-DRIVEN one: ONE gated `verify_change` call (or
 `sackville verify run --flow`) drives a browser flow, captures the HAR, and validates it. **The fan-out's
 load-bearing correction (all 3 critics, independently):** `runFlow` SWALLOWS step errors (returns
@@ -320,7 +326,7 @@ content-addressed filename bypassed `finalizeHar`'s extension gate); (6) `bin-ve
 the FULL browser gate (`ENABLE_RUN ∧ ALLOW_CAPTURE ∧ BROWSER_ALLOWED_HOSTS ∧ _HAR_DIR ∧ _FLOWS_DIR`, no new
 env) + the **union redactor** (verify ∪ browser secrets) at BOTH chokepoints (`finalizeHar` + `validate`);
 (7) surface the produced HAR handle (`capture:{harHandle,summary}`) for auditability — via a widened SURFACE
-runner return, core still `() => Promise<ContractResult[]>`; (8) extract live-capture to `@sackville/browser`
+runner return, core still `() => Promise<ContractResult[]>`; (8) extract live-capture to `@sackville-mcp/browser`
 (its natural home — shared by the MCP bin AND the CLI, ONE flow-completeness guard) + `sackville verify run
 --flow` (gated by browser egress flags, not `--allow-run`; injectable runner so the suite never spawns).
 Invariants held: core `.mjs` untouched, compose-never-widen, absence-never-a-pass, no real spawn in `pnpm
@@ -328,17 +334,17 @@ gate`, redaction (union) before the verdict inline AND stored. **5f staged:** th
 (per-hop HAR + request-body capture for GraphQL + a finalizeHar-style redaction pass); request-body/param
 contract validation; extract the shared `Severity` scale out of deps; artifact GC/TTL; the Python half._
 _**MILESTONE 5d — diff-scoping + deps run-wiring — COMPLETE** (2026-06-04, all TDD red→green; the
-shared-primitive placement fork was ratified by the human: EXTRACT `@sackville/diff`, not extend coverage).
+shared-primitive placement fork was ratified by the human: EXTRACT `@sackville-mcp/diff`, not extend coverage).
 Two coupled threads, 6 slices: **(a) diff-scoping.** **Slice 1** extracted the new pure, zero-dependency
-**`@sackville/diff`** package — `parseUnifiedDiff` MOVED out of `@sackville/coverage` (which re-exports it
+**`@sackville-mcp/diff`** package — `parseUnifiedDiff` MOVED out of `@sackville-mcp/coverage` (which re-exports it
 for back-compat + consumes it via `report.ts`; behavior-preserving, coverage suite is the regression guard)
 + a new `changedFiles(diff)` scope primitive (all non-deleted touched paths, incl. removal-only
 modifications `parseUnifiedDiff` omits; excludes deletions). The placement is forced, not aesthetic:
-`@sackville/verify` must RUNTIME-call the parser to scope pillars, and its source-scanned "imports zero
-spawn-capable code" invariant forbids a runtime import from the engine-listed `@sackville/coverage` (re-exports
+`@sackville-mcp/verify` must RUNTIME-call the parser to scope pillars, and its source-scanned "imports zero
+spawn-capable code" invariant forbids a runtime import from the engine-listed `@sackville-mcp/coverage` (re-exports
 `runScoped`→`child_process`) — a pure shared package keeps the invariant provable. Mirrors safety/assert/
-artifacts. **Slice 2** added pure block-aware **`changedDependencies(diff, ecosystem)`** to `@sackville/deps`
-(over `@sackville/diff`): tracks the open `dependencies`/`devDependencies`/`peerDependencies`/
+artifacts. **Slice 2** added pure block-aware **`changedDependencies(diff, ecosystem)`** to `@sackville-mcp/deps`
+(over `@sackville-mcp/diff`): tracks the open `dependencies`/`devDependencies`/`peerDependencies`/
 `optionalDependencies` block so a changed `version`/`engines.node`/`packageManager`/`scripts` value (which
 also LOOKS like a version) is never mistaken for a dependency. Under-scopes (never invents a dep) when a deep
 dependency's block header is outside the diff context — documented, caller falls back to whole-project.
@@ -357,14 +363,14 @@ the runner scopes the audit to `changedDependencies(ctx.diff)`, whole-project fa
 `cli/deps.ts`); `--deps` is NETWORK-gated (no `--allow-run`), a `--diff` scopes it, fetcher = the same
 `makeFetcher(registriesFrom)` as `sackville deps`. Load-bearing invariants HELD: "compose, never widen" (no
 umbrella gate; deps composes `ALLOW_NETWORK` under `ENABLE_RUN`); scoping only NARROWS what runs; no real
-spawn/fetch in `pnpm gate` (every runner/fetcher injected). The `@sackville/diff` alias was added to
+spawn/fetch in `pnpm gate` (every runner/fetcher injected). The `@sackville-mcp/diff` alias was added to
 `vitest.config.ts` + it is a dep of coverage/deps/mcp; verify's built `.mjs` still imports only `node:crypto`
-+ `@sackville/verdict` (verify uses the MCP/CLI layer's diff derivation, not its own runtime diff import — the
++ `@sackville-mcp/verdict` (verify uses the MCP/CLI layer's diff derivation, not its own runtime diff import — the
 invariant is untouched)._
 _Make the pillars COMPOSE: a captured browser/API run's traffic is validated against the API
 contract (the capture→contract bridge), and that folds with the four Phase-4 signals into ONE
 structured verdict an agent requests for a change. **5b LANDED (1038 TS + 45 Py green):** the new
-pure **`@sackville/verdict`** package — `Severity`/`SEVERITY_RANK`/`maxSeverity`, the five `from*`
+pure **`@sackville-mcp/verdict`** package — `Severity`/`SEVERITY_RANK`/`maxSeverity`, the five `from*`
 pillar adapters, and `composeVerdict` (type-only pillar imports, **zero runtime pillar deps** — the
 built `.mjs` has no imports at all, so it never drags `better-sqlite3`/`playwright-core` in). The
 load-bearing invariant holds: **absence is never a pass** — an empty fold, or any present
@@ -377,7 +383,7 @@ the §3c guard — no per-pillar `*_ALLOW_RUN`) + `sackville verify` CLI (exit 0
 2 inconclusive). Earlier: **5a** the capture→contract bridge (below). Both compose-only / zero-spawn
 in v1; orchestration/run-driving, GraphQL-from-HAR, and
 the Python half are explicitly staged. **MILESTONE 5a COMPLETE (1011 TS + 45 Py green) — the
-capture→contract bridge works end-to-end:** (slice 1) `@sackville/artifacts` is now
+capture→contract bridge works end-to-end:** (slice 1) `@sackville-mcp/artifacts` is now
 **prefix-qualified on disk** (`<baseDir>/<prefix>/<id>/<kind>`) so one shared `baseDir` is
 collision-free across pillars and a store **rehydrates a foreign-prefix handle it never `put()`**
 (the cross-pillar read) — per-segment allowlist + realpath-confinement (symlink-escape closed) +
@@ -423,35 +429,35 @@ adversarial pass killed those as a drift footgun); no agent input can set `allow
 The design was forged via the `verify-orchestration-design-research` (6 streams) → human ratification
 of 4 forks → `verify-orchestration-adversarial-critics` (3 critics) fan-outs; the critics materially
 changed the gate-env mechanism + the status model (recorded in the ADR Addendum's corrections list).
-Decisions: a NEW `@sackville/verify` runtime package (orchestration core; imports ZERO spawn-capable
+Decisions: a NEW `@sackville-mcp/verify` runtime package (orchestration core; imports ZERO spawn-capable
 code — all runners/store/validator injected, engines `external`, so `pnpm gate` never loads
 better-sqlite3/playwright-core); a NEW sibling `verify_change` MCP tool (deny-by-default REGISTRATION,
 only when run-driving enabled) + `sackville verify run <root>` CLI (the compose-only `request_verdict` +
 `sackville verify` stay unchanged); run-driving FIRST/unscoped (diff-scoping = 5d); capture CONSUME-only
 (live capture = 5e). Per-pillar failure isolation via `Promise.allSettled`; gate-denial ⇒
 `skipReason:'gate-not-set'`, any other rejection ⇒ `errorReason` (REDACTED); injected `idFactory`
-(default `randomUUID`). **Slice 1 of 6 LANDED (1057 TS + 45 Py green):** the pure `@sackville/verdict`
+(default `randomUUID`). **Slice 1 of 6 LANDED (1057 TS + 45 Py green):** the pure `@sackville-mcp/verdict`
 provenance fields — `PillarVerdict` gains optional `skipReason:'gate-not-set'|'not-requested'` +
 `errorReason?` (redacted); skipped/errored map to `status:'no-signal'`, not-requested to `'missing'`
 (both already ⇒ `inconclusive`); **`PillarStatus` is UNCHANGED** (adversarial correction — extending the
 exhaustively-switched union would corrupt the fold + `failsByPolicy`); `composeVerdict`'s inconclusive
 predicate widened defensively so a present `skipReason`/`errorReason` can NEVER be laundered into a pass.
-**Slice 2 of 6 LANDED (1063 TS + 45 Py green):** the new **`@sackville/verify`** runtime package — the
+**Slice 2 of 6 LANDED (1063 TS + 45 Py green):** the new **`@sackville-mcp/verify`** runtime package — the
 gated `orchestrate(request, options)` core. Each requested pillar carries an async `run` thunk producing
 its NATIVE result; orchestrate fans them out concurrently (per-task `.catch` = the failure isolation
 `Promise.allSettled` gives — one pillar's crash never sinks the verdict), maps each via the existing
-`@sackville/verdict` `from*` adapter, and folds via `composeVerdict` (omitted pillars ⇒ `missing`). A
+`@sackville-mcp/verdict` `from*` adapter, and folds via `composeVerdict` (omitted pillars ⇒ `missing`). A
 rejected run ⇒ an errored, **redacted** `no-signal` contributor (injected `redact`); the verdict id is
 minted by an injected `idFactory` (default `randomUUID`). **The "imports zero spawn-capable code"
-invariant holds and is proven two ways:** a source-scan test (every `@sackville/<engine>` import is
+invariant holds and is proven two ways:** a source-scan test (every `@sackville-mcp/<engine>` import is
 `import type`; no `defaultVitestRunner`/`HistoryStore`/`better-sqlite3`/`playwright-core` token) AND the
-built `.mjs` imports ONLY `node:crypto` + `@sackville/verdict` (verified, dist not committed). The pillar
+built `.mjs` imports ONLY `node:crypto` + `@sackville-mcp/verdict` (verified, dist not committed). The pillar
 `run` thunks (wired by the surface to each gated runner) are the only side-effecting code; verify itself
 type-imports the result interfaces and runtime-imports only the pure verdict package.
 **Slice 3 of 6 LANDED (1072 TS + 45 Py green) — gate composition ("compose, never widen"):** a pillar
 whose OWN gate denies ⇒ `skipReason:'gate-not-set'` (surfaced, NOT run, raw message dropped; siblings
 still fold); any OTHER rejection ⇒ redacted `errorReason`; both `no-signal` ⇒ `inconclusive`, never pass.
-The mechanism is a **structural brand via the global symbol registry** — `@sackville/verify` exports
+The mechanism is a **structural brand via the global symbol registry** — `@sackville-mcp/verify` exports
 `isGateDenial`/`gateDenied`/`GATE_DENIAL` keyed by `Symbol.for('sackville.gate-denial')`, and the three
 engine `*GateError` classes (Coverage/Flake/Mutate) now set that symbol in their constructors — so verify
 recognizes a REAL gate denial WITHOUT importing any engine code (the spawn-free invariant holds; reuses
@@ -461,14 +467,14 @@ ZERO args (it cannot inject/widen a gate — the gate lives entirely in the oper
 `OrchestrateRequest`/`Options` types carry no `allowRun`/`allowedRoots` knob at all.
 **Slice 4 of 6 LANDED (1078 TS + 45 Py green) — the `verify_change` MCP tool.** In
 `packages/mcp/src/verify.ts`: a NEW sibling tool (compose-only `request_verdict` unchanged) that DRIVES
-the wired pillars via `@sackville/verify` `orchestrate` and folds one `CompositeVerdict`. Deny-by-default
+the wired pillars via `@sackville-mcp/verify` `orchestrate` and folds one `CompositeVerdict`. Deny-by-default
 REGISTRATION — registered ONLY when `opts.runDriving` wires ≥1 pillar runner (mirrors `run_scoped`). Input:
 `projectRoot` + optional `changedFiles`/`diff` + optional `pillars[]` (default = all wired) +
 consume-only `contract:{harHandle,...}` + `failAtOrAbove` (no default). Each pillar's runner is INJECTED
 (operator-wired in slice 5, gate satisfied); a requested-but-unwired pillar gets a `gateDenied()` thunk ⇒
 `skipReason:'gate-not-set'` (never run). Output = compact verdict inline (pillars carry the provenance) +
 detail by `sackville://verify/{id}/{kind}`. Contract sub-verdict folds in behind the injected capture
-runner (`source:'capture-from-HAR'`). (`@sackville/verify` added to mcp deps + the vitest alias map; tests
+runner (`source:'capture-from-HAR'`). (`@sackville-mcp/verify` added to mcp deps + the vitest alias map; tests
 inject fake runners so the suite never spawns.)
 **Slice 5 of 6 LANDED (1082 TS + 45 Py green) — `bin-verify.ts` run-driving entrypoint, the "both
 required" env gate.** Run-driving wires ONLY when `SACKVILLE_VERIFY_ENABLE_RUN` is set; THEN each pillar's
@@ -487,14 +493,14 @@ has no single exported runner; factoring it out is a clean follow-up, naturally 
 fed to `request_verdict` (compose path).
 **Slice 6 of 6 LANDED (1087 TS + 45 Py green) — `sackville verify run <root>` CLI.** A `run` subcommand on
 `sackville verify` (bare `verify` = compose, unchanged): drives the selected pillars (`--coverage` /
-`--mutate` / `--flake --flake-db <path>`) over `@sackville/verify` `orchestrate` + folds them. The human is
+`--mutate` / `--flake --flake-db <path>`) over `@sackville-mcp/verify` `orchestrate` + folds them. The human is
 the operator: `--allow-run` is the straight-through gate, the typed `<root>` is auto-allowed; without it
 each pillar's own `assertAllowed` denies (⇒ `skipReason:gate-not-set`, exit 2). `--changed-file`/`--diff`/
 `--timeout-ms`/`--fail-at-or-above`/`--json`; exit `0 pass / 1 fail|warn / 2 inconclusive`. Per-pillar run
 thunks are injectable (the test seam mirrors the MCP `RunDrivingOptions`) so the suite never spawns; the
 no-`--allow-run` test exercises the REAL engine gate (denies before any spawn). **MILESTONE 5c COMPLETE.**
 **Next action: milestone 5d — diff-scoping the non-coverage pillars + deps run-wiring.** (a) a shared
-changed-set primitive (extend coverage's `parseUnifiedDiff` or extract `@sackville/diff`); expose flake's
+changed-set primitive (extend coverage's `parseUnifiedDiff` or extract `@sackville-mcp/diff`); expose flake's
 existing `files` in MCP; a pure `changedDependencies(diff, ecosystem)`; `verify_change` then scopes each
 pillar from one diff. (b) Wire deps into the verify run path — factor `audit_project`'s per-package
 pipeline into a reusable runner, add `rd.deps` to `bin-verify` (gated by `SACKVILLE_DEPS_ALLOW_NETWORK`
@@ -502,22 +508,22 @@ under `ENABLE_RUN`) + a `--deps` flag to `sackville verify run`. Then 5e (live c
 milestone 5d + the ADR 0013 Addendum § "what stays staged"._
 
 **Phase 4 — Cross-cutting verification: COMPLETE (all 5 pillars: engine + agent surface).**
-_(`@sackville/deps`, `@sackville/coverage`, `@sackville/flake`, `@sackville/mutate`, AND now
-`@sackville/lsp` are all COMPLETE; only explicitly-staged, non-blocking tails remain — see the
-end of the Next-action block. `@sackville/lsp` (the last pillar) shipped as **ADR 0011** slices
+_(`@sackville-mcp/deps`, `@sackville-mcp/coverage`, `@sackville-mcp/flake`, `@sackville-mcp/mutate`, AND now
+`@sackville-mcp/lsp` are all COMPLETE; only explicitly-staged, non-blocking tails remain — see the
+end of the Next-action block. `@sackville-mcp/lsp` (the last pillar) shipped as **ADR 0011** slices
 1–5: pure encoding + normalize (1), `client.ts` LSP JSON-RPC client (2), `registry.ts` +
 `manager.ts` lifecycle (3), the gated `query.ts` engine (4), and the MCP surface + `sackville-lsp-mcp`
 bin (5) — all over a fake-peer harness replaying recorded `typescript-language-server` payloads
 (NO real server in `pnpm gate`). Design pass done via the `phase4-design-research` fan-out — 5 parallel research
 streams → synthesis → 3 adversarial critics → corrected synthesis; captured in **ADR
-0010**. Sequence (by leverage-per-effort): **`@sackville/deps` (dependency/version
-intelligence) first** ∥ `@sackville/coverage` (parallel track), then `@sackville/flake`
-→ `@sackville/mutate` (after a Stryker/Vitest-4 compat spike) → `@sackville/lsp` (last —
+0010**. Sequence (by leverage-per-effort): **`@sackville-mcp/deps` (dependency/version
+intelligence) first** ∥ `@sackville-mcp/coverage` (parallel track), then `@sackville-mcp/flake`
+→ `@sackville-mcp/mutate` (after a Stryker/Vitest-4 compat spike) → `@sackville-mcp/lsp` (last —
 the only candidate that breaks ARCHITECTURE §1's no-live-RPC rule). Cross-cutting
-decisions in ADR 0010: extract a shared **`@sackville/artifacts`** (parameterized
+decisions in ADR 0010: extract a shared **`@sackville-mcp/artifacts`** (parameterized
 prefix) before the first handle-emitting slice; **explicit pins, no transitive
 imports**; **paired deny-by-default operator gate** for any code-running surface;
-**TS/Vitest first, Python staged**. **Slice 1 landed:** `@sackville/deps`
+**TS/Vitest first, Python staged**. **Slice 1 landed:** `@sackville-mcp/deps`
 `auditDeprecation(packument, installedVersion)` — a pure, offline deprecation reducer
 (version-scope wins over package-scope; npm empty-string un-deprecate idiom honoured)
 over committed npm-packument fixtures. **Slice 2 landed:** `matchVulnerabilities`
@@ -547,29 +553,29 @@ the operator OSV snapshot (`loadOsvSnapshot`) → pure `auditDependency`; report
 fails clearly when the version can't be detected or network is off. The bin is the sole
 reader of namespaced `SACKVILLE_DEPS_*` (`OSV_DB_DIR`, `ALLOW_NETWORK` **off by default**,
 `NPM_REGISTRY`, `ALLOW_PRIVATE`) and the sole builder of the **SSRF-pinned**
-(`@sackville/safety` `resolveAndPin`, private blocked by default) npm packument fetcher;
+(`@sackville-mcp/safety` `resolveAndPin`, private blocked by default) npm packument fetcher;
 safety/network are operator-set, never agent inputs. The first **handle-emitting** deps
 slice (`changelog_diff` + by-handle `audit_project` detail) is deferred to the shared
-`@sackville/artifacts` extraction. **Shared `@sackville/artifacts` extraction DONE** (ADR
-0010 cross-cutting): the on-disk `ArtifactStore` moved out of `@sackville/browser` into a
+`@sackville-mcp/artifacts` extraction. **Shared `@sackville-mcp/artifacts` extraction DONE** (ADR
+0010 cross-cutting): the on-disk `ArtifactStore` moved out of `@sackville-mcp/browser` into a
 new shared package with a **parameterized** `sackville://<prefix>/<id>/<kind>` handle
 prefix (browser keeps `browser/run`; deps/coverage emit their own — e.g.
 `sackville://deps/...`). Behavior-preserving — browser is a thin subclass that bakes in
 the `browser/run` prefix so every call site is unchanged; the full browser suite is the
 regression guard. **`changelog_diff` landed (first handle-emitting deps slice):** a
-pure `sliceChangelog(markdown, {from, to?})` core in `@sackville/deps` (versioned ATX
+pure `sliceChangelog(markdown, {from, to?})` core in `@sackville-mcp/deps` (versioned ATX
 headings — Keep-a-Changelog `## [x.y.z] - date` + plain `## vX.Y.Z`; returns the
 sections in `(from, to]`, or `> from` when `to` is omitted, newest-first, semver-ordered;
 date tokens/"Unreleased" never become versions; unparseable bounds throw) + a
 `changelog_diff` MCP tool that detects the installed `from`, fetches the changelog via an
 **injected** fetcher, slices it, and returns a compact summary with the sliced markdown
-stored **by handle** in `@sackville/artifacts` (`deps` prefix) — served by a new
+stored **by handle** in `@sackville-mcp/artifacts` (`deps` prefix) — served by a new
 `sackville://deps/{id}/{kind}` resource. Deny-by-default: the tool + resource register only
 when BOTH a fetcher and an artifact store are configured. Bin adds
 `SACKVILLE_DEPS_ARTIFACT_DIR` (→ `ArtifactStore(dir,'deps')`) + a SSRF-pinned GitHub-raw
 CHANGELOG fetcher (packument repo → `raw.githubusercontent.com/<owner>/<repo>/HEAD/<file>`,
 `resolveAndPin` per attempt, private blocked by default). It is the first consumer of the
-extracted `@sackville/artifacts`. **`audit_project` full detail by handle also landed:**
+extracted `@sackville-mcp/artifacts`. **`audit_project` full detail by handle also landed:**
 when an artifact store is configured, `audit_project` stores the full per-package
 `DependencyAudit` verdicts (vulnerability lists, deprecation messages, freshness) as one
 JSON blob by handle and surfaces `detailHandle` (inline result stays a compact roll-up;
@@ -582,7 +588,7 @@ vulns, distinct from `recommendedTarget`), and the `behindBy` freshness metric
 patch). **CVSS-vector → bucket scoring also landed** (pure `cvssV3BaseScore` v3.0/3.1 base
 formula; `matchVulnerabilities` derives the severity bucket from a CVSS vector when no
 qualitative GHSA string is present, so a vector-only advisory is no longer `unknown`).
-**Track A `@sackville/coverage` is now open (slice 1):** the pure `uncoveredNewLines` differ
+**Track A `@sackville-mcp/coverage` is now open (slice 1):** the pure `uncoveredNewLines` differ
 classifies a diff's added lines against an istanbul `FileCoverage` as covered / uncovered /
 `nonExecutable` and surfaces the executable-but-unhit lines (the forgotten-assertion catch);
 the no-statement `nonExecutable` third state + a guard test address ADR 0010's documented
@@ -602,7 +608,7 @@ in the gate). **MCP surface landed:** `uncovered_in_diff` (free, read-only) + `r
 (gated, registered only when the operator set `allowRun` + a non-empty root allowlist) in
 `packages/mcp/src/coverage.ts` + the `sackville-coverage-mcp` bin (`SACKVILLE_COVERAGE_ALLOW_RUN`
 / `_PROJECT_ROOTS` / `_TIMEOUT_MS`, wires the live vitest runner). **The coverage pillar's
-agent surface is complete.** **`@sackville/flake` is now open (slice 1):** the pure
+agent surface is complete.** **`@sackville-mcp/flake` is now open (slice 1):** the pure
 `wilsonInterval(failures, runs, z=1.96)` (Wilson score interval for a binomial proportion,
 clamped to [0,1], degenerate-zero for zero runs — chosen over naive p̂=failures/runs, which
 is overconfident at small n and collapses at the p̂=0/1 boundaries) + `classifyHistory`/
@@ -614,7 +620,7 @@ run count (observed inconsistency = flaky); an all-pass/all-fail history is `rel
 conservative, sample-size-aware magnitude the (later, operator-gated) quarantine slice
 thresholds on. Pure/offline over a committed `run-history.json` fixture shaped like the
 future private better-sqlite3 history store ({passed, at} runs; `at` ignored). No runtime
-deps yet (better-sqlite3 arrives with the history-DB slice). **`@sackville/flake` is now
+deps yet (better-sqlite3 arrives with the history-DB slice). **`@sackville-mcp/flake` is now
 COMPLETE (engine + agent surface), slices 2–6:** slice 2 `HistoryStore` — the private
 better-sqlite3 run-history DB (append-only `test_run` + `flake_meta`; record/history/
 classify; a SECOND SQLite owner per ADR 0010, outside the docs-pillar invariant); slice 3
@@ -629,7 +635,7 @@ surface, paired deny-by-default gate adapted here (`allowQuarantine` + load-bear
 `allowedRoots` gate, injected TestRunner so no real spawn in the gate); slice 6 the MCP
 surface + `sackville-flake-mcp` bin (`flake_status`/`flake_candidates`/`flake_release`
 always on; `flake_run` behind the run gate; `flake_quarantine` behind the quarantine gate;
-bin requires `SACKVILLE_FLAKE_DB` + the two independent paired gates). **`@sackville/mutate`
+bin requires `SACKVILLE_FLAKE_DB` + the two independent paired gates). **`@sackville-mcp/mutate`
 is now COMPLETE (engine + agent surface):** the **Stryker/Vitest-4 compat spike resolved
 positively** (ADR 0010 update 2026-06-01 — vitest-runner 9.x declares `vitest >=2.0.0` +
 ships Vitest 4/4.1 support, so thin-wrap is viable and Stryker stays an injected,
@@ -744,7 +750,7 @@ flows**. Visual regression and multi-engine have since landed; Phase 3 is
 feature-complete (only the explicitly-aspirational bucket remains). Design locked by a 5-stream
 research workflow w/ adversarial verification (`docs/research/2026-05-31-pillar3-
 browser-testing.md`); captured in **ADR 0006 (+ dated updates) + ARCHITECTURE §10
-+ ROADMAP Phase 3**. A new pure-TS **`@sackville/browser`** built **thin on stable
++ ROADMAP Phase 3**. A new pure-TS **`@sackville-mcp/browser`** built **thin on stable
 `playwright-core` 1.60.0** (NOT a wrap of `@playwright/mcp`, which pins an alpha
 core + inlines artifacts); ARIA-snapshot-first driving; artifacts by handle;
 deny-by-default operator-set safety. Shipped slices (all TDD, real-chromium tested
@@ -759,7 +765,7 @@ against in-process fixtures):
    free reads) over generation-tagged refs.
 5. `BrowserGate` deny-by-default action gate — navigation allowlist + mutation
    dry-run (one-shot route capture+abort) vs execute; operator-set.
-6. Shared **`@sackville/safety`** (SSRF range classifier + `Redactor` moved from
+6. Shared **`@sackville-mcp/safety`** (SSRF range classifier + `Redactor` moved from
    `api`) + Tier-1 `installSafetyRoutes` allowlist (allowlist-authoritative).
 7. Tier-2 `createSsrfProxy` — loopback DNS-pinning forward proxy; `allowPrivate`
    opt-in for local-app testing (never link-local/metadata).
@@ -850,7 +856,7 @@ against in-process fixtures):
    later submit is gated separately by the mutation gate. Bin-wired via
    `SACKVILLE_BROWSER_UPLOAD_DIR` (unset ⇒ uploads denied). **The downloads/uploads/
    dialog/auth gating bundle is now COMPLETE** (auth = origin-scoped `httpCredentials`).
-22. **Human `sackville browser` CLI:** `@sackville/cli` gains `browser snapshot|audit|
+22. **Human `sackville browser` CLI:** `@sackville-mcp/cli` gains `browser snapshot|audit|
    screenshot <url>` (`packages/cli/src/browser.ts`) — single-shot page inspection
    over the engine (navigate once + read; per-snapshot refs needn't outlive the
    process). Reuses the bin's egress boundary: a gated `BrowserManager` + **mandatory**
@@ -859,9 +865,9 @@ against in-process fixtures):
    `--allow-private`/`--no-sandbox`/`--headed`/`--json`/`--out`/`--full-page`.
    `audit` exits 1 on a11y violations (CI-usable). Real-chromium CLI tests.
 23. **Browser assertions — one assertion engine across pillars.** Factored a shared
-   **`@sackville/assert`** package (the pillar-agnostic operator core: `AssertionOp` +
-   `applyOp`, moved out of `@sackville/api`, which now consumes it — behavior-preserving,
-   mirroring the `@sackville/safety` extraction). `@sackville/browser` `assertions.ts` +
+   **`@sackville-mcp/assert`** package (the pillar-agnostic operator core: `AssertionOp` +
+   `applyOp`, moved out of `@sackville-mcp/api`, which now consumes it — behavior-preserving,
+   mirroring the `@sackville-mcp/safety` extraction). `@sackville-mcp/browser` `assertions.ts` +
    `PageDriver.assert(specs)` evaluate declarative assertions against the live page:
    sources `url`/`title`/`ariaSnapshot` (page) + `text`/`value`/`visible`/`count`
    (element, by `ref` or `role`+`name`), each **auto-waiting** via a fast poll
@@ -869,7 +875,7 @@ against in-process fixtures):
    to its timeout — so a condition that becomes true after an async update still
    passes. Observed string values are redacted; `pass` reflects the true (raw) value.
    MCP `browser_assert` tool (free read) returns `{pass, results}`.
-24. **`browser_trace_query` — trace.zip → action timeline.** `@sackville/browser`
+24. **`browser_trace_query` — trace.zip → action timeline.** `@sackville-mcp/browser`
    `trace.ts`/`queryTrace(zip, opts)` parses a captured Playwright trace.zip's `.trace`
    **JSONL directly** (no `npx playwright trace` subprocess — its `open` is a GUI
    viewer and there are NO `console`/`network`/`errors` subcommands; those live inside
@@ -879,7 +885,7 @@ against in-process fixtures):
    `includeParams`. MCP `browser_trace_query` resolves the stored (already-redacted)
    trace by `runId` — **no live session needed** (query after close); errors actionably
    when trace capture was off. Schema probed against the 1.60.0 pin.
-25. **`browser_perf_audit` — Lighthouse perf over the node API.** `@sackville/browser`
+25. **`browser_perf_audit` — Lighthouse perf over the node API.** `@sackville-mcp/browser`
    `perf.ts`/`auditPerf(url, opts)` runs **Lighthouse 13.3.0** (`onlyCategories:
    ['performance']`) by launching its own Chrome via **`chrome-launcher`** at the
    operator chromium path + **operator-supplied flags** (the bin passes the mandatory
@@ -893,7 +899,7 @@ against in-process fixtures):
    scores**. Feasibility + LHR shape probed against the pin.
 
 26. **Network heavy mode — HAR capture** (`a6ead53` + `c6a5303`). New
-   `@sackville/browser` `har.ts`: `finalizeHar` reads the HAR `.zip` Playwright
+   `@sackville-mcp/browser` `har.ts`: `finalizeHar` reads the HAR `.zip` Playwright
    writes on context close, redacts every text entry (`.har` JSON + persisted text
    bodies, via fflate) BEFORE surfacing, stores by
    `sackville://browser/run/<id>/har` handle, returns a compact summary
@@ -918,7 +924,7 @@ against in-process fixtures):
    COMPLETE.**
 
 28. **Persisted `.bru` browser-step flows** (`227263a`/`d7ad2a4`/`e23427e`; mirrors
-   ADR 0004). New `@sackville/browser` `flow.ts`: a Bruno-openable `<name>.bru`
+   ADR 0004). New `@sackville-mcp/browser` `flow.ts`: a Bruno-openable `<name>.bru`
    (meta) + `<name>.sackville.yml` sidecar holding ordered `steps`, keyed by
    `SemanticLocator {role,name?,nth?}` (NOT ephemeral refs, so a flow is stable
    across runs). `loadFlow`/`loadFlowCollection` parse + validate (fail-loud);
@@ -929,7 +935,7 @@ against in-process fixtures):
    flow but continues. PageDriver gained semantic-locator action methods
    (`clickAt`/`fillAt`/`selectAt`/`pressAt`) driving via `getByRole` directly,
    reusing the same mutation gate; factored a shared `locatorFor()`; `waitFor` takes
-   `nth`. Surfaced by **`sackville browser run <flow.bru>`** (`@sackville/cli`,
+   `nth`. Surfaced by **`sackville browser run <flow.bru>`** (`@sackville-mcp/cli`,
    --var/--unsafe/--allow-host/--json, exit-nonzero on failure, env-secret redaction)
    + bundled `examples/browser/login/` with an offline guard test.
 
@@ -946,7 +952,7 @@ against in-process fixtures):
    documented side-by-side in `examples/browser/README.md` (CLI `sackville browser run`
    + the MCP `browser_list_flows`→`browser_run_flow` sequence over the login example).
 
-30. **Video capture (webm) — operator-gated.** New `@sackville/browser` `video.ts`:
+30. **Video capture (webm) — operator-gated.** New `@sackville-mcp/browser` `video.ts`:
    `finalizeVideo` reads the `.webm` Playwright writes on context close, stores it by
    `sackville://browser/run/<id>/video` handle (NO redaction — video is unredactable
    pixels, so it is gated **off** by default like the trace/screenshots), returns a
@@ -990,7 +996,7 @@ against in-process fixtures):
    ROADMAP. The dev harness (`docker/`) stays separate (gitignored).
 
 33. **Visual regression — `compareScreenshots` engine + `browser_visual_compare`.**
-   `@sackville/browser` `visual.ts` (pixelmatch 7.2.0 + pngjs 7.0.0): a **pure,
+   `@sackville-mcp/browser` `visual.ts` (pixelmatch 7.2.0 + pngjs 7.0.0): a **pure,
    deterministic** pixel diff — diff count/ratio, `maxDiffPixelRatio`/`maxDiffPixels`
    budget, pixel-rect `mask[]` (dynamic regions), size-mismatch hard-fail, diff PNG.
    `PageDriver.screenshot()` gained stable-capture options (`animations:'disabled'`/
@@ -1004,7 +1010,7 @@ against in-process fixtures):
    the green gate stays deterministic: tested with in-memory PNGs + a real-chromium
    **self-captured** baseline (nothing committed to the repo).
 
-34. **Multi-engine (firefox/webkit) — operator-selected.** New `@sackville/browser`
+34. **Multi-engine (firefox/webkit) — operator-selected.** New `@sackville-mcp/browser`
    `engine.ts`: `resolveEngine` (default chromium, throws loud on a typo) +
    `engineLauncher`/`engineLaunchOptions`. The injected-`launch()` `BrowserManager`
    is unchanged (already engine-agnostic) — selection lives only at the launch seam.
@@ -1030,17 +1036,17 @@ count is the one in the Phase-4 current-phase block at the top of this file.)** 
 now FEATURE-COMPLETE. On top of **Pillar 2 fully COMPLETE** (request-body matrix +
 keyring wiring, SSRF range-block + redirect re-check, contract reach, import).
 **Developer live-view was DROPPED** (ADR 0008, headless-only/LLM-first).)_
-**Next action:** Phase 4 is underway (ADR 0010). `@sackville/deps` slices 1–4 (pure core:
+**Next action:** Phase 4 is underway (ADR 0010). `@sackville-mcp/deps` slices 1–4 (pure core:
 `auditDeprecation`, `matchVulnerabilities`, `loadOsvSnapshot`, `auditDependency`) **and
 slice 5 (the agent surface)** are landed: `audit_dependency` + `audit_project` MCP tools
 (`packages/mcp/src/deps.ts`) + the `sackville-deps-mcp` bin (`bin-deps.ts`, namespaced
 `SACKVILLE_DEPS_*`, network off by default, SSRF-pinned packument fetch via
-`@sackville/safety` `resolveAndPin` — **note:** `assertSsrfAllowed` does NOT exist on
-`safety`, only in the api package). **The shared `@sackville/artifacts` extraction is now
+`@sackville-mcp/safety` `resolveAndPin` — **note:** `assertSsrfAllowed` does NOT exist on
+`safety`, only in the api package). **The shared `@sackville-mcp/artifacts` extraction is now
 DONE** (parameterized `sackville://<prefix>/<id>/<kind>`; browser rewired as a thin
 subclass, behavior-preserving), **and `changelog_diff` (the first handle-emitting deps
 slice) is DONE**: pure `sliceChangelog` core + the `changelog_diff` MCP tool (injected
-fetcher → slice → store by handle in `@sackville/artifacts` `deps` prefix → compact
+fetcher → slice → store by handle in `@sackville-mcp/artifacts` `deps` prefix → compact
 summary) + the `sackville://deps/{id}/{kind}` resource + bin wiring
 (`SACKVILLE_DEPS_ARTIFACT_DIR` + SSRF-pinned GitHub-raw CHANGELOG fetch), **and by-handle
 full `audit_project` detail is DONE** (`detailHandle` → the `sackville://deps` resource),
@@ -1054,26 +1060,26 @@ CVSS-vector → bucket scoring is DONE** (pure `cvssV3BaseScore`; `matchVulnerab
 falls back to the CVSS vector's bucket when no qualitative GHSA string is present).
 **Next for deps:** the staged **Python/PyPI + RubyGems advisory adapters** (the non-npm
 ecosystems — `audit_project` is npm-only today; `detectInstalledVersion` already dispatches
-by ecosystem). **Track A `@sackville/coverage` is open** — slices 1–3 landed (`uncoveredNewLines` differ,
+by ecosystem). **Track A `@sackville-mcp/coverage` is open** — slices 1–3 landed (`uncoveredNewLines` differ,
 `parseUnifiedDiff`, and the `uncoveredInDiff` integrator) — **the pure offline core of the
 forgotten-assertion catch is complete**, **the live `runScoped` engine (slice 4)
 landed**, **and the MCP surface + `sackville-coverage-mcp` bin landed** — so **the
-`@sackville/coverage` pillar (engine + agent surface) is complete** (`uncovered_in_diff`
+`@sackville-mcp/coverage` pillar (engine + agent surface) is complete** (`uncovered_in_diff`
 free/read-only + gated `run_scoped`). **Next for deps/coverage:** the staged
 **Python/PyPI + RubyGems advisory adapters** (deps) and, optionally, a `sackville coverage`
-human CLI / `istanbul-lib-coverage` for `CoverageMap` merging. **`@sackville/flake` is now
+human CLI / `istanbul-lib-coverage` for `CoverageMap` merging. **`@sackville-mcp/flake` is now
 COMPLETE (engine + agent surface)** — the pure Wilson classifier (slice 1) + the private
 better-sqlite3 `HistoryStore` (slice 2) + `parseVitestJson`/`ingestReport` (slice 3) + the
 operator-gated `Quarantine` with mandatory expiry (slice 4) + the gated `runAndRecord`
 vitest spawner (slice 5) + the MCP surface/`sackville-flake-mcp` bin (slice 6:
 `flake_status`/`flake_candidates`/`flake_release` always on, `flake_run` + `flake_quarantine`
-each behind their own paired gate). **`@sackville/mutate` is now COMPLETE (engine + agent
+each behind their own paired gate). **`@sackville-mcp/mutate` is now COMPLETE (engine + agent
 surface)** — the Stryker/Vitest-4 spike resolved (thin-wrap viable; Stryker injected, not a
 gate dep), pure `summarizeMutation` over the mutation-testing-elements schema, the gated
 diff-scoped `runMutation` (spawn `stryker run`), and the `mutate_summarize`/`mutate_run` MCP
 surface + `sackville-mutate-mcp` bin.
 
-**LAST Phase-4 candidate: `@sackville/lsp` — semantic code navigation. DESIGN DONE (ADR
+**LAST Phase-4 candidate: `@sackville-mcp/lsp` — semantic code navigation. DESIGN DONE (ADR
 0011); coding NOT started.** The design pass ran as the `lsp-bridge-design` fan-out (3
 research streams → synthesis → 2 adversarial critics — the adversarial pass materially
 reshaped it, ADR-0010 style). Locked decisions (full detail in **ADR 0011**): it is the
@@ -1094,7 +1100,7 @@ inside it; a **per-(server,uri) mutex** + open-once/refcount docs + in-flight-aw
 installed version"); `vscode-jsonrpc` + `vscode-languageserver-protocol` as **explicit pins**
 (the playwright-core pattern, not a hand-roll); **MVP = `lsp_find_definition`/
 `lsp_find_references`/`lsp_hover`** (hover restored, call-hierarchy staged behind capability
-detection). **`@sackville/lsp` slice 1 is LANDED:** the pure `encoding.ts`
+detection). **`@sackville-mcp/lsp` slice 1 is LANDED:** the pure `encoding.ts`
 (`toLspCharacter`/`fromLspCharacter` for utf-8/16/32 with non-BMP fixtures + cross-encoding
 round-trip; `resolvePositionEncoding` fail-loud-on-unsupported; `toLspPosition`/
 `fromLspPosition` with LF/CR/CRLF split + BOM strip) + `normalize.ts` (`normalizeLocations`
@@ -1145,7 +1151,7 @@ collapsed), and version provenance (`serverInfo` on every result + a `versionWar
 server reports none; echoes optional caller-supplied `toolchain` provenance). 10 query tests; **646
 TS + 45 Py green**. The richer **warn-on-toolchain-mismatch** heuristic (reusing
 `core.detectInstalledVersion`) is deliberately staged to the surface (it has the `core` dep + is
-genuinely per-server heuristic). **Slice 5 is LANDED — the `@sackville/lsp` pillar is COMPLETE
+genuinely per-server heuristic). **Slice 5 is LANDED — the `@sackville-mcp/lsp` pillar is COMPLETE
 (engine + agent surface):** the MCP surface (`packages/mcp/src/lsp.ts`,
 `registerLspTools`/`createLspServer`) + the `sackville-lsp-mcp` bin (`bin-lsp.ts`,
 `buildLspServerFromEnv`). `lsp_find_definition`/`lsp_find_references`/`lsp_hover` are **gated as a
@@ -1154,7 +1160,7 @@ are all set — there is NO free-read tier, since every answer needs a live inde
 always-on, no-spawn **`lsp_languages`** reports the bound languages + (once a server is live in-session)
 its advertised capabilities + `serverInfo.version` via `manager.describe()` — **never** the
 command/path. A long reference list is capped inline (head of 50) + the full list emitted **by handle**
-via `@sackville/artifacts` (`lsp` prefix; `sackville://lsp/{id}/{kind}` resource, registered only when a
+via `@sackville-mcp/artifacts` (`lsp` prefix; `sackville://lsp/{id}/{kind}` resource, registered only when a
 store is set). The surface is **pure wiring over an injected `query` + `describeServers`** (so the mcp
 tests use stubs — no peer harness reach-in); the bin builds the real `LanguageServerManager` +
 `LspQueryEngine` (the sole reader of `SACKVILLE_LSP_ALLOW_RUN`/`_PROJECT_ROOTS`/`_TIMEOUT_MS`/
@@ -1254,7 +1260,7 @@ input — apply is the engine's internal decision; large edit sets by handle) + 
 captured from real `typescript-language-server` 5.3.0 (out-of-gate; gate replays recorded payloads, NO
 real server). Independent golden-file byte assertion (not `applyTextEdits` output) guards the writer.
 **HUMAN VERIFICATION CLIs DONE, 839 TS + 45 Py green:** all five Phase-4 pillars now have a
-`sackville <pillar>` subcommand in `@sackville/cli`, each a thin human wrapper over its engine
+`sackville <pillar>` subcommand in `@sackville-mcp/cli`, each a thin human wrapper over its engine
 mirroring the `api`/`browser` CLI pattern (the human IS the operator, so run/write gates are
 straight-through flags like `api`'s `--unsafe`, the typed root/host is auto-allowed, and the
 engine runner/fetcher is **injectable** so the suite never spawns/fetches — ADR 0010
@@ -1270,9 +1276,9 @@ real manager/engine per invocation and shuts it down; exit 2 = `not_ready`; ship
 `examples/lsp/greeter` — a tiny runnable TS project + an offline coordinate guard). The deps CLI forced a
 **behavior-preserving refactor**: the pure ecosystem-dispatch helpers (`comparatorFor`/`matchName`/
 `dependencyNames` + `OsvEcosystem`/`OSV_ECOSYSTEMS`) were lifted out of `packages/mcp/src/deps.ts`
-into a new `@sackville/deps` `ecosystem.ts` (one source of truth, shared by the MCP surface + the
+into a new `@sackville-mcp/deps` `ecosystem.ts` (one source of truth, shared by the MCP surface + the
 CLI; the surface rewires to import them, guarded by the 90-test deps+mcp suite); the CLI builds its
-own SSRF-pinned packument/changelog fetcher from `@sackville/safety` `resolveAndPin` (the established
+own SSRF-pinned packument/changelog fetcher from `@sackville-mcp/safety` `resolveAndPin` (the established
 per-surface pattern; private registries gated by `--allow-private`). The `lsp` CLI followed the MCP
 surface's stub pattern (inject `query`/`rename`/`describeServers` for success paths; the gate-refusal
 path uses the real build, where `assertAllowed` throws before any spawn — so no real server in the
@@ -1390,7 +1396,7 @@ ingestion refinements, Dash docset adapter). Pillar 2 design is locked (ADR 0004
 + 0005 + ARCHITECTURE §9, grounded by a 4-stream research workflow archived in
 `docs/research/2026-05-31-pillar2-api-testing.md`).
 
-**`@sackville/api` so far (TDD, offline tests):**
+**`@sackville-mcp/api` so far (TDD, offline tests):**
 - Loads Bruno `.bru` + `*.sackville.yml` sidecar; var interpolation; **undici**
   runner; declarative assertions (status/jsonpath/header); body by
   `sackville://run/<id>/body` handle.
@@ -1456,7 +1462,7 @@ ingestion refinements, Dash docset adapter). Pillar 2 design is locked (ADR 0004
 **Pillar 2 tail: COMPLETE.** All previously-deferred items have landed:
 - **Keyring** secret store wired into both surfaces (CLI `--keyring`, MCP
   `SACKVILLE_KEYRING`; chains the OS keyring ahead of `SACKVILLE_SECRET_<NAME>`).
-- **SSRF range-block** on every request (`assertSsrfAllowed` via `@sackville/safety`
+- **SSRF range-block** on every request (`assertSsrfAllowed` via `@sackville-mcp/safety`
   `resolveAndPin`; metadata/link-local always refused, loopback/private gated by
   `allowPrivate` — default permissive, `SACKVILLE_BLOCK_PRIVATE` / `--block-private`
   to harden) **+ opt-in redirect following** (`maxRedirects`) re-checking SSRF +
@@ -1472,7 +1478,7 @@ Remaining ADR-0005-documented out-of-scope (not blocking): remote (http) `$ref`
 deref; non-schema `$ref`s; ajv `strict:false`. Import defers multipart/file
 bodies + non-header auth.
 
-Decided (ADR 0004): new pure-TS **`@sackville/api`** package; **Bruno `.bru`** +
+Decided (ADR 0004): new pure-TS **`@sackville-mcp/api`** package; **Bruno `.bru`** +
 thin model (via `@usebruno/lang`); Sackville assertions/captures in a **sidecar
 `*.sackville.yml`**; **deny-by-default** mutation safety (dry-run + allowlist +
 `--unsafe`); secrets via `@napi-rs/keyring` + env fallback, value-redacted;
@@ -1489,7 +1495,7 @@ thin model (via `@usebruno/lang`); Sackville assertions/captures in a **sidecar
 - Design grounded by a 6-stream research workflow → `ARCHITECTURE.md` (exact
   stack/versions, the SQLite contract, MCP tool shapes). Raw research archived in
   `docs/research/2026-05-31-design-research.md`.
-- **Monorepo scaffolded and 100% green:** pnpm workspace + `@sackville/core` (TS;
+- **Monorepo scaffolded and 100% green:** pnpm workspace + `@sackville-mcp/core` (TS;
   better-sqlite3 + sqlite-vec, Biome, Vitest, tsdown) and `py/sackville_ingest`
   (uv; Ruff, pytest). `pnpm gate` runs both toolchains.
 - **Polyglot boundary proven (red→green):** Python builds `fixtures/golden.sqlite`
@@ -1525,9 +1531,9 @@ thin model (via `@usebruno/lang`); Sackville assertions/captures in a **sidecar
   (precedence version > installed > project). Verified end to end: pointing at a
   project with React 18 installed, with no version supplied, returns React
   18.3.1 docs.
-- **`@sackville/cli` shipped:** `sackville search|get|versions|detect` over `core`
-  (hybrid via `@sackville/embed`, `--json`, version flags). The query embedder was
-  extracted into **`@sackville/embed`** (transformers.js, dynamic import) shared
+- **`@sackville-mcp/cli` shipped:** `sackville search|get|versions|detect` over `core`
+  (hybrid via `@sackville-mcp/embed`, `--json`, version flags). The query embedder was
+  extracted into **`@sackville-mcp/embed`** (transformers.js, dynamic import) shared
   by cli + mcp.
 - **CI gate:** `.github/workflows/ci.yml` mirrors `pnpm gate` (both toolchains)
   on push/PR.
@@ -1592,7 +1598,7 @@ thin model (via `@usebruno/lang`); Sackville assertions/captures in a **sidecar
 > Phase-4 tails: `deps` changelog_diff for PyPI/RubyGems; `mutate` cosmic-ray + `runMutmut`. Or open
 > Phase 5 (needs a design-pass/ADR first). The detailed historical slice log follows.
 
-**Phase 3, Slice 1 (a11y-audit summarizer): DONE & committed** (`@sackville/browser`
+**Phase 3, Slice 1 (a11y-audit summarizer): DONE & committed** (`@sackville-mcp/browser`
 scaffolded; `ArtifactStore`/`summarizeA11y`/`auditA11y`, TDD against an offline
 fixture + real headless Chromium; CI + docker harness provision Chromium). The
 slice deliberately deferred visual baselines + Lighthouse scores (the flaky parts).
@@ -1636,22 +1642,22 @@ allowlisted current host (hard-deny otherwise). Gate omitted ⇒ raw ungated lay
 + 45 Py green.** Committed to `main`; **not yet pushed** — push after the SSRF
 slice rounds out the safety story.
 
-**Slice 6 (`@sackville/safety` + Tier-1 SSRF): DONE.** New shared **`@sackville/safety`**
+**Slice 6 (`@sackville-mcp/safety` + Tier-1 SSRF): DONE.** New shared **`@sackville-mcp/safety`**
 package (factored per ADR 0006): SSRF range classifier (`isBlockedIp`/
 `isBlockedHost`/`isBlockedHostLiteral` via `ipaddr.js`, fail-closed) +
 `resolveAndPin` (DNS resolve → refuse blocked range → pinned IP, the Tier-2
-decision core) + the `Redactor` (moved from `@sackville/api`, re-exported there —
+decision core) + the `Redactor` (moved from `@sackville-mcp/api`, re-exported there —
 behavior-preserving). **Tier-1** `installSafetyRoutes` (deny-by-default
 `browserContext.route`, wired into `BrowserManager` when a gate is set) governs
 every request and is **allowlist-authoritative** (ADR 0006 update 2026-06-01:
 literals blocked by deny-by-default rather than unconditionally, so localhost
 apps stay testable). **174 TS + 45 Py green.** Committed to `main`; the
-`@sackville/safety` extraction (77c7ff7) + Tier-1 are being pushed together as the
+`@sackville-mcp/safety` extraction (77c7ff7) + Tier-1 are being pushed together as the
 milestone.
 
 **Slice 7 (Tier-2 DNS-pinning SSRF proxy): DONE.** `createSsrfProxy`
 (`proxy.ts`) — a loopback forward proxy (HTTP absolute-form + HTTPS `CONNECT`)
-passed as Chromium's `proxy.server`; calls `@sackville/safety` `resolveAndPin` per
+passed as Chromium's `proxy.server`; calls `@sackville-mcp/safety` `resolveAndPin` per
 request/CONNECT (resolve once → refuse blocked range → connect to the **pinned**
 IP), closing allowlisted-hostname DNS-rebinding (the gap Tier-1 can't see). HTTP
 rebind → 502; redirects re-checked (each hop is a fresh proxy request). The
@@ -1665,7 +1671,7 @@ pushing as the milestone.
 **Slice 8a (dry-run redaction completeness): DONE.** `PageDriver`'s dry-run
 preview now applies the `redact` hook to the would-be request **`url`** as well as
 its `postData` (a secret in a GET query string previously leaked into the preview);
-the option doc records that the server bin wires the real `@sackville/safety`
+the option doc records that the server bin wires the real `@sackville-mcp/safety`
 `Redactor` there. Test wires a real `Redactor` through the hook → both body and
 `?token=` query scrubbed. (ef5cd81)
 
@@ -1768,8 +1774,8 @@ arbitrary local files. **The downloads/uploads/dialog/auth gating bundle is COMP
 over a gated manager + mandatory SSRF proxy; typed host auto-allowed; `audit` exits
 1 on violations. (`packages/cli/src/browser.ts`, real-chromium tested.)
 
-**Browser assertions: DONE.** Shared **`@sackville/assert`** (operator core extracted
-from `@sackville/api`) + `@sackville/browser` `assertions.ts`/`PageDriver.assert` (page
+**Browser assertions: DONE.** Shared **`@sackville-mcp/assert`** (operator core extracted
+from `@sackville-mcp/api`) + `@sackville-mcp/browser` `assertions.ts`/`PageDriver.assert` (page
 + element sources, auto-wait poll, redacted actual) + MCP `browser_assert`. One
 assertion engine across pillars.
 
@@ -1819,13 +1825,13 @@ TDD red→green; `pnpm gate` 100% green before each commit.
 
 ---
 
-Pillar 2 (`@sackville/api`) is **COMPLETE — engine + agent/human surfaces + the
+Pillar 2 (`@sackville-mcp/api`) is **COMPLETE — engine + agent/human surfaces + the
 full optional tail**. All five formerly-deferred tail items have landed (TDD,
 all green):
 1. ~~Keyring secret store into CLI/MCP~~ **DONE** (CLI `--keyring`, MCP
    `SACKVILLE_KEYRING`; `resolveSecretStore({keyring})` chains keyring → env).
 2. ~~SSRF range-block + post-redirect re-check~~ **DONE** (`assertSsrfAllowed`
-   on every request via `@sackville/safety`; opt-in `maxRedirects` with per-hop
+   on every request via `@sackville-mcp/safety`; opt-in `maxRedirects` with per-hop
    SSRF + allowlist re-check + cross-origin credential strip).
 3. ~~Request **body types**: multipart-form, file, graphql~~ **DONE**.
 4. ~~Import: Postman/Insomnia/OpenAPI/HAR → `.bru`~~ **DONE** (`import.ts`,
@@ -1864,7 +1870,7 @@ See `py/sackville_ingest/README.md` and `packages/mcp/README.md`.
 
 ## Known open questions
 
-- npm publishing: scope packages under `@sackville/*` (bare `sackville` is taken
+- npm publishing: scope packages under `@sackville-mcp/*` (bare `sackville` is taken
   on npm). Name confirmed fine for repo + Homebrew tap.
 - Captured/script-set values flow through `response.captured` unredacted (needed
   for chaining); the MCP/CLI surface layer must decide how to expose them.

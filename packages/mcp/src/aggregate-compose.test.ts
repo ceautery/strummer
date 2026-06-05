@@ -17,7 +17,7 @@ function fakePillar(
 ) {
   return {
     default: isDefault,
-    pkg: `@sackville/${name}`,
+    pkg: `@sackville-mcp/${name}`,
     load: async () => {
       calls.push(name)
       if (opts.fail === 'module') {
@@ -108,7 +108,7 @@ describe('buildAggregateServer — isolation: loud-disable vs fatal (ADR 0019 §
     )
     expect(enabled).toEqual(['api'])
     expect(disabled).toEqual([
-      { pillar: 'browser', reason: 'engine not installed (@sackville/browser)' },
+      { pillar: 'browser', reason: 'engine not installed (@sackville-mcp/browser)' },
     ])
     expect(logs.join('\n')).toMatch(/browser.*disabled.*not installed/)
     expect(await listToolNames(server)).toEqual(['fake_api'])

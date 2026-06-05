@@ -1,6 +1,6 @@
 {
-  "name": "@sackville/api",
-  "version": "0.0.0",
+  "name": "@sackville-mcp/api",
+  "version": "0.0.1-alpha.1",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@napi-rs/keyring": "^1.3.0",
-    "@sackville/assert": "workspace:*",
-    "@sackville/safety": "workspace:*",
+    "@sackville-mcp/assert": "workspace:*",
+    "@sackville-mcp/safety": "workspace:*",
     "@usebruno/lang": "^0.36.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",

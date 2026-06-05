@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { connect as netConnect } from 'node:net'
-import { type DnsLookup, type RangeOptions, resolveAndPin } from '@sackville/safety'
+import { type DnsLookup, type RangeOptions, resolveAndPin } from '@sackville-mcp/safety'
 
 export interface SsrfProxyOptions extends RangeOptions {
   /** DNS resolver (injectable in tests). Defaults to the system resolver. */

@@ -1,4 +1,4 @@
-# ADR 0011 — `@sackville/lsp`: the semantic-navigation LSP bridge
+# ADR 0011 — `@sackville-mcp/lsp`: the semantic-navigation LSP bridge
 
 - **Status:** Accepted (design; no production code yet)
 - **Date:** 2026-06-01
@@ -9,7 +9,7 @@
 
 ## Context
 
-`@sackville/lsp` is the final Phase-4 candidate (ADR 0010 sequence step 5): semantic
+`@sackville-mcp/lsp` is the final Phase-4 candidate (ADR 0010 sequence step 5): semantic
 code navigation — go-to-definition, find-references, hover, and (staged)
 type-definition / document-symbols / call-hierarchy — by driving a real **Language
 Server Protocol** server as a subprocess and exposing its answers to an agent over
@@ -43,7 +43,7 @@ test-runner gate. We reuse the test-runners' *gate shape* (paired
 from the browser pillar (below). This reframing resolves most of the adversarial
 findings.
 
-### `@sackville/lsp` is the documented exception to ARCHITECTURE §1
+### `@sackville-mcp/lsp` is the documented exception to ARCHITECTURE §1
 
 ARCHITECTURE §1: "Polyglot core, file-based boundary … No live RPC." ADR 0010
 already named LSP "the only candidate that violates §1 outright." We keep that
@@ -58,7 +58,7 @@ hard invariants:
 - **The LSP subprocess must never open `schema/sackville.schema.sql` or any Sackville
   SQLite.** The docs index is off-limits to it.
 - **Results are ephemeral.** No LSP output is cached into the index or persisted
-  beyond an in-flight call's `@sackville/artifacts` handle.
+  beyond an in-flight call's `@sackville-mcp/artifacts` handle.
 
 This keeps §1 a bright line with one named, fenced exception — not a fuzzy carve-out
 the next contributor reaches for elsewhere.
@@ -162,7 +162,7 @@ version-awareness (that would violate the principle, not merely defer it):
 - **Record `serverInfo.{name,version}` from the `initialize` result in every
   navigation result and on every artifact handle** — free (it is in the protocol),
   and turns "silently wrong" into "wrong-but-attributed".
-- **v1 warn-on-mismatch**: reuse `@sackville/core` `detectInstalledVersion` to detect
+- **v1 warn-on-mismatch**: reuse `@sackville-mcp/core` `detectInstalledVersion` to detect
   the project's typescript/go/rust toolchain and emit a non-fatal `versionWarning`
   when the bound server's reported version is implausible for it. The full
   toolchain-resolution matrix stages; the warn hook is a v1 obligation.
@@ -179,7 +179,7 @@ were hand-rolled only because the converter was unavailable offline — a forced
 not a preference). Hand-rolling ~200 lines of framing buys nothing and gets the
 correctness corners (charset, partial reads, cancellation, progress tokens) subtly
 wrong. Per ADR 0010's "explicit pins, no transitive imports": **both packages are
-added as explicitly pinned direct deps** of `@sackville/lsp` (3.17.x line, stable,
+added as explicitly pinned direct deps** of `@sackville-mcp/lsp` (3.17.x line, stable,
 no native build); the protocol package is imported **types-only** where possible so
 its churn lands as a type-level, not runtime, coupling.
 
@@ -241,7 +241,7 @@ The v1 cut is the **de-risking MVP**, not an arbitrary line:
   unsupported tool and always knows the provenance.
 - Tool naming follows the house `verb_noun` form (`lsp_find_definition`), documented.
 - Large results (hundreds of references, document symbols for a big file) return a
-  **compact head inline + the full list by handle** via `@sackville/artifacts` (prefix
+  **compact head inline + the full list by handle** via `@sackville-mcp/artifacts` (prefix
   `lsp`, resource `sackville://lsp/{id}/{kind}`, registered only when a store is set) —
   the deps/coverage rule. A file body is **never** inlined.
 - **Staged, not amputated** (CLAUDE.md directive 4 — recorded in ROADMAP):
@@ -278,7 +278,7 @@ MCP surface in `packages/mcp/src/lsp.ts` + `bin-lsp.ts`; env
   before any process is spawned. Then the `client.ts` handshake/tri-state against the
   fake in-process peer; then the gated `manager`/`query` engine; then the MCP surface
   + bin.
-- `@sackville/lsp` is the **documented, fenced exception** to ARCHITECTURE §1; §1
+- `@sackville-mcp/lsp` is the **documented, fenced exception** to ARCHITECTURE §1; §1
   otherwise stands. A future ARCHITECTURE update should cite this ADR at §1.
 - The pillar deliberately has **no real-server test in `pnpm gate`** — a stricter
   determinism posture than the other Phase-4 pillars, justified and recorded here.
@@ -308,7 +308,7 @@ MCP surface in `packages/mcp/src/lsp.ts` + `bin-lsp.ts`; env
 
 ## 1. Overview
 
-`lsp_rename` adds the first **write** capability to `@sackville/lsp`: a semantic, cross-file symbol rename driven by the live language server's `textDocument/rename`. It is the final staged tail of Phase 4 and the documented extension of ADR-0011's live-LSP exception to ARCHITECTURE §1.
+`lsp_rename` adds the first **write** capability to `@sackville-mcp/lsp`: a semantic, cross-file symbol rename driven by the live language server's `textDocument/rename`. It is the final staged tail of Phase 4 and the documented extension of ADR-0011's live-LSP exception to ARCHITECTURE §1.
 
 **Posture (locked):** `lsp_rename` is **dry-run by default** — it computes the server's `WorkspaceEdit`, normalizes and validates it (offsets, overlap, confinement), and returns a human-readable preview with **zero disk writes and zero server-state mutation**. It applies to disk **only** behind a **separate operator gate `allowWrite`** that is distinct from and strictly *requires* the read gate `allowRun` (`allowWrite` is meaningless without `allowRun` — see §4). Every edited file is confined to the allowlisted project root, **realpath-hardened**, before any byte is read or written. Apply stages all files in memory, then commits temp-file-then-atomic-rename.
 
@@ -460,8 +460,8 @@ client.applyEdited(uri, newText): void  // if uri is in the open map: send didCh
 ```
 - **`oldText` is sliced with the absolute offsets from `lspPositionToOffset`, NEVER reconstructed from line:column via `splitLines`** (closing critic 1-finding-3) — `fromLspPosition` is used **only to render the human line:column label**, never to compute the byte span shown as `oldText`. A CRLF preview fixture asserts `oldText` byte-matches disk. Hunks are bounded to the edit span + a small clamped margin; **file bodies are never inlined** (ADR-0011 §"a file body is never inlined").
 - **Out-of-root edits show path + edit count ONLY — never `oldText`/`newText`** (closing critic 2-finding-7): we must not read+surface a file already decided to be outside the allowlist; `outOfRoot: true` flags it as not-applicable. (In single-file-apply v1 an out-of-root edit means the whole apply is refused anyway.)
-- **Secret redaction** runs over every `oldText`/`newText` via `@sackville/safety` (the shared redaction already used by `api`/`browser`) before they hit the preview or the artifact (closing critic 2-finding-7).
-- The **full** WorkspaceEdit preview is offloaded by `@sackville/artifacts` — **prefix `'lsp'`, kind `'rename-preview'`**, `sackville://lsp/{id}/rename-preview` — with a capped per-file head inline, mirroring the reference-list pattern (`lsp.ts:145-160`). Artifact retention is **bounded like the reference-list artifacts** and contains no out-of-root file bodies and no unredacted secrets.
+- **Secret redaction** runs over every `oldText`/`newText` via `@sackville-mcp/safety` (the shared redaction already used by `api`/`browser`) before they hit the preview or the artifact (closing critic 2-finding-7).
+- The **full** WorkspaceEdit preview is offloaded by `@sackville-mcp/artifacts` — **prefix `'lsp'`, kind `'rename-preview'`**, `sackville://lsp/{id}/rename-preview` — with a capped per-file head inline, mirroring the reference-list pattern (`lsp.ts:145-160`). Artifact retention is **bounded like the reference-list artifacts** and contains no out-of-root file bodies and no unredacted secrets.
 
 **Apply result (`applied: true`):** same shape plus a `kind: 'applied-edit'` audit artifact recording exactly which files were written and their **pre/post SHA-256 digests** for auditability. Per-file digests are the v1 audit bar; a full unified diff under a separate handle kind is staged (Open Q in §10).
 
@@ -525,7 +525,7 @@ client.applyEdited(uri, newText): void  // if uri is in the open map: send didCh
 4. *resourceOps confinement contradictory with refuse* → **folded.** Resource-op refusal is unconditional and early, before any confinement; resource-op confinement explicitly staged for the future un-stage slice (§2.5).
 5. *Confine ordering vs Phase-1 reads* → **folded.** Strict order normalize → confine-all → reads; out-of-root URI causes zero reads (asserted) (§4).
 6. *Multi-file holds only queried lock* → **folded** (same as critic-1 #1).
-7. *Secret/path leakage in preview + artifact* → **folded.** No hunk bodies for out-of-root edits; `@sackville/safety` redaction over hunks; project-relative paths only; bounded artifact retention (§6).
+7. *Secret/path leakage in preview + artifact* → **folded.** No hunk bodies for out-of-root edits; `@sackville-mcp/safety` redaction over hunks; project-relative paths only; bounded artifact retention (§6).
 8. *newName guard "optional"* → **folded.** Made mandatory pure validator `isPlausibleRenameName`, validated before sending to server (§3.4, Slice A).
 9. *Server buffer stale vs disk pre-compute* → **folded.** Pre-compute `didChange` reconcile when `didOpen` text differs from disk (§4, §5).
 10. *Partial restore can corrupt; paths leak* → **folded** (same as critic-1 #2; project-relative report paths).

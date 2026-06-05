@@ -1,5 +1,5 @@
 /**
- * The verdict severity scale now lives in the shared zero-dep `@sackville/severity`
+ * The verdict severity scale now lives in the shared zero-dep `@sackville-mcp/severity`
  * leaf (extracted out of deps so the verdict scale and deps' `SeverityBucket` share
  * ONE source of truth for the four qualitative buckets — see that package for why
  * `none` and deps' `unknown` stay distinct). This module re-exports it so verdict's
@@ -12,4 +12,4 @@ export {
   type QualitativeSeverity,
   SEVERITY_RANK,
   type Severity,
-} from '@sackville/severity'
+} from '@sackville-mcp/severity'

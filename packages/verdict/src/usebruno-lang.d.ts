@@ -1,4 +1,4 @@
-// `@sackville/verdict` type-imports `@sackville/api`'s result interfaces, which pulls
+// `@sackville-mcp/verdict` type-imports `@sackville-mcp/api`'s result interfaces, which pulls
 // api's source graph (it references `@usebruno/lang`, a JS dep with no type
 // declarations) into this package's compilation. Mirror the ambient shim every
 // other api consumer ships so tsc can resolve the module. (Erased at build; this

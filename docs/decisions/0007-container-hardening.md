@@ -5,7 +5,7 @@
 
 ## Context
 
-The browser pillar (`@sackville/browser` + `sackville-browser-mcp`) runs a **real
+The browser pillar (`@sackville-mcp/browser` + `sackville-browser-mcp`) runs a **real
 Chromium** that loads **attacker-influenced web content** and is driven by an
 **LLM agent**. That is the most exposed surface in Sackville: a renderer exploit,
 a malicious page, or a confused-deputy agent all execute *inside the server

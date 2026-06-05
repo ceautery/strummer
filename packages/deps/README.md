@@ -1,4 +1,4 @@
-# @sackville/deps
+# @sackville-mcp/deps
 
 **Dependency / version intelligence** — the first Phase-4 cross-cutting verification
 pillar (see `docs/decisions/0010-phase4-cross-cutting-verification.md`).
@@ -18,7 +18,7 @@ behind operator config:
   verdict — no network, no subprocess — so the green gate stays deterministic.
 - **Advisory data is file-as-data.** Vulnerability lookups read an operator-
   provisioned on-disk OSV snapshot (`SACKVILLE_DEPS_OSV_DB_DIR`); network is
-  off by default. When enabled, egress is SSRF-pinned via `@sackville/safety`
+  off by default. When enabled, egress is SSRF-pinned via `@sackville-mcp/safety`
   `resolveAndPin` + an operator allowlist — never an agent-supplied URL.
 - **Big artifacts by handle.** Changelog/release-note diffs are returned by
   resource handle, never inlined.
@@ -31,7 +31,7 @@ behind operator config:
   is honoured).
 
 ```ts
-import { auditDeprecation } from '@sackville/deps'
+import { auditDeprecation } from '@sackville-mcp/deps'
 
 auditDeprecation(requestPackument, '2.88.2')
 // → { isDeprecated: true, message: '…', scope: 'version' }
@@ -47,7 +47,7 @@ auditDeprecation(lodashPackument, '4.17.21')
   inclusive; explicit `versions`; filtered by ecosystem + name).
 
 ```ts
-import { matchVulnerabilities } from '@sackville/deps'
+import { matchVulnerabilities } from '@sackville-mcp/deps'
 
 matchVulnerabilities(lodashAdvisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15')
 // → [{ id: 'GHSA-…', severity: 'moderate', fixedIn: ['4.17.21'], … }]
@@ -61,7 +61,7 @@ matchVulnerabilities(lodashAdvisories, { ecosystem: 'npm', name: 'lodash' }, '4.
   absent — never a silent "zero vulnerabilities". Zero network.
 
 ```ts
-import { loadOsvSnapshot, matchVulnerabilities } from '@sackville/deps'
+import { loadOsvSnapshot, matchVulnerabilities } from '@sackville-mcp/deps'
 
 const { advisories, snapshotDate } = loadOsvSnapshot(process.env.SACKVILLE_DEPS_OSV_DB_DIR!, 'npm')
 matchVulnerabilities(advisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15')
@@ -72,11 +72,11 @@ matchVulnerabilities(advisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15'
   the *installed* version: `{ deprecated, vulnerabilities, worstSeverity, freshness
   (latest / latestSameMajor / isOutdated), recommendedTarget (conservative
   newest-same-major), snapshotDate, hasFindings }`. Pure — the caller gathers the
-  inputs (detect the installed version via `@sackville/core` `detectInstalledVersion`,
+  inputs (detect the installed version via `@sackville-mcp/core` `detectInstalledVersion`,
   load advisories via `loadOsvSnapshot`, fetch the packument).
 
 ```ts
-import { auditDependency } from '@sackville/deps'
+import { auditDependency } from '@sackville-mcp/deps'
 
 auditDependency({
   packageName: 'oldpkg', ecosystem: 'npm', installedVersion: '1.0.0',

@@ -1,8 +1,8 @@
 /** Domain model for API requests, assertions, and run results. */
 
-// The operator vocabulary is shared across pillars (see @sackville/assert); the api
+// The operator vocabulary is shared across pillars (see @sackville-mcp/assert); the api
 // pillar re-exports it so existing `./model.js` importers are unaffected.
-import type { AssertionOp } from '@sackville/assert'
+import type { AssertionOp } from '@sackville-mcp/assert'
 
 export type { AssertionOp }
 

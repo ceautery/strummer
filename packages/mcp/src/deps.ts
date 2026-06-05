@@ -1,6 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ArtifactStore } from '@sackville/artifacts'
-import { detectInstalledVersion, type Ecosystem } from '@sackville/core'
+import type { ArtifactStore } from '@sackville-mcp/artifacts'
+import type { DetectedVersion, Ecosystem } from '@sackville-mcp/core'
 import {
   auditDependency,
   comparatorFor,
@@ -13,8 +13,27 @@ import {
   type OsvEcosystem,
   type Packument,
   sliceChangelog,
-} from '@sackville/deps'
+} from '@sackville-mcp/deps'
 import { z } from 'zod'
+
+// `@sackville-mcp/core` is an OPTIONAL peer (it drags in better-sqlite3). The deps pillar
+// only needs it for PROJECT auto-detection of the installed version; explicit-version
+// queries never touch it. Import it LAZILY so the aggregate's native-free default
+// (api+deps+verify) loads when core is NOT installed — a top-level static value import
+// would make this whole chunk fail to import (ERR_MODULE_NOT_FOUND) and silently take
+// the deps AND verify pillars down with it. When core is absent, auto-detection degrades
+// to the "not detected" sentinel and callers fall back to requiring an explicit version.
+let detectInstalledVersion: (
+  projectDir: string,
+  pkg: string,
+  opts: { ecosystem?: Ecosystem },
+) => DetectedVersion = () => ({ version: null, source: 'none' })
+try {
+  ;({ detectInstalledVersion } = await import('@sackville-mcp/core'))
+} catch {
+  // optional peer not installed — project auto-detection unavailable (callers throw a
+  // clear "could not detect ... provide an explicit version" when they need it).
+}
 
 /** Fetch the registry metadata ("packument") for a package. Injected so the pure
  * audit core stays offline/deterministic; the bin wires an operator-gated,
@@ -46,8 +65,8 @@ export interface DepsToolsOptions {
   artifacts?: ArtifactStore
 }
 
-/** Map an OSV ecosystem to the `@sackville/core` installed-version detection ecosystem.
- * (Comparator/match-name/manifest dispatch lives in `@sackville/deps`; this mapping needs
+/** Map an OSV ecosystem to the `@sackville-mcp/core` installed-version detection ecosystem.
+ * (Comparator/match-name/manifest dispatch lives in `@sackville-mcp/deps`; this mapping needs
  * `core`, which the engine deliberately does not depend on, so it stays here.) */
 const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
   npm: 'node',

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { OsvAdvisory, Packument } from '@sackville/deps'
+import type { OsvAdvisory, Packument } from '@sackville-mcp/deps'
 import { strToU8, zipSync } from 'fflate'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runDeps } from './deps.js'

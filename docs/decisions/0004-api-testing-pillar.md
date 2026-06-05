@@ -11,11 +11,11 @@ design-research workflow (`docs/research/2026-05-31-pillar2-api-testing.md`).
 
 ## Decisions
 
-### 1. New package `@sackville/api`
+### 1. New package `@sackville-mcp/api`
 
 A pure-TS engine (collection IO, HTTP runner, assertions, var/secret resolution,
 contract validation, JS sandbox) consumed by thin `mcp` + `cli` adapters. The
-**safety gate lives in `@sackville/api`**, so every surface enforces it identically.
+**safety gate lives in `@sackville-mcp/api`**, so every surface enforces it identically.
 
 ### 2. Collection format: **Bruno `.bru` + a thin domain model**
 
@@ -47,7 +47,7 @@ GET/HEAD/OPTIONS run freely. POST/PUT/PATCH/DELETE **dry-run** by default
 actually sending requires an explicit unlock: run-scoped `allowUnsafe` (`--unsafe`)
 **plus** a host+method allowlist. Block private/link-local/metadata ranges (SSRF),
 validate the post-redirect final host+method, no auto-retry for non-idempotent
-calls. Enforced server-side in `@sackville/api`.
+calls. Enforced server-side in `@sackville-mcp/api`.
 
 ### 5. Secrets: references + pluggable store + value-redaction
 

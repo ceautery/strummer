@@ -11,11 +11,11 @@ import {
   runMutation,
   runMutmut,
   summarizeMutation,
-} from '@sackville/mutate'
+} from '@sackville-mcp/mutate'
 import type { CliIO } from './index.js'
 
 /**
- * `sackville mutate` — the human surface over `@sackville/mutate`.
+ * `sackville mutate` — the human surface over `@sackville-mcp/mutate`.
  *
  * `summarize` is a pure report viewer (Stryker JSON or `mutmut results` text). `run` is the
  * gated, diff-scopable mutation run. The CLI's human IS the operator, so the run gate is a

@@ -11,11 +11,11 @@ import {
   runAndRecord,
   runAndRecordPytest,
   type TestRunner,
-} from '@sackville/flake'
+} from '@sackville-mcp/flake'
 import type { CliIO } from './index.js'
 
 /**
- * `sackville flake` — the human surface over `@sackville/flake`.
+ * `sackville flake` — the human surface over `@sackville-mcp/flake`.
  *
  * Reads (`status`/`candidates`) + `ingest`/`release` are always available against the
  * operator's private run-history DB (`--db`). `run` (spawns vitest) and `quarantine`

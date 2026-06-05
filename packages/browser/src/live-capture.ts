@@ -1,7 +1,7 @@
 /**
  * Verify-DRIVEN live capture (ADR 0013 Addendum 3, milestone 5e): drive an
  * operator-authored flow (by NAME), capture its HAR, and return the stored (redacted)
- * handle for a contract bridge to validate. Lives in `@sackville/browser` — its natural
+ * handle for a contract bridge to validate. Lives in `@sackville-mcp/browser` — its natural
  * home, alongside {@link runFlow}/{@link finalizeHar}/{@link loadFlowCollection} — so BOTH
  * the verify MCP bin AND the `sackville verify run --flow` CLI share ONE implementation of
  * the security-critical flow-completeness guard (no drift). Callers lazy-import the whole
@@ -21,7 +21,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { ArtifactStore } from '@sackville/artifacts'
+import type { ArtifactStore } from '@sackville-mcp/artifacts'
 import { PageDriver } from './driver.js'
 import { type BrowserFlow, type FlowResult, loadFlowCollection, runFlow } from './flow.js'
 import type { BrowserGate } from './gate.js'

@@ -6,16 +6,16 @@ Raw output of the 4-stream API-testing research workflow + synthesis. Distilled 
 
 This is a synthesis/architecture task — no tools needed. I'll produce the milestone plan directly.
 
-# Sackville Pillar 2 (`@sackville/api`) — Milestone Plan
+# Sackville Pillar 2 (`@sackville-mcp/api`) — Milestone Plan
 
 ## 1. Package layout
 
-New leaf package `@sackville/api` (pure TS, agent-agnostic). It owns the domain model, file IO, HTTP runner, assertions, secret resolution, and contract validation. `mcp` and `cli` are thin adapters that depend on it; they contain no HTTP/assertion logic.
+New leaf package `@sackville-mcp/api` (pure TS, agent-agnostic). It owns the domain model, file IO, HTTP runner, assertions, secret resolution, and contract validation. `mcp` and `cli` are thin adapters that depend on it; they contain no HTTP/assertion logic.
 
 ```
 packages/
   core/            # existing shared types/utils
-  api/             # NEW @sackville/api — the engine
+  api/             # NEW @sackville-mcp/api — the engine
     src/
       collection/  # .bru <-> domain model (wraps @usebruno/lang), on-disk layout
       runner/      # undici dispatcher, request execution, timing capture
@@ -28,11 +28,11 @@ packages/
     test/
       fixtures/    # .bru sample collections, sample OpenAPI specs
   embed/
-  mcp/             # adds run_request/list_requests/... tools -> calls @sackville/api
-  cli/             # `sackville run`, `sackville list` -> calls @sackville/api
+  mcp/             # adds run_request/list_requests/... tools -> calls @sackville-mcp/api
+  cli/             # `sackville run`, `sackville list` -> calls @sackville-mcp/api
 ```
 
-Consumption contract: `@sackville/api` exposes a `Runner` facade returning **structured results + an artifact handle** (never inlined large bodies). `mcp` maps that 1:1 onto MCP `structuredContent` + `resource_link`; `cli` renders the same struct to a terminal table and writes artifacts to disk. The **safety gate (deny-by-default mutation) lives in `@sackville/api`**, not in mcp/cli, so both adapters and any future embed get identical enforcement.
+Consumption contract: `@sackville-mcp/api` exposes a `Runner` facade returning **structured results + an artifact handle** (never inlined large bodies). `mcp` maps that 1:1 onto MCP `structuredContent` + `resource_link`; `cli` renders the same struct to a terminal table and writes artifacts to disk. The **safety gate (deny-by-default mutation) lives in `@sackville-mcp/api`**, not in mcp/cli, so both adapters and any future embed get identical enforcement.
 
 ## 2. DECISION — Collection format: **ADOPT Bruno `.bru` + `@usebruno/lang`**
 
@@ -93,7 +93,7 @@ Small, workflow-shaped (not a 1:1 REST wrapper), each with `outputSchema` and ac
 4. `run_collection {collectionId, stopOnFailure?, dryRun?}` — `readOnlyHint` only if every member is safe, else `destructiveHint`.
 5. `validate_response` — response handle + spec ref → structured drift report (`readOnlyHint`).
 
-**DEFAULT SAFETY POSTURE = deny-by-default for mutation, enforced server-side in `@sackville/api`:**
+**DEFAULT SAFETY POSTURE = deny-by-default for mutation, enforced server-side in `@sackville-mcp/api`:**
 - GET/HEAD/OPTIONS execute freely.
 - POST/PUT/PATCH/DELETE are by default **(a) dry-run only** — resolve, apply secrets, return what *would* be sent (method, URL, redacted headers, body shape) without firing — and **(b)** require the run to be in an **unlocked** state to actually send.
 - Unlock = explicit auditable gate: run-scoped `allowUnsafe:true` (`--unsafe`) **plus** a host+method allowlist, optionally a `confirm` token echoing a server-issued challenge.

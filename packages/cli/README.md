@@ -1,17 +1,17 @@
-# @sackville/cli
+# @sackville-mcp/cli
 
 The Sackville command-line tool — a human entry point over the same engines the
 MCP servers expose. Two surfaces:
 
-- **docs search** (`search`/`get`/`versions`/`detect`) over [`@sackville/core`](../core).
-- **API testing** (`api …`) over [`@sackville/api`](../api).
+- **docs search** (`search`/`get`/`versions`/`detect`) over [`@sackville-mcp/core`](../core).
+- **API testing** (`api …`) over [`@sackville-mcp/api`](../api).
 
 ## Install / invoke
 
 There's no published npm package yet, so run it from the built workspace:
 
 ```bash
-pnpm -r build                          # once (or: pnpm -F @sackville/cli build)
+pnpm -r build                          # once (or: pnpm -F @sackville-mcp/cli build)
 node packages/cli/dist/bin.mjs --help
 ```
 

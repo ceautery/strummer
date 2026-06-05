@@ -35,13 +35,13 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
 
-      # Browser pillar (@sackville/browser) tests launch real headless browsers —
+      # Browser pillar (@sackville-mcp/browser) tests launch real headless browsers —
       # Chromium plus Firefox + WebKit for the multi-engine path. Install the
       # binaries + their system libs; revisions are pinned by playwright-core's
       # version in packages/browser/package.json. (Without firefox/webkit the
       # cross-engine tests skip themselves, but CI runs them for real coverage.)
       - name: Install Playwright browsers + system deps
-        run: pnpm --filter @sackville/browser exec playwright-core install --with-deps chromium firefox webkit
+        run: pnpm --filter @sackville-mcp/browser exec playwright-core install --with-deps chromium firefox webkit
 
       - name: Sync Python environment
         working-directory: py/sackville_ingest

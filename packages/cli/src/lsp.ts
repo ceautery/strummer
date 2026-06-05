@@ -17,7 +17,7 @@ import {
   type ResultWorkspaceSymbol,
   type ServerDescription,
   type ServerRegistry,
-} from '@sackville/lsp'
+} from '@sackville-mcp/lsp'
 import type { CliIO } from './index.js'
 
 /** Injected (test) or real engine entries. */
@@ -32,7 +32,7 @@ export interface LspDeps {
 }
 
 /**
- * `sackville lsp` — the human surface over `@sackville/lsp`. Single-shot semantic code
+ * `sackville lsp` — the human surface over `@sackville-mcp/lsp`. Single-shot semantic code
  * navigation: each invocation binds the operator's server registry, drives one query against
  * a live Language Server subprocess, then shuts it down.
  *

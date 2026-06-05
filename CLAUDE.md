@@ -142,7 +142,7 @@ vision and `ARCHITECTURE.md` for the technical design.
   SSRF + redirect re-check, import
   Postman/Insomnia/OpenAPI/HAR; plus the Phase-5f HAR-synthesis half — `har-synth.ts`'s
   pure fflate-only `redactHarZip`/`summarizeHar` (the shared blanket-redaction pass that
-  `@sackville/browser` `finalizeHar` now delegates to) + `synthesizeRedactedHarZip`
+  `@sackville-mcp/browser` `finalizeHar` now delegates to) + `synthesizeRedactedHarZip`
   (RunResult→consume-bridge HAR, redact folded in), the runner's out-of-band
   `runRequestForHar`/`runSequenceForHar` capture channel (per-hop records + the real wire
   request body + `redirectTruncated`; `RunResult` UNCHANGED), and the `runRequestToHar`/
@@ -180,7 +180,7 @@ vision and `ARCHITECTURE.md` for the technical design.
   Gemfile/Gemfile.lock, per-file classifiers; ADR 0010 addendum) AND `changelog_diff` for
   npm/PyPI/RubyGems via the shared `repo.ts` source-repo derivation),
   `coverage` (Phase-4 track A: the forgotten-assertion catch — `uncoveredNewLines` +
-  `uncoveredInDiff` pure differs over `@sackville/diff`'s `parseUnifiedDiff`, plus gated impact-scoped
+  `uncoveredInDiff` pure differs over `@sackville-mcp/diff`'s `parseUnifiedDiff`, plus gated impact-scoped
   `runScoped` (vitest) AND `runScopedPython` (pytest + coverage.py via `coveragePyToIstanbul`;
   `selectPytestScope` mirrored-test heuristic + report-gap/widen fallback; pytest exit 5/2/3/4 →
   inconclusive; ADR 0010 addendum); `uncovered_in_diff`/`run_scoped`/`py_run_scoped` MCP surface),
@@ -231,7 +231,7 @@ vision and `ARCHITECTURE.md` for the technical design.
   `lsp_find_definition`/`_references`/`_hover` (gated as a group — no free-read tier) + the
   always-on no-spawn `lsp_languages` (bound languages + live capabilities/`serverInfo.version`
   via `manager.describe()`, never the command/path); large reference lists by handle via
-  `@sackville/artifacts` (`lsp` prefix); `packages/mcp/src/lsp.ts` (pure wiring over an injected
+  `@sackville-mcp/artifacts` (`lsp` prefix); `packages/mcp/src/lsp.ts` (pure wiring over an injected
   `query`+`describeServers`) + `sackville-lsp-mcp` bin (`SACKVILLE_LSP_*`; toolchain provenance via
   `core.detectInstalledVersion`). Capability-gated read tails DONE — `lsp_type_definition`/
   `lsp_document_symbols`/`lsp_call_hierarchy` (real `typescript-language-server` 5.3.0 payload
@@ -272,14 +272,14 @@ vision and `ARCHITECTURE.md` for the technical design.
   `fromCaptureVerdict`** — folds the FULL `CaptureContractVerdict` (its `clean` flag), so a capture with a
   valid entry alongside a no-signal/unresolved one (which push NO `ContractResult`) is `inconclusive`, not
   a pass — closing a confirmed latent absence-as-pass hole in the shipped 5e produce + consume paths. The
-  capture→contract bridge half lives in `@sackville/api` `har-capture.ts` (`harEntriesToFacts` +
+  capture→contract bridge half lives in `@sackville-mcp/api` `har-capture.ts` (`harEntriesToFacts` +
   `validateCapturedTraffic` reuse the shipped `validateOpenApiResponse` over a stored HAR; surfaced
   as the gated `validate_capture`)),
   `verify` (Phase-5 milestone 5c run-driving orchestration, COMPLETE: a RUNTIME package — the gated
   `orchestrate(request, options)` that DRIVES the pillars and folds them into one verdict in a single
   call. Imports ZERO spawn-capable code: each requested pillar is an injected `run` thunk producing its
-  native result, mapped via `@sackville/verdict`'s `from*` adapters; the built `.mjs` imports only
-  `node:crypto` + `@sackville/verdict`. Per-pillar failure isolation (per-task catch); a rejection
+  native result, mapped via `@sackville-mcp/verdict`'s `from*` adapters; the built `.mjs` imports only
+  `node:crypto` + `@sackville-mcp/verdict`. Per-pillar failure isolation (per-task catch); a rejection
   BRANDED a gate denial via `Symbol.for('sackville.gate-denial')` ⇒ `skipReason:'gate-not-set'` (the three
   engine `*GateError` classes set the brand — verify recognizes a real denial without importing engine
   code, reusing `assertAllowed`, no drift), any other ⇒ redacted `errorReason`; injected `idFactory`
@@ -288,7 +288,7 @@ vision and `ARCHITECTURE.md` for the technical design.
   `bin-verify` "both required" env gate (`SACKVILLE_VERIFY_ENABLE_RUN` AND each pillar's OWN
   `*_ALLOW_RUN` — never verify-scoped renames) + `sackville verify run` CLI. **Phase-5d landed
   diff-scoping + deps run-wiring:** `verify_change` derives `changedFiles` from a supplied `diff` (via
-  `@sackville/diff`) so ONE diff scopes coverage/mutate/flake; the reusable `auditProjectDependencies`
+  `@sackville-mcp/diff`) so ONE diff scopes coverage/mutate/flake; the reusable `auditProjectDependencies`
   runner (`mcp/deps.ts`, optional `names` scope) is wired into `bin-verify` `rd.deps` gated by
   `SACKVILLE_DEPS_ALLOW_NETWORK` composed under `ENABLE_RUN` (deps' gate is NETWORK, not spawn) +
   `sackville verify run --deps`; the deps runner scopes to `changedDependencies(diff)`. **Phase-5e landed
@@ -296,16 +296,16 @@ vision and `ARCHITECTURE.md` for the technical design.
   --flow` DRIVE an operator-authored browser flow → capture the HAR → validate it (the consume-only path
   stays). `ContractCaptureContext` is a `consume|produce` discriminated union; produce composes the FULL
   browser gate (`ALLOWED_HOSTS`+`HAR_DIR`+`FLOWS_DIR`, no new env) behind `ENABLE_RUN`+`ALLOW_CAPTURE`;
-  the shared `@sackville/browser` `driveBrowserFlowToHar` gates on FLOW COMPLETENESS (never validates a
+  the shared `@sackville-mcp/browser` `driveBrowserFlowToHar` gates on FLOW COMPLETENESS (never validates a
   partial HAR) over the single-source `buildBrowserRuntimeFromEnv` (egress) with a union redactor at both
   finalize + validate; the produced HAR handle is surfaced for audit. **Phase-5f landed the SECOND produce
   source — verify-DRIVEN API-RUNNER capture:** `verify_change`'s `contract.request` + `sackville verify run
-  --request` DRIVE the `@sackville/api` runner for an operator-authored request (by NAME) → synthesize +
-  redact + store its HAR (via `@sackville/api` `har-synth.ts`) → validate. `ContractCaptureContext` gains a
+  --request` DRIVE the `@sackville-mcp/api` runner for an operator-authored request (by NAME) → synthesize +
+  redact + store its HAR (via `@sackville-mcp/api` `har-synth.ts`) → validate. `ContractCaptureContext` gains a
   `produce-api` variant (EXACTLY ONE of request/flow/harHandle); `bin-verify` composes the api pillar's OWN
   gate (`SACKVILLE_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/`_BLOCK_PRIVATE` + `{{secret:NAME}}`) + the ratified
   `SACKVILLE_API_COLLECTIONS_DIR` (by-NAME, traversal refused). Transport guards throw ⇒ inconclusive; the
-  contract thunk now surfaces the FULL verdict so `@sackville/verdict` `fromCaptureVerdict` folds
+  contract thunk now surfaces the FULL verdict so `@sackville-mcp/verdict` `fromCaptureVerdict` folds
   `clean===false` to inconclusive (consume + both produce paths). Design = ADR 0013 Addenda 2+3+4),
   `mcp` (server), `cli` (terminal — `search`/`get`/`versions`/`detect`, `api`,
   `browser`, AND the Phase-4 verification CLIs `mutate`/`coverage`/`flake`/`deps`/`lsp`,
@@ -320,7 +320,7 @@ vision and `ARCHITECTURE.md` for the technical design.
   `examples/browser/login`, `examples/lsp/greeter` — a tiny TS project for the
   `sackville lsp` quickstart, and `examples/lsp/pygreeter` — its Python counterpart
   (drives `pyright-langserver`; the engine is language-agnostic)), used by the
-  `@sackville/cli` quickstarts; each guarded by an offline test so the sample + its docs
+  `@sackville-mcp/cli` quickstarts; each guarded by an offline test so the sample + its docs
   can't drift.
 - `.github/workflows/ci.yml` — CI mirroring `pnpm gate` on push/PR.
 - The Linux dev-container harness (`docker/`, `docker-compose.yml`) that hosts

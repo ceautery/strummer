@@ -4,7 +4,7 @@
 
 A committed Sackville index containing a single hand-crafted `react/19.0/useState`
 fragment. It is the artifact behind the **polyglot boundary test**: the Python
-ingester writes it, and `@sackville/core` (TypeScript) reads it back, proving the
+ingester writes it, and `@sackville-mcp/core` (TypeScript) reads it back, proving the
 SQLite schema contract holds across both languages.
 
 It is committed (rather than built at test time) so `pnpm test` runs without the

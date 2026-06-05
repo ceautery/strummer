@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
@@ -9,16 +8,21 @@ import {
   runRequestToHar,
   StaticSecretStore,
   validateCapturedTraffic,
-} from '@sackville/api'
-import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville/artifacts'
-import { runScoped } from '@sackville/coverage'
-import { changedDependencies } from '@sackville/deps'
-import { runCosmicRay, runMutation, runMutmut } from '@sackville/mutate'
-import { Redactor } from '@sackville/safety'
-import { gateDenied } from '@sackville/verify'
+} from '@sackville-mcp/api'
+import {
+  ArtifactStore,
+  DEFAULT_SWEEP_INTERVAL_MS,
+  retentionFromEnv,
+} from '@sackville-mcp/artifacts'
+import { runScoped } from '@sackville-mcp/coverage'
+import { changedDependencies } from '@sackville-mcp/deps'
+import { runCosmicRay, runMutation, runMutmut } from '@sackville-mcp/mutate'
+import { Redactor } from '@sackville-mcp/safety'
+import { gateDenied } from '@sackville-mcp/verify'
 import { type AggregateMode, apiSafetyGateFromEnv, apiSecretPrefix } from './bin-api.js'
 import { depsNetworkConfig } from './bin-deps.js'
 import { auditProjectDependencies } from './deps.js'
+import { isMainModule } from './is-main.js'
 import type { PillarSetup } from './pillars.js'
 import {
   createVerifyServer,
@@ -178,11 +182,11 @@ function parseVerify(
     if (bool(env.SACKVILLE_FLAKE_ALLOW_RUN) && flakeRoots.length > 0 && flakeDb) {
       const timeoutMs = num(env.SACKVILLE_FLAKE_TIMEOUT_MS)
       rd.flake = async (ctx) => {
-        // Lazy: only pull @sackville/flake (better-sqlite3) when a flake run actually
+        // Lazy: only pull @sackville-mcp/flake (better-sqlite3) when a flake run actually
         // fires — so the api+deps+verify default works in an install that did NOT add
-        // the optional @sackville/flake engine (ADR 0019 split). Mirrors the lazy
-        // @sackville/browser import in the produce-capture path.
-        const { HistoryStore, runAndRecord } = await import('@sackville/flake')
+        // the optional @sackville-mcp/flake engine (ADR 0019 split). Mirrors the lazy
+        // @sackville-mcp/browser import in the produce-capture path.
+        const { HistoryStore, runAndRecord } = await import('@sackville-mcp/flake')
         const store = HistoryStore.open(flakeDb)
         try {
           const r = await runAndRecord(
@@ -295,7 +299,7 @@ function parseVerify(
           const verdict = validateCapturedTraffic(har, buildCaptureContract(ctx), { redact })
           return { results: verdict.results, verdict }
         }
-        // PRODUCE-API: drive the @sackville/api runner for an operator-authored request,
+        // PRODUCE-API: drive the @sackville-mcp/api runner for an operator-authored request,
         // synthesize + validate its HAR. Gate-deny (⇒ gate-not-set) when no collections
         // dir is set. A mutating request without SACKVILLE_ALLOW_UNSAFE dry-runs ⇒ the
         // driver's non-sent guard throws ⇒ inconclusive — the api server's posture, reused.
@@ -340,12 +344,12 @@ function parseVerify(
             'live browser capture is not enabled (needs SACKVILLE_BROWSER_ALLOWED_HOSTS + _HAR_DIR + _FLOWS_DIR)',
           )
         }
-        // Lazy: only pull @sackville/browser (playwright-core) when a produce capture
+        // Lazy: only pull @sackville-mcp/browser (playwright-core) when a produce capture
         // actually runs — compose-only / API-only / consume-only operators never load it.
         const [
           { buildBrowserRuntimeFromEnv, buildBrowserRedactorFromEnv },
           { driveBrowserFlowToHar },
-        ] = await Promise.all([import('./bin-browser.js'), import('@sackville/browser')])
+        ] = await Promise.all([import('./bin-browser.js'), import('@sackville-mcp/browser')])
         // The UNION redactor (browser secrets + HTTP creds ∪ verify secrets), used at BOTH
         // chokepoints — finalizeHar (the archive) and validateCapturedTraffic (the findings)
         // — so a browser-registered secret never survives in either. More aggressive
@@ -401,7 +405,7 @@ export function buildVerifyServerFromEnv(
 }
 
 // Executable tail: only run when invoked directly (not when imported by a test).
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   const { server } = buildVerifyServerFromEnv()
   await server.connect(new StdioServerTransport())
 }

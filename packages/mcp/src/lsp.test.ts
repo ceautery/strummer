@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ArtifactStore } from '@sackville/artifacts'
+import { ArtifactStore } from '@sackville-mcp/artifacts'
 import type {
   LspQueryInput,
   LspQueryResult,
@@ -11,7 +11,7 @@ import type {
   LspRenameResult,
   ServerDescription,
   ServerRegistry,
-} from '@sackville/lsp'
+} from '@sackville-mcp/lsp'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createLspServer, type LspToolsOptions, toolchainMismatchWarning } from './lsp.js'
 

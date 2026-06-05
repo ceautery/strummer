@@ -22,7 +22,7 @@ import {
   validateGraphqlOperation,
   validateOpenApiRequest,
   validateOpenApiResponse,
-} from '@sackville/api'
+} from '@sackville-mcp/api'
 import type { CliIO } from './index.js'
 
 /**
@@ -641,7 +641,7 @@ function cmdValidateCapture(args: string[], io: CliIO): number {
     return 1
   }
   const harZip = readFileSync(harPath)
-  const contract: import('@sackville/api').CaptureContract = {
+  const contract: import('@sackville-mcp/api').CaptureContract = {
     ...(values.openapi ? { openapi: JSON.parse(readFileSync(values.openapi, 'utf8')) } : {}),
     ...(values.graphql
       ? {

@@ -63,7 +63,12 @@ describe('package publish hygiene (ADR 0019)', () => {
 describe('sackville install isolation — heavy engines are OPTIONAL peers (ADR 0019 §B)', () => {
   // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
   const mcp = readPackageJson('mcp') as any
-  const HEAVY = ['@sackville/browser', '@sackville/core', '@sackville/embed', '@sackville/flake']
+  const HEAVY = [
+    '@sackville-mcp/browser',
+    '@sackville-mcp/core',
+    '@sackville-mcp/embed',
+    '@sackville-mcp/flake',
+  ]
 
   it('does NOT list the heavy engines (or playwright-core) as hard dependencies', () => {
     const deps = Object.keys(mcp.dependencies ?? {})
@@ -82,23 +87,86 @@ describe('sackville install isolation — heavy engines are OPTIONAL peers (ADR 
   })
 })
 
+describe('default-pillar wiring is native-free (ADR 0019 §B; alpha.0 regression)', () => {
+  // alpha.0 shipped broken: `mcp/src/deps.ts` STATICALLY value-imported the OPTIONAL
+  // peer `@sackville-mcp/core`, so the dynamically-imported deps chunk threw
+  // ERR_MODULE_NOT_FOUND on a bare (native-free) install — silently taking the deps AND
+  // verify pillars down, collapsing the curated default from [api,deps,verify] to [api].
+  // The default-pillar wiring must reach an optional peer only via `import type` or
+  // `await import()`, never a top-level value import.
+  const OPTIONAL_PEERS = [
+    '@sackville-mcp/core',
+    '@sackville-mcp/embed',
+    '@sackville-mcp/browser',
+    '@sackville-mcp/flake',
+    'playwright-core',
+  ]
+  // The source files reachable when the aggregate loads the curated default pillars.
+  const DEFAULT_WIRING = [
+    'aggregate.ts',
+    'pillars.ts',
+    'api.ts',
+    'deps.ts',
+    'verify.ts',
+    'bin-api.ts',
+    'bin-deps.ts',
+    'bin-verify.ts',
+  ]
+  const mcpSrc = join(packagesDir, 'mcp', 'src')
+
+  // A STATIC value import: `import ...non-type... from '<peer>'`. We allow `import type`
+  // and brace lists whose every specifier is `type`-prefixed; flag anything that pulls a
+  // runtime binding.
+  function staticValueImportsOf(source: string, peer: string): boolean {
+    const re = /import\s+(type\s+)?([^;]*?)\s*from\s*['"]([^'"]+)['"]/g
+    for (const m of source.matchAll(re)) {
+      const [, typeKw, clause, from] = m
+      if (from !== peer) continue
+      if (typeKw) continue // `import type … from '<peer>'` — erased, safe
+      const brace = clause.match(/\{([^}]*)\}/)
+      if (brace) {
+        const allType = brace[1]
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .every((s) => s.startsWith('type '))
+        if (allType) continue // `import { type A, type B } from '<peer>'` — all erased
+      }
+      return true // a runtime binding is pulled from an optional peer
+    }
+    return false
+  }
+
+  for (const file of DEFAULT_WIRING) {
+    it(`${file} reaches optional peers only lazily (type-only / await import)`, () => {
+      const source = readFileSync(join(mcpSrc, file), 'utf8')
+      for (const peer of OPTIONAL_PEERS) {
+        expect(
+          staticValueImportsOf(source, peer),
+          `${file} statically value-imports the optional peer ${peer} (use \`import type\` or \`await import()\`)`,
+        ).toBe(false)
+      }
+    })
+  }
+})
+
 describe('onboarding example .mcp.json (ADR 0019 §14)', () => {
   // biome-ignore lint/suspicious/noExplicitAny: JSON config is untyped.
   const cfg = JSON.parse(readFileSync(join(repoRoot, 'examples/mcp/.mcp.json'), 'utf8')) as any
-  const server = cfg.mcpServers?.sackville
+  const server = cfg.mcpServers?.['sackville-mcp']
   // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
   const mcp = readPackageJson('mcp') as any
 
-  it('declares the aggregate sackville server', () => {
+  it('declares the aggregate sackville-mcp server', () => {
     expect(server).toBeDefined()
     expect(server.command).toBe('npx')
-    expect(server.args).toContain('sackville')
+    expect(server.args).toContain('sackville-mcp')
   })
 
-  it('the documented `npx sackville` resolves to a REAL bin (no npx trap)', () => {
-    // npx runs the bin matching the package name's last segment — `mcp` for
-    // sackville. If that bin is missing, `npx sackville` errors.
-    expect(mcp.bin?.sackville).toBeDefined()
+  it('the documented `npx sackville-mcp` resolves to a REAL bin (no npx trap)', () => {
+    // npx runs the bin matching the package name — `sackville-mcp`. If that bin
+    // is missing, `npx sackville-mcp` errors.
+    expect(mcp.bin?.['sackville-mcp']).toBeDefined()
   })
 
   it('only sets operator namespaced env (no agent inputs leak into config)', () => {

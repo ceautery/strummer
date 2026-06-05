@@ -8,7 +8,7 @@ import {
   runScopedPython,
   type TestRunner,
   uncoveredInDiff,
-} from '@sackville/coverage'
+} from '@sackville-mcp/coverage'
 import { z } from 'zod'
 
 export interface CoverageToolsOptions {

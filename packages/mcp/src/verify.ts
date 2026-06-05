@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ContractResult } from '@sackville/api'
-import type { HarSummary } from '@sackville/browser'
-import type { DiffCoverageReport } from '@sackville/coverage'
-import type { DependencyAudit } from '@sackville/deps'
-import { changedFiles as changedFilesFromDiff } from '@sackville/diff'
-import type { FlakeVerdict } from '@sackville/flake'
-import type { MutationSummary } from '@sackville/mutate'
+import type { ContractResult } from '@sackville-mcp/api'
+import type { HarSummary } from '@sackville-mcp/browser'
+import type { DiffCoverageReport } from '@sackville-mcp/coverage'
+import type { DependencyAudit } from '@sackville-mcp/deps'
+import { changedFiles as changedFilesFromDiff } from '@sackville-mcp/diff'
+import type { FlakeVerdict } from '@sackville-mcp/flake'
+import type { MutationSummary } from '@sackville-mcp/mutate'
 import {
   type CaptureVerdictFacts,
   type ComposeInputs,
@@ -17,8 +17,8 @@ import {
   fromFlakeVerdicts,
   fromMutationSummary,
   type Severity,
-} from '@sackville/verdict'
-import { gateDenied, type OrchestrateRequest, orchestrate } from '@sackville/verify'
+} from '@sackville-mcp/verdict'
+import { gateDenied, type OrchestrateRequest, orchestrate } from '@sackville-mcp/verify'
 import { z } from 'zod'
 
 /** Per-call context the operator-wired pillar runners receive (slice 5 builds these). */
@@ -50,7 +50,7 @@ export interface ContractProduceContext extends ContractInputs {
   vars?: Record<string, string>
 }
 
-/** PRODUCE-API mode (5f): verify DRIVES the `@sackville/api` runner for an operator-authored
+/** PRODUCE-API mode (5f): verify DRIVES the `@sackville-mcp/api` runner for an operator-authored
  * request (by NAME), synthesizes its HAR, and validates it. The agent supplies only the
  * target — a `request` name (+ optional `collection` name, resolved server-side under the
  * operator's `SACKVILLE_API_COLLECTIONS_DIR`, never a path) + non-secret `vars`; the api

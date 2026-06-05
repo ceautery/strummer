@@ -1,11 +1,11 @@
 /**
  * The shared qualitative severity vocabulary every pillar reconciles onto (ADR 0013
- * §2). Extracted out of `@sackville/deps` so the verdict scale and the deps scale stop
+ * §2). Extracted out of `@sackville-mcp/deps` so the verdict scale and the deps scale stop
  * each carrying their own copy of the same four-bucket ordering.
  *
  * Two scales build on this ONE base so their common ranks can never silently drift:
- *   - `@sackville/verdict`  `Severity`      = {@link QualitativeSeverity} | 'none'
- *   - `@sackville/deps`     `SeverityBucket` = {@link QualitativeSeverity} | 'unknown'
+ *   - `@sackville-mcp/verdict`  `Severity`      = {@link QualitativeSeverity} | 'none'
+ *   - `@sackville-mcp/deps`     `SeverityBucket` = {@link QualitativeSeverity} | 'unknown'
  *
  * The fifth member differs ON PURPOSE and is load-bearing: verdict's `'none'` means
  * "no severity"; deps' `'unknown'` means "severity indeterminable" and maps to a
@@ -13,7 +13,7 @@
  * absence-is-never-a-pass rule). So `'unknown'` is deliberately absent from this scale;
  * deps owns it.
  *
- * Pure, zero-dependency leaf (mirrors `@sackville/diff`/`assert`/`artifacts`): no spawn,
+ * Pure, zero-dependency leaf (mirrors `@sackville-mcp/diff`/`assert`/`artifacts`): no spawn,
  * no network, no disk, no heavy runtime deps to drag into a consumer's bundle.
  */
 

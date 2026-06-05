@@ -2,12 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-04
-- **Extends:** ADR 0010 (the shared `@sackville/artifacts` extraction) + ADR 0013 slice 1
+- **Extends:** ADR 0010 (the shared `@sackville-mcp/artifacts` extraction) + ADR 0013 slice 1
   (the prefix-qualified on-disk layout + realpath confinement).
 
 ## Context
 
-`@sackville/artifacts` `ArtifactStore` is disk-backed and **append-only**: `put()` writes
+`@sackville-mcp/artifacts` `ArtifactStore` is disk-backed and **append-only**: `put()` writes
 `<baseDir>/<prefix>/<id>/<kind>` + a `<kind>.meta.json` sidecar and never deletes. Every
 pillar writes to it — browser (traces/screenshots/video/HAR, the heaviest), deps
 (changelog/audit detail), lsp (large reference lists), verify (verdicts, produced HARs).

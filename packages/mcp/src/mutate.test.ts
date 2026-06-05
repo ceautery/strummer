@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import type { MutationRunner } from '@sackville/mutate'
+import type { MutationRunner } from '@sackville-mcp/mutate'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMutateServer, type MutateToolsOptions } from './mutate.js'
 

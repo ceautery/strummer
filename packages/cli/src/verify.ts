@@ -8,8 +8,8 @@ import {
   loadCollection,
   runRequestToHar,
   validateCapturedTraffic,
-} from '@sackville/api'
-import { ArtifactStore } from '@sackville/artifacts'
+} from '@sackville-mcp/api'
+import { ArtifactStore } from '@sackville-mcp/artifacts'
 import {
   BrowserGate,
   BrowserManager,
@@ -19,18 +19,18 @@ import {
   driveBrowserFlowToHar,
   engineLauncher,
   resolveEngine,
-} from '@sackville/browser'
-import { type DiffCoverageReport, runScoped, type TestRunner } from '@sackville/coverage'
-import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@sackville/deps'
-import { type FlakeVerdict, HistoryStore, runAndRecord } from '@sackville/flake'
+} from '@sackville-mcp/browser'
+import { type DiffCoverageReport, runScoped, type TestRunner } from '@sackville-mcp/coverage'
+import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@sackville-mcp/deps'
+import { type FlakeVerdict, HistoryStore, runAndRecord } from '@sackville-mcp/flake'
 import {
   type MutationRunner,
   type MutationSummary,
   runCosmicRay,
   runMutation,
   runMutmut,
-} from '@sackville/mutate'
-import { Redactor } from '@sackville/safety'
+} from '@sackville-mcp/mutate'
+import { Redactor } from '@sackville-mcp/safety'
 import {
   type CaptureVerdictFacts,
   type ComposeInputs,
@@ -42,8 +42,8 @@ import {
   fromFlakeVerdicts,
   fromMutationSummary,
   type Severity,
-} from '@sackville/verdict'
-import { type OrchestrateRequest, orchestrate } from '@sackville/verify'
+} from '@sackville-mcp/verdict'
+import { type OrchestrateRequest, orchestrate } from '@sackville-mcp/verify'
 import { auditProjectScoped, makeFetcher, type PackumentFetcher, registriesFrom } from './deps.js'
 import type { CliIO } from './index.js'
 

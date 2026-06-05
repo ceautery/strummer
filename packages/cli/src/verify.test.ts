@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { MutationRunner } from '@sackville/mutate'
+import type { MutationRunner } from '@sackville-mcp/mutate'
 import { describe, expect, it, vi } from 'vitest'
 import { run } from './index.js'
 import { runVerify } from './verify.js'

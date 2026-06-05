@@ -60,7 +60,7 @@ export interface BuildSnapshotOptions {
   /** Applied to the serialized `text` + `fullText` before they are returned (and
    * before the full tree is stored), so a secret reflected into the DOM never
    * lands in a snapshot the agent sees or in the stored artifact. Default
-   * identity; the server bin wires the real `@sackville/safety` `Redactor` here. */
+   * identity; the server bin wires the real `@sackville-mcp/safety` `Redactor` here. */
   redact?: (text: string) => string
 }
 

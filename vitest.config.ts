@@ -5,38 +5,48 @@ export default defineConfig({
   resolve: {
     alias: {
       // Run internal packages from source — no build step in the test loop.
-      '@sackville/artifacts': fileURLToPath(
+      '@sackville-mcp/artifacts': fileURLToPath(
         new URL('./packages/artifacts/src/index.ts', import.meta.url),
       ),
-      '@sackville/assert': fileURLToPath(
+      '@sackville-mcp/assert': fileURLToPath(
         new URL('./packages/assert/src/index.ts', import.meta.url),
       ),
-      '@sackville/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
-      '@sackville/coverage': fileURLToPath(
+      '@sackville-mcp/core': fileURLToPath(
+        new URL('./packages/core/src/index.ts', import.meta.url),
+      ),
+      '@sackville-mcp/coverage': fileURLToPath(
         new URL('./packages/coverage/src/index.ts', import.meta.url),
       ),
-      '@sackville/deps': fileURLToPath(new URL('./packages/deps/src/index.ts', import.meta.url)),
-      '@sackville/diff': fileURLToPath(new URL('./packages/diff/src/index.ts', import.meta.url)),
-      '@sackville/embed': fileURLToPath(new URL('./packages/embed/src/index.ts', import.meta.url)),
-      '@sackville/flake': fileURLToPath(new URL('./packages/flake/src/index.ts', import.meta.url)),
-      '@sackville/mutate': fileURLToPath(
+      '@sackville-mcp/deps': fileURLToPath(
+        new URL('./packages/deps/src/index.ts', import.meta.url),
+      ),
+      '@sackville-mcp/diff': fileURLToPath(
+        new URL('./packages/diff/src/index.ts', import.meta.url),
+      ),
+      '@sackville-mcp/embed': fileURLToPath(
+        new URL('./packages/embed/src/index.ts', import.meta.url),
+      ),
+      '@sackville-mcp/flake': fileURLToPath(
+        new URL('./packages/flake/src/index.ts', import.meta.url),
+      ),
+      '@sackville-mcp/mutate': fileURLToPath(
         new URL('./packages/mutate/src/index.ts', import.meta.url),
       ),
-      '@sackville/lsp': fileURLToPath(new URL('./packages/lsp/src/index.ts', import.meta.url)),
-      '@sackville/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
-      '@sackville/browser': fileURLToPath(
+      '@sackville-mcp/lsp': fileURLToPath(new URL('./packages/lsp/src/index.ts', import.meta.url)),
+      '@sackville-mcp/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
+      '@sackville-mcp/browser': fileURLToPath(
         new URL('./packages/browser/src/index.ts', import.meta.url),
       ),
-      '@sackville/safety': fileURLToPath(
+      '@sackville-mcp/safety': fileURLToPath(
         new URL('./packages/safety/src/index.ts', import.meta.url),
       ),
-      '@sackville/severity': fileURLToPath(
+      '@sackville-mcp/severity': fileURLToPath(
         new URL('./packages/severity/src/index.ts', import.meta.url),
       ),
-      '@sackville/verdict': fileURLToPath(
+      '@sackville-mcp/verdict': fileURLToPath(
         new URL('./packages/verdict/src/index.ts', import.meta.url),
       ),
-      '@sackville/verify': fileURLToPath(
+      '@sackville-mcp/verify': fileURLToPath(
         new URL('./packages/verify/src/index.ts', import.meta.url),
       ),
     },

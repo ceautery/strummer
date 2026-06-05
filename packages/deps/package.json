@@ -1,6 +1,6 @@
 {
-  "name": "@sackville/deps",
-  "version": "0.0.0",
+  "name": "@sackville-mcp/deps",
+  "version": "0.0.1-alpha.1",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -20,8 +20,8 @@
   "dependencies": {
     "@renovatebot/pep440": "5.0.0",
     "@renovatebot/ruby-semver": "5.0.0",
-    "@sackville/diff": "workspace:*",
-    "@sackville/severity": "workspace:*",
+    "@sackville-mcp/diff": "workspace:*",
+    "@sackville-mcp/severity": "workspace:*",
     "fflate": "^0.8.3",
     "semver": "^7.8.1"
   },

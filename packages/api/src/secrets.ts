@@ -1,9 +1,9 @@
 import type { SecretStore } from './model.js'
 
-// The redaction boundary is shared across pillars; it lives in @sackville/safety.
+// The redaction boundary is shared across pillars; it lives in @sackville-mcp/safety.
 // Re-exported here so existing `import { Redactor } from './secrets.js'` sites
 // (runner, prepare, script, …) keep working unchanged.
-export { Redactor } from '@sackville/safety'
+export { Redactor } from '@sackville-mcp/safety'
 
 /** In-memory store (tests / explicit injection). */
 export class StaticSecretStore implements SecretStore {
