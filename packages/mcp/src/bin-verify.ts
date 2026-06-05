@@ -17,6 +17,7 @@ import { HistoryStore, runAndRecord } from '@strummer/flake'
 import { runCosmicRay, runMutation, runMutmut } from '@strummer/mutate'
 import { Redactor } from '@strummer/safety'
 import { gateDenied } from '@strummer/verify'
+import { type AggregateMode, apiSafetyGateFromEnv, apiSecretPrefix } from './bin-api.js'
 import { depsNetworkConfig } from './bin-deps.js'
 import { auditProjectDependencies } from './deps.js'
 import type { PillarSetup } from './pillars.js'
@@ -102,7 +103,10 @@ const EMPTY_COVERAGE = {
  * `put()` (no timer), the flake `HistoryStore` is opened/closed per run thunk, and the browser
  * runtime is built+torn-down lazily inside the produce thunk — so the setup has no `shutdown`.
  */
-function parseVerify(env: Record<string, string | undefined> = process.env): {
+function parseVerify(
+  env: Record<string, string | undefined> = process.env,
+  mode: AggregateMode = {},
+): {
   config: VerifyBinConfig
   opts: VerifyToolsOptions
 } {
@@ -264,13 +268,18 @@ function parseVerify(env: Record<string, string | undefined> = process.env): {
       // {{secret:NAME}} store) on top of ENABLE_RUN + the capture gate, PLUS the by-name
       // collections dir. No new env beyond the collections dir; no tool input sets a gate.
       const collectionsDir = env.STRUMMER_API_COLLECTIONS_DIR
-      const apiAllowUnsafe = bool(env.STRUMMER_ALLOW_UNSAFE)
-      const apiAllowedHosts = csv(env.STRUMMER_ALLOWED_HOSTS)
-      const apiAllowPrivate = !bool(env.STRUMMER_BLOCK_PRIVATE)
+      // The api pillar's OWN gate, read through the shared helper so aggregate mode
+      // pins it to STRUMMER_API_* (a bare STRUMMER_ALLOW_UNSAFE can't unlock verify's
+      // api-runner capture in a shared process — ADR 0019 §A8); standalone reads bare.
+      const apiGate = apiSafetyGateFromEnv(env, mode)
+      const apiAllowUnsafe = apiGate.allowUnsafe
+      const apiAllowedHosts = apiGate.allowedHosts
+      const apiAllowPrivate = apiGate.allowPrivate
+      const apiSecretPfx = apiSecretPrefix(mode)
       const apiSecrets: Record<string, string> = {}
       for (const [key, value] of Object.entries(env)) {
-        const m = /^STRUMMER_SECRET_(.+)$/.exec(key)
-        if (m?.[1] && value) apiSecrets[m[1]] = value
+        if (value && key.startsWith(apiSecretPfx))
+          apiSecrets[key.slice(apiSecretPfx.length)] = value
       }
 
       rd.contract = async (ctx) => {
@@ -373,8 +382,9 @@ function parseVerify(env: Record<string, string | undefined> = process.env): {
  */
 export function setupVerifyFromEnv(
   env: Record<string, string | undefined> = process.env,
+  mode: AggregateMode = {},
 ): PillarSetup {
-  const { opts } = parseVerify(env)
+  const { opts } = parseVerify(env, mode)
   return { register: (server) => registerVerifyTools(server, opts) }
 }
 

@@ -13,11 +13,19 @@ export class StaticSecretStore implements SecretStore {
   }
 }
 
-/** Reads `STRUMMER_SECRET_<NAME>` — the zero-dependency default (Linux/CI). */
+/**
+ * Reads `<prefix><NAME>` from the environment — the zero-dependency default
+ * (Linux/CI). The default prefix is `STRUMMER_SECRET_`; the aggregate server
+ * overrides it to `STRUMMER_API_SECRET_` so the api pillar's secrets live in its
+ * own namespace and can't be read via a bare, shared name (ADR 0019).
+ */
 export class EnvSecretStore implements SecretStore {
-  constructor(private readonly env: Record<string, string | undefined> = process.env) {}
+  constructor(
+    private readonly env: Record<string, string | undefined> = process.env,
+    private readonly prefix = 'STRUMMER_SECRET_',
+  ) {}
   get(name: string): Promise<string | undefined> {
-    return Promise.resolve(this.env[`STRUMMER_SECRET_${name}`])
+    return Promise.resolve(this.env[`${this.prefix}${name}`])
   }
 }
 
@@ -51,9 +59,14 @@ export class ChainedSecretStore implements SecretStore {
   }
 }
 
-/** Default store: keyring (opt-in) chained ahead of env, else env only. */
-export function resolveSecretStore(opts: { keyring?: boolean } = {}): SecretStore {
-  return opts.keyring
-    ? new ChainedSecretStore([new KeyringSecretStore(), new EnvSecretStore()])
-    : new EnvSecretStore()
+/**
+ * Default store: keyring (opt-in) chained ahead of env, else env only.
+ * `env`/`envPrefix` override the environment source + variable prefix the
+ * `EnvSecretStore` reads (the aggregate server passes `STRUMMER_API_SECRET_`).
+ */
+export function resolveSecretStore(
+  opts: { keyring?: boolean; env?: Record<string, string | undefined>; envPrefix?: string } = {},
+): SecretStore {
+  const envStore = new EnvSecretStore(opts.env, opts.envPrefix)
+  return opts.keyring ? new ChainedSecretStore([new KeyringSecretStore(), envStore]) : envStore
 }

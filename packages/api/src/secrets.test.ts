@@ -20,6 +20,14 @@ describe('secret stores', () => {
     expect(await store.get('OTHER')).toBeUndefined()
   })
 
+  it('EnvSecretStore honours a custom prefix (aggregate STRUMMER_API_SECRET_)', async () => {
+    const store = new EnvSecretStore(
+      { STRUMMER_API_SECRET_TOKEN: 'a1', STRUMMER_SECRET_TOKEN: 'bare' },
+      'STRUMMER_API_SECRET_',
+    )
+    expect(await store.get('TOKEN')).toBe('a1')
+  })
+
   it('ChainedSecretStore returns the first store that has the value', async () => {
     const store = new ChainedSecretStore([
       new StaticSecretStore({ A: 'first' }),
@@ -50,6 +58,12 @@ describe('resolveSecretStore', () => {
     } finally {
       delete process.env.STRUMMER_SECRET_RS_KEYRING
     }
+  })
+
+  it('reads from an injected env + custom prefix (aggregate api namespace)', async () => {
+    const env = { STRUMMER_API_SECRET_TOK: 'agg', STRUMMER_SECRET_TOK: 'bare' }
+    const store = resolveSecretStore({ env, envPrefix: 'STRUMMER_API_SECRET_' })
+    expect(await store.get('TOK')).toBe('agg')
   })
 })
 

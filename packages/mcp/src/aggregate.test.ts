@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { describe, expect, it } from 'vitest'
+import { apiConfigFromEnv, apiSafetyGateFromEnv, apiSecretPrefix } from './bin-api.js'
 import type {
   ApiToolsOptions,
   BrowserToolsOptions,
@@ -176,4 +177,54 @@ describe('no bin imports the index barrel (ADR 0019 §A4)', () => {
       expect(src).not.toMatch(/from\s+'\.\/index\.js'/)
     })
   }
+})
+
+describe('api+verify gate prefixing — compose, never widen (ADR 0019 §A8)', () => {
+  // The api gate is read through ONE shared helper used by BOTH the api pillar and
+  // verify's produce-api capture path. In aggregate mode it must read the api pillar's
+  // OWN STRUMMER_API_* namespace, so a single bare STRUMMER_ALLOW_UNSAFE in a shared
+  // process cannot unlock BOTH pillars at once.
+  const bareUnsafe = { STRUMMER_ALLOW_UNSAFE: '1', STRUMMER_ALLOWED_HOSTS: 'x.test' }
+  const apiUnsafe = { STRUMMER_API_ALLOW_UNSAFE: '1', STRUMMER_API_ALLOWED_HOSTS: 'x.test' }
+
+  it('standalone (bare): bare names grant; the prefixed names do nothing', () => {
+    const gate = apiSafetyGateFromEnv(bareUnsafe)
+    expect(gate.allowUnsafe).toBe(true)
+    expect(gate.allowedHosts).toEqual(['x.test'])
+    expect(apiSafetyGateFromEnv(apiUnsafe).allowUnsafe).toBe(false)
+  })
+
+  it('aggregate: a BARE flag grants NOTHING (the widening hole is closed)', () => {
+    const gate = apiSafetyGateFromEnv(bareUnsafe, { aggregate: true })
+    expect(gate.allowUnsafe).toBe(false)
+    expect(gate.allowedHosts).toEqual([])
+  })
+
+  it('aggregate: only the prefixed STRUMMER_API_* names grant', () => {
+    const gate = apiSafetyGateFromEnv(apiUnsafe, { aggregate: true })
+    expect(gate.allowUnsafe).toBe(true)
+    expect(gate.allowedHosts).toEqual(['x.test'])
+  })
+
+  it('keyring + block-private + the secret namespace are prefixed too', () => {
+    expect(apiSafetyGateFromEnv({ STRUMMER_KEYRING: '1' }, { aggregate: true }).keyring).toBe(false)
+    expect(apiSafetyGateFromEnv({ STRUMMER_API_KEYRING: '1' }, { aggregate: true }).keyring).toBe(
+      true,
+    )
+    // block-private flips allowPrivate; bare is ignored in aggregate.
+    expect(
+      apiSafetyGateFromEnv({ STRUMMER_BLOCK_PRIVATE: '1' }, { aggregate: true }).allowPrivate,
+    ).toBe(true)
+    expect(
+      apiSafetyGateFromEnv({ STRUMMER_API_BLOCK_PRIVATE: '1' }, { aggregate: true }).allowPrivate,
+    ).toBe(false)
+    expect(apiSecretPrefix({ aggregate: true })).toBe('STRUMMER_API_SECRET_')
+    expect(apiSecretPrefix()).toBe('STRUMMER_SECRET_')
+  })
+
+  it('apiConfigFromEnv threads the mode (standalone bare unchanged)', () => {
+    expect(apiConfigFromEnv(bareUnsafe).allowUnsafe).toBe(true)
+    expect(apiConfigFromEnv(bareUnsafe, { aggregate: true }).allowUnsafe).toBe(false)
+    expect(apiConfigFromEnv(apiUnsafe, { aggregate: true }).allowUnsafe).toBe(true)
+  })
 })

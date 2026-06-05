@@ -38,15 +38,43 @@ function csv(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
+/** Aggregate-mode flag: when true, the api pillar reads its OWN `STRUMMER_API_*`
+ * namespace instead of the bare names (ADR 0019 §A8 — so one bare flag can't
+ * unlock api AND verify in a single shared process). Standalone bins pass false. */
+export interface AggregateMode {
+  aggregate?: boolean
+}
+
+/** The api pillar's operator safety gate. In aggregate mode it reads the PREFIXED
+ * `STRUMMER_API_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/`_BLOCK_PRIVATE`/`_KEYRING`; standalone
+ * reads the bare `STRUMMER_*` names. Shared by the api bin AND verify's produce-api
+ * gate so the anti-widening rule is enforced in exactly one place. */
+export function apiSafetyGateFromEnv(
+  env: Record<string, string | undefined> = process.env,
+  { aggregate = false }: AggregateMode = {},
+): { allowUnsafe: boolean; allowedHosts: string[]; allowPrivate: boolean; keyring: boolean } {
+  const p = aggregate ? 'STRUMMER_API_' : 'STRUMMER_'
+  return {
+    allowUnsafe: bool(env[`${p}ALLOW_UNSAFE`]),
+    allowedHosts: csv(env[`${p}ALLOWED_HOSTS`]),
+    allowPrivate: !bool(env[`${p}BLOCK_PRIVATE`]),
+    keyring: bool(env[`${p}KEYRING`]),
+  }
+}
+
+/** The env variable prefix the api pillar's secret store reads. Aggregate mode
+ * uses its own namespace so a bare `STRUMMER_SECRET_*` can't be read here. */
+export function apiSecretPrefix({ aggregate = false }: AggregateMode = {}): string {
+  return aggregate ? 'STRUMMER_API_SECRET_' : 'STRUMMER_SECRET_'
+}
+
 /** Parse the operator env into the API bin config (single source of truth). */
 export function apiConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
+  mode: AggregateMode = {},
 ): ApiBinConfig {
   return {
-    allowUnsafe: bool(env.STRUMMER_ALLOW_UNSAFE),
-    allowedHosts: csv(env.STRUMMER_ALLOWED_HOSTS),
-    keyring: bool(env.STRUMMER_KEYRING),
-    allowPrivate: !bool(env.STRUMMER_BLOCK_PRIVATE),
+    ...apiSafetyGateFromEnv(env, mode),
     artifactsRoot: env.STRUMMER_ARTIFACTS_ROOT || undefined,
     allowCapture: bool(env.STRUMMER_VERIFY_ALLOW_CAPTURE),
   }
@@ -62,6 +90,7 @@ export function apiConfigFromEnv(
 function apiOptions(
   config: ApiBinConfig,
   env: Record<string, string | undefined>,
+  mode: AggregateMode = {},
 ): ApiToolsOptions {
   // The capture→contract bridge (ADR 0013) is wired only when the operator set a
   // shared artifacts root. The store resolves a foreign-prefix HAR handle via the
@@ -85,11 +114,20 @@ function apiOptions(
     verifyRedact = (v) => redactor.redact(v)
   }
 
+  // Standalone: keyring chains over the bare STRUMMER_SECRET_* (else the runner's
+  // default env store). Aggregate: ALWAYS pin the api secret namespace
+  // (STRUMMER_API_SECRET_*) so a bare shared STRUMMER_SECRET_* is never read here.
+  const secrets = mode.aggregate
+    ? resolveSecretStore({ keyring: config.keyring, env, envPrefix: apiSecretPrefix(mode) })
+    : config.keyring
+      ? resolveSecretStore({ keyring: true })
+      : undefined
+
   return {
     allowUnsafe: config.allowUnsafe,
     allowedHosts: config.allowedHosts,
     allowPrivate: config.allowPrivate,
-    secrets: config.keyring ? resolveSecretStore({ keyring: true }) : undefined,
+    secrets,
     allowCapture: config.allowCapture,
     resolveHar,
     storeVerifyDetail,
@@ -104,8 +142,9 @@ function apiOptions(
  */
 export function setupApiFromEnv(
   env: Record<string, string | undefined> = process.env,
+  mode: AggregateMode = {},
 ): PillarSetup {
-  const opts = apiOptions(apiConfigFromEnv(env), env)
+  const opts = apiOptions(apiConfigFromEnv(env, mode), env, mode)
   return { register: (server) => registerApiTools(server, opts) }
 }
 
