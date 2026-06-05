@@ -19,7 +19,13 @@ import { Redactor } from '@strummer/safety'
 import { gateDenied } from '@strummer/verify'
 import { depsNetworkConfig } from './bin-deps.js'
 import { auditProjectDependencies } from './deps.js'
-import { createVerifyServer, type RunDrivingOptions } from './verify.js'
+import type { PillarSetup } from './pillars.js'
+import {
+  createVerifyServer,
+  type RunDrivingOptions,
+  registerVerifyTools,
+  type VerifyToolsOptions,
+} from './verify.js'
 
 /**
  * Operator-set config for the verify MCP bin (ADR 0013 + Addendum milestone 5c).
@@ -85,9 +91,21 @@ const EMPTY_COVERAGE = {
   summary: { covered: 0, uncovered: 0, nonExecutable: 0, total: 0, filesWithoutCoverage: 0 },
 }
 
-export function buildVerifyServerFromEnv(
-  env: Record<string, string | undefined> = process.env,
-): BuiltVerifyServer {
+/**
+ * Parse the operator env into BOTH the {@link VerifyBinConfig} (the bin-test regression
+ * surface) and the {@link VerifyToolsOptions} (`storeVerdict`/`resolveVerdict`/`runDriving`)
+ * — the single source of truth shared by the standalone `buildVerifyServerFromEnv` and the
+ * aggregate `setupVerifyFromEnv` (ADR 0019), so the two surfaces can never drift. Verify
+ * COMPOSES other pillars: each requested pillar runner is wired here ONLY when its OWN gate
+ * is satisfied, behind the conscious `STRUMMER_VERIFY_ENABLE_RUN` "both required" switch. It
+ * constructs no long-lived OS resource — the `ArtifactStore` sweeps opportunistically on
+ * `put()` (no timer), the flake `HistoryStore` is opened/closed per run thunk, and the browser
+ * runtime is built+torn-down lazily inside the produce thunk — so the setup has no `shutdown`.
+ */
+function parseVerify(env: Record<string, string | undefined> = process.env): {
+  config: VerifyBinConfig
+  opts: VerifyToolsOptions
+} {
   const config: VerifyBinConfig = {
     artifactsRoot: env.STRUMMER_ARTIFACTS_ROOT || undefined,
     allowCapture: bool(env.STRUMMER_VERIFY_ALLOW_CAPTURE),
@@ -344,7 +362,27 @@ export function buildVerifyServerFromEnv(
     runDriving = rd
   }
 
-  const server = createVerifyServer({ storeVerdict, resolveVerdict, runDriving })
+  return { config, opts: { storeVerdict, resolveVerdict, runDriving } }
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): parse env, return a {@link PillarSetup} that
+ * registers the verify tools (`request_verdict` always; `verify_change` only when ≥1 pillar
+ * runner is wired — deny-by-default) onto a (possibly shared) server. Verify owns no
+ * long-lived resource (see {@link parseVerify}), so there is no `shutdown`.
+ */
+export function setupVerifyFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): PillarSetup {
+  const { opts } = parseVerify(env)
+  return { register: (server) => registerVerifyTools(server, opts) }
+}
+
+export function buildVerifyServerFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): BuiltVerifyServer {
+  const { config, opts } = parseVerify(env)
+  const server = createVerifyServer(opts)
   return { server, config }
 }
 

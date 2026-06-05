@@ -5,7 +5,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { resolveSecretStore } from '@strummer/api'
 import { ArtifactStore } from '@strummer/artifacts'
 import { Redactor } from '@strummer/safety'
-import { createApiServer } from './api.js'
+import { type ApiToolsOptions, createApiServer, registerApiTools } from './api.js'
+import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the API MCP bin (set at launch). */
 export interface ApiBinConfig {
@@ -37,19 +38,11 @@ function csv(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-/**
- * Build the API MCP server from operator env. Safety is operator-set, never by
- * the agent (see ADR 0004): mutating requests stay dry-run unless BOTH
- * `STRUMMER_ALLOW_UNSAFE` and a `STRUMMER_ALLOWED_HOSTS` allowlist are present.
- *   STRUMMER_ALLOW_UNSAFE=1
- *   STRUMMER_ALLOWED_HOSTS=api.example.com,127.0.0.1
- *   STRUMMER_KEYRING=1        # chain the OS keyring ahead of STRUMMER_SECRET_<NAME>
- *   STRUMMER_BLOCK_PRIVATE=1  # also refuse loopback/RFC1918 SSRF targets (hardened)
- */
-export function buildApiServerFromEnv(
+/** Parse the operator env into the API bin config (single source of truth). */
+export function apiConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
-): BuiltApiServer {
-  const config: ApiBinConfig = {
+): ApiBinConfig {
+  return {
     allowUnsafe: bool(env.STRUMMER_ALLOW_UNSAFE),
     allowedHosts: csv(env.STRUMMER_ALLOWED_HOSTS),
     keyring: bool(env.STRUMMER_KEYRING),
@@ -57,7 +50,19 @@ export function buildApiServerFromEnv(
     artifactsRoot: env.STRUMMER_ARTIFACTS_ROOT || undefined,
     allowCapture: bool(env.STRUMMER_VERIFY_ALLOW_CAPTURE),
   }
+}
 
+/**
+ * Build the exact {@link ApiToolsOptions} object the standalone bin passes to
+ * `createApiServer` — the single place that wires the capture→contract bridge.
+ * Shared by `buildApiServerFromEnv` and `setupApiFromEnv` so the two surfaces
+ * can never drift. The API pillar owns no long-lived resources (the
+ * `ArtifactStore` is opened lazily inside `registerApiTools`).
+ */
+function apiOptions(
+  config: ApiBinConfig,
+  env: Record<string, string | undefined>,
+): ApiToolsOptions {
   // The capture→contract bridge (ADR 0013) is wired only when the operator set a
   // shared artifacts root. The store resolves a foreign-prefix HAR handle via the
   // slice-1 cross-prefix rehydrate; verdict detail is stored under the `verify`
@@ -80,7 +85,7 @@ export function buildApiServerFromEnv(
     verifyRedact = (v) => redactor.redact(v)
   }
 
-  const server = createApiServer({
+  return {
     allowUnsafe: config.allowUnsafe,
     allowedHosts: config.allowedHosts,
     allowPrivate: config.allowPrivate,
@@ -89,7 +94,35 @@ export function buildApiServerFromEnv(
     resolveHar,
     storeVerifyDetail,
     verifyRedact,
-  })
+  }
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): parse env, return a {@link PillarSetup}
+ * that registers the API tools onto a (possibly shared) server. The API pillar owns
+ * no long-lived resources, so there is no `shutdown`.
+ */
+export function setupApiFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): PillarSetup {
+  const opts = apiOptions(apiConfigFromEnv(env), env)
+  return { register: (server) => registerApiTools(server, opts) }
+}
+
+/**
+ * Build the API MCP server from operator env. Safety is operator-set, never by
+ * the agent (see ADR 0004): mutating requests stay dry-run unless BOTH
+ * `STRUMMER_ALLOW_UNSAFE` and a `STRUMMER_ALLOWED_HOSTS` allowlist are present.
+ *   STRUMMER_ALLOW_UNSAFE=1
+ *   STRUMMER_ALLOWED_HOSTS=api.example.com,127.0.0.1
+ *   STRUMMER_KEYRING=1        # chain the OS keyring ahead of STRUMMER_SECRET_<NAME>
+ *   STRUMMER_BLOCK_PRIVATE=1  # also refuse loopback/RFC1918 SSRF targets (hardened)
+ */
+export function buildApiServerFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): BuiltApiServer {
+  const config = apiConfigFromEnv(env)
+  const server = createApiServer(apiOptions(config, env))
   return { server, config }
 }
 

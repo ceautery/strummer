@@ -18,7 +18,14 @@ import {
   rubygemsToPackument,
 } from '@strummer/deps'
 import { resolveAndPin } from '@strummer/safety'
-import { type ChangelogFetcher, createDepsServer, type PackumentFetcher } from './deps.js'
+import {
+  type ChangelogFetcher,
+  createDepsServer,
+  type DepsToolsOptions,
+  type PackumentFetcher,
+  registerDepsTools,
+} from './deps.js'
+import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the deps MCP bin (set at launch). */
 export interface DepsBinConfig {
@@ -186,21 +193,11 @@ function makeChangelogFetcher(
   }
 }
 
-/**
- * Build the deps MCP server from operator env. Network is OFF by default; the OSV
- * snapshot is operator-provisioned out-of-band:
- *   STRUMMER_DEPS_OSV_DB_DIR=/var/lib/strummer/osv   # <dir>/<ecosystem>/all.zip
- *   STRUMMER_DEPS_ARTIFACT_DIR=/var/lib/strummer/deps # backs changelog_diff handles
- *   STRUMMER_DEPS_ALLOW_NETWORK=1                     # enable packument + changelog fetch
- *   STRUMMER_DEPS_NPM_REGISTRY=https://registry.npmjs.org
- *   STRUMMER_DEPS_PYPI_REGISTRY=https://pypi.org/pypi  # PyPI JSON API base
- *   STRUMMER_DEPS_RUBYGEMS_REGISTRY=https://rubygems.org/api/v1  # RubyGems API base
- *   STRUMMER_DEPS_ALLOW_PRIVATE=1                     # permit a local registry mirror
- */
-export function buildDepsServerFromEnv(
+/** Parse the operator env into the deps bin config (single source of truth). */
+export function depsConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
-): BuiltDepsServer {
-  const config: DepsBinConfig = {
+): DepsBinConfig {
+  return {
     osvDir: env.STRUMMER_DEPS_OSV_DB_DIR || undefined,
     artifactDir: env.STRUMMER_DEPS_ARTIFACT_DIR || undefined,
     allowNetwork: bool(env.STRUMMER_DEPS_ALLOW_NETWORK),
@@ -209,8 +206,20 @@ export function buildDepsServerFromEnv(
     rubygemsRegistry: env.STRUMMER_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
     allowPrivate: bool(env.STRUMMER_DEPS_ALLOW_PRIVATE),
   }
+}
+
+/**
+ * Build the {@link DepsToolsOptions} the server is configured with — the OSV snapshot dir,
+ * the SSRF-pinned packument/changelog fetchers (only when network is enabled), and the
+ * by-handle artifact store (only when an artifact dir is set). Single construction path
+ * shared by `buildDepsServerFromEnv` and `setupDepsFromEnv` so the two surfaces can't drift.
+ */
+function depsToolsOptions(
+  config: DepsBinConfig,
+  env: Record<string, string | undefined>,
+): DepsToolsOptions {
   const net = depsNetworkConfig(env)
-  const server = createDepsServer({
+  return {
     osvDir: net.osvDir,
     fetchPackument: net.fetchPackument,
     fetchChangelog: config.allowNetwork
@@ -232,7 +241,38 @@ export function buildDepsServerFromEnv(
             sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
           })
         : undefined,
-  })
+  }
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): parse env, return a {@link PillarSetup}
+ * that registers the deps tools onto a (possibly shared) server. Deps owns no long-lived
+ * resource the aggregate must tear down (the optional artifact store's sweep timer is
+ * unref'd + opportunistic), so there is no `shutdown`.
+ */
+export function setupDepsFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): PillarSetup {
+  const opts = depsToolsOptions(depsConfigFromEnv(env), env)
+  return { register: (server) => registerDepsTools(server, opts) }
+}
+
+/**
+ * Build the deps MCP server from operator env. Network is OFF by default; the OSV
+ * snapshot is operator-provisioned out-of-band:
+ *   STRUMMER_DEPS_OSV_DB_DIR=/var/lib/strummer/osv   # <dir>/<ecosystem>/all.zip
+ *   STRUMMER_DEPS_ARTIFACT_DIR=/var/lib/strummer/deps # backs changelog_diff handles
+ *   STRUMMER_DEPS_ALLOW_NETWORK=1                     # enable packument + changelog fetch
+ *   STRUMMER_DEPS_NPM_REGISTRY=https://registry.npmjs.org
+ *   STRUMMER_DEPS_PYPI_REGISTRY=https://pypi.org/pypi  # PyPI JSON API base
+ *   STRUMMER_DEPS_RUBYGEMS_REGISTRY=https://rubygems.org/api/v1  # RubyGems API base
+ *   STRUMMER_DEPS_ALLOW_PRIVATE=1                     # permit a local registry mirror
+ */
+export function buildDepsServerFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): BuiltDepsServer {
+  const config = depsConfigFromEnv(env)
+  const server = createDepsServer(depsToolsOptions(config, env))
   return { server, config }
 }
 

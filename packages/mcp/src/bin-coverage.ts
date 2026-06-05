@@ -2,7 +2,12 @@
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { createCoverageServer } from './coverage.js'
+import {
+  type CoverageToolsOptions,
+  createCoverageServer,
+  registerCoverageTools,
+} from './coverage.js'
+import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the coverage MCP bin (set at launch). */
 export interface CoverageBinConfig {
@@ -30,6 +35,40 @@ function csv(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
+/** Parse the operator env into the coverage bin config (single source of truth). */
+export function coverageConfigFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): CoverageBinConfig {
+  const timeoutRaw = env.STRUMMER_COVERAGE_TIMEOUT_MS
+  const timeoutMs =
+    timeoutRaw !== undefined && timeoutRaw.trim() !== '' ? Number(timeoutRaw) : undefined
+  return {
+    allowRun: bool(env.STRUMMER_COVERAGE_ALLOW_RUN),
+    allowedRoots: csv(env.STRUMMER_COVERAGE_PROJECT_ROOTS),
+    timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
+  }
+}
+
+function coverageOptions(config: CoverageBinConfig): CoverageToolsOptions {
+  return {
+    allowRun: config.allowRun,
+    allowedRoots: config.allowedRoots,
+    timeoutMs: config.timeoutMs,
+  }
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): parse env, return a {@link PillarSetup}
+ * that registers the coverage tools onto a (possibly shared) server. Coverage owns no
+ * long-lived resources, so there is no `shutdown`.
+ */
+export function setupCoverageFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): PillarSetup {
+  const opts = coverageOptions(coverageConfigFromEnv(env))
+  return { register: (server) => registerCoverageTools(server, opts) }
+}
+
 /**
  * Build the coverage MCP server from operator env. `uncovered_in_diff` (read-only) is
  * always available; `run_scoped` runs the project's tests, so it is enabled only with the
@@ -42,19 +81,8 @@ function csv(value: string | undefined): string[] {
 export function buildCoverageServerFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): BuiltCoverageServer {
-  const timeoutRaw = env.STRUMMER_COVERAGE_TIMEOUT_MS
-  const timeoutMs =
-    timeoutRaw !== undefined && timeoutRaw.trim() !== '' ? Number(timeoutRaw) : undefined
-  const config: CoverageBinConfig = {
-    allowRun: bool(env.STRUMMER_COVERAGE_ALLOW_RUN),
-    allowedRoots: csv(env.STRUMMER_COVERAGE_PROJECT_ROOTS),
-    timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
-  }
-  const server = createCoverageServer({
-    allowRun: config.allowRun,
-    allowedRoots: config.allowedRoots,
-    timeoutMs: config.timeoutMs,
-  })
+  const config = coverageConfigFromEnv(env)
+  const server = createCoverageServer(coverageOptions(config))
   return { server, config }
 }
 

@@ -12,7 +12,13 @@ import {
   parseServerRegistry,
   type ServerRegistry,
 } from '@strummer/lsp'
-import { createLspServer, type ToolchainDetector } from './lsp.js'
+import {
+  createLspServer,
+  type LspToolsOptions,
+  registerLspTools,
+  type ToolchainDetector,
+} from './lsp.js'
+import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the LSP MCP bin (set at launch). */
 export interface LspBinConfig {
@@ -113,6 +119,24 @@ const detectToolchain: ToolchainDetector = (projectRoot, language) => {
 export function buildLspServerFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): BuiltLspServer {
+  const { config, options, manager } = buildLspRuntimeFromEnv(env)
+  // createLspServer sets the server name + instructions, then registers the same tools options.
+  const server = createLspServer(options)
+  return { server, config, manager }
+}
+
+/**
+ * The single, shared parse + resource construction for the LSP bin: parse the operator
+ * `STRUMMER_LSP_*` env, enforce the anti-widening hard throws, and (when a registry is bound)
+ * construct the OWNED long-lived `LanguageServerManager` + the query/rename engines wired into one
+ * {@link LspToolsOptions}. Both `buildLspServerFromEnv` (standalone server) and `setupLspFromEnv`
+ * (aggregate composition) go through here so the manager is constructed exactly ONE way.
+ */
+function buildLspRuntimeFromEnv(env: Record<string, string | undefined>): {
+  config: LspBinConfig
+  options: LspToolsOptions
+  manager?: LanguageServerManager
+} {
   const serversRaw = env.STRUMMER_LSP_SERVERS
   const registry =
     serversRaw && serversRaw.trim() !== '' ? parseServerRegistry(serversRaw) : undefined
@@ -188,7 +212,7 @@ export function buildLspServerFromEnv(
   const engine = query
   const writeEngine = renameEngine
   const liveManager = manager
-  const server = createLspServer({
+  const options: LspToolsOptions = {
     registry: config.registry,
     allowRun: config.allowRun,
     allowedRoots: config.allowedRoots,
@@ -197,9 +221,25 @@ export function buildLspServerFromEnv(
     ...(engine ? { query: (input) => engine.query(input) } : {}),
     ...(writeEngine ? { rename: (input) => writeEngine.rename(input) } : {}),
     ...(liveManager ? { describeServers: () => liveManager.describe() } : {}),
-  })
+  }
 
-  return { server, config, manager }
+  return { config, options, manager }
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): parse env, construct the OWNED `LanguageServerManager`
+ * (the long-lived resource), and return a {@link PillarSetup} that registers the LSP tools onto a
+ * (possibly shared) server and tears the manager down via `shutdown`. The anti-widening hard throws
+ * (ALLOW_WRITE-requires-ALLOW_RUN, DESTRUCTIVE-requires-WRITE) fire here too, at construction.
+ */
+export function setupLspFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): PillarSetup {
+  const { options, manager } = buildLspRuntimeFromEnv(env)
+  return {
+    register: (server) => registerLspTools(server, options),
+    ...(manager ? { shutdown: () => manager.shutdown() } : {}),
+  }
 }
 
 // Executable tail: only run when invoked directly (not when imported by a test).

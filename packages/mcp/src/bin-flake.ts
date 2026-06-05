@@ -3,7 +3,8 @@ import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { HistoryStore } from '@strummer/flake'
-import { createFlakeServer } from './flake.js'
+import { createFlakeServer, type FlakeToolsOptions, registerFlakeTools } from './flake.js'
+import type { PillarSetup } from './pillars.js'
 
 /** Parsed, operator-set configuration for the flake MCP bin (set at launch). */
 export interface FlakeBinConfig {
@@ -44,6 +45,61 @@ function num(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+/** Parse the operator env into the flake bin config (single source of truth). */
+export function flakeConfigFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): FlakeBinConfig {
+  const dbPath = env.STRUMMER_FLAKE_DB
+  if (!dbPath) {
+    throw new Error('STRUMMER_FLAKE_DB must be set to the run-history database path')
+  }
+  return {
+    dbPath,
+    allowRun: bool(env.STRUMMER_FLAKE_ALLOW_RUN),
+    allowedRoots: csv(env.STRUMMER_FLAKE_PROJECT_ROOTS),
+    timeoutMs: num(env.STRUMMER_FLAKE_TIMEOUT_MS),
+    allowQuarantine: bool(env.STRUMMER_FLAKE_ALLOW_QUARANTINE),
+    maxExpiryMs: num(env.STRUMMER_FLAKE_MAX_EXPIRY_MS) ?? 0,
+  }
+}
+
+/**
+ * Open the owned HistoryStore and assemble the FlakeToolsOptions from a parsed config — the
+ * ONE place the store is constructed, shared by the standalone bin and the aggregate seam.
+ * No injected runner ⇒ the engine uses the live vitest subprocess (defaultVitestRunner).
+ */
+function flakeOptions(config: FlakeBinConfig): { store: HistoryStore; opts: FlakeToolsOptions } {
+  const store = HistoryStore.open(config.dbPath)
+  const opts: FlakeToolsOptions = {
+    store,
+    runConfig: {
+      allowRun: config.allowRun,
+      allowedRoots: config.allowedRoots,
+      timeoutMs: config.timeoutMs,
+    },
+    quarantinePolicy: {
+      allowQuarantine: config.allowQuarantine,
+      maxExpiryMs: config.maxExpiryMs,
+    },
+  }
+  return { store, opts }
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): parse env, open the OWNED run-history store, and
+ * return a {@link PillarSetup} that registers the flake tools onto a (possibly shared) server.
+ * Flake owns the SQLite HistoryStore, so `shutdown` closes it for the aggregate's teardown.
+ */
+export function setupFlakeFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): PillarSetup {
+  const { store, opts } = flakeOptions(flakeConfigFromEnv(env))
+  return {
+    register: (server) => registerFlakeTools(server, opts),
+    shutdown: () => store.close(),
+  }
+}
+
 /**
  * Build the flake MCP server from operator env. The read tools (status/candidates/release)
  * are always available once a DB path is set; the code-running and write tools are each
@@ -58,32 +114,9 @@ function num(value: string | undefined): number | undefined {
 export function buildFlakeServerFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): BuiltFlakeServer {
-  const dbPath = env.STRUMMER_FLAKE_DB
-  if (!dbPath) {
-    throw new Error('STRUMMER_FLAKE_DB must be set to the run-history database path')
-  }
-  const config: FlakeBinConfig = {
-    dbPath,
-    allowRun: bool(env.STRUMMER_FLAKE_ALLOW_RUN),
-    allowedRoots: csv(env.STRUMMER_FLAKE_PROJECT_ROOTS),
-    timeoutMs: num(env.STRUMMER_FLAKE_TIMEOUT_MS),
-    allowQuarantine: bool(env.STRUMMER_FLAKE_ALLOW_QUARANTINE),
-    maxExpiryMs: num(env.STRUMMER_FLAKE_MAX_EXPIRY_MS) ?? 0,
-  }
-  const store = HistoryStore.open(config.dbPath)
-  const server = createFlakeServer({
-    store,
-    runConfig: {
-      allowRun: config.allowRun,
-      allowedRoots: config.allowedRoots,
-      timeoutMs: config.timeoutMs,
-    },
-    quarantinePolicy: {
-      allowQuarantine: config.allowQuarantine,
-      maxExpiryMs: config.maxExpiryMs,
-    },
-    // No injected runner ⇒ the engine uses the live vitest subprocess (defaultVitestRunner).
-  })
+  const config = flakeConfigFromEnv(env)
+  const { store, opts } = flakeOptions(config)
+  const server = createFlakeServer(opts)
   return { server, store, config }
 }
 

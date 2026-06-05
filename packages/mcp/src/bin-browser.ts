@@ -20,7 +20,8 @@ import {
 } from '@strummer/browser'
 import { Redactor } from '@strummer/safety'
 import { chromium } from 'playwright-core'
-import { createBrowserServer } from './browser.js'
+import { type BrowserToolsOptions, createBrowserServer, registerBrowserTools } from './browser.js'
+import type { PillarSetup } from './pillars.js'
 
 /**
  * `strummer-browser-mcp` — the operator-configured server bin. This is the ONLY
@@ -376,18 +377,14 @@ export async function buildBrowserRuntimeFromEnv(
 }
 
 /**
- * Build (but do not connect/serve) the browser MCP server from operator env. A thin
- * wrapper over {@link buildBrowserRuntimeFromEnv} (the egress-safe runtime) that adds the
- * MCP tool surface. Exported so the wiring — namespaced safety env, the mandatory proxy,
- * the loopback-bypass launch arg, capture defaults — is unit-testable without launching
- * Chromium or attaching a transport.
+ * Assemble the {@link BrowserToolsOptions} the agent surface is registered with, from an
+ * already-built egress-safe {@link BrowserRuntime}. The SINGLE place this options object is
+ * built, so the standalone bin ({@link buildBrowserServerFromEnv}) and the aggregate seam
+ * ({@link setupBrowserFromEnv}) register an identical surface — they cannot drift.
  */
-export async function buildBrowserServerFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<BuiltBrowserServer> {
-  const rt = await buildBrowserRuntimeFromEnv(env)
+function browserToolsOptions(rt: BrowserRuntime): BrowserToolsOptions {
   const { config } = rt
-  const server = createBrowserServer({
+  return {
     manager: rt.manager,
     gate: rt.gate,
     artifacts: rt.store,
@@ -407,12 +404,45 @@ export async function buildBrowserServerFromEnv(
     runPerfAudit: rt.runPerfAudit,
     capture: config.capture,
     maxNodes: config.maxNodes,
-  })
+  }
+}
+
+/**
+ * The aggregate-composition seam (ADR 0019): build the egress-safe runtime from operator env
+ * and return a {@link PillarSetup} that registers the browser tools onto a (possibly shared)
+ * server. The browser pillar OWNS long-lived resources (the started SSRF proxy + the browser
+ * manager), so it returns the runtime's `shutdown` — the aggregate owns teardown. Constructs
+ * the runtime via {@link buildBrowserRuntimeFromEnv}, the SAME single-source wiring the
+ * standalone bin uses, so the two surfaces can never drift.
+ */
+export async function setupBrowserFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<PillarSetup> {
+  const rt = await buildBrowserRuntimeFromEnv(env)
+  const opts = browserToolsOptions(rt)
+  return {
+    register: (server) => registerBrowserTools(server, opts),
+    shutdown: rt.shutdown,
+  }
+}
+
+/**
+ * Build (but do not connect/serve) the browser MCP server from operator env. A thin
+ * wrapper over {@link buildBrowserRuntimeFromEnv} (the egress-safe runtime) that adds the
+ * MCP tool surface. Exported so the wiring — namespaced safety env, the mandatory proxy,
+ * the loopback-bypass launch arg, capture defaults — is unit-testable without launching
+ * Chromium or attaching a transport.
+ */
+export async function buildBrowserServerFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<BuiltBrowserServer> {
+  const rt = await buildBrowserRuntimeFromEnv(env)
+  const server = createBrowserServer(browserToolsOptions(rt))
   return {
     server,
     manager: rt.manager,
     proxy: rt.proxy,
-    config,
+    config: rt.config,
     resolveSecret: rt.resolveSecret,
     redact: rt.redact,
     shutdown: rt.shutdown,
