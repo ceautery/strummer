@@ -1,14 +1,43 @@
 # @strummer/mcp
 
-The Strummer MCP server(s) — expose Strummer's pillars to an LLM agent as MCP
-tools and resources. Two servers ship from this package:
+The Strummer MCP server — exposes Strummer's pillars to an LLM agent as MCP tools
+and resources. **`strummer-mcp` is the AGGREGATE server**: one stdio process that
+serves every *enabled* pillar (docs, api, browser, coverage, deps, flake, lsp,
+mutate, verify). Narrow single-pillar bins also ship for minimal deployments
+(`strummer-docs-mcp`, `strummer-api-mcp`, `strummer-browser-mcp`, …).
 
-- **`strummer-mcp`** — the **docs** server over [`@strummer/core`](../core)
-  (Tools / Resource below).
-- **`strummer-api-mcp`** — the **API-testing** server over [`@strummer/api`](../api)
-  (API tools below).
-- **`strummer-browser-mcp`** — the **browser/UI-testing** server over
-  [`@strummer/browser`](../browser) (browser tools below).
+## Quickstart — the aggregate server
+
+Add one block to your MCP client config (see [`examples/mcp/.mcp.json`](../../examples/mcp/.mcp.json)):
+
+```jsonc
+{
+  "mcpServers": {
+    "strummer": {
+      "command": "npx",
+      "args": ["-y", "@strummer/mcp"],
+      "env": {
+        // Pick which pillars to expose (unset ⇒ the curated default docs+api+deps+verify).
+        "STRUMMER_TOOLSETS": "api,deps,verify",
+        // Each pillar reads its OWN operator gate; run/write tools appear only when set.
+        "STRUMMER_API_ALLOWED_HOSTS": "api.example.com"
+      }
+    }
+  }
+}
+```
+
+- **Selecting pillars** — `STRUMMER_TOOLSETS` is a comma list of pillar names; unset
+  enables the curated read-heavy default. It only *selects* — it never grants a
+  capability (each pillar still reads its own `STRUMMER_<PILLAR>_*` gate).
+- **Install isolation** — a bare `npm i @strummer/mcp` is **native-free**. The heavy
+  engines (`@strummer/browser` → playwright, `@strummer/core`/`@strummer/embed` → the
+  docs index, `@strummer/flake` → SQLite) are **optional peers**: install the ones whose
+  pillars you enable. A pillar whose engine isn't installed (or, for docs, whose
+  `STRUMMER_INDEX` is unset) is *loud-disabled* at startup — the server still starts.
+- **Compose, never widen** — in the aggregate the api + verify pillars read the prefixed
+  `STRUMMER_API_*` / `STRUMMER_API_SECRET_*` namespace, so no bare flag unlocks two
+  pillars at once. Safety config is always operator-set, never an agent input.
 
 ## Docs tools
 

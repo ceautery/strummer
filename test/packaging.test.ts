@@ -81,3 +81,29 @@ describe('@strummer/mcp install isolation — heavy engines are OPTIONAL peers (
     for (const h of HEAVY) expect(mcp.devDependencies?.[h]).toBeDefined()
   })
 })
+
+describe('onboarding example .mcp.json (ADR 0019 §14)', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: JSON config is untyped.
+  const cfg = JSON.parse(readFileSync(join(repoRoot, 'examples/mcp/.mcp.json'), 'utf8')) as any
+  const server = cfg.mcpServers?.strummer
+  // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
+  const mcp = readPackageJson('mcp') as any
+
+  it('declares the aggregate strummer server', () => {
+    expect(server).toBeDefined()
+    expect(server.command).toBe('npx')
+    expect(server.args).toContain('@strummer/mcp')
+  })
+
+  it('the documented `npx @strummer/mcp` resolves to a REAL bin (no npx trap)', () => {
+    // npx runs the bin matching the package name's last segment — `mcp` for
+    // @strummer/mcp. If that bin is missing, `npx @strummer/mcp` errors.
+    expect(mcp.bin?.mcp).toBeDefined()
+  })
+
+  it('only sets operator namespaced env (no agent inputs leak into config)', () => {
+    for (const key of Object.keys(server.env ?? {})) {
+      expect(key.startsWith('STRUMMER_')).toBe(true)
+    }
+  })
+})
