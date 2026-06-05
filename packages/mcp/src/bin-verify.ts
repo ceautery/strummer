@@ -19,8 +19,7 @@ import { Redactor } from '@strummer/safety'
 import { gateDenied } from '@strummer/verify'
 import { depsNetworkConfig } from './bin-deps.js'
 import { auditProjectDependencies } from './deps.js'
-import { createVerifyServer } from './index.js'
-import type { RunDrivingOptions } from './verify.js'
+import { createVerifyServer, type RunDrivingOptions } from './verify.js'
 
 /**
  * Operator-set config for the verify MCP bin (ADR 0013 + Addendum milestone 5c).

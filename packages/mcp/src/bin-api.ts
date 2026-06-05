@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { resolveSecretStore } from '@strummer/api'
 import { ArtifactStore } from '@strummer/artifacts'
 import { Redactor } from '@strummer/safety'
-import { createApiServer } from './index.js'
+import { createApiServer } from './api.js'
 
 /** Parsed, operator-set configuration for the API MCP bin (set at launch). */
 export interface ApiBinConfig {

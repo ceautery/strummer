@@ -2,7 +2,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { openDb } from '@strummer/core'
 import { QueryEmbedder } from '@strummer/embed'
-import { createStrummerServer } from './index.js'
+import { createStrummerServer } from './docs.js'
 
 const indexPath = process.env.STRUMMER_INDEX ?? process.argv[2]
 if (!indexPath) {
