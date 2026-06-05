@@ -1,6 +1,7 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { MutationRunner } from '@strummer/mutate'
 import { describe, expect, it, vi } from 'vitest'
 import { run } from './index.js'
 import { runVerify } from './verify.js'
@@ -117,6 +118,51 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
       await runVerify(['run', '/repo', '--coverage', '--fail-at-or-above', 'spicy'], c.io),
     ).toBe(2)
     expect(c.err()).toContain('fail-at-or-above')
+  })
+
+  it('rejects an unknown --mutate-tool (Fork D)', async () => {
+    const c = capture()
+    expect(
+      await runVerify(['run', '/repo', '--mutate', '--mutate-tool', 'wat', '--allow-run'], c.io),
+    ).toBe(2)
+    expect(c.err()).toContain('mutate-tool')
+  })
+
+  it('--mutate-tool cosmic-ray routes to the cosmic-ray runner (init→exec→dump), diff-scoped', async () => {
+    // A real temp project (cosmic-ray reads its base config + the selected file); the runner is
+    // injected so nothing spawns. The dump is keyed by the relative selected path so reconcile passes.
+    const proj = mkdtempSync(join(tmpdir(), 'strummer-verify-cr-'))
+    mkdirSync(join(proj, 'pkg'), { recursive: true })
+    writeFileSync(join(proj, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
+    writeFileSync(
+      join(proj, 'cosmic-ray.toml'),
+      '[cosmic-ray]\nmodule-path = "pkg"\ntimeout = 30.0\nexcluded-modules = []\ntest-command = "x"\n\n[cosmic-ray.distributor]\nname = "local"\n',
+    )
+    const verbs: string[] = []
+    const mutateRunner: MutationRunner = async (argv) => {
+      verbs.push(argv[0] ?? '')
+      const dump =
+        '[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[1,1]}]},{"worker_outcome":"normal","test_outcome":"killed"}]'
+      return { exitCode: 0, stdout: argv[0] === 'dump' ? dump : '', stderr: '' }
+    }
+    const c = capture()
+    await runVerify(
+      [
+        'run',
+        proj,
+        '--mutate',
+        '--mutate-tool',
+        'cosmic-ray',
+        '--changed-file',
+        'pkg/calc.py',
+        '--allow-run',
+      ],
+      c.io,
+      { mutateRunner },
+    )
+    expect(verbs).toEqual(['init', 'exec', 'dump']) // cosmic-ray was selected, not stryker/mutmut
+    expect(c.out()).toContain('mutate: pass') // the scoped cosmic-ray run (mutant killed) drove a pass
+    // (overall is inconclusive — the OTHER pillars weren't run — which is the absence-never-a-pass default)
   })
 
   it('drives a --flow contract capture via an injected runner — no browser spawn', async () => {

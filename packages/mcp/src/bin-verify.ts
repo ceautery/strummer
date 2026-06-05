@@ -14,7 +14,7 @@ import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@str
 import { runScoped } from '@strummer/coverage'
 import { changedDependencies } from '@strummer/deps'
 import { HistoryStore, runAndRecord } from '@strummer/flake'
-import { runMutation } from '@strummer/mutate'
+import { runCosmicRay, runMutation, runMutmut } from '@strummer/mutate'
 import { Redactor } from '@strummer/safety'
 import { gateDenied } from '@strummer/verify'
 import { depsNetworkConfig } from './bin-deps.js'
@@ -177,12 +177,27 @@ export function buildVerifyServerFromEnv(
     if (bool(env.STRUMMER_MUTATE_ALLOW_RUN) && mutRoots.length > 0) {
       const timeoutMs = num(env.STRUMMER_MUTATE_TIMEOUT_MS)
       const reportPath = env.STRUMMER_MUTATE_REPORT_PATH
+      // Fork D: the operator picks the tool (default stryker — the TS engine). The Python tools
+      // (cosmic-ray PRIMARY / mutmut) honor `mutateFiles` via a synthesized scoped config + a
+      // STRUMMER_MUTATE_CONFIG_PATH base config (cosmic-ray.toml / pyproject.toml). The diff →
+      // ctx.changedFiles scopes the run; under-scope/empty-session throws ⇒ verify folds to
+      // inconclusive (absence-is-never-a-pass).
+      const tool = env.STRUMMER_MUTATE_TOOL
+      const configPath = env.STRUMMER_MUTATE_CONFIG_PATH
       rd.mutate = async (ctx) => {
-        const r = await runMutation(
-          { projectRoot: ctx.projectRoot, allowedRoots: mutRoots, allowRun: true, timeoutMs },
-          { mutateFiles: ctx.changedFiles },
-          { reportPath },
-        )
+        const cfg = {
+          projectRoot: ctx.projectRoot,
+          allowedRoots: mutRoots,
+          allowRun: true,
+          timeoutMs,
+        }
+        const input = { mutateFiles: ctx.changedFiles, configPath }
+        const r =
+          tool === 'cosmic-ray'
+            ? await runCosmicRay(cfg, input)
+            : tool === 'mutmut'
+              ? await runMutmut(cfg, input)
+              : await runMutation(cfg, input, { reportPath })
         return r.summary
       }
     }

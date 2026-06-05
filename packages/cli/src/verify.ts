@@ -23,7 +23,13 @@ import {
 import { type DiffCoverageReport, runScoped, type TestRunner } from '@strummer/coverage'
 import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@strummer/deps'
 import { type FlakeVerdict, HistoryStore, runAndRecord } from '@strummer/flake'
-import { type MutationRunner, type MutationSummary, runMutation } from '@strummer/mutate'
+import {
+  type MutationRunner,
+  type MutationSummary,
+  runCosmicRay,
+  runMutation,
+  runMutmut,
+} from '@strummer/mutate'
 import { Redactor } from '@strummer/safety'
 import {
   type CaptureVerdictFacts,
@@ -89,12 +95,14 @@ interface RunCtx {
  *
  * - `verify [--contract f] [--coverage f] ...` (COMPOSE): fold per-pillar JSON results
  *   on disk into one verdict (ADR 0013 §1). The human supplies each pillar's output.
- * - `verify run <root> [--coverage] [--flake --flake-db f] [--mutate] [--deps] [--allow-run] ...`
+ * - `verify run <root> [--coverage] [--flake --flake-db f] [--mutate [--mutate-tool T --mutate-config f]] [--deps] [--allow-run] ...`
  *   (RUN-DRIVING, ADR 0013 Addendum 5c/5d): DRIVE the selected pillars and fold them. The
  *   human is the operator, so `--allow-run` is the straight-through gate for the SPAWN
  *   pillars (coverage/flake/mutate) and the typed root is auto-allowed; each pillar's own
  *   `assertAllowed` still denies without it (⇒ `skipReason:gate-not-set`, never run —
- *   "compose, never widen"). `--deps` is gated by NETWORK not spawn (a packument fetch),
+ *   "compose, never widen"). `--mutate-tool` picks the mutation engine (stryker default |
+ *   cosmic-ray | mutmut; the Python tools diff-scope via a synthesized config from
+ *   `--mutate-config`, ADR 0010 addendum 2). `--deps` is gated by NETWORK not spawn (a packument fetch),
  *   so it needs no `--allow-run`; a `--diff` scopes the audit to the changed packages
  *   (`changedDependencies`). `--flow <name>` (5e) DRIVES an operator-authored browser flow
  *   to capture a HAR and validate it against `--openapi`/`--graphql` — gated by the browser
@@ -145,6 +153,8 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
       coverage: { type: 'boolean' },
       flake: { type: 'boolean' },
       mutate: { type: 'boolean' },
+      'mutate-tool': { type: 'string' },
+      'mutate-config': { type: 'string' },
       deps: { type: 'boolean' },
       'allow-run': { type: 'boolean' },
       'changed-file': { type: 'string', multiple: true },
@@ -214,17 +224,29 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
   }
   if (values.mutate) {
     const ovr = deps.mutate
+    // Fork D: --mutate-tool selects the engine (default stryker); --mutate-config supplies the
+    // Python tools' base config (cosmic-ray.toml / pyproject.toml). The runner is injectable so
+    // the suite never spawns; --diff/--changed-file scope the run.
+    const tool = values['mutate-tool'] ?? 'stryker'
+    if (tool !== 'stryker' && tool !== 'cosmic-ray' && tool !== 'mutmut') {
+      io.err(`verify run --mutate-tool must be stryker | cosmic-ray | mutmut (got ${tool})\n`)
+      return 2
+    }
+    const configPath = values['mutate-config']
     request.mutate = {
       run: ovr
         ? () => ovr(ctx)
-        : async () =>
-            (
-              await runMutation(
-                { projectRoot, allowedRoots, allowRun, timeoutMs },
-                { mutateFiles: changedFiles },
-                { runner: deps.mutateRunner },
-              )
-            ).summary,
+        : async () => {
+            const cfg = { projectRoot, allowedRoots, allowRun, timeoutMs }
+            const mInput = { mutateFiles: changedFiles, configPath }
+            const r =
+              tool === 'cosmic-ray'
+                ? await runCosmicRay(cfg, mInput, { runner: deps.mutateRunner })
+                : tool === 'mutmut'
+                  ? await runMutmut(cfg, mInput, { runner: deps.mutateRunner })
+                  : await runMutation(cfg, mInput, { runner: deps.mutateRunner })
+            return r.summary
+          },
     }
   }
   if (values.flake) {
