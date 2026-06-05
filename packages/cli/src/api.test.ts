@@ -728,6 +728,43 @@ get {
     expect(c.err()).toContain('failed to load --coercers module')
   })
 
+  it('run --graphql --coercers rejects a live custom-scalar request variable (exit 1, value-free)', async () => {
+    writeFileSync(
+      join(dir, 'events-schema.graphql'),
+      'scalar DateTime\ntype Query { events(at: DateTime!): Int }',
+    )
+    writeFileSync(
+      join(dir, 'coercers.mjs'),
+      "export default { DateTime: (v) => { if (!/^\\d{4}-/.test(String(v))) throw new Error('bad DateTime') } }\n",
+    )
+    writeFileSync(
+      join(dir, 'gql-dt.bru'),
+      'meta {\n  name: gql-dt\n}\npost {\n  url: {{baseUrl}}/graphql\n  body: graphql\n}\nbody:graphql {\n  query Q($at: DateTime!) { events(at: $at) }\n}\nbody:graphql:vars {\n  {\n    "at": "not-a-date"\n  }\n}\n',
+    )
+    const c = capture()
+    const code = await run(
+      [
+        'api',
+        'run',
+        dir,
+        'gql-dt',
+        '--var',
+        `baseUrl=${baseUrl}`,
+        '--unsafe',
+        '--allow-host',
+        '127.0.0.1',
+        '--graphql',
+        join(dir, 'events-schema.graphql'),
+        '--coercers',
+        join(dir, 'coercers.mjs'),
+      ],
+      c.io,
+    )
+    expect(code).toBe(1)
+    expect(c.out()).toContain('graphql-variable-invalid')
+    expect(c.out()).not.toContain('not-a-date') // value never echoed
+  })
+
   it('run --graphql flags a wrong-typed request variable (exit 1, response still clean)', async () => {
     const c = capture()
     const code = await run(

@@ -41,13 +41,11 @@ async function loadCoercers(
     const mod = (await import(pathToFileURL(resolve(file)).href)) as { default?: unknown }
     exported = mod.default
   } catch (err) {
-    io.err(`api validate: failed to load --coercers module ${file}: ${(err as Error).message}\n`)
+    io.err(`api: failed to load --coercers module ${file}: ${(err as Error).message}\n`)
     return undefined
   }
   if (!exported || typeof exported !== 'object') {
-    io.err(
-      `api validate: --coercers module ${file} must default-export an object of scalar coercers\n`,
-    )
+    io.err(`api: --coercers module ${file} must default-export an object of scalar coercers\n`)
     return undefined
   }
   return exported as Record<string, ScalarCoercer>
@@ -253,7 +251,12 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: { ...RUN_OPTIONS, openapi: { type: 'string' }, graphql: { type: 'string' } },
+    options: {
+      ...RUN_OPTIONS,
+      openapi: { type: 'string' },
+      graphql: { type: 'string' },
+      coercers: { type: 'string' },
+    },
   })
   const [dir, name] = positionals
   if (!dir || !name) {
@@ -330,6 +333,13 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
   let graphqlContract: ContractResult | undefined
   if (values.graphql && reqCapture && isGraphqlEnvelope(reqCapture.request.body)) {
     const sdl = readFileSync(values.graphql, 'utf8')
+    // --coercers loads operator custom-scalar coercers (ADR 0018, the second wire point);
+    // a load failure is LOUD + non-zero, never a silent no-coercer fall-through.
+    let scalarCoercers: Record<string, ScalarCoercer> | undefined
+    if (values.coercers !== undefined) {
+      scalarCoercers = await loadCoercers(values.coercers, io)
+      if (scalarCoercers === undefined) return 1
+    }
     const env = reqCapture.request.body as {
       query: string
       operationName?: string
@@ -337,6 +347,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     }
     const raw = validateGraphqlOperation(sdl, env.query, {
       operationName: env.operationName,
+      ...(scalarCoercers ? { scalarCoercers } : {}),
       ...(result.sent && result.response
         ? { json: parseStoredBody(artifacts, result.response.bodyHandle) }
         : {}),
