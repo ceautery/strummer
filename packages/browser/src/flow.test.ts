@@ -31,7 +31,7 @@ describe('loadFlow / loadFlowCollection — .bru + sidecar persistence', () => {
   let dir: string
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'strummer-flow-'))
+    dir = mkdtempSync(join(tmpdir(), 'sackville-flow-'))
   })
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true })
@@ -39,7 +39,7 @@ describe('loadFlow / loadFlowCollection — .bru + sidecar persistence', () => {
 
   function write(stem: string, bru = BRU, sidecar = SIDECAR) {
     writeFileSync(join(dir, `${stem}.bru`), bru)
-    writeFileSync(join(dir, `${stem}.strummer.yml`), sidecar)
+    writeFileSync(join(dir, `${stem}.sackville.yml`), sidecar)
   }
 
   it('loads a flow: meta name from the .bru, ordered steps from the sidecar', () => {

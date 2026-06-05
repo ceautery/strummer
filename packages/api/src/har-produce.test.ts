@@ -23,7 +23,7 @@ function recordingSink(): { sink: HarArtifactSink; bytes: () => Buffer[] } {
   const sink: HarArtifactSink = {
     put: (id, kind, body) => {
       puts.push(Buffer.from(body))
-      return `strummer://verify/${id}/${kind}`
+      return `sackville://verify/${id}/${kind}`
     },
   }
   return { sink, bytes: () => puts }
@@ -94,7 +94,7 @@ describe('runRequestToHar — produce a HAR from the runner + transport-complete
         runForHar: fakeRun({ sent: true, hops: [jsonHop(200, '[]')] }),
       },
     )
-    expect(out.harHandle).toBe('strummer://verify/fixed-id/har')
+    expect(out.harHandle).toBe('sackville://verify/fixed-id/har')
     expect(out.summary).toMatchObject({
       entryCount: 1,
       byStatus: { '200': 1 },

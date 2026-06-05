@@ -49,7 +49,7 @@ def _cmd_build(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int
                 attribution = attribution or clean_attribution(meta.get("attribution", ""))
                 mtime = meta.get("mtime")
             workdir = (
-                Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="strummer-"))
+                Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="sackville-"))
             )
             sys.stderr.write(f"fetching DevDocs '{args.slug}' -> {workdir}\n")
             fetch_devdocs(args.slug, workdir, mtime=mtime)
@@ -98,7 +98,7 @@ def _cmd_build(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="strummer-ingest")
+    parser = argparse.ArgumentParser(prog="sackville-ingest")
     sub = parser.add_subparsers(dest="command", required=True)
 
     fixture = sub.add_parser("build-fixture", help="(re)build the golden test fixture")

@@ -1,7 +1,7 @@
 [project]
-name = "strummer-ingest"
+name = "sackville-ingest"
 version = "0.0.0"
-description = "Strummer documentation ingestion & indexing (writes the SQLite index the TS server reads)"
+description = "Sackville documentation ingestion & indexing (writes the SQLite index the TS server reads)"
 license = "Apache-2.0"
 authors = [{ name = "Curtis Autery" }]
 requires-python = ">=3.12"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-strummer-ingest = "strummer_ingest.cli:main"
+sackville-ingest = "sackville_ingest.cli:main"
 
 [build-system]
 requires = ["hatchling"]

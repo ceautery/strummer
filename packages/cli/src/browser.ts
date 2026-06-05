@@ -15,14 +15,14 @@ import {
   PageDriver,
   resolveEngine,
   runFlow,
-} from '@strummer/browser'
-import { Redactor } from '@strummer/safety'
+} from '@sackville/browser'
+import { Redactor } from '@sackville/safety'
 import type { Browser, Page } from 'playwright-core'
 import type { CliIO } from './index.js'
 
 /**
- * Human-facing `strummer browser …` — single-shot page-inspection commands over
- * the `@strummer/browser` engine. Each command navigates once and reads, so the
+ * Human-facing `sackville browser …` — single-shot page-inspection commands over
+ * the `@sackville/browser` engine. Each command navigates once and reads, so the
  * per-snapshot refs never need to outlive the process (unlike the stateful MCP
  * surface). The egress boundary mirrors the server bin: navigation is gated by an
  * allowlist (the typed host is auto-allowed, since the human explicitly asked for
@@ -103,7 +103,7 @@ async function withSession(
   // The human typed this URL → auto-allow its host, plus any extra --allow-host.
   const gate = new BrowserGate({ allowedHosts: [host, ...flags.allowHost] })
   const proxy = await createSsrfProxy({ allowPrivate: flags.allowPrivate })
-  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-cli-')))
+  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-browser-cli-')))
   const manager = new BrowserManager({
     gate,
     launch: launchFor(flags, proxy.url),
@@ -159,11 +159,11 @@ function parseVars(raw: string[] | undefined): Record<string, unknown> {
 }
 
 /**
- * Replay a persisted browser flow (`<flow>.bru` + sidecar) — `strummer browser
+ * Replay a persisted browser flow (`<flow>.bru` + sidecar) — `sackville browser
  * run <flow.bru>`. Unlike the single-shot commands the flow drives its own
  * navigations, so no URL is auto-allowed: the human allowlists target hosts with
  * `--allow-host` and unlocks mutations with `--unsafe` (else they dry-run).
- * `{{secret:NAME}}` resolves from `STRUMMER_BROWSER_SECRET_<NAME>` env (the human
+ * `{{secret:NAME}}` resolves from `SACKVILLE_BROWSER_SECRET_<NAME>` env (the human
  * is the operator); a `Redactor` scrubs those values from every result. Exits
  * non-zero when the flow fails (a step error or a failed assertion) — CI-usable.
  */
@@ -191,13 +191,13 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     return 1
   }
 
-  // Operator secrets from env (STRUMMER_BROWSER_SECRET_<NAME>); register the
+  // Operator secrets from env (SACKVILLE_BROWSER_SECRET_<NAME>); register the
   // values with a redactor so they never surface, expose them only by NAME.
   const env = io.env ?? {}
   const redactor = new Redactor()
   const secrets = new Map<string, string>()
   for (const [key, val] of Object.entries(env)) {
-    const m = /^STRUMMER_BROWSER_SECRET_(.+)$/.exec(key)
+    const m = /^SACKVILLE_BROWSER_SECRET_(.+)$/.exec(key)
     if (m?.[1] && val) {
       redactor.register(m[1], val)
       secrets.set(m[1], val)
@@ -210,7 +210,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     allowedHosts: flags.allowHost,
   })
   const proxy = await createSsrfProxy({ allowPrivate: flags.allowPrivate })
-  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-flow-')))
+  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-browser-flow-')))
   const manager = new BrowserManager({
     gate,
     launch: launchFor(flags, proxy.url),

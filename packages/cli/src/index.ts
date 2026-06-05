@@ -7,8 +7,8 @@ import {
   openDb,
   resolveVersion,
   searchDocs,
-} from '@strummer/core'
-import type { Embedder } from '@strummer/embed'
+} from '@sackville/core'
+import type { Embedder } from '@sackville/embed'
 import type DatabaseType from 'better-sqlite3'
 import { runApi } from './api.js'
 import { runBrowser } from './browser.js'
@@ -28,59 +28,59 @@ export interface CliIO {
   env?: Record<string, string | undefined>
 }
 
-const HELP = `strummer — version-pinned documentation search
+const HELP = `sackville — version-pinned documentation search
 
 Usage:
-  strummer search <query…>  [-l <lib>] [--version <v>] [--installed <v>] [-p <dir>] [--ecosystem <e>] [--type <t>] [--limit <n>] [--json]
-  strummer get <id>         [--json]
-  strummer versions <library>
-  strummer detect <project> <library>  [--ecosystem <node|python|ruby>]
+  sackville search <query…>  [-l <lib>] [--version <v>] [--installed <v>] [-p <dir>] [--ecosystem <e>] [--type <t>] [--limit <n>] [--json]
+  sackville get <id>         [--json]
+  sackville versions <library>
+  sackville detect <project> <library>  [--ecosystem <node|python|ruby>]
 
 API testing:
-  strummer api list <dir>                               [--json]
-  strummer api get <dir> <name>                         [--json]
-  strummer api run <dir> <name>                         [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--block-private] [--max-redirects <n>] [--openapi <spec.json>] [--json]
-  strummer api run-collection <dir> <name…>             [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--block-private] [--max-redirects <n>] [--stop-on-failure] [--json]
-  strummer api validate --graphql <schema> --query <q>  [--operation <name>] [--json]
-  strummer api import <postman|insomnia|openapi|har> <source-file> <dest-dir>  [--name <n>]
+  sackville api list <dir>                               [--json]
+  sackville api get <dir> <name>                         [--json]
+  sackville api run <dir> <name>                         [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--block-private] [--max-redirects <n>] [--openapi <spec.json>] [--json]
+  sackville api run-collection <dir> <name…>             [--var k=v…] [--env <e>] [--unsafe] [--allow-host <h>…] [--keyring] [--block-private] [--max-redirects <n>] [--stop-on-failure] [--json]
+  sackville api validate --graphql <schema> --query <q>  [--operation <name>] [--json]
+  sackville api import <postman|insomnia|openapi|har> <source-file> <dest-dir>  [--name <n>]
 
 Browser testing (single-shot; the typed host is auto-allowed):
-  strummer browser snapshot <url>    [--allow-host <h>…] [--allow-private] [--no-sandbox] [--headed] [--engine chromium|firefox|webkit] [--json]
-  strummer browser audit <url>       [same flags]   (exit 1 if any a11y violations)
-  strummer browser screenshot <url>  [--out <file>] [--full-page] [same flags]
-  strummer browser run <flow.bru>    [--var k=v…] [--unsafe] [--allow-host <h>…] [same flags]  (replay a persisted flow; exit 1 on failure)
+  sackville browser snapshot <url>    [--allow-host <h>…] [--allow-private] [--no-sandbox] [--headed] [--engine chromium|firefox|webkit] [--json]
+  sackville browser audit <url>       [same flags]   (exit 1 if any a11y violations)
+  sackville browser screenshot <url>  [--out <file>] [--full-page] [same flags]
+  sackville browser run <flow.bru>    [--var k=v…] [--unsafe] [--allow-host <h>…] [same flags]  (replay a persisted flow; exit 1 on failure)
 
 Mutation testing:
-  strummer mutate summarize <report-file>  [--format stryker|mutmut] [--json]
-  strummer mutate run <project-root>        [--file <f>…] [--incremental] [--allow-run] [--timeout-ms <n>] [--report-path <p>] [--json]  (gated; needs --allow-run)
+  sackville mutate summarize <report-file>  [--format stryker|mutmut] [--json]
+  sackville mutate run <project-root>        [--file <f>…] [--incremental] [--allow-run] [--timeout-ms <n>] [--report-path <p>] [--json]  (gated; needs --allow-run)
 
 Coverage (impact-scoped; exit 1 when a new line is uncovered):
-  strummer coverage uncovered-in-diff --diff <file> --coverage <file>  [--coverage-format istanbul|coveragepy] [--project-root <p>] [--json]
-  strummer coverage run-scoped <project-root>  --changed-file <f>…  [--diff <file>] [--allow-run] [--timeout-ms <n>] [--json]  (gated; needs --allow-run)
+  sackville coverage uncovered-in-diff --diff <file> --coverage <file>  [--coverage-format istanbul|coveragepy] [--project-root <p>] [--json]
+  sackville coverage run-scoped <project-root>  --changed-file <f>…  [--diff <file>] [--allow-run] [--timeout-ms <n>] [--json]  (gated; needs --allow-run)
 
-Flaky-test detection (--db <run-history.db> or STRUMMER_FLAKE_DB):
-  strummer flake status                  [--min-runs <n>] [--limit-per-test <n>] [--since <ISO>] [--json]
-  strummer flake candidates              [--min-flake-score <0..1>] [--min-runs <n>] [--json]
-  strummer flake ingest <report-file>    [--format vitest|pytest] [--at <ISO>] [--project-root <p>] [--run-group <g>] [--json]
-  strummer flake release <testId>
-  strummer flake run <project-root>      [--repeat <n>] [--file <f>…] [--run-group <g>] [--allow-run] [--timeout-ms <n>] [--json]  (gated)
-  strummer flake quarantine <testId>     --reason <r> --expires-at <ISO> [--flake-score <s>] [--allow-quarantine] [--max-expiry-ms <n>] [--json]  (gated write)
+Flaky-test detection (--db <run-history.db> or SACKVILLE_FLAKE_DB):
+  sackville flake status                  [--min-runs <n>] [--limit-per-test <n>] [--since <ISO>] [--json]
+  sackville flake candidates              [--min-flake-score <0..1>] [--min-runs <n>] [--json]
+  sackville flake ingest <report-file>    [--format vitest|pytest] [--at <ISO>] [--project-root <p>] [--run-group <g>] [--json]
+  sackville flake release <testId>
+  sackville flake run <project-root>      [--repeat <n>] [--file <f>…] [--run-group <g>] [--allow-run] [--timeout-ms <n>] [--json]  (gated)
+  sackville flake quarantine <testId>     --reason <r> --expires-at <ISO> [--flake-score <s>] [--allow-quarantine] [--max-expiry-ms <n>] [--json]  (gated write)
 
 Dependency/version intelligence (for the INSTALLED version; exit 1 on a finding):
-  strummer deps audit <project> <package>  [--ecosystem npm|PyPI|RubyGems] [--version <v>] [--osv-db <dir>] [--registry <url>] [--allow-private] [--json]
-  strummer deps audit-project <project>     [--ecosystem <e>] [--skip-dev] [--osv-db <dir>] [--registry <url>] [--allow-private] [--json]
-  strummer deps changelog <package>         (--from <v> | --project <dir>) [--to <v>] [--ecosystem <e>] [--registry <url>] [--json]
+  sackville deps audit <project> <package>  [--ecosystem npm|PyPI|RubyGems] [--version <v>] [--osv-db <dir>] [--registry <url>] [--allow-private] [--json]
+  sackville deps audit-project <project>     [--ecosystem <e>] [--skip-dev] [--osv-db <dir>] [--registry <url>] [--allow-private] [--json]
+  sackville deps changelog <package>         (--from <v> | --project <dir>) [--to <v>] [--ecosystem <e>] [--registry <url>] [--json]
 
-Semantic code navigation (LSP; single-shot; --servers <json> or STRUMMER_LSP_SERVERS binds the server registry):
-  strummer lsp languages                                          [--servers <json>] [--json]
-  strummer lsp definition|type-definition|references|hover <lang> <file> <line> <col>  --project <dir> --allow-run [--servers <json>] [--timeout-ms <n>] [--json]
-  strummer lsp symbols <lang> <file>                              --project <dir> --allow-run [--servers <json>] [--json]
-  strummer lsp call-hierarchy <lang> <file> <line> <col>          --project <dir> --allow-run [--direction incoming|outgoing] [--json]
-  strummer lsp rename <lang> <file> <line> <col> <newName>        --project <dir> --allow-run [--allow-write] [--allow-partial-rename] [--json]  (dry-run unless --allow-write)
+Semantic code navigation (LSP; single-shot; --servers <json> or SACKVILLE_LSP_SERVERS binds the server registry):
+  sackville lsp languages                                          [--servers <json>] [--json]
+  sackville lsp definition|type-definition|references|hover <lang> <file> <line> <col>  --project <dir> --allow-run [--servers <json>] [--timeout-ms <n>] [--json]
+  sackville lsp symbols <lang> <file>                              --project <dir> --allow-run [--servers <json>] [--json]
+  sackville lsp call-hierarchy <lang> <file> <line> <col>          --project <dir> --allow-run [--direction incoming|outgoing] [--json]
+  sackville lsp rename <lang> <file> <line> <col> <newName>        --project <dir> --allow-run [--allow-write] [--allow-partial-rename] [--json]  (dry-run unless --allow-write)
   (exit 2 = server still indexing, retry; a "suspect" rename — an open-files-scoped server's likely-partial edit — is refused for write unless --allow-partial-rename)
 
 Global:
-  -i, --index <file>   index to query (or set STRUMMER_INDEX)
+  -i, --index <file>   index to query (or set SACKVILLE_INDEX)
 `
 
 export async function run(argv: string[], io: CliIO): Promise<number> {
@@ -126,9 +126,9 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
 }
 
 function openIndex(indexFlag: string | undefined, io: CliIO): DatabaseType.Database | null {
-  const path = indexFlag ?? io.env?.STRUMMER_INDEX
+  const path = indexFlag ?? io.env?.SACKVILLE_INDEX
   if (!path) {
-    io.err('no index given: pass --index <file> or set STRUMMER_INDEX\n')
+    io.err('no index given: pass --index <file> or set SACKVILLE_INDEX\n')
     return null
   }
   return openDb(path)
@@ -210,7 +210,7 @@ async function cmdSearch(args: string[], io: CliIO): Promise<number> {
       const sym = r.symbol ? `  (${r.symbol})` : ''
       io.out(`${r.version}  [${r.type ?? '-'}]  ${r.title}${sym}\n`)
       io.out(`    ${r.snippet}\n`)
-      io.out(`    strummer://doc/${r.id}\n`)
+      io.out(`    sackville://doc/${r.id}\n`)
     }
     return 0
   } finally {

@@ -22,7 +22,7 @@ const DIFF = `diff --git a/calc.py b/calc.py
 
 let dir: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-cov-py-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-cov-py-'))
 })
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })

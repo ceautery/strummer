@@ -1,4 +1,4 @@
-export { changedFiles, type DiffFile, parseUnifiedDiff } from '@strummer/diff'
+export { changedFiles, type DiffFile, parseUnifiedDiff } from '@sackville/diff'
 export {
   type CoveragePyFile,
   type CoveragePyReport,

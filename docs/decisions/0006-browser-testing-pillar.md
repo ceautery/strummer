@@ -11,7 +11,7 @@ workflow with adversarial verification
 (`docs/research/2026-05-31-pillar3-browser-testing.md`); the adversarial pass
 refuted one claim and corrected two (folded in below).
 
-The pillar must honor Strummer's prime directives unchanged: agent-first with
+The pillar must honor Sackville's prime directives unchanged: agent-first with
 **token-efficient** structured output and **large artifacts by handle**;
 **version-pinned, not latest**; **deny-by-default** safety that is **operator-set,
 never agent-self-authorized**; secrets resolved only at the transport boundary
@@ -20,18 +20,18 @@ flaky/network-dependent tests.
 
 ## Decisions
 
-### 1. New package `@strummer/browser`, thin on `playwright-core`
+### 1. New package `@sackville/browser`, thin on `playwright-core`
 
 A pure-TS engine (browser/context/page lifecycle, ARIA-snapshot capture, step
 tools, assertions, artifact capture, safety gate, audits) consumed by thin `mcp`
-+ `cli` adapters — mirroring `@strummer/api`. Built directly on **stable
++ `cli` adapters — mirroring `@sackville/api`. Built directly on **stable
 `playwright-core` 1.60.0**. We do **not** wrap or embed `@playwright/mcp` as a
 runtime dependency: `@playwright/mcp@0.0.75` hard-pins an **alpha**
 `playwright-core` (`1.61.0-alpha-…`), inlines large artifacts, and rides a churny
 0.0.x line — all disqualifying. It is used as a **design reference** for the tool
 taxonomy + ARIA-snapshot model, and its Apache-2.0 ARIA serializer may be
 **copied with attribution** (playwright-core's `_snapshotForAI` is private). The
-**safety gate lives in `@strummer/browser`**, so every surface enforces it
+**safety gate lives in `@sackville/browser`**, so every surface enforces it
 identically.
 
 ### 2. Driving model: ARIA-snapshot-first, imperative step tools over ref-ids
@@ -55,7 +55,7 @@ rejected for v1 (scheduled in ROADMAP). On disk, replayable flows are a
 > `page._snapshotForAI()` output. Probing the pinned **`playwright-core` 1.60.0**
 > showed that API does **not exist** there (it's a 1.61-alpha feature — exactly
 > why `@playwright/mcp` pins the alpha), and `locator.ariaSnapshot({ref:true})`
-> emits **no ref-ids** in 1.60.0. So Strummer instead parses the **public, stable
+> emits **no ref-ids** in 1.60.0. So Sackville instead parses the **public, stable
 > `locator.ariaSnapshot()` YAML** and **mints its own ref-ids**, each mapping to a
 > semantic-locator descriptor (`{role, name, nth}`) resolved via
 > `getByRole(role,{name}).nth(nth)`. This keeps us on a stable pinned API (a prime
@@ -67,7 +67,7 @@ rejected for v1 (scheduled in ROADMAP). On disk, replayable flows are a
 
 Capture trace.zip (`tracing.start{screenshots,snapshots,sources}`→`stop`),
 optional video (webm), HAR, and our own console/network logs to a per-run temp
-dir; register each as `strummer://browser/run/<id>/<kind>` in an **on-disk-backed
+dir; register each as `sackville://browser/run/<id>/<kind>` in an **on-disk-backed
 `ArtifactStore`** (`{path, contentType, byteSize, sha256}`) — the binary-artifact
 extension of the API pillar's in-memory handle store. Tool results return only
 structured summaries (counts, sizes, top errors, action list, pass/fail) +
@@ -102,7 +102,7 @@ allowlisting alone is bypassable by DNS rebinding. Therefore: **Tier-1** a
 unconditionally aborts private/link-local/metadata literals (169.254.169.254,
 169.254/16, 127/8, 10/8, 172.16/12, 192.168/16, ::1, fc00::/7, fe80::/10,
 0.0.0.0, metadata.google.internal); **Tier-2** launch Chromium through
-Strummer's own loopback forward proxy (`proxy:{server}`) that re-resolves +
+Sackville's own loopback forward proxy (`proxy:{server}`) that re-resolves +
 **pins** the resolved IP, rejects blocked ranges, and re-checks on each redirect
 — reusing the shared range classifier. WebRTC/QUIC can bypass an HTTP proxy, so
 the hardened profile disables WebRTC (scheduled).
@@ -114,10 +114,10 @@ the hardened profile disables WebRTC (scheduled).
 > allowlisted), and making the block unconditional would break the **primary
 > localhost-testing use case** — an operator deliberately allowlisting
 > `127.0.0.1` to test a local app. The IP-range classifier (`isBlockedIp`/
-> `isBlockedHost`/`resolveAndPin` in `@strummer/safety`) therefore belongs to
+> `isBlockedHost`/`resolveAndPin` in `@sackville/safety`) therefore belongs to
 > **Tier-2** (connection-time, where the resolved IP is visible and
 > allowlisted-hostname DNS-rebinding is the real threat). The shared SSRF
-> classifier + the `Redactor` now live in **`@strummer/safety`**, consumed by
+> classifier + the `Redactor` now live in **`@sackville/safety`**, consumed by
 > both pillars. Implemented: `packages/safety/src/ssrf.ts`,
 > `packages/browser/src/routes.ts` (Tier-1).
 
@@ -141,7 +141,7 @@ the hardened profile disables WebRTC (scheduled).
 > **Update (2026-06-01) — MCP surface + server bin (grounded by the
 > `browser-mcp-design` fan-out: 3 designs → 2 adversarial critics → synthesis).**
 > Shipped **MCP-only** (human CLI deferred): `registerBrowserTools`/
-> `createBrowserServer` (`packages/mcp/src/browser.ts`) + the `strummer-browser-mcp`
+> `createBrowserServer` (`packages/mcp/src/browser.ts`) + the `sackville-browser-mcp`
 > bin (`bin-browser.ts`). Load-bearing decisions and adversarial corrections:
 > - **Loopback proxy-bypass gap (real).** Chromium bypasses `proxy.server` for
 >   loopback literals (documented in `proxy.test.ts`), so an operator allowlisting
@@ -167,7 +167,7 @@ the hardened profile disables WebRTC (scheduled).
 >   never agent input**; reaper reconciliation via a new `BrowserManager.onReap`
 >   hook (flush the recorder before `context.close`) + `hasSession` eviction (a
 >   reaped session is refused, never silently re-created).
-> - **Namespaced `STRUMMER_BROWSER_*` operator env with NO fallback** to the api
+> - **Namespaced `SACKVILLE_BROWSER_*` operator env with NO fallback** to the api
 >   pillar's unprefixed vars, so unlocking API writes never unlocks browser
 >   mutations. Trace capture is **off by default** (unredacted binary); sandbox is
 >   **on by default** (`--no-sandbox` is an explicit operator opt-in).
@@ -189,15 +189,15 @@ only, by handle, scrubbed from traces.
 > **Update (2026-06-01) — secret boundary implemented.** All of §6 now ships:
 > - **`{{secret:NAME}}` fill resolution** at the surface (`browser_fill`/
 >   `browser_fill_form`), just before `locator.fill()`; **fail-closed** on an
->   unknown name; bin-wired from `STRUMMER_BROWSER_SECRET_*` (same map as the
+>   unknown name; bin-wired from `SACKVILLE_BROWSER_SECRET_*` (same map as the
 >   redactor). Cleartext is typed into the input and scrubbed from every output.
 > - **Origin-scoped `httpCredentials`** applied per context by `BrowserManager`
 >   (`browser.newContext({ httpCredentials })`), bin-parsed from
->   `STRUMMER_BROWSER_HTTP_USERNAME/PASSWORD/ORIGIN` (built only when both
+>   `SACKVILLE_BROWSER_HTTP_USERNAME/PASSWORD/ORIGIN` (built only when both
 >   username+password are set); the password is registered with the redactor and
 >   kept out of the returned config.
 > - **`storageState` by handle**: operator-gated `browser_save_storage_state`
->   (`STRUMMER_BROWSER_ALLOW_STORAGE_STATE`, default off) writes the
+>   (`SACKVILLE_BROWSER_ALLOW_STORAGE_STATE`, default off) writes the
 >   password-equivalent state to an operator-path artifact and returns a **handle +
 >   cookie/origin counts only** — never inlined; the run-artifact resource
 >   **refuses** to serve the `storage-state` kind to the agent.
@@ -212,10 +212,10 @@ only, by handle, scrubbed from traces.
 > close and scrubs every text entry (the `.har` JSON + persisted text bodies,
 > fflate) before it is stored by handle / surfaced. HAR carries full
 > headers/query/bodies (only *registered* secrets are redacted), so capture stays
-> operator-gated **off** by default (`STRUMMER_BROWSER_HAR_DIR`), like the trace.
+> operator-gated **off** by default (`SACKVILLE_BROWSER_HAR_DIR`), like the trace.
 > HAR **replay** (`page.routeFromHAR`, notFound:'abort') gives deterministic
 > offline runs with zero egress, gated behind an operator replay dir
-> (`STRUMMER_BROWSER_REPLAY_HAR_DIR`). Mechanically, finalize hangs off a new
+> (`SACKVILLE_BROWSER_REPLAY_HAR_DIR`). Mechanically, finalize hangs off a new
 > `BrowserManager.onClosed` hook (fires after `context.close()` — the mirror of
 > `onReap`, since the HAR only exists post-close), so the explicit close, the
 > idle reaper, and shutdown all finalize, never leaving an unredacted HAR on disk.
@@ -234,7 +234,7 @@ upload-allowlist dir (airtight, unit-tested path validation). Container default:
 **keep the Chromium sandbox** (seccomp + dropped caps + read-only FS + non-root);
 `--no-sandbox` is an operator-gated fallback (residual renderer-RCE risk recorded
 here, compensated by the SSRF proxy + FS confinement). Capture levels are
-operator-set (`STRUMMER_BROWSER_ARTIFACTS=trace,console,network` default;
+operator-set (`SACKVILLE_BROWSER_ARTIFACTS=trace,console,network` default;
 `+video`/`+fullpage`/`+har-bodies` must be unlocked); agents may request a level
 but cannot self-authorize heavier/PII-risky capture.
 
@@ -256,7 +256,7 @@ shape/thresholds, never exact perf scores** (run-to-run variable).
 ### 9. Persisted browser flows: literal `.bru` + sidecar, semantic-locator steps (update 2026-06-01)
 
 Replayable flows mirror ADR 0004's API-pillar split: a Bruno-openable `<name>.bru`
-(its `meta.name`) + a colocated `<name>.strummer.yml` sidecar holding the ordered
+(its `meta.name`) + a colocated `<name>.sackville.yml` sidecar holding the ordered
 `steps`. Bruno's `.bru` grammar is HTTP-request-shaped and can't represent a
 click/fill sequence, so the `.bru` stays a minimal (inert-to-Bruno) container and
 the sidecar carries the real content — a deliberate "honor the format + sidecar
@@ -268,13 +268,13 @@ stable across runs and snapshot-cap-independent. `runFlow` reuses the live engin
 wholesale: the same mutation gate (dry-run vs execute), the same redactor, and
 `{{var}}`/`{{secret:NAME}}` resolution as the API pillar (assert *expected* values
 get `{{var}}` only — never secrets — so a cleartext expected can't leak). Primary
-surface is the human/CI `strummer browser run`; an MCP `browser_run_flow` tool is a
+surface is the human/CI `sackville browser run`; an MCP `browser_run_flow` tool is a
 scheduled follow-up.
 
 ### Cross-pillar refactor
 
 Lift the SSRF/private-IP range classifier (`ipaddr.js`) and the secret-resolution
-+ redaction boundary out of `@strummer/api` into a shared **`@strummer/safety`**
++ redaction boundary out of `@sackville/api` into a shared **`@sackville/safety`**
 module consumed by both pillars, so one allow/deny + redaction policy governs
 `api` and `browser`.
 
@@ -296,7 +296,7 @@ artifacts, `--no-sandbox` by default, HAR `content:'embed'`.
 The a11y-audit summarizer against an in-process `node:http` fixture (one `<img>`
 missing `alt`): launch headless chromium → `AxeBuilder({page}).analyze()` →
 assert `summarize()` returns `violationCount>=1` + the `image-alt` rule bucketed
-by impact + the full Results addressable by a `strummer://browser/run/<id>/a11y`
+by impact + the full Results addressable by a `sackville://browser/run/<id>/a11y`
 handle. No pixels, no perf, no network — deterministic and offline. Exercises
 every architectural seam (browser launch, fixture server, audit, token-efficient
 summary, on-disk handle store) at minimum size. Visual baselines and Lighthouse

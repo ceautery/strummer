@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { FileCoverage, TestRunner } from '@strummer/coverage'
+import type { FileCoverage, TestRunner } from '@sackville/coverage'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runCoverage } from './coverage.js'
 import { run } from './index.js'
@@ -40,7 +40,7 @@ const istanbul = (path: string): Record<string, FileCoverage> => ({
 
 let dir: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-cli-cov-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-cli-cov-'))
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -50,7 +50,7 @@ function diffFile(): string {
   return p
 }
 
-describe('strummer coverage CLI', () => {
+describe('sackville coverage CLI', () => {
   it('uncovered-in-diff surfaces the executable-but-unhit new line and exits 1', async () => {
     const cov = join(dir, 'coverage-final.json')
     writeFileSync(cov, JSON.stringify(istanbul('/repo/src/math.ts')))

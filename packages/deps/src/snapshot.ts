@@ -1,7 +1,7 @@
 /**
  * OSV snapshot loading — read an operator-provisioned on-disk OSV database and parse
  * it into advisories that `matchVulnerabilities` can evaluate. This is the offline
- * data seam: the operator provisions the snapshot out-of-band, and Strummer queries
+ * data seam: the operator provisions the snapshot out-of-band, and Sackville queries
  * it with **zero network** (network fetching of `all.zip` is a separate, operator-
  * gated slice).
  *

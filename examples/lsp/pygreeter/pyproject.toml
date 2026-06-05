@@ -1,7 +1,7 @@
 [project]
-name = "strummer-examples-lsp-pygreeter"
+name = "sackville-examples-lsp-pygreeter"
 version = "0.0.0"
-description = "A tiny Python project for the strummer lsp quickstart"
+description = "A tiny Python project for the sackville lsp quickstart"
 requires-python = ">=3.9"
 
 # pyright reads this section for its analysis roots; the defaults are fine for a

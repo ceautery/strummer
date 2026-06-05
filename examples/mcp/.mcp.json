@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "strummer": {
+    "sackville": {
       "command": "npx",
-      "args": ["-y", "@strummer/mcp"],
+      "args": ["-y", "sackville"],
       "env": {
-        "STRUMMER_TOOLSETS": "api,deps,verify",
-        "STRUMMER_API_ALLOWED_HOSTS": "api.example.com",
-        "STRUMMER_DEPS_OSV_DB_DIR": "/abs/path/to/osv-snapshot"
+        "SACKVILLE_TOOLSETS": "api,deps,verify",
+        "SACKVILLE_API_ALLOWED_HOSTS": "api.example.com",
+        "SACKVILLE_DEPS_OSV_DB_DIR": "/abs/path/to/osv-snapshot"
       }
     }
   }

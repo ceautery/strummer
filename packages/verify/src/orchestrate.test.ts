@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { DependencyAudit } from '@strummer/deps'
+import type { DependencyAudit } from '@sackville/deps'
 import { describe, expect, it, vi } from 'vitest'
 import { gateDenied, isGateDenial } from './gate.js'
 import { orchestrate } from './orchestrate.js'
@@ -99,13 +99,13 @@ describe('orchestrate — drives requested pillars + folds via the from* adapter
 
   it('a pillar that throws becomes an errored, REDACTED no-signal contributor — never sinks the run', async () => {
     const redact = (s: string) =>
-      s.replace('/tmp/strummer-cov-x9/coverage-final.json', '‹redacted›')
+      s.replace('/tmp/sackville-cov-x9/coverage-final.json', '‹redacted›')
     const { verdict } = await orchestrate(
       {
         coverage: {
           run: async () => {
             throw new Error(
-              'scoped run did not produce a coverage report at /tmp/strummer-cov-x9/coverage-final.json',
+              'scoped run did not produce a coverage report at /tmp/sackville-cov-x9/coverage-final.json',
             )
           },
         },
@@ -117,7 +117,7 @@ describe('orchestrate — drives requested pillars + folds via the from* adapter
     expect(coverage?.status).toBe('no-signal')
     expect(coverage?.errorReason).toBe('scoped run did not produce a coverage report at ‹redacted›')
     // the leaked temp path must appear NOWHERE in the verdict (inline)
-    expect(JSON.stringify(verdict)).not.toContain('/tmp/strummer-cov-x9')
+    expect(JSON.stringify(verdict)).not.toContain('/tmp/sackville-cov-x9')
     // the sibling deps pillar still ran and folded; absence ⇒ inconclusive, never pass
     expect(verdict.pillars.find((p) => p.pillar === 'deps')?.status).toBe('pass')
     expect(verdict.status).toBe('inconclusive')
@@ -211,14 +211,14 @@ describe('orchestrate — gate composition: compose, never widen (slice 3)', () 
 })
 
 describe('orchestrate — imports zero spawn-capable engine code (slice 2)', () => {
-  it('every @strummer engine import is type-only; no runner/store/native module is reachable', () => {
+  it('every @sackville engine import is type-only; no runner/store/native module is reachable', () => {
     const ENGINES = [
-      '@strummer/api',
-      '@strummer/coverage',
-      '@strummer/deps',
-      '@strummer/flake',
-      '@strummer/mutate',
-      '@strummer/browser',
+      '@sackville/api',
+      '@sackville/coverage',
+      '@sackville/deps',
+      '@sackville/flake',
+      '@sackville/mutate',
+      '@sackville/browser',
     ]
     for (const file of sourceFiles()) {
       const text = readFileSync(join(SRC_DIR, file), 'utf8')

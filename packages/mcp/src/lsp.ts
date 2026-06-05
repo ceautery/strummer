@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ArtifactStore } from '@strummer/artifacts'
+import type { ArtifactStore } from '@sackville/artifacts'
 import type {
   LspQueryInput,
   LspQueryKind,
@@ -8,11 +8,11 @@ import type {
   LspRenameResult,
   ServerDescription,
   ServerRegistry,
-} from '@strummer/lsp'
+} from '@sackville/lsp'
 import { z } from 'zod'
 
 /**
- * The `@strummer/lsp` MCP surface (ADR 0011, slice 5) — pure wiring over an injected gated
+ * The `@sackville/lsp` MCP surface (ADR 0011, slice 5) — pure wiring over an injected gated
  * query engine + the manager's `describe`. There is **no free-read tier**: every navigation
  * answer requires a live, code-executing, indexing daemon, so `lsp_find_definition`/
  * `lsp_find_references`/`lsp_hover` are registered **as a group** only when the operator set
@@ -20,7 +20,7 @@ import { z } from 'zod'
  * always-on, no-spawn tool is `lsp_languages` (reports the bound languages and, once a server
  * has initialized in-session, its capabilities + `serverInfo.version` — **never** the
  * command/path). Large reference lists return a compact head inline + the full list by handle
- * via `@strummer/artifacts` (`strummer://lsp/{id}/{kind}`, registered only when a store is set).
+ * via `@sackville/artifacts` (`sackville://lsp/{id}/{kind}`, registered only when a store is set).
  */
 
 /** Detects the project's toolchain version for a language (the bin wires `core.detectInstalledVersion`). */
@@ -52,7 +52,7 @@ export interface LspToolsOptions {
   detectToolchain?: ToolchainDetector
 }
 
-const INSTRUCTIONS = `Strummer drives a real Language Server as a subprocess for semantic code
+const INSTRUCTIONS = `Sackville drives a real Language Server as a subprocess for semantic code
 navigation. \`lsp_languages\` (always available, no spawn) reports which languages the operator
 bound a server for, plus — once a server is running — its advertised capabilities and version.
 
@@ -601,7 +601,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
     const store = opts.artifacts
     server.registerResource(
       'lsp-artifact',
-      new ResourceTemplate('strummer://lsp/{id}/{kind}', { list: undefined }),
+      new ResourceTemplate('sackville://lsp/{id}/{kind}', { list: undefined }),
       {
         title: 'LSP artifact',
         description: 'A stored LSP artifact (a full reference/location list) by handle',
@@ -609,7 +609,7 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
       },
       (uri, variables) => {
         const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
-        const handle = `strummer://lsp/${pick(variables.id)}/${pick(variables.kind)}`
+        const handle = `sackville://lsp/${pick(variables.id)}/${pick(variables.kind)}`
         const artifact = store.get(handle)
         if (!artifact) {
           throw new Error(`No stored LSP artifact for ${handle}`)
@@ -624,10 +624,10 @@ export function registerLspTools(server: McpServer, opts: LspToolsOptions = {}):
   }
 }
 
-/** Build a standalone Strummer LSP MCP server over an injected query engine + describe. */
+/** Build a standalone Sackville LSP MCP server over an injected query engine + describe. */
 export function createLspServer(opts: LspToolsOptions = {}): McpServer {
   const server = new McpServer(
-    { name: 'strummer-lsp', version: '0.0.0' },
+    { name: 'sackville-lsp', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerLspTools(server, opts)

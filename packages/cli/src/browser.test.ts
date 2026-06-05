@@ -26,7 +26,7 @@ function capture() {
   }
 }
 
-describe('strummer browser CLI (real headless chromium)', () => {
+describe('sackville browser CLI (real headless chromium)', () => {
   let server: Server
   let baseUrl: string
   // 127.0.0.1 is loopback → needs --allow-private for the SSRF proxy to reach it.
@@ -82,7 +82,7 @@ describe('strummer browser CLI (real headless chromium)', () => {
   })
 
   it('screenshot writes a PNG to --out', async () => {
-    const out = join(mkdtempSync(join(tmpdir(), 'strummer-cli-shot-')), 'page.png')
+    const out = join(mkdtempSync(join(tmpdir(), 'sackville-cli-shot-')), 'page.png')
     const c = capture()
     const code = await run(['browser', 'screenshot', baseUrl, '--out', out, ...SAFE], c.io)
     expect(code).toBe(0)

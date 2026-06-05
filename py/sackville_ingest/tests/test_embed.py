@@ -17,13 +17,13 @@ import pytest
 def test_import_does_not_pull_in_fastembed() -> None:
     # Drop any cached import so the assertion is meaningful.
     sys.modules.pop("fastembed", None)
-    sys.modules.pop("strummer_ingest.embed", None)
-    importlib.import_module("strummer_ingest.embed")
+    sys.modules.pop("sackville_ingest.embed", None)
+    importlib.import_module("sackville_ingest.embed")
     assert "fastembed" not in sys.modules
 
 
 def test_fake_embedder_is_deterministic() -> None:
-    from strummer_ingest.embed import FakeEmbedder
+    from sackville_ingest.embed import FakeEmbedder
 
     emb = FakeEmbedder()
     assert emb.dim == 384
@@ -39,7 +39,7 @@ def test_fake_embedder_is_deterministic() -> None:
 
 
 def test_fake_embedder_custom_dim() -> None:
-    from strummer_ingest.embed import FakeEmbedder
+    from sackville_ingest.embed import FakeEmbedder
 
     emb = FakeEmbedder(dim=16)
     assert emb.dim == 16
@@ -48,26 +48,26 @@ def test_fake_embedder_custom_dim() -> None:
 
 
 def test_fake_embedder_empty_input() -> None:
-    from strummer_ingest.embed import FakeEmbedder
+    from sackville_ingest.embed import FakeEmbedder
 
     assert FakeEmbedder().embed([]) == []
 
 
 def test_schema_to_fastembed_mapping() -> None:
-    from strummer_ingest.embed import SCHEMA_TO_FASTEMBED
+    from sackville_ingest.embed import SCHEMA_TO_FASTEMBED
 
     assert SCHEMA_TO_FASTEMBED["bge-small-en-v1.5"] == "BAAI/bge-small-en-v1.5"
 
 
 def test_fake_embedder_satisfies_protocol() -> None:
-    from strummer_ingest.embed import Embedder, FakeEmbedder
+    from sackville_ingest.embed import Embedder, FakeEmbedder
 
     emb: Embedder = FakeEmbedder()
     assert emb.dim == 384
 
 
 def test_fastembed_constructs_lazily_without_download() -> None:
-    from strummer_ingest.embed import FastEmbedEmbedder
+    from sackville_ingest.embed import FastEmbedEmbedder
 
     sys.modules.pop("fastembed", None)
     # Construction must not import fastembed or download a model.
@@ -78,11 +78,11 @@ def test_fastembed_constructs_lazily_without_download() -> None:
 
 
 @pytest.mark.skipif(
-    not os.environ.get("STRUMMER_RUN_EMBED_TESTS"),
-    reason="real fastembed model download is slow; set STRUMMER_RUN_EMBED_TESTS to run",
+    not os.environ.get("SACKVILLE_RUN_EMBED_TESTS"),
+    reason="real fastembed model download is slow; set SACKVILLE_RUN_EMBED_TESTS to run",
 )
 def test_fastembed_real_embedding() -> None:
-    from strummer_ingest.embed import FastEmbedEmbedder
+    from sackville_ingest.embed import FastEmbedEmbedder
 
     emb = FastEmbedEmbedder()
     vecs = emb.embed(["hello world"])

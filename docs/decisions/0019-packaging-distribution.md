@@ -11,16 +11,16 @@
 
 ## Context
 
-Strummer is feature-complete across 5 phases but is shaped like a **monorepo, not a product**.
+Sackville is feature-complete across 5 phases but is shaped like a **monorepo, not a product**.
 Two concrete gaps block adoption:
 
 1. **Server fragmentation.** An agent wanting the full toolkit must wire up **nine separate
-   stdio MCP bins** (`strummer-mcp` = docs, plus `bin-api`/`-browser`/`-coverage`/`-deps`/
-   `-flake`/`-lsp`/`-mutate`/`-verify`), each its own process with its own `STRUMMER_<PILLAR>_*`
+   stdio MCP bins** (`sackville-mcp` = docs, plus `bin-api`/`-browser`/`-coverage`/`-deps`/
+   `-flake`/`-lsp`/`-mutate`/`-verify`), each its own process with its own `SACKVILLE_<PILLAR>_*`
    env namespace and its own gate. There is no single server that exposes the whole toolkit.
-2. **Nothing is publishable.** Every `@strummer/*` package is `"private": true` at
-   `"version": "0.0.0"`. The bare `strummer` npm name is taken, so packages ship under
-   `@strummer/*`.
+2. **Nothing is publishable.** Every `@sackville/*` package is `"private": true` at
+   `"version": "0.0.0"`. The bare `sackville` npm name is taken, so packages ship under
+   `@sackville/*`.
 
 Ground truth established by the fan-out (verified in-repo):
 
@@ -31,21 +31,21 @@ Ground truth established by the fan-out (verified in-repo):
 - **No tool-name or resource collisions today:** ~60 tool names are globally unique (pillar
   prefixes `browser_`/`lsp_`/`flake_`/`mutate_`/`audit_`/`validate_` act as de-facto
   namespaces; only the docs/api tools are unprefixed); resource templates use distinct
-  `strummer://<prefix>/` paths. **SDK 1.29 `registerTool`/resource registration THROWS hard on
+  `sackville://<prefix>/` paths. **SDK 1.29 `registerTool`/resource registration THROWS hard on
   a dup** — so a uniqueness guard is mandatory to keep a future pillar from silently shadowing.
 - **Conditional, gate-driven tool registration already exists** per pillar (coverage registers
   `run_scoped` only when `allowRun && allowedRoots.length`; flake/api/lsp/verify gate their
   run/write tools). Selective enablement is therefore *partly intrinsic*.
-- **Lazy-load precedent already ships:** `bin-verify` does `await import('@strummer/browser')`
+- **Lazy-load precedent already ships:** `bin-verify` does `await import('@sackville/browser')`
   only on the produce-capture path, so consume-only operators never load playwright-core.
 - **tsdown externalizes** all deps (built `.mjs` keeps bare `import` statements). So a STATIC
   top-level import of a heavy engine runs its module-init at process start; a dynamic
   `await import()` defers it. **But deferral is RUNTIME-only — it does not stop `npm install`
   from pulling the dependency.** Install isolation requires a *package-graph* change.
 - **Native/heavy install closure** flows through exactly four engine packages:
-  `@strummer/browser` (`playwright-core`, `lighthouse`, `chrome-launcher`, `pixelmatch`,
-  `pngjs`), `@strummer/core` (`better-sqlite3`, docs), `@strummer/embed` (`onnxruntime` via
-  transformers.js, docs), `@strummer/flake` (`better-sqlite3`). **`@strummer/mcp` carries a
+  `@sackville/browser` (`playwright-core`, `lighthouse`, `chrome-launcher`, `pixelmatch`,
+  `pngjs`), `@sackville/core` (`better-sqlite3`, docs), `@sackville/embed` (`onnxruntime` via
+  transformers.js, docs), `@sackville/flake` (`better-sqlite3`). **`sackville` carries a
   redundant direct `playwright-core` dep** (only `browser` needs it). The light pillars
   (api/deps/coverage/mutate/lsp/verify + the pure leaves) pull no native binary at install.
 
@@ -54,10 +54,10 @@ Ground truth established by the fan-out (verified in-repo):
 ### A. Aggregate MCP server
 
 1. **Compose onto ONE `McpServer` via `register<X>Tools(server, opts)`.** The aggregate builds
-   one server `{ name: 'strummer', version }`, and for each ENABLED pillar derives its opts from
+   one server `{ name: 'sackville', version }`, and for each ENABLED pillar derives its opts from
    env and registers its tools onto that server. (Closes the "barrel" blocker — see A4.)
-2. **`strummer-mcp` is REPOINTED to the aggregate** (ratified fork). The current docs-only
-   server moves to a new bin name (`strummer-docs-mcp`); `strummer-mcp` now serves the whole
+2. **`sackville-mcp` is REPOINTED to the aggregate** (ratified fork). The current docs-only
+   server moves to a new bin name (`sackville-docs-mcp`); `sackville-mcp` now serves the whole
    enabled toolset. README/configs that meant docs-only are updated in the onboarding slice.
    The other 8 per-pillar bins are **kept untouched** alongside (rule 4: they are the minimal
    runtime-capability boundary for narrow deployments).
@@ -67,7 +67,7 @@ Ground truth established by the fan-out (verified in-repo):
    db+embedder) and their **shutdown** handles. `build<X>ServerFromEnv` becomes
    `register<X>Tools(new McpServer(...), <pillar>OptionsFromEnv(env))` — behaviour-preserving;
    the standalone bins are the regression guard.
-4. **Extract `createStrummerServer` (docs) to `./docs.js`** so `index.ts` is *pure re-exports
+4. **Extract `createSackvilleServer` (docs) to `./docs.js`** so `index.ts` is *pure re-exports
    with no bin-importable side effects*. `bin.ts` (docs) currently imports the barrel; the
    barrel statically re-exports every pillar, so importing it would defeat lazy loading. A test
    asserts no `bin*.ts` imports `./index.js`.
@@ -77,40 +77,40 @@ Ground truth established by the fan-out (verified in-repo):
 
 ### B. Package split for install isolation (ratified fork: "split now")
 
-6. **The four heavy engines become OPTIONAL PEER dependencies of `@strummer/mcp`** (and likewise
-   reconsidered for `@strummer/cli`): `@strummer/browser`, `@strummer/core`, `@strummer/embed`,
-   `@strummer/flake` move from `dependencies` to `peerDependencies` +
+6. **The four heavy engines become OPTIONAL PEER dependencies of `sackville`** (and likewise
+   reconsidered for `@sackville/cli`): `@sackville/browser`, `@sackville/core`, `@sackville/embed`,
+   `@sackville/flake` move from `dependencies` to `peerDependencies` +
    `peerDependenciesMeta: { optional: true }`. **Drop mcp's redundant direct `playwright-core`.**
    The aggregate **dynamically `import()`s** each engine only when its pillar is enabled.
 7. **Missing optional engine ⇒ LOUD DISABLE; contradictory gate ⇒ FATAL.** A pillar whose
    engine package is not installed (the dynamic import throws `ERR_MODULE_NOT_FOUND`) is
-   disabled with a clear diagnostic ("pillar X disabled: install `@strummer/core`"), the server
+   disabled with a clear diagnostic ("pillar X disabled: install `@sackville/core`"), the server
    still starts. A pillar whose *gate* is internally contradictory (e.g. LSP `ALLOW_WRITE`
    without `ALLOW_RUN`, which the engine throws on) is **fatal to the whole aggregate** — these
    throws are anti-widening guards; swallowing them would be fail-open.
-8. **Consequence for the default set:** a bare `npm i @strummer/mcp` (no heavy peers) is
+8. **Consequence for the default set:** a bare `npm i sackville` (no heavy peers) is
    **fully native-free**, so the *effective* zero-extra-install default is **api+deps+verify**.
-   **docs** (needs `@strummer/core`+`@strummer/embed` *and* an operator-provided index) and
+   **docs** (needs `@sackville/core`+`@sackville/embed` *and* an operator-provided index) and
    **flake**/**browser** loud-disable until their engine is installed. The ratified
    **curated read-heavy default (docs+api+deps+verify)** therefore holds *in intent* — docs
    joins the default the moment its engine + index are present.
 
 ### C. Gate / env composition — "compose, never widen"
 
-9. **Keep the existing `STRUMMER_<PILLAR>_*` namespace, read unchanged by one process** — it is
+9. **Keep the existing `SACKVILLE_<PILLAR>_*` namespace, read unchanged by one process** — it is
    already collision-free. No rename of working per-pillar vars.
 10. **Close the bare-name widening hole (critic blocker).** `api` AND `verify` both read the
-    *unprefixed* `STRUMMER_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/`_BLOCK_PRIVATE`/`_KEYRING` (verify
+    *unprefixed* `SACKVILLE_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/`_BLOCK_PRIVATE`/`_KEYRING` (verify
     via its live-capture path). In one process a single bare flag would unlock **both**. In
     **aggregate mode** both `apiOptionsFromEnv` and `verifyOptionsFromEnv` read **prefixed**
-    `STRUMMER_API_*` (+ `STRUMMER_API_SECRET_*`); bare names are ignored. **Standalone bins are
+    `SACKVILLE_API_*` (+ `SACKVILLE_API_SECRET_*`); bare names are ignored. **Standalone bins are
     unchanged.** Redaction unions all resolved secrets.
-11. **`STRUMMER_TOOLSETS` is SUBTRACTIVE selection only — it never grants a capability.** It
+11. **`SACKVILLE_TOOLSETS` is SUBTRACTIVE selection only — it never grants a capability.** It
     chooses which enabled pillars *register*; each pillar still reads its own gate for whether
     its run/write tools appear. Selection ⊥ capability. Unset ⇒ the curated default (B8).
     Per-pillar `instructions` strings are assembled only for enabled pillars (avoids the
     ~60-tool / 9-instruction-block bloat the critic flagged).
-12. **One `STRUMMER_ARTIFACTS_ROOT`, per-pillar subtree + retention** (ADR 0017 unchanged):
+12. **One `SACKVILLE_ARTIFACTS_ROOT`, per-pillar subtree + retention** (ADR 0017 unchanged):
     sweeps stay prefix-scoped; the browser `mkdtemp` ephemeral default is preserved when unset.
 13. **Lifecycle:** the aggregate collects and runs **every** pillar's shutdown/reaper on
     SIGINT/SIGTERM (browser proxy, lsp manager, sqlite db, embedder, artifact sweep timers).
@@ -123,7 +123,7 @@ Ground truth established by the fan-out (verified in-repo):
     `access: public`, `baseBranch: main`. mcp/cli/verdict/verify are tightly coupled; one
     version → no internal compatibility matrix (pure leaves take no-op bumps; accepted).
 15. **Publishability prerequisites (critic blocker):** remove `private: true`; add
-    `repository: { type: 'git', url: 'git+https://github.com/ceautery/strummer.git',
+    `repository: { type: 'git', url: 'git+https://github.com/ceautery/sackville.git',
     directory: 'packages/<name>' }` **case-exact** (absent ⇒ provenance no-ops);
     `publishConfig: { access: 'public', provenance: true }`. **Topological `pnpm -r build`
     before publish** (the gate has no build step).
@@ -141,8 +141,8 @@ Ground truth established by the fan-out (verified in-repo):
     `NODE_AUTH_TOKEN`**, provenance auto-attached (do **not** also set `provenance:true` in a way
     that double-sets — reconcile with §15), green gate first. Trusted publishing fails silently
     otherwise.
-19. **`@strummer/cli` exposes a `strummer` bin**; a scoped package can provide an unscoped bin.
-    Add a **default bin** so `npx @strummer/mcp` resolves, plus document `npx -p`. No CLI feature
+19. **`@sackville/cli` exposes a `sackville` bin**; a scoped package can provide an unscoped bin.
+    Add a **default bin** so `npx sackville` resolves, plus document `npx -p`. No CLI feature
     work — the CLI is already unified; only onboarding docs.
 
 ### E. Distribution / onboarding
@@ -158,7 +158,7 @@ Ground truth established by the fan-out (verified in-repo):
 | Fork | Decision |
 | --- | --- |
 | Default pillar set (TOOLSETS unset) | **Curated read-heavy** (docs+api+deps+verify; effective api+deps+verify until docs engine+index present — §B8) |
-| Aggregate bin name | **Repoint `strummer-mcp`** → aggregate; docs-only becomes `strummer-docs-mcp` |
+| Aggregate bin name | **Repoint `sackville-mcp`** → aggregate; docs-only becomes `sackville-docs-mcp` |
 | Package shape | **Split now** — heavy engines as optional peer-deps + dynamic import (§B) |
 | Versioning | **Fixed / lockstep** via Changesets (§D14) |
 
@@ -175,15 +175,15 @@ transitive graph** (forced — tsdown externalizes `workspace:*`); **add a defau
    *Test:* exit 0, no masquerading types — reds for the flat shape.
 3. **Tool/resource uniqueness guard** (pure). Enumerate all names+templates incl. docs.js.
    *Test:* register all pillars, assert no dup; red via injected dup, green for real.
-4. **Extract `docs.js`** (refactor). Move `createStrummerServer` out of `index.ts`; repoint
+4. **Extract `docs.js`** (refactor). Move `createSackvilleServer` out of `index.ts`; repoint
    `bin.ts`. *Test:* `bin.ts` no `./index.js` import; scan finds zero barrel-from-bin refs.
 5. **Extract `<pillar>OptionsFromEnv`** (refactor). Factor env→opts(+resources+shutdown);
    preserve the LSP/flake anti-widening throws. *Test:* each `optsFromEnv` equals the prior
    `build*FromEnv` behaviour (coverage `allowRun`; LSP WRITE-no-RUN + DESTRUCTIVE-no-WRITE throw).
-6. **API+VERIFY gate prefixing** (anti-widening). aggregate mode: both read `STRUMMER_API_*`;
-   bare ignored; standalone unchanged. *Test:* api+verify enabled + bare `STRUMMER_ALLOW_UNSAFE=1`
+6. **API+VERIFY gate prefixing** (anti-widening). aggregate mode: both read `SACKVILLE_API_*`;
+   bare ignored; standalone unchanged. *Test:* api+verify enabled + bare `SACKVILLE_ALLOW_UNSAFE=1`
    sets `allowUnsafe` on NEITHER; bare `SECRET_FOO` doesn't resolve; standalone still honors bare.
-7. **Subtractive selection + default** (pure). Parse `STRUMMER_TOOLSETS`; assemble enabled-only
+7. **Subtractive selection + default** (pure). Parse `SACKVILLE_TOOLSETS`; assemble enabled-only
    instructions. *Test:* `TOOLSETS=api` → api read-tier only (run needs its gate); unset →
    curated default; instructions enabled-only.
 8. **Aggregate composition over `InMemoryTransport`** (pure). enabled+env → dynamic-import →
@@ -196,7 +196,7 @@ transitive graph** (forced — tsdown externalizes `workspace:*`); **add a defau
     entry `await import()`s per pillar. *Test:* grep emitted `.mjs` — for `{api,deps}` and for
     verify-on/browser+flake+docs-off, playwright/sqlite/onnx/transformers are NOT in the static
     prelude (only in await-import chunks). Outside `pnpm gate`.
-11. **Aggregate bin + stdio + default bin** (smoke). `strummer-mcp` over `StdioServerTransport`
+11. **Aggregate bin + stdio + default bin** (smoke). `sackville-mcp` over `StdioServerTransport`
     + SIGINT/SIGTERM; bin map + tsdown entries + `files`. *Test:* spawn minimal env, list tools,
     assert baseline + clean shutdown; offline, every bin path resolves.
 12. **Package-graph split + publishability** (pure config). Heavy engines → optional peers; drop
@@ -215,12 +215,12 @@ transitive graph** (forced — tsdown externalizes `workspace:*`); **add a defau
 ## Invariants held
 
 - **Compose, never widen:** the aggregate cannot grant a capability a pillar's own gate refuses;
-  the bare-name fix (§10) closes the one real widening path; `STRUMMER_TOOLSETS` selects, never
+  the bare-name fix (§10) closes the one real widening path; `SACKVILLE_TOOLSETS` selects, never
   grants; contradictory gates stay fatal.
 - **No heavy dep when a pillar is off:** runtime via dynamic import (§6, asserted on emitted
   `.mjs`, §slice 10) *and* install via optional peer-deps (§slice 12). The verdict/verify
   invariant is re-stated precisely as **zero NATIVE/heavy deps in the `.mjs` closure** (their
-  runtime `@strummer/severity`/`@strummer/diff` imports are pure and fine).
+  runtime `@sackville/severity`/`@sackville/diff` imports are pure and fine).
 - **No real spawn/fetch/network/native binary in `pnpm gate`:** every publish/lazy-boundary
   assertion is a build-then-assert CI job or a `--dry` run, never in the gate; composition tests
   use `InMemoryTransport` + stubbed opts.
@@ -228,7 +228,7 @@ transitive graph** (forced — tsdown externalizes `workspace:*`); **add a defau
 
 ## Consequences
 
-`strummer-mcp` becomes the single front door (one `.mcp.json` block), with selective enablement
+`sackville-mcp` becomes the single front door (one `.mcp.json` block), with selective enablement
 and true install isolation. Staged, not built: HTTP/SSE transport; MCP registry submission; an
 MCPB/DXT bundle; a Homebrew tap / single-binary CLI; an end-to-end "verify a PR" GitHub Action
 (the natural Phase-7 capstone now that the entrypoint is unified).

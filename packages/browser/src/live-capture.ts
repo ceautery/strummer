@@ -1,9 +1,9 @@
 /**
  * Verify-DRIVEN live capture (ADR 0013 Addendum 3, milestone 5e): drive an
  * operator-authored flow (by NAME), capture its HAR, and return the stored (redacted)
- * handle for a contract bridge to validate. Lives in `@strummer/browser` — its natural
+ * handle for a contract bridge to validate. Lives in `@sackville/browser` — its natural
  * home, alongside {@link runFlow}/{@link finalizeHar}/{@link loadFlowCollection} — so BOTH
- * the verify MCP bin AND the `strummer verify run --flow` CLI share ONE implementation of
+ * the verify MCP bin AND the `sackville verify run --flow` CLI share ONE implementation of
  * the security-critical flow-completeness guard (no drift). Callers lazy-import the whole
  * package so the playwright cold-start stays off compose-only / API-only paths.
  *
@@ -21,7 +21,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { ArtifactStore } from '@strummer/artifacts'
+import type { ArtifactStore } from '@sackville/artifacts'
 import { PageDriver } from './driver.js'
 import { type BrowserFlow, type FlowResult, loadFlowCollection, runFlow } from './flow.js'
 import type { BrowserGate } from './gate.js'
@@ -37,7 +37,7 @@ export interface CaptureRuntime {
   /** The (union) redactor for surfaced values + the HAR archive. */
   redact: (value: string) => string
   resolveSecret?: (name: string) => string | undefined
-  /** The HAR sink (operator `STRUMMER_BROWSER_HAR_DIR` / CLI `--har-dir`). */
+  /** The HAR sink (operator `SACKVILLE_BROWSER_HAR_DIR` / CLI `--har-dir`). */
   config: { harDir?: string }
   /** Tear down the manager AND close the SSRF proxy (single-shot — always in `finally`). */
   shutdown: () => Promise<void>
@@ -130,7 +130,9 @@ export async function driveBrowserFlowToHar(
 
     const harDir = runtime.config.harDir
     if (!harDir) {
-      throw new Error('live capture requires a HAR sink dir (STRUMMER_BROWSER_HAR_DIR / --har-dir)')
+      throw new Error(
+        'live capture requires a HAR sink dir (SACKVILLE_BROWSER_HAR_DIR / --har-dir)',
+      )
     }
     const summary = await finalize({
       harPath: harPath(harDir, id),

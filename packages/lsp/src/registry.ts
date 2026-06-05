@@ -1,7 +1,7 @@
 /**
  * The operator-bound language→server registry (ADR 0011). Safety-critical: the agent supplies
  * only a `language` string and NEVER a binary, argv, or path. The operator binds the registry
- * out-of-band (`STRUMMER_LSP_SERVERS`, JSON); a language absent from it is refused, never
+ * out-of-band (`SACKVILLE_LSP_SERVERS`, JSON); a language absent from it is refused, never
  * spawned.
  *
  * The registry is **JSON with `command` and `args[]` structurally separate** — deliberately

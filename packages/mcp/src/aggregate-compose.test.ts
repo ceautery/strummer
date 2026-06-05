@@ -17,7 +17,7 @@ function fakePillar(
 ) {
   return {
     default: isDefault,
-    pkg: `@strummer/${name}`,
+    pkg: `@sackville/${name}`,
     load: async () => {
       calls.push(name)
       if (opts.fail === 'module') {
@@ -72,7 +72,7 @@ describe('parseToolsets — subtractive selection (ADR 0019 §A)', () => {
   })
 
   it('throws (loud) on an unknown name — typo protection, never silently ignored', () => {
-    expect(() => parseToolsets('api,nope', reg)).toThrow(/unknown STRUMMER_TOOLSETS/)
+    expect(() => parseToolsets('api,nope', reg)).toThrow(/unknown SACKVILLE_TOOLSETS/)
   })
 })
 
@@ -80,7 +80,7 @@ describe('buildAggregateServer — composition + dynamic-load isolation (ADR 001
   it('loads + registers ONLY the enabled pillars (others never imported)', async () => {
     const calls: string[] = []
     const { server, enabled } = await buildAggregateServer(
-      { STRUMMER_TOOLSETS: 'api,deps' },
+      { SACKVILLE_TOOLSETS: 'api,deps' },
       { registry: makeRegistry(calls), log: () => {} },
     )
     expect(enabled.sort()).toEqual(['api', 'deps'])
@@ -103,12 +103,12 @@ describe('buildAggregateServer — isolation: loud-disable vs fatal (ADR 0019 §
     const calls: string[] = []
     const logs: string[] = []
     const { server, enabled, disabled } = await buildAggregateServer(
-      { STRUMMER_TOOLSETS: 'api,browser' },
+      { SACKVILLE_TOOLSETS: 'api,browser' },
       { registry: makeRegistry(calls, { browser: { fail: 'module' } }), log: (m) => logs.push(m) },
     )
     expect(enabled).toEqual(['api'])
     expect(disabled).toEqual([
-      { pillar: 'browser', reason: 'engine not installed (@strummer/browser)' },
+      { pillar: 'browser', reason: 'engine not installed (@sackville/browser)' },
     ])
     expect(logs.join('\n')).toMatch(/browser.*disabled.*not installed/)
     expect(await listToolNames(server)).toEqual(['fake_api'])
@@ -116,17 +116,17 @@ describe('buildAggregateServer — isolation: loud-disable vs fatal (ADR 0019 §
 
   it('a pillar returning undefined (e.g. docs with no index) ⇒ loud disable', async () => {
     const { enabled, disabled } = await buildAggregateServer(
-      { STRUMMER_TOOLSETS: 'docs,api' },
+      { SACKVILLE_TOOLSETS: 'docs,api' },
       { registry: makeRegistry([], { docs: { disable: true } }), log: () => {} },
     )
     expect(enabled).toEqual(['api'])
-    expect(disabled).toEqual([{ pillar: 'docs', reason: 'no STRUMMER_INDEX configured' }])
+    expect(disabled).toEqual([{ pillar: 'docs', reason: 'no SACKVILLE_INDEX configured' }])
   })
 
   it('a CONTRADICTORY gate (setup throws) ⇒ FATAL, never swallowed', async () => {
     await expect(
       buildAggregateServer(
-        { STRUMMER_TOOLSETS: 'api,lsp' },
+        { SACKVILLE_TOOLSETS: 'api,lsp' },
         { registry: makeRegistry([], { lsp: { fail: 'fatal' } }), log: () => {} },
       ),
     ).rejects.toThrow(/contradictory gate/)
@@ -138,7 +138,7 @@ describe('buildAggregateServer — lifecycle (ADR 0019 §A13)', () => {
     const apiDown = vi.fn()
     const verifyDown = vi.fn()
     const { shutdown } = await buildAggregateServer(
-      { STRUMMER_TOOLSETS: 'api,verify' },
+      { SACKVILLE_TOOLSETS: 'api,verify' },
       {
         registry: makeRegistry([], {
           api: { shutdown: apiDown },
@@ -155,7 +155,7 @@ describe('buildAggregateServer — lifecycle (ADR 0019 §A13)', () => {
   it('a throwing shutdown does not stop the others (best-effort teardown)', async () => {
     const good = vi.fn()
     const { shutdown } = await buildAggregateServer(
-      { STRUMMER_TOOLSETS: 'api,verify' },
+      { SACKVILLE_TOOLSETS: 'api,verify' },
       {
         registry: makeRegistry([], {
           api: {

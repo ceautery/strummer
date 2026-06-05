@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
-import { type DnsLookup, SsrfError } from '@strummer/safety'
+import { type DnsLookup, SsrfError } from '@sackville/safety'
 import { type Dispatcher, type FormData, request } from 'undici'
 import { ArtifactStore } from './artifacts.js'
 import { evaluateAssertions, extractCaptures } from './assert.js'

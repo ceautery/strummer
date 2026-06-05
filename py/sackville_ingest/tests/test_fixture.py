@@ -7,8 +7,8 @@ import struct
 
 import sqlite_vec
 
-from strummer_ingest.db import EMBED_DIM, EMBED_MODEL, SCHEMA_VERSION
-from strummer_ingest.fixture import build_golden_fixture
+from sackville_ingest.db import EMBED_DIM, EMBED_MODEL, SCHEMA_VERSION
+from sackville_ingest.fixture import build_golden_fixture
 
 
 def _open(path: str) -> sqlite3.Connection:
@@ -23,7 +23,7 @@ def test_fixture_seeds_meta(tmp_path) -> None:
     out = tmp_path / "golden.sqlite"
     assert build_golden_fixture(out) == 1
     conn = _open(str(out))
-    meta = dict(conn.execute("SELECT key, value FROM strummer_meta").fetchall())
+    meta = dict(conn.execute("SELECT key, value FROM sackville_meta").fetchall())
     assert meta["schema_version"] == str(SCHEMA_VERSION)
     assert meta["embed_model"] == EMBED_MODEL
     assert meta["embed_dim"] == str(EMBED_DIM)

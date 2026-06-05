@@ -51,7 +51,7 @@ beforeAll(async () => {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 
-  dir = mkdtempSync(join(tmpdir(), 'strummer-cli-api-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-cli-api-'))
   writeFileSync(
     join(dir, 'bruno.json'),
     JSON.stringify({ version: '1', name: 't', type: 'collection' }),
@@ -68,7 +68,7 @@ get {
 `,
   )
   writeFileSync(
-    join(dir, 'get-health.strummer.yml'),
+    join(dir, 'get-health.sackville.yml'),
     `assertions:
   - source: status
     op: equals
@@ -99,7 +99,7 @@ get {
   )
 
   writeFileSync(
-    join(dir, 'follow-redirect.strummer.yml'),
+    join(dir, 'follow-redirect.sackville.yml'),
     `assertions:
   - source: status
     op: equals
@@ -263,7 +263,7 @@ describe('cli api', () => {
   })
 
   it('run --keyring resolves a secret (keyring chain falls back to env in CI)', async () => {
-    process.env.STRUMMER_SECRET_API_TOKEN = 'env-token-xyz'
+    process.env.SACKVILLE_SECRET_API_TOKEN = 'env-token-xyz'
     try {
       const c = capture()
       const code = await run(
@@ -273,7 +273,7 @@ describe('cli api', () => {
       expect(code).toBe(0)
       expect(c.out()).toContain('200')
     } finally {
-      delete process.env.STRUMMER_SECRET_API_TOKEN
+      delete process.env.SACKVILLE_SECRET_API_TOKEN
     }
   })
 
@@ -286,7 +286,7 @@ describe('cli api', () => {
         item: [{ name: 'ping', request: { method: 'GET', url: '{{baseUrl}}/health' } }],
       }),
     )
-    const out = mkdtempSync(join(tmpdir(), 'strummer-cli-import-'))
+    const out = mkdtempSync(join(tmpdir(), 'sackville-cli-import-'))
     const c = capture()
     expect(await run(['api', 'import', 'postman', src, out], c.io)).toBe(0)
     expect(c.out()).toContain('imported 1')
@@ -531,7 +531,7 @@ body:form-urlencoded {
 
   it('run --openapi redacts a secret echoed in a request finding', async () => {
     const secret = 'super-secret-token-zzz'
-    process.env.STRUMMER_SECRET_API_TOKEN = secret
+    process.env.SACKVILLE_SECRET_API_TOKEN = secret
     writeFileSync(
       join(dir, 'search-secret.bru'),
       `meta {
@@ -570,7 +570,7 @@ get {
       expect(c.out()).not.toContain(secret)
       expect(c.out()).toContain('[redacted:API_TOKEN]')
     } finally {
-      delete process.env.STRUMMER_SECRET_API_TOKEN
+      delete process.env.SACKVILLE_SECRET_API_TOKEN
     }
   })
 
@@ -875,7 +875,7 @@ describe('cli api validate-capture', () => {
         },
       },
     }
-    const specPath = join(mkdtempSync(join(tmpdir(), 'strummer-cap-')), 'openapi.json')
+    const specPath = join(mkdtempSync(join(tmpdir(), 'sackville-cap-')), 'openapi.json')
     writeFileSync(specPath, JSON.stringify(spec))
 
     const c = capture()
@@ -895,7 +895,7 @@ describe('cli api validate-capture', () => {
     // The REAL Playwright GraphQL HAR fixture; the captured query (`widgets { id name }`)
     // drifts from this SDL (no `name` on Widget).
     const gqlHar = resolve(here, '../../api/test/fixtures/graphql-capture.har.zip')
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-gqlcap-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-gqlcap-'))
     const sdlPath = join(dir, 'schema.graphql')
     writeFileSync(sdlPath, 'type Query { widgets: [Widget!]! } type Widget { id: ID! }')
 
@@ -960,14 +960,14 @@ describe('cli api validate-request', () => {
   }
 
   function specFile(): string {
-    const d = mkdtempSync(join(tmpdir(), 'strummer-vreq-'))
+    const d = mkdtempSync(join(tmpdir(), 'sackville-vreq-'))
     const specPath = join(d, 'openapi.json')
     writeFileSync(specPath, JSON.stringify(SPEC))
     return specPath
   }
 
   it('exits 0 on a valid request body', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'strummer-vreq-'))
+    const d = mkdtempSync(join(tmpdir(), 'sackville-vreq-'))
     const specPath = join(d, 'openapi.json')
     writeFileSync(specPath, JSON.stringify(SPEC))
     const bodyPath = join(d, 'body.json')
@@ -993,7 +993,7 @@ describe('cli api validate-request', () => {
   })
 
   it('exits 1 on a request-body schema violation', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'strummer-vreq-'))
+    const d = mkdtempSync(join(tmpdir(), 'sackville-vreq-'))
     const specPath = join(d, 'openapi.json')
     writeFileSync(specPath, JSON.stringify(SPEC))
     const bodyPath = join(d, 'body.json')

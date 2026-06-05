@@ -17,7 +17,7 @@ import {
   type ResultWorkspaceSymbol,
   type ServerDescription,
   type ServerRegistry,
-} from '@strummer/lsp'
+} from '@sackville/lsp'
 import type { CliIO } from './index.js'
 
 /** Injected (test) or real engine entries. */
@@ -32,7 +32,7 @@ export interface LspDeps {
 }
 
 /**
- * `strummer lsp` — the human surface over `@strummer/lsp`. Single-shot semantic code
+ * `sackville lsp` — the human surface over `@sackville/lsp`. Single-shot semantic code
  * navigation: each invocation binds the operator's server registry, drives one query against
  * a live Language Server subprocess, then shuts it down.
  *
@@ -42,7 +42,7 @@ export interface LspDeps {
  * preview). The typed `--project` root is the allowlist (explicit operator intent). Per ADR
  * 0011 the engine is **injectable** so the suite never spawns a real server — the production
  * path builds the real `LanguageServerManager`/`LspQueryEngine`/`LspRenameEngine` from flags
- * (mirroring `strummer-lsp-mcp`), and the gate throws *before* any spawn when `--allow-run` is
+ * (mirroring `sackville-lsp-mcp`), and the gate throws *before* any spawn when `--allow-run` is
  * absent.
  *
  * Exit codes: 0 = the query ran (`ok`/`no_result`, or a rename preview/apply); 1 = denied,
@@ -113,7 +113,7 @@ interface Engines {
 
 /**
  * Build the query/rename engines — injected stubs in tests, else the real manager + engines
- * from the operator registry (`--servers`/`STRUMMER_LSP_SERVERS`), gated by `--allow-run` /
+ * from the operator registry (`--servers`/`SACKVILLE_LSP_SERVERS`), gated by `--allow-run` /
  * `--allow-write` and confined to the `--project` root. Returns null on a config error (the
  * caller has already had the message written).
  */
@@ -136,9 +136,9 @@ function makeEngines(values: Record<string, unknown>, io: CliIO, deps: LspDeps):
       workspaceRoots,
     }
   }
-  const raw = (values.servers as string) ?? io.env?.STRUMMER_LSP_SERVERS
+  const raw = (values.servers as string) ?? io.env?.SACKVILLE_LSP_SERVERS
   if (!raw || raw.trim() === '') {
-    io.err('no servers bound: pass --servers <json> or set STRUMMER_LSP_SERVERS\n')
+    io.err('no servers bound: pass --servers <json> or set SACKVILLE_LSP_SERVERS\n')
     return null
   }
   let registry: ServerRegistry
@@ -185,7 +185,7 @@ function fail(what: string): never {
 
 function cmdLanguages(args: string[], io: CliIO, deps: LspDeps): number {
   const { values } = parseArgs({ args, allowPositionals: true, options: GATE_OPTIONS })
-  const raw = (values.servers as string) ?? io.env?.STRUMMER_LSP_SERVERS
+  const raw = (values.servers as string) ?? io.env?.SACKVILLE_LSP_SERVERS
   let languages: string[] = []
   if (raw && raw.trim() !== '') {
     try {

@@ -1,8 +1,8 @@
 /** Domain model for API requests, assertions, and run results. */
 
-// The operator vocabulary is shared across pillars (see @strummer/assert); the api
+// The operator vocabulary is shared across pillars (see @sackville/assert); the api
 // pillar re-exports it so existing `./model.js` importers are unaffected.
-import type { AssertionOp } from '@strummer/assert'
+import type { AssertionOp } from '@sackville/assert'
 
 export type { AssertionOp }
 
@@ -15,7 +15,7 @@ export type AssertionSource =
   | 'responseTime'
   | 'schema'
 
-/** A declarative assertion (from a `*.strummer.yml` sidecar). */
+/** A declarative assertion (from a `*.sackville.yml` sidecar). */
 export interface AssertionSpec {
   source: AssertionSource
   op: AssertionOp

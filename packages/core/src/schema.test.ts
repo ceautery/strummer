@@ -5,11 +5,11 @@ import { describe, expect, it } from 'vitest'
 import { EXPECTED_EMBED_DIM, EXPECTED_EMBED_MODEL, EXPECTED_SCHEMA_VERSION } from './schema.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const schemaJsonPath = resolve(here, '../../../schema/strummer.schema.json')
+const schemaJsonPath = resolve(here, '../../../schema/sackville.schema.json')
 
 // Drift guard: the TypeScript constants and the canonical schema/*.json must
 // never diverge. If this fails, the contract changed on one side only.
-describe('contract constants match schema/strummer.schema.json', () => {
+describe('contract constants match schema/sackville.schema.json', () => {
   const schema = JSON.parse(readFileSync(schemaJsonPath, 'utf8'))
 
   it('schema_version', () => {

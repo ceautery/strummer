@@ -5,21 +5,37 @@
 
 ## Context
 
-Greenfield project "Strummer": an LLM-agent-first developer testing toolkit
+Greenfield project "Sackville": an LLM-agent-first developer testing toolkit
 covering documentation/idioms, web API testing, and browser/UI testing. Target
 platform is macOS; development happens in a Linux dev container. The dev was
 asked to pick technologies.
 
 ## Decisions
 
-### 1. Name: **Strummer** (kept)
+### 1. Name: **Sackville** (renamed from *Strummer*, 2026-06-05)
 
-The bare `strummer` npm name is taken by a dormant structural-matching library
-(Tabcorp, last publish ~6y ago), and several guitar "Strum/Strummer" VST
-plugins exist. None collide with a developer-tooling product, and the
-`ceautery/strummer` GitHub repo is clear. **Mitigation:** publish npm packages
-under the `@strummer/*` scope; distribute the CLI as `strummer` via a Homebrew
-tap.
+Originally **Strummer**, but the bare `strummer` npm name was taken by a dormant
+structural-matching library (`tabdigital`, last publish 2019) with offshoots
+(`strummer-middleware`), forcing an `@strummer/*`-scope-only distribution and
+muddying discovery. Picking a common word was the mistake. **Renamed to
+`sackville`** (the Sackville-Baggins of *The Lord of the Rings* — apt for a
+verification toolkit): the bare `sackville` npm name **and** the `@sackville`
+scope are **verified available** (registry 404, no offshoots), and `ceautery`
+owns the GitHub org.
+
+**Naming shape** (so the bare name does the most good for an agent-first product):
+
+- The bare **`sackville`** npm package **is the aggregate MCP server**, so client
+  onboarding is the clean `npx -y sackville` in `.mcp.json` (its primary bin is
+  `sackville`; `sackville-mcp` is an alias; per-pillar bins are `sackville-<pillar>-mcp`).
+- The **library graph + the human CLI publish under `@sackville/*`** (`@sackville/core`,
+  `@sackville/api`, …, `@sackville/cli` whose bin is `sackville-cli` to avoid colliding
+  with the server's bare `sackville` bin).
+- Homebrew remains a candidate **secondary** channel for the CLI.
+
+Mechanics of the rename (blast radius, the `SACKVILLE_*` env / `sackville://` URI /
+`@sackville/*` scope / `sackville_ingest` Python package) were a single gate-verified
+pass; see the project memory + STATUS.
 
 ### 2. Stack: **Polyglot core**
 

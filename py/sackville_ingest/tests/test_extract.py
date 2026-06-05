@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from strummer_ingest.extract import split_sections, symbol_from_heading
+from sackville_ingest.extract import split_sections, symbol_from_heading
 
 INLINE_HTML = """
 <h1>Widget<a href="#undefined" aria-label="Link"><svg><path d="M0 0"></path></svg></a></h1>

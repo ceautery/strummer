@@ -38,7 +38,7 @@ def build_index(
     conn = dbmod.open_writer(out)
     try:
         if reuse:
-            existing = dict(conn.execute("SELECT key, value FROM strummer_meta").fetchall())
+            existing = dict(conn.execute("SELECT key, value FROM sackville_meta").fetchall())
             if int(existing.get("schema_version", -1)) != dbmod.SCHEMA_VERSION:
                 raise ValueError(
                     f"cannot append: existing index is schema "

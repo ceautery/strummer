@@ -2,7 +2,7 @@
 node_modules/
 dist/
 build/
-# Coverage report output anywhere — but NOT the @strummer/coverage source package.
+# Coverage report output anywhere — but NOT the @sackville/coverage source package.
 coverage/
 !packages/coverage/
 *.tsbuildinfo
@@ -23,7 +23,7 @@ venv/
 # transformers.js downloads embedding models into a cache dir.
 .cache/
 
-# --- Strummer build artifacts ---
+# --- Sackville build artifacts ---
 # Built docset/index databases are reproducible artifacts, never committed.
 /data/
 /var/
@@ -41,7 +41,7 @@ venv/
 
 # --- Dev-container harness (local only) ---
 # Tooling used to create the Claude Code container that develops this project;
-# not part of Strummer itself. Kept on disk, out of the repo.
+# not part of Sackville itself. Kept on disk, out of the repo.
 /docker/
 /docker-compose.yml
 

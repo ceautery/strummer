@@ -8,8 +8,8 @@ import {
   loadCollection,
   runRequestToHar,
   validateCapturedTraffic,
-} from '@strummer/api'
-import { ArtifactStore } from '@strummer/artifacts'
+} from '@sackville/api'
+import { ArtifactStore } from '@sackville/artifacts'
 import {
   BrowserGate,
   BrowserManager,
@@ -19,18 +19,18 @@ import {
   driveBrowserFlowToHar,
   engineLauncher,
   resolveEngine,
-} from '@strummer/browser'
-import { type DiffCoverageReport, runScoped, type TestRunner } from '@strummer/coverage'
-import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@strummer/deps'
-import { type FlakeVerdict, HistoryStore, runAndRecord } from '@strummer/flake'
+} from '@sackville/browser'
+import { type DiffCoverageReport, runScoped, type TestRunner } from '@sackville/coverage'
+import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@sackville/deps'
+import { type FlakeVerdict, HistoryStore, runAndRecord } from '@sackville/flake'
 import {
   type MutationRunner,
   type MutationSummary,
   runCosmicRay,
   runMutation,
   runMutmut,
-} from '@strummer/mutate'
-import { Redactor } from '@strummer/safety'
+} from '@sackville/mutate'
+import { Redactor } from '@sackville/safety'
 import {
   type CaptureVerdictFacts,
   type ComposeInputs,
@@ -42,8 +42,8 @@ import {
   fromFlakeVerdicts,
   fromMutationSummary,
   type Severity,
-} from '@strummer/verdict'
-import { type OrchestrateRequest, orchestrate } from '@strummer/verify'
+} from '@sackville/verdict'
+import { type OrchestrateRequest, orchestrate } from '@sackville/verify'
 import { auditProjectScoped, makeFetcher, type PackumentFetcher, registriesFrom } from './deps.js'
 import type { CliIO } from './index.js'
 
@@ -91,7 +91,7 @@ interface RunCtx {
 }
 
 /**
- * `strummer verify` — the human surface over the cross-pillar verdict.
+ * `sackville verify` — the human surface over the cross-pillar verdict.
  *
  * - `verify [--contract f] [--coverage f] ...` (COMPOSE): fold per-pillar JSON results
  *   on disk into one verdict (ADR 0013 §1). The human supplies each pillar's output.
@@ -325,7 +325,10 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
         return 2
       }
       const contract = readCaptureContract(values)
-      const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-verify-cap-')), 'verify')
+      const store = new ArtifactStore(
+        mkdtempSync(join(tmpdir(), 'sackville-verify-cap-')),
+        'verify',
+      )
       // The human is the operator: --allow-unsafe + --allow-host are the api pillar gate
       // (a mutating request without them dry-runs ⇒ the driver throws ⇒ inconclusive). The
       // run-resolved {{secret:NAME}} pairs are folded into the redactor by the driver, so a
@@ -365,7 +368,10 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
       const contract = readCaptureContract(values)
       // The human is the operator: the typed flow's hosts are allowlisted via --allow-host;
       // the mandatory SSRF proxy fronts every request (built in the runtime factory).
-      const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-verify-cap-')), 'verify')
+      const store = new ArtifactStore(
+        mkdtempSync(join(tmpdir(), 'sackville-verify-cap-')),
+        'verify',
+      )
       request.contract = {
         source: 'capture-from-HAR',
         run: async () => {
@@ -423,7 +429,7 @@ function readCaptureContract(values: {
 }
 
 /** Build a single-shot CaptureRuntime from the CLI's browser egress flags (mirrors
- * `strummer browser`): a gated, proxy-fronted manager with HAR recording armed. */
+ * `sackville browser`): a gated, proxy-fronted manager with HAR recording armed. */
 async function captureRuntimeFromFlags(values: {
   'allow-host'?: string[]
   'allow-private'?: boolean
@@ -433,7 +439,7 @@ async function captureRuntimeFromFlags(values: {
 }): Promise<CaptureRuntime> {
   const gate = new BrowserGate({ allowedHosts: values['allow-host'] ?? [] })
   const proxy = await createSsrfProxy({ allowPrivate: values['allow-private'] ?? false })
-  const harDir = mkdtempSync(join(tmpdir(), 'strummer-verify-har-'))
+  const harDir = mkdtempSync(join(tmpdir(), 'sackville-verify-har-'))
   const manager = new BrowserManager({
     gate,
     harDir,

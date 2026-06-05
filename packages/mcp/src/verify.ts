@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ContractResult } from '@strummer/api'
-import type { HarSummary } from '@strummer/browser'
-import type { DiffCoverageReport } from '@strummer/coverage'
-import type { DependencyAudit } from '@strummer/deps'
-import { changedFiles as changedFilesFromDiff } from '@strummer/diff'
-import type { FlakeVerdict } from '@strummer/flake'
-import type { MutationSummary } from '@strummer/mutate'
+import type { ContractResult } from '@sackville/api'
+import type { HarSummary } from '@sackville/browser'
+import type { DiffCoverageReport } from '@sackville/coverage'
+import type { DependencyAudit } from '@sackville/deps'
+import { changedFiles as changedFilesFromDiff } from '@sackville/diff'
+import type { FlakeVerdict } from '@sackville/flake'
+import type { MutationSummary } from '@sackville/mutate'
 import {
   type CaptureVerdictFacts,
   type ComposeInputs,
@@ -17,8 +17,8 @@ import {
   fromFlakeVerdicts,
   fromMutationSummary,
   type Severity,
-} from '@strummer/verdict'
-import { gateDenied, type OrchestrateRequest, orchestrate } from '@strummer/verify'
+} from '@sackville/verdict'
+import { gateDenied, type OrchestrateRequest, orchestrate } from '@sackville/verify'
 import { z } from 'zod'
 
 /** Per-call context the operator-wired pillar runners receive (slice 5 builds these). */
@@ -50,10 +50,10 @@ export interface ContractProduceContext extends ContractInputs {
   vars?: Record<string, string>
 }
 
-/** PRODUCE-API mode (5f): verify DRIVES the `@strummer/api` runner for an operator-authored
+/** PRODUCE-API mode (5f): verify DRIVES the `@sackville/api` runner for an operator-authored
  * request (by NAME), synthesizes its HAR, and validates it. The agent supplies only the
  * target — a `request` name (+ optional `collection` name, resolved server-side under the
- * operator's `STRUMMER_API_COLLECTIONS_DIR`, never a path) + non-secret `vars`; the api
+ * operator's `SACKVILLE_API_COLLECTIONS_DIR`, never a path) + non-secret `vars`; the api
  * pillar's own gate (allowUnsafe/allowedHosts/SSRF) stays operator-set ("compose, never widen"). */
 export interface ContractProduceApiContext extends ContractInputs {
   mode: 'produce-api'
@@ -74,7 +74,7 @@ export type ContractCaptureContext =
 /**
  * The operator-wired, ALREADY-GATED pillar runners for the run-driving `verify_change`
  * tool (ADR 0013 Addendum, milestone 5c). The bin wires a pillar's runner here ONLY
- * when that pillar's gate is satisfied — `STRUMMER_VERIFY_ENABLE_RUN` AND the pillar's
+ * when that pillar's gate is satisfied — `SACKVILLE_VERIFY_ENABLE_RUN` AND the pillar's
  * OWN `*_ALLOW_RUN` ("both required" — slice 5). A requested pillar with no runner here
  * ⇒ `skipReason:'gate-not-set'` (never run, surfaced). `verify_change` is registered
  * ONLY when ≥1 runner is wired — deny-by-default REGISTRATION, not just a runtime check.
@@ -105,7 +105,7 @@ export interface ContractRunResult {
    * `fromCaptureVerdict` (5f). When present it is folded in preference to `results`; the
    * consume + both produce runners populate it from `validateCapturedTraffic`. */
   verdict?: CaptureVerdictFacts
-  /** `strummer://verify/<runId>/har` — the produced (redacted) HAR, by handle. */
+  /** `sackville://verify/<runId>/har` — the produced (redacted) HAR, by handle. */
   harHandle?: string
   summary?: HarSummary
 }
@@ -119,7 +119,7 @@ export interface VerifyToolsOptions {
   runDriving?: RunDrivingOptions
 }
 
-const INSTRUCTIONS = `Strummer composes the per-pillar verification signals into ONE change verdict.
+const INSTRUCTIONS = `Sackville composes the per-pillar verification signals into ONE change verdict.
 
 Supply whichever pillar results you have — contract (from validate_capture/validate_response),
 coverage (uncovered_in_diff/run_scoped), deps (audit_project), flake, mutation — and request_verdict
@@ -380,7 +380,7 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
     const resolveVerdict = opts.resolveVerdict
     server.registerResource(
       'verify-verdict',
-      new ResourceTemplate('strummer://verify/{id}/{kind}', { list: undefined }),
+      new ResourceTemplate('sackville://verify/{id}/{kind}', { list: undefined }),
       {
         title: 'Composite verdict',
         description: 'A stored cross-pillar verdict, by handle',
@@ -388,7 +388,7 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
       },
       (uri, variables) => {
         const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
-        const handle = `strummer://verify/${pick(variables.id)}/${pick(variables.kind)}`
+        const handle = `sackville://verify/${pick(variables.id)}/${pick(variables.kind)}`
         const artifact = resolveVerdict(handle)
         if (!artifact) throw new Error(`No stored verdict for ${handle}`)
         return {
@@ -401,10 +401,10 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
   }
 }
 
-/** Build a standalone Strummer verify MCP server. */
+/** Build a standalone Sackville verify MCP server. */
 export function createVerifyServer(opts: VerifyToolsOptions = {}): McpServer {
   const server = new McpServer(
-    { name: 'strummer-verify', version: '0.0.0' },
+    { name: 'sackville-verify', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerVerifyTools(server, opts)

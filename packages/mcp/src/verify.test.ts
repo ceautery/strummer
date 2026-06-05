@@ -57,7 +57,7 @@ describe('request_verdict (ADR 0013 slice 10)', () => {
     const store = new Map<string, string>()
     const c = await connect({
       storeVerdict: (id, kind, body) => {
-        const handle = `strummer://verify/${id}/${kind}`
+        const handle = `sackville://verify/${id}/${kind}`
         store.set(handle, body)
         return handle
       },
@@ -71,7 +71,7 @@ describe('request_verdict (ADR 0013 slice 10)', () => {
       arguments: { contract: { results: [contractError] } },
     })
     const handle = (res.structuredContent as { detailHandle: string }).detailHandle
-    expect(handle).toMatch(/^strummer:\/\/verify\/.+\/verdict$/)
+    expect(handle).toMatch(/^sackville:\/\/verify\/.+\/verdict$/)
     const resource = await c.readResource({ uri: handle })
     const first = resource.contents[0] as { text: string }
     expect(JSON.parse(first.text).status).toBe('fail')
@@ -154,7 +154,7 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
   it('folds the consume contract sub-verdict from a HAR handle (mode:consume)', async () => {
     const contract = vi.fn(async (ctx: { mode: string; harHandle?: string }) => {
       expect(ctx.mode).toBe('consume')
-      expect(ctx.harHandle).toBe('strummer://browser/run/x/har')
+      expect(ctx.harHandle).toBe('sackville://browser/run/x/har')
       return { results: [contractError as never] }
     })
     const c = await connect({ runDriving: { contract } })
@@ -162,7 +162,7 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
       name: 'verify_change',
       arguments: {
         projectRoot: '/repo',
-        contract: { harHandle: 'strummer://browser/run/x/har' },
+        contract: { harHandle: 'sackville://browser/run/x/har' },
       },
     })
     const sc = res.structuredContent as {
@@ -194,8 +194,8 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
             unresolvedBodies: 0,
             entriesValidated: 1,
           } as never,
-          harHandle: 'strummer://verify/api-7/har',
-          summary: { handle: 'strummer://verify/api-7/har', byteSize: 9, entryCount: 1 } as never,
+          harHandle: 'sackville://verify/api-7/har',
+          summary: { handle: 'sackville://verify/api-7/har', byteSize: 9, entryCount: 1 } as never,
         }
       },
     )
@@ -216,7 +216,7 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
     // clean===false ⇒ contract is no-signal (NOT pass), so the run is inconclusive (5f).
     expect(sc.pillars.find((p) => p.pillar === 'contract')?.status).toBe('no-signal')
     expect(sc.status).toBe('inconclusive')
-    expect(sc.capture?.harHandle).toBe('strummer://verify/api-7/har')
+    expect(sc.capture?.harHandle).toBe('sackville://verify/api-7/har')
   })
 
   it('rejects a contract input with more than one target (request + harHandle)', async () => {
@@ -226,7 +226,7 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
       name: 'verify_change',
       arguments: {
         projectRoot: '/repo',
-        contract: { request: 'r', harHandle: 'strummer://browser/run/x/har' },
+        contract: { request: 'r', harHandle: 'sackville://browser/run/x/har' },
       },
     })
     expect(res.isError).toBe(true)
@@ -241,8 +241,8 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
       // produce mode returns the contract results + the stored HAR handle for auditability
       return {
         results: [contractError as never],
-        harHandle: 'strummer://verify/cap-9/har',
-        summary: { handle: 'strummer://verify/cap-9/har', byteSize: 5, entryCount: 2 } as never,
+        harHandle: 'sackville://verify/cap-9/har',
+        summary: { handle: 'sackville://verify/cap-9/har', byteSize: 5, entryCount: 2 } as never,
       }
     })
     const c = await connect({ runDriving: { contract } })
@@ -259,7 +259,7 @@ describe('verify_change — run-driving orchestration (slice 4)', () => {
     }
     expect(contract).toHaveBeenCalledOnce()
     expect(sc.status).toBe('fail') // the contract error dominates
-    expect(sc.capture?.harHandle).toBe('strummer://verify/cap-9/har') // surfaced for audit
+    expect(sc.capture?.harHandle).toBe('sackville://verify/cap-9/har') // surfaced for audit
     expect(sc.capture?.summary?.entryCount).toBe(2)
   })
 
@@ -320,7 +320,7 @@ diff --git a/src/y.ts b/src/y.ts
         deps: async () => ({ audits: [cleanAudit as never], osvSnapshotLoaded: true }),
       },
       storeVerdict: (id, kind, body) => {
-        const handle = `strummer://verify/${id}/${kind}`
+        const handle = `sackville://verify/${id}/${kind}`
         store.set(handle, body)
         return handle
       },
@@ -330,7 +330,7 @@ diff --git a/src/y.ts b/src/y.ts
       arguments: { projectRoot: '/repo' },
     })
     const handle = (res.structuredContent as { detailHandle: string }).detailHandle
-    expect(handle).toMatch(/^strummer:\/\/verify\/.+\/verdict$/)
+    expect(handle).toMatch(/^sackville:\/\/verify\/.+\/verdict$/)
     expect(store.has(handle)).toBe(true)
   })
 })

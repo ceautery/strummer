@@ -1,9 +1,9 @@
 import type { SecretStore } from './model.js'
 
-// The redaction boundary is shared across pillars; it lives in @strummer/safety.
+// The redaction boundary is shared across pillars; it lives in @sackville/safety.
 // Re-exported here so existing `import { Redactor } from './secrets.js'` sites
 // (runner, prepare, script, …) keep working unchanged.
-export { Redactor } from '@strummer/safety'
+export { Redactor } from '@sackville/safety'
 
 /** In-memory store (tests / explicit injection). */
 export class StaticSecretStore implements SecretStore {
@@ -15,14 +15,14 @@ export class StaticSecretStore implements SecretStore {
 
 /**
  * Reads `<prefix><NAME>` from the environment — the zero-dependency default
- * (Linux/CI). The default prefix is `STRUMMER_SECRET_`; the aggregate server
- * overrides it to `STRUMMER_API_SECRET_` so the api pillar's secrets live in its
+ * (Linux/CI). The default prefix is `SACKVILLE_SECRET_`; the aggregate server
+ * overrides it to `SACKVILLE_API_SECRET_` so the api pillar's secrets live in its
  * own namespace and can't be read via a bare, shared name (ADR 0019).
  */
 export class EnvSecretStore implements SecretStore {
   constructor(
     private readonly env: Record<string, string | undefined> = process.env,
-    private readonly prefix = 'STRUMMER_SECRET_',
+    private readonly prefix = 'SACKVILLE_SECRET_',
   ) {}
   get(name: string): Promise<string | undefined> {
     return Promise.resolve(this.env[`${this.prefix}${name}`])
@@ -34,7 +34,7 @@ export class EnvSecretStore implements SecretStore {
  * never loads it; Secret Service can throw at runtime in headless containers, so
  * failures resolve to undefined. */
 export class KeyringSecretStore implements SecretStore {
-  constructor(private readonly service = 'strummer') {}
+  constructor(private readonly service = 'sackville') {}
   async get(name: string): Promise<string | undefined> {
     try {
       const moduleId: string = '@napi-rs/keyring'
@@ -62,7 +62,7 @@ export class ChainedSecretStore implements SecretStore {
 /**
  * Default store: keyring (opt-in) chained ahead of env, else env only.
  * `env`/`envPrefix` override the environment source + variable prefix the
- * `EnvSecretStore` reads (the aggregate server passes `STRUMMER_API_SECRET_`).
+ * `EnvSecretStore` reads (the aggregate server passes `SACKVILLE_API_SECRET_`).
  */
 export function resolveSecretStore(
   opts: { keyring?: boolean; env?: Record<string, string | undefined>; envPrefix?: string } = {},

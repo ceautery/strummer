@@ -170,7 +170,7 @@ already analyzed). It does not scan unopened workspace files, so on a non-trivia
 linearly with the open set (verified), and a rename can therefore be silently INCOMPLETE across
 files. An anchor file does not fix it (it only extends coverage to the files you explicitly open).
 The tiny 2-file pygreeter rename looks complete only because pyright auto-analyzes the whole 2-file
-workspace; do not generalize. A server capability difference, not a Strummer wire bug — but Strummer
+workspace; do not generalize. A server capability difference, not a Sackville wire bug — but Sackville
 must not claim a completeness pyright does not provide. Provenance note:
 pyright has no clean single-package toolchain mapping (its analysis bundles its own typeshed; "answer
 for the installed version" means the analyzed libraries, not one package), so — unlike `typescript` →

@@ -22,7 +22,7 @@ import {
   validateGraphqlOperation,
   validateOpenApiRequest,
   validateOpenApiResponse,
-} from '@strummer/api'
+} from '@sackville/api'
 import type { CliIO } from './index.js'
 
 /**
@@ -207,7 +207,7 @@ function parseMaxRedirects(raw: string | undefined): number | undefined {
 }
 
 /** Secret store for a run: opt into the OS keyring (chained ahead of env) with
- * `--keyring`, else the env default (`STRUMMER_SECRET_<NAME>`). */
+ * `--keyring`, else the env default (`SACKVILLE_SECRET_<NAME>`). */
 function secretsFor(keyring: boolean | undefined): SecretStore | undefined {
   return keyring ? resolveSecretStore({ keyring: true }) : undefined
 }
@@ -641,7 +641,7 @@ function cmdValidateCapture(args: string[], io: CliIO): number {
     return 1
   }
   const harZip = readFileSync(harPath)
-  const contract: import('@strummer/api').CaptureContract = {
+  const contract: import('@sackville/api').CaptureContract = {
     ...(values.openapi ? { openapi: JSON.parse(readFileSync(values.openapi, 'utf8')) } : {}),
     ...(values.graphql
       ? {

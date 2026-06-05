@@ -6,16 +6,16 @@ Raw output of the 4-stream API-testing research workflow + synthesis. Distilled 
 
 This is a synthesis/architecture task — no tools needed. I'll produce the milestone plan directly.
 
-# Strummer Pillar 2 (`@strummer/api`) — Milestone Plan
+# Sackville Pillar 2 (`@sackville/api`) — Milestone Plan
 
 ## 1. Package layout
 
-New leaf package `@strummer/api` (pure TS, agent-agnostic). It owns the domain model, file IO, HTTP runner, assertions, secret resolution, and contract validation. `mcp` and `cli` are thin adapters that depend on it; they contain no HTTP/assertion logic.
+New leaf package `@sackville/api` (pure TS, agent-agnostic). It owns the domain model, file IO, HTTP runner, assertions, secret resolution, and contract validation. `mcp` and `cli` are thin adapters that depend on it; they contain no HTTP/assertion logic.
 
 ```
 packages/
   core/            # existing shared types/utils
-  api/             # NEW @strummer/api — the engine
+  api/             # NEW @sackville/api — the engine
     src/
       collection/  # .bru <-> domain model (wraps @usebruno/lang), on-disk layout
       runner/      # undici dispatcher, request execution, timing capture
@@ -23,21 +23,21 @@ packages/
       vars/        # layered scope resolver, {{var}} interpolation, captures
       secrets/     # SecretStore interface + keyring/env backends + Redactor
       contract/    # OpenAPI 3.1 (openapi-backend) + GraphQL validation
-      artifacts/   # resource-handle store for bodies/HAR (strummer://run/<id>/body)
+      artifacts/   # resource-handle store for bodies/HAR (sackville://run/<id>/body)
       index.ts     # public API surface
     test/
       fixtures/    # .bru sample collections, sample OpenAPI specs
   embed/
-  mcp/             # adds run_request/list_requests/... tools -> calls @strummer/api
-  cli/             # `strummer run`, `strummer list` -> calls @strummer/api
+  mcp/             # adds run_request/list_requests/... tools -> calls @sackville/api
+  cli/             # `sackville run`, `sackville list` -> calls @sackville/api
 ```
 
-Consumption contract: `@strummer/api` exposes a `Runner` facade returning **structured results + an artifact handle** (never inlined large bodies). `mcp` maps that 1:1 onto MCP `structuredContent` + `resource_link`; `cli` renders the same struct to a terminal table and writes artifacts to disk. The **safety gate (deny-by-default mutation) lives in `@strummer/api`**, not in mcp/cli, so both adapters and any future embed get identical enforcement.
+Consumption contract: `@sackville/api` exposes a `Runner` facade returning **structured results + an artifact handle** (never inlined large bodies). `mcp` maps that 1:1 onto MCP `structuredContent` + `resource_link`; `cli` renders the same struct to a terminal table and writes artifacts to disk. The **safety gate (deny-by-default mutation) lives in `@sackville/api`**, not in mcp/cli, so both adapters and any future embed get identical enforcement.
 
 ## 2. DECISION — Collection format: **ADOPT Bruno `.bru` + `@usebruno/lang`**
 
 Rationale (decisive, not close):
-- Instant ecosystem interop — Strummer collections open in Bruno's GUI and run under `@usebruno/cli`; we can open any existing Bruno repo. We avoid building and forever maintaining a parser + a Bruno import/export bridge.
+- Instant ecosystem interop — Sackville collections open in Bruno's GUI and run under `@usebruno/cli`; we can open any existing Bruno repo. We avoid building and forever maintaining a parser + a Bruno import/export bridge.
 - `@usebruno/lang` is MIT, pure JS/WASM-free (ohm-js/arcsecond/lodash, no native bindings) → builds identically on the Linux aarch64 dev container and the macOS target. No platform fallback.
 - One-file-per-request + plain folders is the most diff-friendly and LLM-authorable candidate — exactly the agent-first thesis.
 - `@usebruno/converters` gives Postman/Insomnia/OpenAPI import for free.
@@ -53,8 +53,8 @@ Three layers: references in git, pluggable store, value-based redactor.
 - **References (committed):** collections contain `{{secret:NAME}}` (distinct from ordinary `{{var}}`). A lint step rejects committing a high-entropy literal in a secret-typed field.
 - **Store interface:** `interface SecretStore { get(name): Promise<string|undefined>; set(name,value); delete(name); list(): Promise<string[]> }`.
 - **Backends, selected by `explicit config > keyring > env`:**
-  - `keyring` (primary, macOS/Windows/Linux-desktop): **`@napi-rs/keyring` ^1.3.0** (prebuilt binaries for macos-arm64, linux-arm64-gnu, linux-x64-musl, win32-arm64-msvc; no node-gyp). Service name `strummer`, account = secret NAME. Wrap `get/set` in try/catch — Secret Service needs dbus + an unlocked daemon and throws at **runtime** (not install) in headless containers.
-  - `env` (required Linux dev/CI fallback, zero native deps): read `STRUMMER_SECRET_<NAME>`, optionally from a gitignored `.strummer/secrets.env` kept **separate from the collection dir**.
+  - `keyring` (primary, macOS/Windows/Linux-desktop): **`@napi-rs/keyring` ^1.3.0** (prebuilt binaries for macos-arm64, linux-arm64-gnu, linux-x64-musl, win32-arm64-msvc; no node-gyp). Service name `sackville`, account = secret NAME. Wrap `get/set` in try/catch — Secret Service needs dbus + an unlocked daemon and throws at **runtime** (not install) in headless containers.
+  - `env` (required Linux dev/CI fallback, zero native deps): read `SACKVILLE_SECRET_<NAME>`, optionally from a gitignored `.sackville/secrets.env` kept **separate from the collection dir**.
   - `security-cli` (optional, later, macOS-only): `find-generic-password -w` via stdout, write via stdin/temp — **never** secret in argv.
 - **Redactor (value-based, per run):** resolve `{{secret:NAME}}` only at the transport boundary, inside the runner; register the cleartext in a per-run set; before any artifact crosses back to the agent (body, headers incl. `Authorization`, error text, redirect URLs, logs, resource-handle reads) do exact-substring replacement with `[redacted:NAME]`. Also redact common encodings (base64/url-encoded) of registered values. `get_request` reports **required secret names** without resolving them.
 
@@ -89,11 +89,11 @@ captures:
 Small, workflow-shaped (not a 1:1 REST wrapper), each with `outputSchema` and accurate (but advisory) annotations:
 1. `list_requests` — paginated, concise (`readOnlyHint`).
 2. `get_request` — resolved request incl. **which `{{secret:NAME}}` it needs, never values** (`readOnlyHint`).
-3. `run_request {requestId|inline, dryRun?, confirm?, idempotent?, responseFormat?}` — the workhorse. Returns `structuredContent {status, latencyMs, assertions[], bodyHandle}` + emits body as `resource_link strummer://run/<id>/body`. Inline only under ~2k tokens, always offer the handle.
+3. `run_request {requestId|inline, dryRun?, confirm?, idempotent?, responseFormat?}` — the workhorse. Returns `structuredContent {status, latencyMs, assertions[], bodyHandle}` + emits body as `resource_link sackville://run/<id>/body`. Inline only under ~2k tokens, always offer the handle.
 4. `run_collection {collectionId, stopOnFailure?, dryRun?}` — `readOnlyHint` only if every member is safe, else `destructiveHint`.
 5. `validate_response` — response handle + spec ref → structured drift report (`readOnlyHint`).
 
-**DEFAULT SAFETY POSTURE = deny-by-default for mutation, enforced server-side in `@strummer/api`:**
+**DEFAULT SAFETY POSTURE = deny-by-default for mutation, enforced server-side in `@sackville/api`:**
 - GET/HEAD/OPTIONS execute freely.
 - POST/PUT/PATCH/DELETE are by default **(a) dry-run only** — resolve, apply secrets, return what *would* be sent (method, URL, redacted headers, body shape) without firing — and **(b)** require the run to be in an **unlocked** state to actually send.
 - Unlock = explicit auditable gate: run-scoped `allowUnsafe:true` (`--unsafe`) **plus** a host+method allowlist, optionally a `confirm` token echoing a server-issued challenge.
@@ -131,7 +131,7 @@ Low-confidence / verify-before-coding: `@usebruno/lang` exact published version 
 
 **Decisions a human should weigh in on before coding (3–4):**
 1. **Format lock-in:** Accept the `@usebruno/lang`/Ohm grammar dependency and Bruno's format-churn risk (v2→v3 precedent), or keep a thin domain model + own serializer as insurance? (Recommendation: adopt + thin model.)
-2. **Assertion extension strategy:** Extend `.bru` with new blocks (risking Bruno-GUI incompatibility on those blocks) vs. a sidecar `*.strummer.yml` per request for Strummer-only assertions/captures.
+2. **Assertion extension strategy:** Extend `.bru` with new blocks (risking Bruno-GUI incompatibility on those blocks) vs. a sidecar `*.sackville.yml` per request for Sackville-only assertions/captures.
 3. **Default mutation posture strictness:** Is dry-run-by-default + allowlist + `--unsafe` acceptable as the *only* path to send mutations, or do we also need a global read-only mode and an audit log requirement for v1?
 4. **JS-script escape hatch in v1 or deferred:** Ship declarative-only first (recommended) vs. include QuickJS sandbox now (adds ~1.3MB + a curated `bru`/`expect` API surface to design).
 
@@ -141,7 +141,7 @@ Goal: prove the core spine — **load a request from a `.bru` collection on disk
 
 - **Fixture:** `packages/api/test/fixtures/sample/` containing `bruno.json`, `collection.bru`, and `get-health.bru` (method GET, `url: {{baseUrl}}/health`, one assertion `{source: status, op: equals, value: 200}` and `{source: jsonpath, path: "$.ok", op: equals, value: true}`).
 - **Test harness server:** spin an in-process `node:http` server bound to `127.0.0.1:0` (ephemeral port) inside the Vitest `beforeAll`, responding `200 {"ok":true}` on `/health`. Set `baseUrl` env to its address. No outbound network; deterministic.
-- **Red:** write `runner.runRequest(loadCollection(dir), 'get-health')` returning `{status, latencyMs, assertions[]}`; assert `result.status === 200`, both assertion rows `pass: true`, and `result.bodyHandle` is a `strummer://` URI (not inlined). Initially fails (functions unimplemented).
+- **Red:** write `runner.runRequest(loadCollection(dir), 'get-health')` returning `{status, latencyMs, assertions[]}`; assert `result.status === 200`, both assertion rows `pass: true`, and `result.bodyHandle` is a `sackville://` URI (not inlined). Initially fails (functions unimplemented).
 - **Green path implemented in order:** (1) `collection/` load via `@usebruno/lang` `bruToJsonV2` → domain model; (2) `vars/` interpolate `{{baseUrl}}`; (3) `runner/` undici `request()` against the local server with `performance.now()` timing; (4) `assert/` evaluate status + jsonpath rows; (5) `artifacts/` store body, return handle.
 - **Why this slice:** exercises file format, var interpolation, undici, declarative assertions, and the resource-handle discipline in one vertical, while staying fully offline. Secrets, mutation gating, contract validation, and MCP wiring are deliberately out of this first slice and layered on next.
 
@@ -149,14 +149,14 @@ Relevant target paths (all under the new package): `/workspace/packages/api/src/
 
 ## Findings by stream
 
-### 2026 API-request collection formats for a git-friendly, agent-editable web API testing tool (Strummer Pillar 2)
+### 2026 API-request collection formats for a git-friendly, agent-editable web API testing tool (Sackville Pillar 2)
 **Confidence:** high
 
-**Recommendation:** ADOPT Bruno `.bru` as Strummer's native on-disk format and depend on @usebruno/lang for parse/serialize rather than inventing a YAML/TOML format. Rationale: (1) instant ecosystem compatibility — collections authored in/by Strummer open directly in Bruno's GUI and run under @usebruno/cli, and Strummer can open any existing Bruno repo; (2) @usebruno/lang is MIT, pure-JS, no native deps, so it builds identically in your Linux aarch64 dev container and on the macOS target — no platform fallback needed; (3) `.bru`'s one-file-per-request + plain-folder layout is the most diff-friendly and LLM-authorable of all the candidates, which is exactly Strummer's agent-first thesis; (4) you avoid maintaining a parser, a Bruno importer/exporter, AND fighting users who already have Bruno collections.
+**Recommendation:** ADOPT Bruno `.bru` as Sackville's native on-disk format and depend on @usebruno/lang for parse/serialize rather than inventing a YAML/TOML format. Rationale: (1) instant ecosystem compatibility — collections authored in/by Sackville open directly in Bruno's GUI and run under @usebruno/cli, and Sackville can open any existing Bruno repo; (2) @usebruno/lang is MIT, pure-JS, no native deps, so it builds identically in your Linux aarch64 dev container and on the macOS target — no platform fallback needed; (3) `.bru`'s one-file-per-request + plain-folder layout is the most diff-friendly and LLM-authorable of all the candidates, which is exactly Sackville's agent-first thesis; (4) you avoid maintaining a parser, a Bruno importer/exporter, AND fighting users who already have Bruno collections.
 
 Concrete plan:
 - Add `@usebruno/lang` (0.36.x) for round-tripping .bru<->JSON, and `@usebruno/converters` (0.20.x) for import. Optionally `@usebruno/schema` (0.26.x) to validate before serialize. Consider `@usebruno/filestore` (0.9.x) if you want one API that abstracts .bru vs .yml file IO.
-- Define a thin Strummer TS domain model and map it to @usebruno/lang's JSON shape (bruToJsonV2/jsonToBruV2 for requests, collectionBruToJson/jsonToCollectionBru for collection.bru, bruToEnvJsonV2/envJsonToBruV2 for environments). Keep your agent-first 'return large artifacts by resource handle' rule for big response bodies / HAR captures.
+- Define a thin Sackville TS domain model and map it to @usebruno/lang's JSON shape (bruToJsonV2/jsonToBruV2 for requests, collectionBruToJson/jsonToCollectionBru for collection.bru, bruToEnvJsonV2/envJsonToBruV2 for environments). Keep your agent-first 'return large artifacts by resource handle' rule for big response bodies / HAR captures.
 - Import: Postman v2.1, Insomnia v4/v5, and OpenAPI all go through @usebruno/converters -> .bru on disk. Treat HAR 1.2 as a 'record traffic' source and write your own small HAR->.bru generator (HAR is trivial JSON; converters don't cover it).
 - Use Bruno's own `.env`/secret handling pattern so secrets stay out of git.
 
@@ -204,7 +204,7 @@ Only define a native format if you hit a hard limitation of .bru (e.g. a test co
 - Postman v2.1 stores scripts as arrays of code-line strings inside event[] objects and uses a nested url object (raw + host[] + path[] + query[]) — a naive importer that only reads url.raw will lose structured query/path data. Use @usebruno/converters rather than hand-rolling.
 - Insomnia v5 YAML import has had reported breakage ('No importers found for file', Kong/insomnia #8504); validate round-trips and keep v4 JSON import as a fallback path.
 - HAR is NOT covered by @usebruno/converters — you must build HAR->.bru yourself. Also HAR entries embed response bodies/cookies/auth headers (secrets); scrub sensitive fields before committing generated artifacts to git.
-- Bruno's `tests` block uses a Chai/expect runtime executed inside Bruno/@usebruno/cli. If Strummer runs tests itself, you must reimplement or embed that JS runtime; the .bru file only stores the script text, it doesn't execute anything.
+- Bruno's `tests` block uses a Chai/expect runtime executed inside Bruno/@usebruno/cli. If Sackville runs tests itself, you must reimplement or embed that JS runtime; the .bru file only stores the script text, it doesn't execute anything.
 
 **Citations:**
 - [Bru Tag Reference - Bruno Docs](https://docs.usebruno.com/bru-lang/tag-reference)
@@ -221,16 +221,16 @@ Only define a native format if you hit a hard limitation of .bru (e.g. a test co
 - [openapi-to-postman - postmanlabs (GitHub)](https://github.com/postmanlabs/openapi-to-postman)
 - [Bruno v2 -> v3: Breaking Changes - Bruno Blog](https://blog.usebruno.com/bruno-v2-v3-breaking-changes)
 
-### Secrets handling for Strummer Pillar 2 (web API testing): keep secrets out of git-tracked collections, never expose raw values to the LLM agent, OS-native storage with a Linux dev fallback
+### Secrets handling for Sackville Pillar 2 (web API testing): keep secrets out of git-tracked collections, never expose raw values to the LLM agent, OS-native storage with a Linux dev fallback
 **Confidence:** high
 
-**Recommendation:** Adopt a three-layer design.\n\n1) REFERENCES IN COLLECTIONS (git-friendly): Use the syntax {{secret:NAME}} (distinct from ordinary {{var}} interpolation) in the .bru/.yaml/.json collection files. These files are committed; only the names are. Add a lint/scan step that rejects committing a literal that matches a known-high-entropy/token pattern in a field that should be a secret ref.\n\n2) STORAGE via a SecretStore interface. Define `interface SecretStore { get(name): Promise<string|undefined>; set(name,value); delete(name); list(): Promise<string[]> }`. Implement backends and pick at runtime by availability/config:\n - `keyring` backend: @napi-rs/keyring ^1.3.0 — primary on macOS (Keychain) and Windows, and on Linux desktops with a keyring daemon. Use a fixed service name e.g. `strummer` and the secret NAME as the account. Prefer this over the `security` CLI everywhere because it avoids argv leakage and is cross-platform with one dependency.\n - `env` backend (Linux dev container / CI fallback): read STRUMMER_SECRET_<NAME> from the environment, optionally loaded from a gitignored .strummer/secrets.env. Zero native deps; works headless where Secret Service/dbus is unavailable. This is your required Linux dev fallback.\n - (optional, later) `security-cli` backend for macOS-only zero-native-dependency installs: use `find-generic-password -w` reading stdout, and write via add-generic-password with the value passed over a temp/stdin path — never put the secret in argv.\n Select order: explicit config > keyring (if the native module loads AND store is reachable) > env. Catch the keyring load/Secret-Service error and transparently degrade to env in the container.\n\n3) RESOLUTION + REDACTION in the runner (the agent never sees values). The MCP/CLI runner resolves {{secret:NAME}} immediately before issuing the HTTP request, keeps the cleartext only inside the request execution scope, and registers each resolved value in a per-run Redactor. Before ANY artifact crosses back to the agent (response body, headers, captured request, errors, logs, and especially your by-resource-handle large-artifact reads), run it through the Redactor which does exact-substring replacement of every registered secret with `[redacted:NAME]`. Also auto-redact common auth headers. Never log the cleartext, never return it in tool output, and scrub it from saved run artifacts.\n\nNet: one runtime dependency (@napi-rs/keyring ^1.3.0) plus an env-var fallback backend and a value-based redactor. This satisfies (a) no secrets in git and (b) the agent only ever handles names, never values.
+**Recommendation:** Adopt a three-layer design.\n\n1) REFERENCES IN COLLECTIONS (git-friendly): Use the syntax {{secret:NAME}} (distinct from ordinary {{var}} interpolation) in the .bru/.yaml/.json collection files. These files are committed; only the names are. Add a lint/scan step that rejects committing a literal that matches a known-high-entropy/token pattern in a field that should be a secret ref.\n\n2) STORAGE via a SecretStore interface. Define `interface SecretStore { get(name): Promise<string|undefined>; set(name,value); delete(name); list(): Promise<string[]> }`. Implement backends and pick at runtime by availability/config:\n - `keyring` backend: @napi-rs/keyring ^1.3.0 — primary on macOS (Keychain) and Windows, and on Linux desktops with a keyring daemon. Use a fixed service name e.g. `sackville` and the secret NAME as the account. Prefer this over the `security` CLI everywhere because it avoids argv leakage and is cross-platform with one dependency.\n - `env` backend (Linux dev container / CI fallback): read SACKVILLE_SECRET_<NAME> from the environment, optionally loaded from a gitignored .sackville/secrets.env. Zero native deps; works headless where Secret Service/dbus is unavailable. This is your required Linux dev fallback.\n - (optional, later) `security-cli` backend for macOS-only zero-native-dependency installs: use `find-generic-password -w` reading stdout, and write via add-generic-password with the value passed over a temp/stdin path — never put the secret in argv.\n Select order: explicit config > keyring (if the native module loads AND store is reachable) > env. Catch the keyring load/Secret-Service error and transparently degrade to env in the container.\n\n3) RESOLUTION + REDACTION in the runner (the agent never sees values). The MCP/CLI runner resolves {{secret:NAME}} immediately before issuing the HTTP request, keeps the cleartext only inside the request execution scope, and registers each resolved value in a per-run Redactor. Before ANY artifact crosses back to the agent (response body, headers, captured request, errors, logs, and especially your by-resource-handle large-artifact reads), run it through the Redactor which does exact-substring replacement of every registered secret with `[redacted:NAME]`. Also auto-redact common auth headers. Never log the cleartext, never return it in tool output, and scrub it from saved run artifacts.\n\nNet: one runtime dependency (@napi-rs/keyring ^1.3.0) plus an env-var fallback backend and a value-based redactor. This satisfies (a) no secrets in git and (b) the agent only ever handles names, never values.
 
 **Versions:**
 - @napi-rs/keyring 1.3.0 (published ~April 30 2026) — primary recommendation
 - @napi-rs/keyring platform packages confirmed published: linux-arm64-gnu, linux-x64-musl, win32-arm64-msvc (prebuilt, no native build)
 - keytar — AVOID: Atom org archived 2022-12-15, keytar repo archived ~March 2026, unmaintained
-- Node.js 22 (matches Strummer's existing toolchain; @napi-rs/keyring prebuilds target current Node ABIs)
+- Node.js 22 (matches Sackville's existing toolchain; @napi-rs/keyring prebuilds target current Node ABIs)
 - Bruno secret management (reference peer) — current docs as of 2026; OS-level encryption with AES-256 fallback, external secret-manager integrations in Ultimate/paid tier
 
 **Gotchas:**
@@ -240,8 +240,8 @@ Only define a native format if you hit a hard limitation of .bru (e.g. a test co
 - Redaction must operate on VALUES, not on the {{secret:NAME}} token. After resolution the cleartext can appear anywhere the upstream API echoes it (JSON body, Set-Cookie, error text, redirects). Reference-only masking will leak. Register the resolved value and do exact-substring scrubbing on all outbound artifacts.
 - Beware partial/encoded leakage: a token may appear base64-encoded inside an Authorization header or URL-encoded in a query string. At minimum redact the raw value and the Authorization header; consider redacting common encodings of registered secrets.
 - macOS Keychain auto-allows /usr/bin/security access once an item is created with the right ACL — convenient but means any process invoking `security` can read it. Native @napi-rs/keyring scoping by service+account is cleaner; pick one consistent service name and document it.
-- Don't store secrets in the same file as the collection even if gitignored-by-default; a future `git add -A` or export feature can leak them. Keep the env/.env fallback file in a separate, clearly gitignored location (e.g. .strummer/) and add it to the tool's own .gitignore template.
-- Electron safeStorage shows up in search results as a keytar replacement but is Electron-only — not applicable to a Node CLI/MCP server. Ignore it for Strummer.
+- Don't store secrets in the same file as the collection even if gitignored-by-default; a future `git add -A` or export feature can leak them. Keep the env/.env fallback file in a separate, clearly gitignored location (e.g. .sackville/) and add it to the tool's own .gitignore template.
+- Electron safeStorage shows up in search results as a keytar replacement but is Electron-only — not applicable to a Node CLI/MCP server. Ignore it for Sackville.
 
 **Citations:**
 - [@napi-rs/keyring - npm](https://www.npmjs.com/package/@napi-rs/keyring?activeTab=readme)
@@ -258,7 +258,7 @@ Only define a native format if you hit a hard limitation of .bru (e.g. a test co
 - [Get Password from Keychain in Shell Scripts — Scripting OS X](https://scriptingosx.com/2021/04/get-password-from-keychain-in-shell-scripts/)
 - [cross-keychain - npm](https://www.npmjs.com/package/cross-keychain)
 
-### HTTP request runner + assertions for Strummer Pillar 2 (web API testing, all-TypeScript, Node 22, agent-first)
+### HTTP request runner + assertions for Sackville Pillar 2 (web API testing, all-TypeScript, Node 22, agent-first)
 **Confidence:** high
 
 **Recommendation:** Adopt undici directly as the HTTP engine (add `undici` as an explicit dependency; do not rely on the global fetch). Wrap each request in a thin runner that builds a per-run dispatcher via `new Agent({connect:{...mTLS}}).compose(retryInterceptor, redirectInterceptor, dumpInterceptor)` and, when a proxy is configured, layer ProxyAgent/EnvHttpProxyAgent. Use undici's lower-level `request()` (not `fetch()`) so you control body consumption and can record status, all headers, redirect chain, and timing (wrap with performance.now()/hrtime for total + TTFB). This gives deterministic, fully-captured responses — exactly what an agent needs to assert against.
@@ -301,7 +301,7 @@ Security / JS scripts: ship declarative-only for v1. If/when you add scriptable 
 - ajv: response schema validation needs the right draft and compiled-validator caching; recompiling per request is slow. Also enable `allErrors` only for reporting, not in hot paths, and beware that strict mode rejects some loose schemas users may write.
 - QuickJS asyncified WASM build is 2x size and ~40% the speed of RELEASE_SYNC — only use asyncify if scripts must await host async; otherwise stick to RELEASE_SYNC.
 - Storing environment files in git invites secret leakage — design {{$env.X}} / process.env sourcing and redaction from day one so tokens/certs never land in committed collection files.
-- Don't inline large response bodies into agent output; per Strummer's agent-first design return them by resource handle. Assertion result rows (expected/actual/path) are the small, agent-facing payload.
+- Don't inline large response bodies into agent output; per Sackville's agent-first design return them by resource handle. Assertion result rows (expected/actual/path) are the small, agent-facing payload.
 
 **Citations:**
 - [Node.js Undici (official site)](https://undici.nodejs.org/)
@@ -326,20 +326,20 @@ Security / JS scripts: ship declarative-only for v1. If/when you add scriptable 
 - [quickjs-emscripten — npm](https://www.npmjs.com/package/quickjs-emscripten)
 - [Simon Willison — JavaScript Sandboxing Research (2026)](https://simonwillison.net/2026/Mar/22/javascript-sandboxing-research/)
 
-### Exposing web API testing to an LLM agent over MCP with safety (Strummer Pillar 2)
+### Exposing web API testing to an LLM agent over MCP with safety (Sackville Pillar 2)
 **Confidence:** high
 
-**Recommendation:** Ship a deliberately small MCP tool surface, workflow-shaped: (1) list_requests (collection-scoped, paginated, concise) — readOnlyHint; (2) get_request (resolved request incl. which {{secret:NAME}} it needs, never values) — readOnlyHint; (3) run_request {requestId|inline, dryRun?, confirm?, idempotent?, responseFormat?} — the workhorse; (4) run_collection {collectionId, stopOnFailure?, dryRun?} — readOnlyHint only if every member is safe, else destructive; (5) validate_response / assert (response handle + spec ref -> structured drift report) — readOnlyHint. run_request returns structuredContent {status, latencyMs, assertions[], bodyHandle} and emits the body as a resource_link strummer://run/<id>/body; only inline bodies under a small threshold (~2k tokens) and always offer the handle. Tag tools with accurate annotations but treat them as UI hints only.
+**Recommendation:** Ship a deliberately small MCP tool surface, workflow-shaped: (1) list_requests (collection-scoped, paginated, concise) — readOnlyHint; (2) get_request (resolved request incl. which {{secret:NAME}} it needs, never values) — readOnlyHint; (3) run_request {requestId|inline, dryRun?, confirm?, idempotent?, responseFormat?} — the workhorse; (4) run_collection {collectionId, stopOnFailure?, dryRun?} — readOnlyHint only if every member is safe, else destructive; (5) validate_response / assert (response handle + spec ref -> structured drift report) — readOnlyHint. run_request returns structuredContent {status, latencyMs, assertions[], bodyHandle} and emits the body as a resource_link sackville://run/<id>/body; only inline bodies under a small threshold (~2k tokens) and always offer the handle. Tag tools with accurate annotations but treat them as UI hints only.
 
-DEFAULT SAFETY POSTURE = deny-by-default for mutation. Concretely: safe methods (GET/HEAD/OPTIONS) execute normally; any unsafe method (POST/PUT/PATCH/DELETE) is, by default, (a) dry-run only — Strummer resolves the request, applies secrets, and returns exactly what WOULD be sent (method, URL, redacted headers, body shape) without firing; and (b) requires the run to be in an unlocked state to actually send. Unlock via an explicit, auditable gate: a session/run-scoped --unsafe (or allowUnsafe:true) flag PLUS a host+method allowlist (e.g. only POST to api.staging.example.com), and optionally a per-call confirm token echoing a server-issued challenge so confirmation can't be blind. Mark requests idempotent:true to permit auto-retry/backoff; non-idempotent unsafe calls never auto-retry and inject/require an Idempotency-Key. Rate-limit and exponential-backoff all sends. Enforce ALL of this in the server, independent of client annotations.
+DEFAULT SAFETY POSTURE = deny-by-default for mutation. Concretely: safe methods (GET/HEAD/OPTIONS) execute normally; any unsafe method (POST/PUT/PATCH/DELETE) is, by default, (a) dry-run only — Sackville resolves the request, applies secrets, and returns exactly what WOULD be sent (method, URL, redacted headers, body shape) without firing; and (b) requires the run to be in an unlocked state to actually send. Unlock via an explicit, auditable gate: a session/run-scoped --unsafe (or allowUnsafe:true) flag PLUS a host+method allowlist (e.g. only POST to api.staging.example.com), and optionally a per-call confirm token echoing a server-issued challenge so confirmation can't be blind. Mark requests idempotent:true to permit auto-retry/backoff; non-idempotent unsafe calls never auto-retry and inject/require an Idempotency-Key. Rate-limit and exponential-backoff all sends. Enforce ALL of this in the server, independent of client annotations.
 
 SECRETS: agent only ever emits {{secret:NAME}} tokens. The server resolves them against a secret provider (env/keychain/secret-manager) immediately before transport, after the value has left the LLM-visible argument path. Maintain a secret-value set and redact it from every result, header echo, error message, log line, and resource body (replace with {{secret:NAME}} or [REDACTED]). Log argument shapes, not values. get_request must report required secret names without resolving them.
 
-CONTRACT VALIDATION: use openapi-backend (framework-agnostic, Ajv-2020-12) for OpenAPI 3.1 response validation — point it at the spec, match the live response to an operation, validate status/headers/body, and return a structured drift report (missingRequired[], typeMismatch[], unexpectedField[], statusMismatch, contentTypeMismatch) rather than prose so the agent can act on it. Prefer it over express-openapi-validator because Strummer is not an Express app, though express-openapi-validator >=5.4.0 confirms 3.1 is mainstream. For GraphQL, validate operations and responses against the introspected schema with graphql-js and use graphql-inspector for schema-diff/coverage. Wire spec validation as an opt-in assertion on run_request (specRef param) and as the dedicated validate_response tool operating on a stored response handle. Pure-TS, no Python/SQLite, Linux-dev-clean.
+CONTRACT VALIDATION: use openapi-backend (framework-agnostic, Ajv-2020-12) for OpenAPI 3.1 response validation — point it at the spec, match the live response to an operation, validate status/headers/body, and return a structured drift report (missingRequired[], typeMismatch[], unexpectedField[], statusMismatch, contentTypeMismatch) rather than prose so the agent can act on it. Prefer it over express-openapi-validator because Sackville is not an Express app, though express-openapi-validator >=5.4.0 confirms 3.1 is mainstream. For GraphQL, validate operations and responses against the introspected schema with graphql-js and use graphql-inspector for schema-diff/coverage. Wire spec validation as an opt-in assertion on run_request (specRef param) and as the dedicated validate_response tool operating on a stored response handle. Pure-TS, no Python/SQLite, Linux-dev-clean.
 
 **Versions:**
-- Node.js 22 LTS (Strummer baseline; libs below need >=20)
-- MCP TypeScript SDK 1.29 (Strummer baseline); MCP spec revision 2025-06-18 for tools/resources/annotations
+- Node.js 22 LTS (Sackville baseline; libs below need >=20)
+- MCP TypeScript SDK 1.29 (Sackville baseline); MCP spec revision 2025-06-18 for tools/resources/annotations
 - openapi-backend (framework-agnostic OAS 3.0/3.1 request+response validation via Ajv) — current 5.x line
 - express-openapi-validator >=5.4.0 (first version with OAS 3.1 support; response validation JSON-only)
 - Ajv with JSON Schema 2020-12 dialect (ajv/dist/2020), required for OpenAPI 3.1
@@ -349,7 +349,7 @@ CONTRACT VALIDATION: use openapi-backend (framework-agnostic, Ajv-2020-12) for O
 - Zod 3.x + zod-to-openapi as an alternative single-source-of-truth schema path for assertions
 
 **Gotchas:**
-- MCP tool annotations (readOnlyHint/destructiveHint/idempotentHint) are NOT a security boundary — the spec says clients must treat them as untrusted. If Strummer relies on them for safety instead of server-side enforcement, a misconfigured or malicious client can bypass mutation gating.
+- MCP tool annotations (readOnlyHint/destructiveHint/idempotentHint) are NOT a security boundary — the spec says clients must treat them as untrusted. If Sackville relies on them for safety instead of server-side enforcement, a misconfigured or malicious client can bypass mutation gating.
 - OpenAPI 3.1 uses JSON Schema 2020-12; using a draft-07-default Ajv (the common mistake) silently mis-validates 3.1 specs. Must import the Ajv 2020 build and register format/dialect support.
 - express-openapi-validator's response validation is JSON-only and its public API is Express middleware — extracting standalone response validation means reaching into internals; openapi-backend is the cleaner non-Express path, so don't pick the validator off search-result popularity alone.
 - Inlining a response body 'just this once' defeats the resource-handle design and can blow the ~25k-token Claude Code cap on a single large API response; always default to the handle and gate inlining on a small token/byte threshold.

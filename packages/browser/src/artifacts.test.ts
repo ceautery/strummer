@@ -6,7 +6,7 @@ import { ArtifactStore } from './artifacts.js'
 
 const tmpDirs: string[] = []
 function tmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'strummer-browser-artifacts-'))
+  const dir = mkdtempSync(join(tmpdir(), 'sackville-browser-artifacts-'))
   tmpDirs.push(dir)
   return dir
 }
@@ -24,8 +24,8 @@ describe('browser ArtifactStore (browser/run prefix) — forwards retention opts
     utimesSync(join(dir, 'browser', 'run', 'old'), 1, 1)
     utimesSync(join(dir, 'browser', 'run', 'new'), 2, 2)
     expect(store.sweep()).toEqual(['old'])
-    expect(store.get('strummer://browser/run/old/trace')).toBeUndefined()
-    expect(store.get('strummer://browser/run/new/trace')?.body.toString('utf8')).toBe('y')
+    expect(store.get('sackville://browser/run/old/trace')).toBeUndefined()
+    expect(store.get('sackville://browser/run/new/trace')?.body.toString('utf8')).toBe('y')
   })
 
   it('with no opts, never deletes (backward-compatible)', () => {
@@ -33,6 +33,6 @@ describe('browser ArtifactStore (browser/run prefix) — forwards retention opts
     const store = new ArtifactStore(dir)
     store.put('r', 'trace', 'x', 'application/zip')
     expect(store.sweep()).toEqual([])
-    expect(store.get('strummer://browser/run/r/trace')).toBeDefined()
+    expect(store.get('sackville://browser/run/r/trace')).toBeDefined()
   })
 })

@@ -6,10 +6,10 @@ import sqlite3
 
 import sqlite_vec
 
-from strummer_ingest.build import build_index
-from strummer_ingest.db import EMBED_DIM
-from strummer_ingest.embed import FakeEmbedder
-from strummer_ingest.model import Fragment
+from sackville_ingest.build import build_index
+from sackville_ingest.db import EMBED_DIM
+from sackville_ingest.embed import FakeEmbedder
+from sackville_ingest.model import Fragment
 
 
 def _open(path: str) -> sqlite3.Connection:
@@ -90,7 +90,7 @@ def test_append_adds_another_version_to_one_index(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM docs_vec").fetchone()[0] == 2
     # meta seeded exactly once.
     assert (
-        conn.execute("SELECT COUNT(*) FROM strummer_meta WHERE key='schema_version'").fetchone()[0]
+        conn.execute("SELECT COUNT(*) FROM sackville_meta WHERE key='schema_version'").fetchone()[0]
         == 1
     )
     conn.close()

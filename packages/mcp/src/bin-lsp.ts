@@ -2,8 +2,8 @@
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
-import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
+import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville/artifacts'
+import { detectInstalledVersion, type Ecosystem } from '@sackville/core'
 import {
   defaultListFiles,
   LanguageServerManager,
@@ -11,7 +11,7 @@ import {
   LspRenameEngine,
   parseServerRegistry,
   type ServerRegistry,
-} from '@strummer/lsp'
+} from '@sackville/lsp'
 import {
   createLspServer,
   type LspToolsOptions,
@@ -96,25 +96,25 @@ const detectToolchain: ToolchainDetector = (projectRoot, language) => {
 /**
  * Build the LSP MCP server from operator env. `lsp_languages` is always available; the
  * navigation tools (`lsp_find_definition`/`_references`/`_hover`) run a live indexing daemon, so
- * they are enabled only with the full gate — a truthy `STRUMMER_LSP_ALLOW_RUN`, a non-empty
- * `STRUMMER_LSP_PROJECT_ROOTS` allowlist, AND a non-empty `STRUMMER_LSP_SERVERS` registry:
- *   STRUMMER_LSP_ALLOW_RUN=1
- *   STRUMMER_LSP_ALLOW_WRITE=1   # lets lsp_rename WRITE edits to disk; default off = dry-run only.
- *                                # Requires STRUMMER_LSP_ALLOW_RUN (hard startup error otherwise).
- *   STRUMMER_LSP_ALLOW_PARTIAL_RENAME=1  # apply a rename the completeness guard flags `suspect`
+ * they are enabled only with the full gate — a truthy `SACKVILLE_LSP_ALLOW_RUN`, a non-empty
+ * `SACKVILLE_LSP_PROJECT_ROOTS` allowlist, AND a non-empty `SACKVILLE_LSP_SERVERS` registry:
+ *   SACKVILLE_LSP_ALLOW_RUN=1
+ *   SACKVILLE_LSP_ALLOW_WRITE=1   # lets lsp_rename WRITE edits to disk; default off = dry-run only.
+ *                                # Requires SACKVILLE_LSP_ALLOW_RUN (hard startup error otherwise).
+ *   SACKVILLE_LSP_ALLOW_PARTIAL_RENAME=1  # apply a rename the completeness guard flags `suspect`
  *                                # (an open-files-scoped server like pyright → likely partial edit);
  *                                # default off = a suspect rename is refused for write.
- *   STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS=1  # apply a server `overwrite` on a Create/Rename
+ *   SACKVILLE_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS=1  # apply a server `overwrite` on a Create/Rename
  *                                # (truncate-and-replace an EXISTING regular file). Default off.
- *                                # Requires STRUMMER_LSP_ALLOW_WRITE (hard startup error otherwise).
+ *                                # Requires SACKVILLE_LSP_ALLOW_WRITE (hard startup error otherwise).
  *                                # A symlink/directory target, recursive/dir delete, and `overwrite`
  *                                # on a delete STAY refused even when set.
- *   STRUMMER_LSP_PROJECT_ROOTS=/abs/project,/abs/other
- *   STRUMMER_LSP_SERVERS='{"typescript":{"command":"typescript-language-server","args":["--stdio"]}}'
- *   STRUMMER_LSP_TIMEOUT_MS=15000
- *   STRUMMER_LSP_ARTIFACT_DIR=/var/lib/strummer/lsp   # backs by-handle reference lists
- *   STRUMMER_LSP_MAX_SERVERS=8
- *   STRUMMER_LSP_IDLE_TTL_MS=900000
+ *   SACKVILLE_LSP_PROJECT_ROOTS=/abs/project,/abs/other
+ *   SACKVILLE_LSP_SERVERS='{"typescript":{"command":"typescript-language-server","args":["--stdio"]}}'
+ *   SACKVILLE_LSP_TIMEOUT_MS=15000
+ *   SACKVILLE_LSP_ARTIFACT_DIR=/var/lib/sackville/lsp   # backs by-handle reference lists
+ *   SACKVILLE_LSP_MAX_SERVERS=8
+ *   SACKVILLE_LSP_IDLE_TTL_MS=900000
  */
 export function buildLspServerFromEnv(
   env: Record<string, string | undefined> = process.env,
@@ -127,7 +127,7 @@ export function buildLspServerFromEnv(
 
 /**
  * The single, shared parse + resource construction for the LSP bin: parse the operator
- * `STRUMMER_LSP_*` env, enforce the anti-widening hard throws, and (when a registry is bound)
+ * `SACKVILLE_LSP_*` env, enforce the anti-widening hard throws, and (when a registry is bound)
  * construct the OWNED long-lived `LanguageServerManager` + the query/rename engines wired into one
  * {@link LspToolsOptions}. Both `buildLspServerFromEnv` (standalone server) and `setupLspFromEnv`
  * (aggregate composition) go through here so the manager is constructed exactly ONE way.
@@ -137,40 +137,42 @@ function buildLspRuntimeFromEnv(env: Record<string, string | undefined>): {
   options: LspToolsOptions
   manager?: LanguageServerManager
 } {
-  const serversRaw = env.STRUMMER_LSP_SERVERS
+  const serversRaw = env.SACKVILLE_LSP_SERVERS
   const registry =
     serversRaw && serversRaw.trim() !== '' ? parseServerRegistry(serversRaw) : undefined
 
   const config: LspBinConfig = {
-    allowRun: bool(env.STRUMMER_LSP_ALLOW_RUN),
-    allowWrite: bool(env.STRUMMER_LSP_ALLOW_WRITE),
-    allowPartialRename: bool(env.STRUMMER_LSP_ALLOW_PARTIAL_RENAME),
-    allowDestructiveResourceOps: bool(env.STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS),
-    allowedRoots: csv(env.STRUMMER_LSP_PROJECT_ROOTS),
-    timeoutMs: num(env.STRUMMER_LSP_TIMEOUT_MS),
+    allowRun: bool(env.SACKVILLE_LSP_ALLOW_RUN),
+    allowWrite: bool(env.SACKVILLE_LSP_ALLOW_WRITE),
+    allowPartialRename: bool(env.SACKVILLE_LSP_ALLOW_PARTIAL_RENAME),
+    allowDestructiveResourceOps: bool(env.SACKVILLE_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS),
+    allowedRoots: csv(env.SACKVILLE_LSP_PROJECT_ROOTS),
+    timeoutMs: num(env.SACKVILLE_LSP_TIMEOUT_MS),
     registry,
-    artifactDir: env.STRUMMER_LSP_ARTIFACT_DIR || undefined,
-    maxServers: num(env.STRUMMER_LSP_MAX_SERVERS),
-    idleTtlMs: num(env.STRUMMER_LSP_IDLE_TTL_MS),
+    artifactDir: env.SACKVILLE_LSP_ARTIFACT_DIR || undefined,
+    maxServers: num(env.SACKVILLE_LSP_MAX_SERVERS),
+    idleTtlMs: num(env.SACKVILLE_LSP_IDLE_TTL_MS),
   }
 
   // allowWrite implies allowRun — you cannot apply an edit without a live server computing it.
   // Reject the contradictory combination LOUDLY at startup rather than silently ignoring it.
   if (config.allowWrite && !config.allowRun) {
-    throw new Error('STRUMMER_LSP_ALLOW_WRITE requires STRUMMER_LSP_ALLOW_RUN')
+    throw new Error('SACKVILLE_LSP_ALLOW_WRITE requires SACKVILLE_LSP_ALLOW_RUN')
   }
   // A destructive overwrite is meaningless without write-mode; reject the contradiction loudly.
   if (config.allowDestructiveResourceOps && !config.allowWrite) {
-    throw new Error('STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS requires STRUMMER_LSP_ALLOW_WRITE')
+    throw new Error(
+      'SACKVILLE_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS requires SACKVILLE_LSP_ALLOW_WRITE',
+    )
   }
 
   const artifacts =
     config.artifactDir !== undefined
       ? new ArtifactStore(config.artifactDir, 'lsp', {
           retention: retentionFromEnv({
-            maxAgeMs: env.STRUMMER_LSP_ARTIFACT_MAX_AGE_MS,
-            maxEntries: env.STRUMMER_LSP_ARTIFACT_MAX_ENTRIES,
-            maxBytes: env.STRUMMER_LSP_ARTIFACT_MAX_BYTES,
+            maxAgeMs: env.SACKVILLE_LSP_ARTIFACT_MAX_AGE_MS,
+            maxEntries: env.SACKVILLE_LSP_ARTIFACT_MAX_ENTRIES,
+            maxBytes: env.SACKVILLE_LSP_ARTIFACT_MAX_BYTES,
           }),
           sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
         })

@@ -8,7 +8,7 @@ import type { PageDriver, StepResult, WouldRequest } from './driver.js'
 /**
  * Persisted, replayable browser **flows** — `.bru` + sidecar (ROADMAP Phase 3;
  * mirrors ADR 0004's API-pillar pattern). A Bruno-openable `<name>.bru` carries
- * the flow's meta (its name); the colocated `<name>.strummer.yml` sidecar holds
+ * the flow's meta (its name); the colocated `<name>.sackville.yml` sidecar holds
  * the ordered **steps**. Steps key off **semantic locators** (`role` + optional
  * accessible `name` + `nth`), NOT the ephemeral per-snapshot refs — so a flow is
  * stable across runs. `{{var}}` / `{{secret:NAME}}` interpolation is resolved at
@@ -131,15 +131,15 @@ function parseStep(raw: unknown, index: number): FlowStep {
   }
 }
 
-/** Load a single persisted flow from its `<name>.bru` (+ `<name>.strummer.yml`). */
+/** Load a single persisted flow from its `<name>.bru` (+ `<name>.sackville.yml`). */
 export function loadFlow(bruPath: string): BrowserFlow {
   const stem = basename(bruPath, '.bru')
   const parsed = bruToJsonV2(readFileSync(bruPath, 'utf8')) as BruJson
   const name = parsed.meta?.name ?? stem
 
-  const sidecarPath = bruPath.replace(/\.bru$/, '.strummer.yml')
+  const sidecarPath = bruPath.replace(/\.bru$/, '.sackville.yml')
   if (!existsSync(sidecarPath)) {
-    throw new Error(`flow "${stem}" has no ${stem}.strummer.yml sidecar (the steps live there)`)
+    throw new Error(`flow "${stem}" has no ${stem}.sackville.yml sidecar (the steps live there)`)
   }
   const sidecar = (parseYaml(readFileSync(sidecarPath, 'utf8')) ?? {}) as Sidecar
   const steps = (sidecar.steps ?? []).map((raw, i) => parseStep(raw, i))

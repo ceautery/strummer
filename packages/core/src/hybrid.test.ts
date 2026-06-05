@@ -8,7 +8,7 @@ import { EXPECTED_EMBED_DIM } from './schema.js'
 import { searchDocs } from './search.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const SCHEMA = resolve(here, '../../../schema/strummer.schema.sql')
+const SCHEMA = resolve(here, '../../../schema/sackville.schema.sql')
 
 /** A 384-d unit vector pointing along axis `axis`. */
 function unit(axis: number): number[] {

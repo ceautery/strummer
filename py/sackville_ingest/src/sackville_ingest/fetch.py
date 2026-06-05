@@ -15,7 +15,7 @@ from pathlib import Path
 DOCUMENTS_HOST = "https://documents.devdocs.io"
 MANIFEST_URL = "https://devdocs.io/docs.json"
 DEFAULT_TIMEOUT = 180
-USER_AGENT = "strummer-ingest/0.0 (+https://github.com/ceautery/strummer)"
+USER_AGENT = "sackville-ingest/0.0 (+https://github.com/ceautery/sackville)"
 
 
 def devdocs_url(slug: str, name: str, mtime: int | None = None) -> str:

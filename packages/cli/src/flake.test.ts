@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { TestRunner } from '@strummer/flake'
+import type { TestRunner } from '@sackville/flake'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runFlake } from './flake.js'
 
@@ -18,7 +18,7 @@ function capture() {
 let dir: string
 let db: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-cli-flake-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-cli-flake-'))
   db = join(dir, 'history.db')
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
@@ -30,7 +30,7 @@ function pytestReport(tests: { nodeid: string; outcome: string }[]): string {
   return p
 }
 
-describe('strummer flake CLI', () => {
+describe('sackville flake CLI', () => {
   it('ingest records a pytest report and status classifies it', async () => {
     const report = pytestReport([
       { nodeid: 'tests/test_x.py::test_a', outcome: 'failed' },

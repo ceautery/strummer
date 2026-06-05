@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 /**
  * A pillar's contribution to a (possibly SHARED) MCP server — the seam the
  * aggregate server composes (ADR 0019). Each bin exposes a `setup<Pillar>FromEnv`
- * that parses its OWN `STRUMMER_<PILLAR>_*` env (unchanged from its standalone
+ * that parses its OWN `SACKVILLE_<PILLAR>_*` env (unchanged from its standalone
  * bin) and returns this:
  *
  *  - `register(server)` registers the pillar's tools/resources onto the given

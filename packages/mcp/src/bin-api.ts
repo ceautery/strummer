@@ -2,9 +2,9 @@
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { resolveSecretStore } from '@strummer/api'
-import { ArtifactStore } from '@strummer/artifacts'
-import { Redactor } from '@strummer/safety'
+import { resolveSecretStore } from '@sackville/api'
+import { ArtifactStore } from '@sackville/artifacts'
+import { Redactor } from '@sackville/safety'
 import { type ApiToolsOptions, createApiServer, registerApiTools } from './api.js'
 import type { PillarSetup } from './pillars.js'
 
@@ -14,7 +14,7 @@ export interface ApiBinConfig {
   allowedHosts: string[]
   /** Chain the OS keyring ahead of the env secret store. */
   keyring: boolean
-  /** Permit loopback/private SSRF targets (default true; STRUMMER_BLOCK_PRIVATE flips it). */
+  /** Permit loopback/private SSRF targets (default true; SACKVILLE_BLOCK_PRIVATE flips it). */
   allowPrivate: boolean
   /** Shared artifacts root — enables `validate_capture` HAR resolution (ADR 0013). */
   artifactsRoot?: string
@@ -38,7 +38,7 @@ function csv(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-/** Aggregate-mode flag: when true, the api pillar reads its OWN `STRUMMER_API_*`
+/** Aggregate-mode flag: when true, the api pillar reads its OWN `SACKVILLE_API_*`
  * namespace instead of the bare names (ADR 0019 §A8 — so one bare flag can't
  * unlock api AND verify in a single shared process). Standalone bins pass false. */
 export interface AggregateMode {
@@ -46,14 +46,14 @@ export interface AggregateMode {
 }
 
 /** The api pillar's operator safety gate. In aggregate mode it reads the PREFIXED
- * `STRUMMER_API_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/`_BLOCK_PRIVATE`/`_KEYRING`; standalone
- * reads the bare `STRUMMER_*` names. Shared by the api bin AND verify's produce-api
+ * `SACKVILLE_API_ALLOW_UNSAFE`/`_ALLOWED_HOSTS`/`_BLOCK_PRIVATE`/`_KEYRING`; standalone
+ * reads the bare `SACKVILLE_*` names. Shared by the api bin AND verify's produce-api
  * gate so the anti-widening rule is enforced in exactly one place. */
 export function apiSafetyGateFromEnv(
   env: Record<string, string | undefined> = process.env,
   { aggregate = false }: AggregateMode = {},
 ): { allowUnsafe: boolean; allowedHosts: string[]; allowPrivate: boolean; keyring: boolean } {
-  const p = aggregate ? 'STRUMMER_API_' : 'STRUMMER_'
+  const p = aggregate ? 'SACKVILLE_API_' : 'SACKVILLE_'
   return {
     allowUnsafe: bool(env[`${p}ALLOW_UNSAFE`]),
     allowedHosts: csv(env[`${p}ALLOWED_HOSTS`]),
@@ -63,9 +63,9 @@ export function apiSafetyGateFromEnv(
 }
 
 /** The env variable prefix the api pillar's secret store reads. Aggregate mode
- * uses its own namespace so a bare `STRUMMER_SECRET_*` can't be read here. */
+ * uses its own namespace so a bare `SACKVILLE_SECRET_*` can't be read here. */
 export function apiSecretPrefix({ aggregate = false }: AggregateMode = {}): string {
-  return aggregate ? 'STRUMMER_API_SECRET_' : 'STRUMMER_SECRET_'
+  return aggregate ? 'SACKVILLE_API_SECRET_' : 'SACKVILLE_SECRET_'
 }
 
 /** Parse the operator env into the API bin config (single source of truth). */
@@ -75,8 +75,8 @@ export function apiConfigFromEnv(
 ): ApiBinConfig {
   return {
     ...apiSafetyGateFromEnv(env, mode),
-    artifactsRoot: env.STRUMMER_ARTIFACTS_ROOT || undefined,
-    allowCapture: bool(env.STRUMMER_VERIFY_ALLOW_CAPTURE),
+    artifactsRoot: env.SACKVILLE_ARTIFACTS_ROOT || undefined,
+    allowCapture: bool(env.SACKVILLE_VERIFY_ALLOW_CAPTURE),
   }
 }
 
@@ -108,15 +108,15 @@ function apiOptions(
       verifyStore.put(id, kind, body, contentType)
     const redactor = new Redactor()
     for (const [key, value] of Object.entries(env)) {
-      const m = /^STRUMMER_VERIFY_SECRET_(.+)$/.exec(key)
+      const m = /^SACKVILLE_VERIFY_SECRET_(.+)$/.exec(key)
       if (m?.[1] && value) redactor.register(m[1], value)
     }
     verifyRedact = (v) => redactor.redact(v)
   }
 
-  // Standalone: keyring chains over the bare STRUMMER_SECRET_* (else the runner's
+  // Standalone: keyring chains over the bare SACKVILLE_SECRET_* (else the runner's
   // default env store). Aggregate: ALWAYS pin the api secret namespace
-  // (STRUMMER_API_SECRET_*) so a bare shared STRUMMER_SECRET_* is never read here.
+  // (SACKVILLE_API_SECRET_*) so a bare shared SACKVILLE_SECRET_* is never read here.
   const secrets = mode.aggregate
     ? resolveSecretStore({ keyring: config.keyring, env, envPrefix: apiSecretPrefix(mode) })
     : config.keyring
@@ -151,11 +151,11 @@ export function setupApiFromEnv(
 /**
  * Build the API MCP server from operator env. Safety is operator-set, never by
  * the agent (see ADR 0004): mutating requests stay dry-run unless BOTH
- * `STRUMMER_ALLOW_UNSAFE` and a `STRUMMER_ALLOWED_HOSTS` allowlist are present.
- *   STRUMMER_ALLOW_UNSAFE=1
- *   STRUMMER_ALLOWED_HOSTS=api.example.com,127.0.0.1
- *   STRUMMER_KEYRING=1        # chain the OS keyring ahead of STRUMMER_SECRET_<NAME>
- *   STRUMMER_BLOCK_PRIVATE=1  # also refuse loopback/RFC1918 SSRF targets (hardened)
+ * `SACKVILLE_ALLOW_UNSAFE` and a `SACKVILLE_ALLOWED_HOSTS` allowlist are present.
+ *   SACKVILLE_ALLOW_UNSAFE=1
+ *   SACKVILLE_ALLOWED_HOSTS=api.example.com,127.0.0.1
+ *   SACKVILLE_KEYRING=1        # chain the OS keyring ahead of SACKVILLE_SECRET_<NAME>
+ *   SACKVILLE_BLOCK_PRIVATE=1  # also refuse loopback/RFC1918 SSRF targets (hardened)
  */
 export function buildApiServerFromEnv(
   env: Record<string, string | undefined> = process.env,

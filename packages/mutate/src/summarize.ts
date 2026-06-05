@@ -1,10 +1,10 @@
 /**
- * Pure mutation-report summarizer — the first slice of `@strummer/mutate`, and the one
+ * Pure mutation-report summarizer — the first slice of `@sackville/mutate`, and the one
  * with no I/O and no Stryker dependency.
  *
  * Mutation testing asks "are the tests meaningful?" — it perturbs the source (a `+`
  * becomes `-`, a `true` becomes `false`) and re-runs the suite; a mutant that survives is
- * a behaviour the tests do not actually pin down. Under Strummer's TDD gate the agent
+ * a behaviour the tests do not actually pin down. Under Sackville's TDD gate the agent
  * wrote a passing test, but a passing test can still assert nothing useful — surviving
  * mutants are the catch for that, the natural complement to coverage's forgotten-assertion
  * catch (covered-but-unkilled vs added-but-uncovered).

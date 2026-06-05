@@ -156,7 +156,7 @@ export async function runScopedPython(
   }
 
   const runner = deps.runner ?? defaultPytestCovRunner
-  const coverageDir = deps.coverageDir ?? mkdtempSync(join(tmpdir(), 'strummer-cov-py-'))
+  const coverageDir = deps.coverageDir ?? mkdtempSync(join(tmpdir(), 'sackville-cov-py-'))
   const jsonPath = join(coverageDir, 'coverage.json')
   const argv = pytestArgv(input.measureTargets, scope.selectors, jsonPath)
 

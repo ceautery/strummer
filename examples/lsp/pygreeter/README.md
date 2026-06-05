@@ -1,6 +1,6 @@
-# pygreeter — Python sample project for `strummer lsp`
+# pygreeter — Python sample project for `sackville lsp`
 
-A tiny, real Python project to drive the [`strummer lsp` CLI](../../../packages/cli/README.md#verification-phase-4-pillars)
+A tiny, real Python project to drive the [`sackville lsp` CLI](../../../packages/cli/README.md#verification-phase-4-pillars)
 against a live Language Server — the Python counterpart of [`../greeter`](../greeter)
 (TypeScript). Two files:
 
@@ -10,7 +10,7 @@ against a live Language Server — the Python counterpart of [`../greeter`](../g
   (so `references`/`type-definition`/`rename` cross files).
 
 The LSP engine is **language-agnostic** — there is no Python-specific code in
-[`@strummer/lsp`](../../../packages/lsp). All you change versus the greeter quickstart is the
+[`@sackville/lsp`](../../../packages/lsp). All you change versus the greeter quickstart is the
 operator-bound server registry ([`servers.json`](./servers.json) binds `python` to
 `pyright-langserver`). The recorded fixtures the gate replays for this server live in
 [`packages/lsp/test/fixtures/README.md`](../../../packages/lsp/test/fixtures/README.md)
@@ -18,7 +18,7 @@ operator-bound server registry ([`servers.json`](./servers.json) binds `python` 
 
 ## Prerequisites
 
-`strummer lsp` spawns the operator-bound server as a subprocess — it does **not** bundle one.
+`sackville lsp` spawns the operator-bound server as a subprocess — it does **not** bundle one.
 Install [pyright](https://github.com/microsoft/pyright) (the language server) so
 `pyright-langserver` is on `PATH`:
 
@@ -30,14 +30,14 @@ pip install pyright            # the PyPI wrapper; downloads the matching node b
 
 (this quickstart was verified against **pyright 1.1.410**). The operator registry is in
 [`servers.json`](./servers.json) — pass it with `--servers "$(cat servers.json)"` or set
-`STRUMMER_LSP_SERVERS` to its contents.
+`SACKVILLE_LSP_SERVERS` to its contents.
 
 ## Driving it
 
 ```bash
 S="node packages/cli/dist/bin.mjs"             # from the repo root, after `pnpm -r build`
 P=examples/lsp/pygreeter
-export STRUMMER_LSP_SERVERS="$(cat $P/servers.json)"
+export SACKVILLE_LSP_SERVERS="$(cat $P/servers.json)"
 
 # Which languages are bound (no server spawned):
 $S lsp languages
@@ -87,7 +87,7 @@ pyright's notable traits (all observed live against this project):
   Verified: opening more files surfaces exactly those files' uses and **no more** (greeter alone →
   1 ref; greeter + two importers open → 5; etc., scaling linearly with the open set), and a rename
   on a 62-file project from the declaration edits **only the declaration**, missing every importer.
-  > **⚠️ This makes a pyright cross-file `rename` potentially INCOMPLETE.** Strummer applies
+  > **⚠️ This makes a pyright cross-file `rename` potentially INCOMPLETE.** Sackville applies
   > exactly the edit the server returns, so a rename from a declaration can silently rewrite only
   > some files and break the importers it didn't touch. **In this tiny 2-file example the rename IS
   > complete** — but only because pyright auto-analyzes the entire (2-file) workspace; do **not**
@@ -96,12 +96,12 @@ pyright's notable traits (all observed live against this project):
   > whole-project rename (tsserver, rust-analyzer, gopls). An **anchor file does not help** — it only
   > extends coverage to the files you explicitly open, not to the ones you'd need to discover.
   >
-  > **Strummer guards this for you.** `rename` runs a completeness check — it scans the project for
+  > **Sackville guards this for you.** `rename` runs a completeness check — it scans the project for
   > same-language files that mention the old name but aren't in the edit. If any are found the
   > verdict is `suspect`: the dry-run preview lists the missed files, and an actual write
   > (`--allow-write`) is **refused** unless you also pass `--allow-partial-rename` (you accept a
   > partial rename). A whole-project-rename server reports `complete` and is never blocked.
-  This is a pyright capability limitation, not a Strummer wire bug; cross-file *definition* and
+  This is a pyright capability limitation, not a Sackville wire bug; cross-file *definition* and
   *type-definition* resolve fine (single-target module resolution, unaffected by the scope).
 - **No `serverInfo`.** pyright does not report its name/version over LSP, so results carry a
   `versionWarning` (the answer cannot be attributed to a specific server version). pyright also

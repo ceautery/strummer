@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from strummer_ingest.dash import iter_fragments
-from strummer_ingest.types_map import normalize_dash_type
+from sackville_ingest.dash import iter_fragments
+from sackville_ingest.types_map import normalize_dash_type
 
 
 def _make_docset(root: Path) -> Path:

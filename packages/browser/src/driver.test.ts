@@ -164,7 +164,7 @@ describe('PageDriver — step tools (real headless chromium)', () => {
   })
 
   it('screenshot captures a PNG by indexed handle and preserves refs', async () => {
-    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-shot-')))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-shot-')))
     const page = await context.newPage()
     const driver = new PageDriver(page, { runId: 'shotrun', store })
     await driver.navigate(baseUrl)
@@ -175,7 +175,7 @@ describe('PageDriver — step tools (real headless chromium)', () => {
     expect(result.contentType).toBe('image/png')
     expect(result.fullPage).toBe(false)
     expect(result.byteSize).toBeGreaterThan(0)
-    expect(result.handle).toBe('strummer://browser/run/shotrun/screenshot-s1')
+    expect(result.handle).toBe('sackville://browser/run/shotrun/screenshot-s1')
 
     // the stored bytes are a real PNG (magic signature)
     const stored = store.get(result.handle as string)
@@ -189,7 +189,7 @@ describe('PageDriver — step tools (real headless chromium)', () => {
 
     // a second screenshot gets a fresh, non-overwriting handle
     const second = await driver.screenshot({ fullPage: true })
-    expect(second.handle).toBe('strummer://browser/run/shotrun/screenshot-s2')
+    expect(second.handle).toBe('sackville://browser/run/shotrun/screenshot-s2')
     expect(second.fullPage).toBe(true)
   })
 
@@ -255,7 +255,7 @@ describe('PageDriver — step tools (real headless chromium)', () => {
   })
 
   it('saves a download to the operator quarantine dir and records it (sanitized, indexed)', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-dl-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-dl-'))
     const dlContext = await browser.newContext({ acceptDownloads: true })
     try {
       const page = await dlContext.newPage()
@@ -286,7 +286,7 @@ describe('PageDriver — step tools (real headless chromium)', () => {
   })
 
   it('uploads a file from the operator allowlist dir; rejects paths outside it', async () => {
-    const upDir = mkdtempSync(join(tmpdir(), 'strummer-up-'))
+    const upDir = mkdtempSync(join(tmpdir(), 'sackville-up-'))
     writeFileSync(join(upDir, 'ok.txt'), 'hello')
     const page = await context.newPage()
     const driver = new PageDriver(page, {

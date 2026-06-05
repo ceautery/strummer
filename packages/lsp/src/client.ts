@@ -328,7 +328,7 @@ export class LspClient {
     }
     const result = (await this.conn.sendRequest(InitializeRequest.method, {
       processId: process.pid ?? null,
-      clientInfo: { name: 'strummer-lsp' },
+      clientInfo: { name: 'sackville-lsp' },
       rootUri,
       capabilities: {
         general: { positionEncodings: PREFERRED_ENCODINGS },
@@ -404,10 +404,10 @@ export class LspClient {
     this.conn.onRequest(UnregistrationRequest.method, () => null)
     // Server-initiated `workspace/applyEdit` (e.g. a server that drives renames by asking the
     // client to apply). Its result is an OBJECT (not null) — an unanswered id-bearing request
-    // deadlocks the shared server. Strummer applies rename edits itself, so we DECLINE.
+    // deadlocks the shared server. Sackville applies rename edits itself, so we DECLINE.
     this.conn.onRequest(ApplyWorkspaceEditRequest.method, () => ({
       applied: false,
-      failureReason: 'strummer applies rename edits itself; server-initiated edits are declined',
+      failureReason: 'sackville applies rename edits itself; server-initiated edits are declined',
     }))
     // Push diagnostics: cache the latest per uri, clear the "awaiting first publish" flag, and wake
     // any `documentDiagnostics` waiter. An empty `diagnostics` array is a legitimate publish (the
@@ -479,7 +479,7 @@ export class LspClient {
   }
 
   /**
-   * After Strummer writes `newText` to `uri` on disk (write-mode, ADR 0011 addendum), resync the
+   * After Sackville writes `newText` to `uri` on disk (write-mode, ADR 0011 addendum), resync the
    * server's in-memory buffer with a **full-text `didChange`** so a later navigation sees
    * post-rename positions (we never `didClose`, so the server still holds the pre-rename text).
    * The version is **pre-incremented** — it must be strictly greater than the last `didOpen`/
@@ -502,7 +502,7 @@ export class LspClient {
    * server buffer by `oldUri`, which now names a non-existent path — a later query would be silently
    * wrong (the worst failure class). MIGRATE the open entry: `didClose(oldUri)` + `didOpen(newUri)`
    * with the moved text, carrying the refcount and the languageId to the new key. NO-OP if `oldUri`
-   * was never opened (Strummer opens only the queried file, so the renamed file is usually closed).
+   * was never opened (Sackville opens only the queried file, so the renamed file is usually closed).
    * Run inside the held multi-URI lock so no concurrent query races the key migration.
    */
   didFileRename(oldUri: string, newUri: string, newText: string): void {

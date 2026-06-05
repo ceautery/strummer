@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { LspQueryInput, LspQueryResult, LspRenameInput, LspRenameResult } from '@strummer/lsp'
+import type { LspQueryInput, LspQueryResult, LspRenameInput, LspRenameResult } from '@sackville/lsp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from './index.js'
 import { runLsp } from './lsp.js'
@@ -39,11 +39,11 @@ const definitionResult: LspQueryResult = {
 
 let dir: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-cli-lsp-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-cli-lsp-'))
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-describe('strummer lsp CLI', () => {
+describe('sackville lsp CLI', () => {
   it('languages lists the bound languages (no spawn) + live provenance', async () => {
     const c = capture()
     const code = await runLsp(['languages', '--servers', SERVERS, '--json'], c.io, {

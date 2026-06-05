@@ -1,4 +1,4 @@
-# jsonplaceholder — sample Strummer API collection
+# jsonplaceholder — sample Sackville API collection
 
 A runnable Bruno collection that exercises [JSONPlaceholder](https://jsonplaceholder.typicode.com),
 a free, no-auth REST test API. Used by the [CLI quickstart](../../../packages/cli/README.md#api-testing-quickstart).
@@ -27,4 +27,4 @@ $S api run examples/api/jsonplaceholder create-post --env Public \
 ```
 
 The `.bru` files are plain Bruno requests (open the folder in the Bruno GUI if
-you like); the `*.strummer.yml` sidecars hold Strummer's assertions/captures.
+you like); the `*.sackville.yml` sidecars hold Sackville's assertions/captures.

@@ -6,7 +6,7 @@ import { loadCollection } from './collection.js'
 import { importToCollection, parseImport } from './import.js'
 
 function tmp(): string {
-  return mkdtempSync(join(tmpdir(), 'strummer-import-'))
+  return mkdtempSync(join(tmpdir(), 'sackville-import-'))
 }
 
 describe('import → .bru → loadCollection (round-trip)', () => {

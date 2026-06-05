@@ -5,32 +5,40 @@ export default defineConfig({
   resolve: {
     alias: {
       // Run internal packages from source — no build step in the test loop.
-      '@strummer/artifacts': fileURLToPath(
+      '@sackville/artifacts': fileURLToPath(
         new URL('./packages/artifacts/src/index.ts', import.meta.url),
       ),
-      '@strummer/assert': fileURLToPath(new URL('./packages/assert/src/index.ts', import.meta.url)),
-      '@strummer/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
-      '@strummer/coverage': fileURLToPath(
+      '@sackville/assert': fileURLToPath(
+        new URL('./packages/assert/src/index.ts', import.meta.url),
+      ),
+      '@sackville/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@sackville/coverage': fileURLToPath(
         new URL('./packages/coverage/src/index.ts', import.meta.url),
       ),
-      '@strummer/deps': fileURLToPath(new URL('./packages/deps/src/index.ts', import.meta.url)),
-      '@strummer/diff': fileURLToPath(new URL('./packages/diff/src/index.ts', import.meta.url)),
-      '@strummer/embed': fileURLToPath(new URL('./packages/embed/src/index.ts', import.meta.url)),
-      '@strummer/flake': fileURLToPath(new URL('./packages/flake/src/index.ts', import.meta.url)),
-      '@strummer/mutate': fileURLToPath(new URL('./packages/mutate/src/index.ts', import.meta.url)),
-      '@strummer/lsp': fileURLToPath(new URL('./packages/lsp/src/index.ts', import.meta.url)),
-      '@strummer/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
-      '@strummer/browser': fileURLToPath(
+      '@sackville/deps': fileURLToPath(new URL('./packages/deps/src/index.ts', import.meta.url)),
+      '@sackville/diff': fileURLToPath(new URL('./packages/diff/src/index.ts', import.meta.url)),
+      '@sackville/embed': fileURLToPath(new URL('./packages/embed/src/index.ts', import.meta.url)),
+      '@sackville/flake': fileURLToPath(new URL('./packages/flake/src/index.ts', import.meta.url)),
+      '@sackville/mutate': fileURLToPath(
+        new URL('./packages/mutate/src/index.ts', import.meta.url),
+      ),
+      '@sackville/lsp': fileURLToPath(new URL('./packages/lsp/src/index.ts', import.meta.url)),
+      '@sackville/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
+      '@sackville/browser': fileURLToPath(
         new URL('./packages/browser/src/index.ts', import.meta.url),
       ),
-      '@strummer/safety': fileURLToPath(new URL('./packages/safety/src/index.ts', import.meta.url)),
-      '@strummer/severity': fileURLToPath(
+      '@sackville/safety': fileURLToPath(
+        new URL('./packages/safety/src/index.ts', import.meta.url),
+      ),
+      '@sackville/severity': fileURLToPath(
         new URL('./packages/severity/src/index.ts', import.meta.url),
       ),
-      '@strummer/verdict': fileURLToPath(
+      '@sackville/verdict': fileURLToPath(
         new URL('./packages/verdict/src/index.ts', import.meta.url),
       ),
-      '@strummer/verify': fileURLToPath(new URL('./packages/verify/src/index.ts', import.meta.url)),
+      '@sackville/verify': fileURLToPath(
+        new URL('./packages/verify/src/index.ts', import.meta.url),
+      ),
     },
   },
   test: {

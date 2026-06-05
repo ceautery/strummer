@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ArtifactStore, BrowserGate, BrowserManager, harPathFor } from '@strummer/browser'
-import { Redactor } from '@strummer/safety'
+import { ArtifactStore, BrowserGate, BrowserManager, harPathFor } from '@sackville/browser'
+import { Redactor } from '@sackville/safety'
 import { type Browser, chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createBrowserServer } from './browser.js'
@@ -51,7 +51,7 @@ interface StepSC {
   crossOriginEgress?: boolean
 }
 
-describe('strummer browser MCP surface (real headless chromium)', () => {
+describe('sackville browser MCP surface (real headless chromium)', () => {
   let server: Server
   let baseUrl: string
   let browser: Browser
@@ -149,7 +149,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
-    baseDir = mkdtempSync(join(tmpdir(), 'strummer-bmcp-'))
+    baseDir = mkdtempSync(join(tmpdir(), 'sackville-bmcp-'))
   }, 60_000)
 
   afterAll(async () => {
@@ -223,8 +223,8 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     }
     expect(close.closed).toBe(true)
     expect(close.runId).toBe(open.runId)
-    expect(close.artifacts?.console?.handle).toBe(`strummer://browser/run/${open.runId}/console`)
-    expect(close.artifacts?.network?.handle).toBe(`strummer://browser/run/${open.runId}/network`)
+    expect(close.artifacts?.console?.handle).toBe(`sackville://browser/run/${open.runId}/console`)
+    expect(close.artifacts?.network?.handle).toBe(`sackville://browser/run/${open.runId}/network`)
     await client.close()
   })
 
@@ -346,7 +346,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
 
     const save = await call(client, 'browser_save_storage_state', { sessionId })
     const sc = save.structuredContent as { handle: string; cookies: number; origins: number }
-    expect(sc.handle).toBe(`strummer://browser/run/${runId}/storage-state`)
+    expect(sc.handle).toBe(`sackville://browser/run/${runId}/storage-state`)
     expect(sc.cookies).toBeGreaterThanOrEqual(1)
     expect(sc.origins).toBeGreaterThanOrEqual(1)
     // the result carries only counts + a handle — never the cookie/localStorage values
@@ -383,7 +383,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       contentType: string
       fullPage: boolean
     }
-    expect(sc.handle).toBe(`strummer://browser/run/${runId}/screenshot-s1`)
+    expect(sc.handle).toBe(`sackville://browser/run/${runId}/screenshot-s1`)
     expect(sc.contentType).toBe('image/png')
     expect(sc.byteSize).toBeGreaterThan(0)
 
@@ -724,8 +724,8 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
           metrics: [{ id: 'first-contentful-paint', score: 1, numericValue: 600 }],
           lighthouseVersion: '13.3.0',
         },
-        reportHandle: `strummer://browser/run/${runId}/perf`,
-        htmlHandle: `strummer://browser/run/${runId}/perf-html`,
+        reportHandle: `sackville://browser/run/${runId}/perf`,
+        htmlHandle: `sackville://browser/run/${runId}/perf-html`,
       }
     }
     const { client } = await connect({ allowedHosts: ['app.test'], runPerfAudit: fakePerf })
@@ -739,7 +739,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(res.summary.performanceScore).toBe(0.92)
     expect(res.summary.lighthouseVersion).toBe('13.3.0')
     expect(res.runId).toMatch(/[0-9a-f-]{36}/)
-    expect(res.reportHandle).toBe(`strummer://browser/run/${res.runId}/perf`)
+    expect(res.reportHandle).toBe(`sackville://browser/run/${res.runId}/perf`)
     expect(calls).toHaveLength(1) // the audit ran exactly once, with the minted runId
     expect(calls[0]?.runId).toBe(res.runId)
 
@@ -777,7 +777,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       }
     }
     const har = close.artifacts?.har
-    expect(har?.handle).toBe(`strummer://browser/run/${open.runId}/har`)
+    expect(har?.handle).toBe(`sackville://browser/run/${open.runId}/har`)
     expect(har?.entryCount).toBeGreaterThanOrEqual(1)
 
     // served back as a base64 zip blob (binary), not inlined text
@@ -806,7 +806,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
       artifacts?: { video?: { handle: string; byteSize: number; contentType: string } }
     }
     const video = close.artifacts?.video
-    expect(video?.handle).toBe(`strummer://browser/run/${open.runId}/video`)
+    expect(video?.handle).toBe(`sackville://browser/run/${open.runId}/video`)
     expect(video?.contentType).toBe('video/webm')
     expect(video?.byteSize).toBeGreaterThan(0)
 
@@ -864,7 +864,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     expect(reaped).toContain(sessionId)
     // onClosed finalized the HAR on the reaper path → it resolves on disk, redacted,
     // and the raw staged file is gone
-    const stored = store.get(`strummer://browser/run/${runId}/har`)
+    const stored = store.get(`sackville://browser/run/${runId}/har`)
     expect(stored).toBeDefined()
     expect(existsSync(harPathFor(harDir, sessionId))).toBe(false)
     await client.close()
@@ -924,13 +924,13 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     }
     const nav = (await call(client, 'browser_navigate', { sessionId, url: baseUrl }))
       .structuredContent as { snapshotHandle?: string }
-    expect(nav.snapshotHandle).toBe(`strummer://browser/run/${runId}/snapshot-s1`)
+    expect(nav.snapshotHandle).toBe(`sackville://browser/run/${runId}/snapshot-s1`)
 
     const snap = await client.readResource({ uri: nav.snapshotHandle as string })
     expect((snap.contents[0] as { text: string }).text).toContain('button "Submit"')
 
     await expect(
-      client.readResource({ uri: `strummer://browser/run/${runId}/nope` }),
+      client.readResource({ uri: `sackville://browser/run/${runId}/nope` }),
     ).rejects.toThrow(/No stored artifact/)
     await client.close()
   })
@@ -949,8 +949,8 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const reaped = await manager.sweepIdle()
     expect(reaped).toContain(sessionId)
     // artifacts were written on reap (not lost) and resolve on disk
-    expect(store.get(`strummer://browser/run/${runId}/console`)).toBeDefined()
-    expect(store.get(`strummer://browser/run/${runId}/network`)).toBeDefined()
+    expect(store.get(`sackville://browser/run/${runId}/console`)).toBeDefined()
+    expect(store.get(`sackville://browser/run/${runId}/network`)).toBeDefined()
 
     // a call on the reaped session is refused, not silently re-created
     const after = await call(client, 'browser_get_text', { sessionId, ref: 'e1' })
@@ -966,7 +966,7 @@ describe('strummer browser MCP surface (real headless chromium)', () => {
     const dir = mkdtempSync(join(baseDir, 'flows-'))
     writeFileSync(join(dir, 'inspect.bru'), 'meta {\n  name: inspect\n  type: http\n}\n')
     writeFileSync(
-      join(dir, 'inspect.strummer.yml'),
+      join(dir, 'inspect.sackville.yml'),
       [
         'steps:',
         '  - navigate: "{{baseUrl}}"',

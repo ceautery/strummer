@@ -6,8 +6,8 @@ import {
   openDb,
   resolveVersion,
   searchDocs,
-} from '@strummer/core'
-import { type Embedder, QueryEmbedder } from '@strummer/embed'
+} from '@sackville/core'
+import { type Embedder, QueryEmbedder } from '@sackville/embed'
 import type DatabaseType from 'better-sqlite3'
 import { z } from 'zod'
 import type { PillarSetup } from './pillars.js'
@@ -22,11 +22,11 @@ export interface DocsToolsOptions extends ServerOptions {
   db: DatabaseType.Database
 }
 
-const INSTRUCTIONS = `Strummer serves version-pinned library documentation.
+const INSTRUCTIONS = `Sackville serves version-pinned library documentation.
 
 Use \`search_docs\` to find fragments — it returns COMPACT results (title, symbol,
 a short snippet, and a \`resourceUri\`), never full bodies. To read the full text
-of a hit, call \`get_doc\` with its \`id\` or read its \`strummer://doc/{id}\`
+of a hit, call \`get_doc\` with its \`id\` or read its \`sackville://doc/{id}\`
 resource. Always pass \`library\` (and \`version\` when known) so results match the
 version actually installed in the project.`
 
@@ -49,7 +49,7 @@ function text(value: unknown) {
 
 /**
  * Register the docs-pillar tools (`search_docs`/`get_doc`/`detect_version`/
- * `list_versions`) + the `strummer://doc/{id}` resource onto an existing server.
+ * `list_versions`) + the `sackville://doc/{id}` resource onto an existing server.
  * This is the composition seam used by both the standalone docs bin and the
  * aggregate server (ADR 0019).
  */
@@ -153,7 +153,7 @@ export function registerDocsTools(server: McpServer, opts: DocsToolsOptions): vo
         type: args.type,
         limit: args.limit,
         queryVector,
-      }).map((r) => ({ ...r, resourceUri: `strummer://doc/${r.id}` }))
+      }).map((r) => ({ ...r, resourceUri: `sackville://doc/${r.id}` }))
 
       const structured =
         args.installed || args.project
@@ -256,7 +256,7 @@ export function registerDocsTools(server: McpServer, opts: DocsToolsOptions): vo
 
   server.registerResource(
     'doc',
-    new ResourceTemplate('strummer://doc/{id}', { list: undefined }),
+    new ResourceTemplate('sackville://doc/{id}', { list: undefined }),
     {
       title: 'Documentation fragment',
       description: 'Full doc fragment by id',
@@ -279,15 +279,15 @@ export function registerDocsTools(server: McpServer, opts: DocsToolsOptions): vo
 }
 
 /**
- * Build a standalone Strummer docs MCP server over an open index. The caller owns
- * the db handle (open it with `openDb` from `@strummer/core`) and its lifecycle.
+ * Build a standalone Sackville docs MCP server over an open index. The caller owns
+ * the db handle (open it with `openDb` from `@sackville/core`) and its lifecycle.
  */
-export function createStrummerServer(
+export function createSackvilleServer(
   db: DatabaseType.Database,
   options: ServerOptions = {},
 ): McpServer {
   const server = new McpServer(
-    { name: 'strummer', version: '0.0.0' },
+    { name: 'sackville', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerDocsTools(server, { db, embedder: options.embedder })
@@ -299,14 +299,14 @@ export function createStrummerServer(
  * embedder and return a {@link PillarSetup} that registers the docs tools onto a
  * (possibly shared) server. The docs pillar OWNS the sqlite handle, so its
  * `shutdown` closes it. Returns `undefined` (a LOUD DISABLE) when no
- * `STRUMMER_INDEX` is configured — the curated default enables docs, but without
+ * `SACKVILLE_INDEX` is configured — the curated default enables docs, but without
  * an index there is nothing to serve, so the aggregate logs it and skips (the
  * effective zero-config default is api+deps+verify until an index is present).
  */
 export function setupDocsFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): PillarSetup | undefined {
-  const indexPath = env.STRUMMER_INDEX
+  const indexPath = env.SACKVILLE_INDEX
   if (!indexPath) return undefined
   const db = openDb(indexPath)
   const embedder = new QueryEmbedder()

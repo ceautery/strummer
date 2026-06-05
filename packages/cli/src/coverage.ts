@@ -13,11 +13,11 @@ import {
   type ScopeMode,
   type TestRunner,
   uncoveredInDiff,
-} from '@strummer/coverage'
+} from '@sackville/coverage'
 import type { CliIO } from './index.js'
 
 /**
- * `strummer coverage` — the human surface over `@strummer/coverage`.
+ * `sackville coverage` — the human surface over `@sackville/coverage`.
  *
  * `uncovered-in-diff` is the pure forgotten-assertion catch: classify a diff's new lines
  * against an istanbul or coverage.py report and surface the executable-but-unhit ones.
@@ -25,7 +25,7 @@ import type { CliIO } from './index.js'
  * operator, so the gate is a straight-through `--allow-run` flag and the typed root is
  * auto-allowed; the test runner is injectable so the suite never spawns a real vitest
  * (ADR 0010: no real spawn in the gate). Both commands exit 1 when a new line is uncovered —
- * the catch is CI-actionable, like `strummer browser audit`.
+ * the catch is CI-actionable, like `sackville browser audit`.
  */
 export async function runCoverage(
   args: string[],

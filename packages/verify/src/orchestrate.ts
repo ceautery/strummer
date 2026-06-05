@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import type { ContractResult } from '@strummer/api'
-import type { DiffCoverageReport } from '@strummer/coverage'
-import type { DependencyAudit } from '@strummer/deps'
-import type { FlakeVerdict } from '@strummer/flake'
-import type { MutationSummary } from '@strummer/mutate'
+import type { ContractResult } from '@sackville/api'
+import type { DiffCoverageReport } from '@sackville/coverage'
+import type { DependencyAudit } from '@sackville/deps'
+import type { FlakeVerdict } from '@sackville/flake'
+import type { MutationSummary } from '@sackville/mutate'
 import {
   type CaptureVerdictFacts,
   type ComposeInputs,
@@ -18,14 +18,14 @@ import {
   type PillarName,
   type PillarVerdict,
   type VerdictPolicy,
-} from '@strummer/verdict'
+} from '@sackville/verdict'
 import { isGateDenial } from './gate.js'
 
 /**
  * Per-pillar run request. Each present pillar carries an async `run` thunk that
  * produces that pillar's NATIVE result — the orchestrator maps it via the existing
- * `@strummer/verdict` `from*` adapter. The thunk is wired by the surface (bin/CLI)
- * to the pillar's own gated runner, so `@strummer/verify` itself imports zero
+ * `@sackville/verdict` `from*` adapter. The thunk is wired by the surface (bin/CLI)
+ * to the pillar's own gated runner, so `@sackville/verify` itself imports zero
  * spawn-capable engine code (§ gate (e)). A rejection branded as a gate denial maps
  * to `skipReason:'gate-not-set'`; any other rejection to a redacted `errorReason`.
  */

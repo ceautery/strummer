@@ -1,11 +1,11 @@
 /**
  * HAR synthesis + redaction for the API pillar (ADR 0013 Addendum 4, milestone 5f).
- * Lets `verify` PRODUCE a HAR from the `@strummer/api` runner (not just the browser
+ * Lets `verify` PRODUCE a HAR from the `@sackville/api` runner (not just the browser
  * pillar's live capture), then validate it against the contract via the SHIPPED
  * {@link validateCapturedTraffic} — full REST + GraphQL parity.
  *
  * This module is a PURE leaf: it imports ONLY `fflate` (no runner/undici/spawn-capable
- * code), so the new `@strummer/browser → @strummer/api` dep edge it creates (browser's
+ * code), so the new `@sackville/browser → @sackville/api` dep edge it creates (browser's
  * `finalizeHar` delegates its Buffer→Buffer transform here) cannot drag heavy code into
  * the browser pillar, and the gate suite exercises synthesis with no network.
  *
@@ -29,7 +29,7 @@ const HAR_TEXT_ENTRY = /\.(har|json|txt|html|htm|css|js|xml|svg)$/
 // A body's DECLARED mimeType is text-like (so its bytes may carry a secret as text and
 // must be redacted), even when its content-addressed attach filename has no text
 // extension. Inclusive on purpose — a genuinely binary type is excluded so it passes
-// through byte-for-byte. Mirrors `@strummer/browser` `har.ts` (one redaction posture).
+// through byte-for-byte. Mirrors `@sackville/browser` `har.ts` (one redaction posture).
 const TEXT_MIME = /^text\/|(?:json|xml|javascript|ecmascript|graphql|html|urlencoded|csv|yaml)/i
 
 /**
@@ -182,7 +182,7 @@ export function synthesizeRedactedHarZip(
     entries.push({ request, response: { status: r.status, content } })
   }
   const har = {
-    log: { version: '1.2', creator: { name: 'strummer-api', version: '1.2' }, entries },
+    log: { version: '1.2', creator: { name: 'sackville-api', version: '1.2' }, entries },
   }
   const zip = Buffer.from(zipSync({ 'synth.har': strToU8(JSON.stringify(har)) }))
   return redactHarZip(zip, redact)

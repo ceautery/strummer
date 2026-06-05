@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ArtifactStore } from '@strummer/artifacts'
+import { ArtifactStore } from '@sackville/artifacts'
 import { strFromU8, unzipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type BuiltVerifyServer, buildVerifyServerFromEnv } from './bin-verify.js'
@@ -24,7 +24,7 @@ async function toolNames(built: BuiltVerifyServer): Promise<string[]> {
   return tools.map((t) => t.name)
 }
 
-describe('strummer-verify-mcp bin config (operator env)', () => {
+describe('sackville-verify-mcp bin config (operator env)', () => {
   it('defaults to compose-only: no artifacts root, capture off, run-driving off', () => {
     expect(buildVerifyServerFromEnv({}).config).toEqual({
       artifactsRoot: undefined,
@@ -35,10 +35,10 @@ describe('strummer-verify-mcp bin config (operator env)', () => {
 
   it('reads the shared artifacts root + the capture gate', () => {
     const { config } = buildVerifyServerFromEnv({
-      STRUMMER_ARTIFACTS_ROOT: '/tmp/strummer-artifacts',
-      STRUMMER_VERIFY_ALLOW_CAPTURE: '1',
+      SACKVILLE_ARTIFACTS_ROOT: '/tmp/sackville-artifacts',
+      SACKVILLE_VERIFY_ALLOW_CAPTURE: '1',
     })
-    expect(config.artifactsRoot).toBe('/tmp/strummer-artifacts')
+    expect(config.artifactsRoot).toBe('/tmp/sackville-artifacts')
     expect(config.allowCapture).toBe(true)
   })
 })
@@ -49,10 +49,10 @@ describe('the "both required" run-driving gate (§3c / §gate(b))', () => {
     // enable the verify server to drive runs. With ENABLE_RUN unset, verify_change is
     // not even registered, and the config carries no per-pillar run flag.
     const built = buildVerifyServerFromEnv({
-      STRUMMER_COVERAGE_ALLOW_RUN: '1',
-      STRUMMER_COVERAGE_PROJECT_ROOTS: '/repo',
-      STRUMMER_FLAKE_ALLOW_RUN: '1',
-      STRUMMER_MUTATE_ALLOW_RUN: '1',
+      SACKVILLE_COVERAGE_ALLOW_RUN: '1',
+      SACKVILLE_COVERAGE_PROJECT_ROOTS: '/repo',
+      SACKVILLE_FLAKE_ALLOW_RUN: '1',
+      SACKVILLE_MUTATE_ALLOW_RUN: '1',
     })
     expect(built.config).toEqual({
       artifactsRoot: undefined,
@@ -63,16 +63,16 @@ describe('the "both required" run-driving gate (§3c / §gate(b))', () => {
   })
 
   it('ENABLE_RUN alone (no pillar gate satisfied) does NOT register verify_change', async () => {
-    const built = buildVerifyServerFromEnv({ STRUMMER_VERIFY_ENABLE_RUN: '1' })
+    const built = buildVerifyServerFromEnv({ SACKVILLE_VERIFY_ENABLE_RUN: '1' })
     expect(built.config.enableRun).toBe(true)
     expect(await toolNames(built)).not.toContain('verify_change')
   })
 
   it('ENABLE_RUN + a pillar whose OWN gate is satisfied registers verify_change', async () => {
     const built = buildVerifyServerFromEnv({
-      STRUMMER_VERIFY_ENABLE_RUN: '1',
-      STRUMMER_COVERAGE_ALLOW_RUN: '1',
-      STRUMMER_COVERAGE_PROJECT_ROOTS: '/repo',
+      SACKVILLE_VERIFY_ENABLE_RUN: '1',
+      SACKVILLE_COVERAGE_ALLOW_RUN: '1',
+      SACKVILLE_COVERAGE_PROJECT_ROOTS: '/repo',
     })
     expect(await toolNames(built)).toContain('verify_change')
   })
@@ -80,34 +80,34 @@ describe('the "both required" run-driving gate (§3c / §gate(b))', () => {
   it('ENABLE_RUN + a pillar ALLOW_RUN but EMPTY roots does NOT wire it (deny-by-default)', async () => {
     // allowRun without an allowlisted root is not a satisfied gate.
     const built = buildVerifyServerFromEnv({
-      STRUMMER_VERIFY_ENABLE_RUN: '1',
-      STRUMMER_COVERAGE_ALLOW_RUN: '1',
-      // no STRUMMER_COVERAGE_PROJECT_ROOTS
+      SACKVILLE_VERIFY_ENABLE_RUN: '1',
+      SACKVILLE_COVERAGE_ALLOW_RUN: '1',
+      // no SACKVILLE_COVERAGE_PROJECT_ROOTS
     })
     expect(await toolNames(built)).not.toContain('verify_change')
   })
 
-  it('ENABLE_RUN + STRUMMER_DEPS_ALLOW_NETWORK wires deps run-driving (registers verify_change)', async () => {
+  it('ENABLE_RUN + SACKVILLE_DEPS_ALLOW_NETWORK wires deps run-driving (registers verify_change)', async () => {
     const built = buildVerifyServerFromEnv({
-      STRUMMER_VERIFY_ENABLE_RUN: '1',
-      STRUMMER_DEPS_ALLOW_NETWORK: '1',
+      SACKVILLE_VERIFY_ENABLE_RUN: '1',
+      SACKVILLE_DEPS_ALLOW_NETWORK: '1',
     })
     expect(await toolNames(built)).toContain('verify_change')
   })
 
-  it('STRUMMER_DEPS_ALLOW_NETWORK alone (no ENABLE_RUN) does NOT wire deps run-driving', async () => {
+  it('SACKVILLE_DEPS_ALLOW_NETWORK alone (no ENABLE_RUN) does NOT wire deps run-driving', async () => {
     // The deps network grant for the deps SERVER must not silently enable THIS server to
     // drive a deps audit — that needs the separate ENABLE_RUN opt-in (compose, never widen).
-    const built = buildVerifyServerFromEnv({ STRUMMER_DEPS_ALLOW_NETWORK: '1' })
+    const built = buildVerifyServerFromEnv({ SACKVILLE_DEPS_ALLOW_NETWORK: '1' })
     expect(built.config.enableRun).toBe(false)
     expect(await toolNames(built)).not.toContain('verify_change')
   })
 
   it('ENABLE_RUN + the capture gate registers verify_change for the consume-only contract path', async () => {
     const built = buildVerifyServerFromEnv({
-      STRUMMER_VERIFY_ENABLE_RUN: '1',
-      STRUMMER_ARTIFACTS_ROOT: '/tmp/strummer-artifacts',
-      STRUMMER_VERIFY_ALLOW_CAPTURE: '1',
+      SACKVILLE_VERIFY_ENABLE_RUN: '1',
+      SACKVILLE_ARTIFACTS_ROOT: '/tmp/sackville-artifacts',
+      SACKVILLE_VERIFY_ALLOW_CAPTURE: '1',
     })
     expect(await toolNames(built)).toContain('verify_change')
   })
@@ -123,9 +123,9 @@ describe('5e live-capture (produce) gate — the full browser gate composes on t
   }
 
   const CAPTURE_ENV = {
-    STRUMMER_VERIFY_ENABLE_RUN: '1',
-    STRUMMER_ARTIFACTS_ROOT: '/tmp/strummer-artifacts-5e',
-    STRUMMER_VERIFY_ALLOW_CAPTURE: '1',
+    SACKVILLE_VERIFY_ENABLE_RUN: '1',
+    SACKVILLE_ARTIFACTS_ROOT: '/tmp/sackville-artifacts-5e',
+    SACKVILLE_VERIFY_ALLOW_CAPTURE: '1',
   }
 
   it('a PRODUCE request is gate-denied (no spawn) when the browser gate is unmet', async () => {
@@ -146,9 +146,9 @@ describe('5e live-capture (produce) gate — the full browser gate composes on t
   it('registers verify_change with the full produce gate set (hosts + HAR + flows)', async () => {
     const built = buildVerifyServerFromEnv({
       ...CAPTURE_ENV,
-      STRUMMER_BROWSER_ALLOWED_HOSTS: 'app.test',
-      STRUMMER_BROWSER_HAR_DIR: '/tmp/har',
-      STRUMMER_BROWSER_FLOWS_DIR: '/tmp/flows',
+      SACKVILLE_BROWSER_ALLOWED_HOSTS: 'app.test',
+      SACKVILLE_BROWSER_HAR_DIR: '/tmp/har',
+      SACKVILLE_BROWSER_FLOWS_DIR: '/tmp/flows',
     })
     expect(await toolNames(built)).toContain('verify_change')
   })
@@ -165,7 +165,7 @@ describe('5f produce-api capture — the api pillar gate composes on top', () =>
     })
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-    artifactsRoot = mkdtempSync(join(tmpdir(), 'strummer-verify-5f-'))
+    artifactsRoot = mkdtempSync(join(tmpdir(), 'sackville-verify-5f-'))
   })
   afterAll(async () => {
     await new Promise<void>((r) => server.close(() => r()))
@@ -180,12 +180,12 @@ describe('5f produce-api capture — the api pillar gate composes on top', () =>
   }
 
   const baseEnv = () => ({
-    STRUMMER_VERIFY_ENABLE_RUN: '1',
-    STRUMMER_ARTIFACTS_ROOT: artifactsRoot,
-    STRUMMER_VERIFY_ALLOW_CAPTURE: '1',
+    SACKVILLE_VERIFY_ENABLE_RUN: '1',
+    SACKVILLE_ARTIFACTS_ROOT: artifactsRoot,
+    SACKVILLE_VERIFY_ALLOW_CAPTURE: '1',
   })
 
-  it('gate-denies a produce-api request (no fetch) when STRUMMER_API_COLLECTIONS_DIR is unset', async () => {
+  it('gate-denies a produce-api request (no fetch) when SACKVILLE_API_COLLECTIONS_DIR is unset', async () => {
     const res = await call(baseEnv(), {
       pillars: ['contract'],
       contract: { request: 'get-health' },
@@ -201,9 +201,9 @@ describe('5f produce-api capture — the api pillar gate composes on top', () =>
     expect(sc.status).toBe('inconclusive')
   })
 
-  it('a MUTATING request without STRUMMER_ALLOW_UNSAFE dry-runs ⇒ inconclusive (no HAR, no fetch)', async () => {
+  it('a MUTATING request without SACKVILLE_ALLOW_UNSAFE dry-runs ⇒ inconclusive (no HAR, no fetch)', async () => {
     const res = await call(
-      { ...baseEnv(), STRUMMER_API_COLLECTIONS_DIR: API_SAMPLE },
+      { ...baseEnv(), SACKVILLE_API_COLLECTIONS_DIR: API_SAMPLE },
       { pillars: ['contract'], contract: { request: 'create-thing', vars: { baseUrl } } },
     )
     const sc = res.structuredContent as {
@@ -221,8 +221,8 @@ describe('5f produce-api capture — the api pillar gate composes on top', () =>
     const res = await call(
       {
         ...baseEnv(),
-        STRUMMER_API_COLLECTIONS_DIR: API_SAMPLE,
-        STRUMMER_ALLOWED_HOSTS: '127.0.0.1',
+        SACKVILLE_API_COLLECTIONS_DIR: API_SAMPLE,
+        SACKVILLE_ALLOWED_HOSTS: '127.0.0.1',
       },
       {
         pillars: ['contract'],
@@ -249,7 +249,7 @@ describe('5f produce-api capture — the api pillar gate composes on top', () =>
       capture?: { harHandle: string }
     }
     expect(sc.pillars.find((p) => p.pillar === 'contract')?.status).toBe('pass')
-    expect(sc.capture?.harHandle).toMatch(/^strummer:\/\/verify\/.+\/har$/)
+    expect(sc.capture?.harHandle).toMatch(/^sackville:\/\/verify\/.+\/har$/)
     // The produced HAR is stored + resolvable, and carries the real captured exchange.
     const har = new ArtifactStore(artifactsRoot, 'verify').get(sc.capture?.harHandle ?? '')?.body
     expect(har).toBeDefined()

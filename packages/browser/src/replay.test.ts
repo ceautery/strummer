@@ -27,7 +27,7 @@ describe('PageDriver.replayFromHar — offline determinism (real headless chromi
     await new Promise<void>((r) => (server as Server).listen(0, '127.0.0.1', r))
     baseUrl = `http://127.0.0.1:${((server as Server).address() as AddressInfo).port}`
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
-    replayDir = mkdtempSync(join(tmpdir(), 'strummer-replay-'))
+    replayDir = mkdtempSync(join(tmpdir(), 'sackville-replay-'))
 
     // Record a HAR against the live server, then SHUT THE SERVER DOWN so the only
     // way the page can load afterward is by replaying from the recorded HAR.

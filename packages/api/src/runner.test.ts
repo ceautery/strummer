@@ -73,7 +73,7 @@ describe('runRequest (offline, in-process server)', () => {
     expect(result.response?.status).toBe(200)
     expect(result.response?.assertions).toHaveLength(3)
     expect(result.response?.assertions.every((a) => a.pass)).toBe(true)
-    expect(result.response?.bodyHandle).toMatch(/^strummer:\/\/run\/.+\/body$/)
+    expect(result.response?.bodyHandle).toMatch(/^sackville:\/\/run\/.+\/body$/)
   })
 
   it('resolves {{secret:NAME}} and redacts it from request, body, and headers', async () => {

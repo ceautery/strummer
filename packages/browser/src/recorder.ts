@@ -32,7 +32,7 @@ function redactTraceZip(zip: Buffer, redact: (text: string) => string): Buffer {
  * captures three channels — a Playwright **trace.zip** (screenshots + DOM
  * snapshots + sources), the **console** stream (incl. uncaught page errors),
  * and the **network** log (method/url/status/failure). Each is written to the
- * `ArtifactStore` and returned **by handle** (`strummer://browser/run/<id>/<kind>`)
+ * `ArtifactStore` and returned **by handle** (`sackville://browser/run/<id>/<kind>`)
  * with a compact structured summary — large/binary artifacts never get inlined
  * into a tool result.
  *
@@ -66,7 +66,7 @@ export interface ConsoleSummary {
   count: number
   /** Tally by console type, e.g. `{ log: 3, error: 1, pageerror: 1 }`. */
   byType: Record<string, number>
-  /** `strummer://browser/run/<id>/console` — the full (redacted) console JSON. */
+  /** `sackville://browser/run/<id>/console` — the full (redacted) console JSON. */
   handle: string
 }
 
@@ -76,12 +76,12 @@ export interface NetworkSummary {
   failed: number
   /** Tally by response status code (string keys), e.g. `{ '200': 4, '404': 1 }`. */
   byStatus: Record<string, number>
-  /** `strummer://browser/run/<id>/network` — the full (redacted) network JSON. */
+  /** `sackville://browser/run/<id>/network` — the full (redacted) network JSON. */
   handle: string
 }
 
 export interface TraceSummary {
-  /** `strummer://browser/run/<id>/trace` — the Playwright trace.zip, by handle. */
+  /** `sackville://browser/run/<id>/trace` — the Playwright trace.zip, by handle. */
   handle: string
   byteSize: number
 }
@@ -98,7 +98,7 @@ export interface RunRecorderOptions {
   runId: string
   store: ArtifactStore
   /** Applied to every text artifact before it is written. Default identity; the
-   * server bin wires the real `@strummer/safety` `Redactor` here. */
+   * server bin wires the real `@sackville/safety` `Redactor` here. */
   redact?: (value: string) => string
   /** Capture a Playwright trace.zip. Default true. */
   trace?: boolean
@@ -194,7 +194,7 @@ export class RunRecorder {
     if (this.captureTrace) {
       // Playwright only writes a trace to a path; stage it in a temp file, then
       // hand the bytes to the store (which owns the canonical layout) and clean up.
-      const tmp = join(tmpdir(), `strummer-trace-${runId.replace(/[^\w.-]/g, '_')}.zip`)
+      const tmp = join(tmpdir(), `sackville-trace-${runId.replace(/[^\w.-]/g, '_')}.zip`)
       await this.page.context().tracing.stop({ path: tmp })
       let buf: Buffer = readFileSync(tmp)
       unlinkSync(tmp)

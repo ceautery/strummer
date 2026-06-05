@@ -32,7 +32,7 @@ function capture(env: Record<string, string | undefined> = {}) {
   }
 }
 
-describe('strummer browser run — replay a persisted flow (real headless chromium)', () => {
+describe('sackville browser run — replay a persisted flow (real headless chromium)', () => {
   let server: Server
   let baseUrl: string
   let dir: string
@@ -46,7 +46,7 @@ describe('strummer browser run — replay a persisted flow (real headless chromi
     })
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-    dir = mkdtempSync(join(tmpdir(), 'strummer-flow-cli-'))
+    dir = mkdtempSync(join(tmpdir(), 'sackville-flow-cli-'))
   }, 60_000)
 
   afterAll(async () => {
@@ -55,7 +55,7 @@ describe('strummer browser run — replay a persisted flow (real headless chromi
 
   function writeFlow(stem: string, steps: string) {
     writeFileSync(join(dir, `${stem}.bru`), BRU)
-    writeFileSync(join(dir, `${stem}.strummer.yml`), steps)
+    writeFileSync(join(dir, `${stem}.sackville.yml`), steps)
   }
 
   it('runs a flow with a {{secret}} fill, passing; never prints the secret', async () => {
@@ -69,7 +69,7 @@ describe('strummer browser run — replay a persisted flow (real headless chromi
       - { source: text, role: heading, op: contains, value: Hello }
 `,
     )
-    const c = capture({ STRUMMER_BROWSER_SECRET_WHO: 'World' })
+    const c = capture({ SACKVILLE_BROWSER_SECRET_WHO: 'World' })
     const code = await run(
       ['browser', 'run', join(dir, 'greet.bru'), '--var', `baseUrl=${baseUrl}`, '--json', ...SAFE],
       c.io,

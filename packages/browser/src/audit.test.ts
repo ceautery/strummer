@@ -45,7 +45,7 @@ describe('auditA11y (offline, in-process server + headless chromium)', () => {
   })
 
   it('summarizes the image-alt violation and stores the full report by handle', async () => {
-    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-')))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-browser-')))
     const { summary, resultsHandle } = await auditA11y(page, { runId: 'run-1', store })
 
     expect(summary.violationCount).toBeGreaterThanOrEqual(1)
@@ -55,9 +55,9 @@ describe('auditA11y (offline, in-process server + headless chromium)', () => {
     // bucketed by impact — the critical bucket holds at least the image-alt finding
     expect(summary.byImpact.critical).toBeGreaterThanOrEqual(1)
 
-    // full report is addressable by a strummer://browser/run/<id>/a11y handle,
+    // full report is addressable by a sackville://browser/run/<id>/a11y handle,
     // never inlined into the summary
-    expect(resultsHandle).toBe('strummer://browser/run/run-1/a11y')
+    expect(resultsHandle).toBe('sackville://browser/run/run-1/a11y')
     const stored = store.get(resultsHandle)
     expect(stored).toBeDefined()
     expect(stored?.contentType).toBe('application/json')
@@ -66,11 +66,11 @@ describe('auditA11y (offline, in-process server + headless chromium)', () => {
   }, 60_000)
 
   it('keys repeated audits by an index so handles do not overwrite each other', async () => {
-    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-browser-')))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-browser-')))
     const first = await auditA11y(page, { runId: 'run-2', store, index: 1 })
     const second = await auditA11y(page, { runId: 'run-2', store, index: 2 })
-    expect(first.resultsHandle).toBe('strummer://browser/run/run-2/a11y-s1')
-    expect(second.resultsHandle).toBe('strummer://browser/run/run-2/a11y-s2')
+    expect(first.resultsHandle).toBe('sackville://browser/run/run-2/a11y-s1')
+    expect(second.resultsHandle).toBe('sackville://browser/run/run-2/a11y-s2')
     expect(store.get(first.resultsHandle)).toBeDefined()
     expect(store.get(second.resultsHandle)).toBeDefined()
   }, 60_000)

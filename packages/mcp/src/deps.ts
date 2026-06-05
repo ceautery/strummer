@@ -1,6 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ArtifactStore } from '@strummer/artifacts'
-import { detectInstalledVersion, type Ecosystem } from '@strummer/core'
+import type { ArtifactStore } from '@sackville/artifacts'
+import { detectInstalledVersion, type Ecosystem } from '@sackville/core'
 import {
   auditDependency,
   comparatorFor,
@@ -13,7 +13,7 @@ import {
   type OsvEcosystem,
   type Packument,
   sliceChangelog,
-} from '@strummer/deps'
+} from '@sackville/deps'
 import { z } from 'zod'
 
 /** Fetch the registry metadata ("packument") for a package. Injected so the pure
@@ -46,8 +46,8 @@ export interface DepsToolsOptions {
   artifacts?: ArtifactStore
 }
 
-/** Map an OSV ecosystem to the `@strummer/core` installed-version detection ecosystem.
- * (Comparator/match-name/manifest dispatch lives in `@strummer/deps`; this mapping needs
+/** Map an OSV ecosystem to the `@sackville/core` installed-version detection ecosystem.
+ * (Comparator/match-name/manifest dispatch lives in `@sackville/deps`; this mapping needs
  * `core`, which the engine deliberately does not depend on, so it stays here.) */
 const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
   npm: 'node',
@@ -55,14 +55,14 @@ const DETECT_ECOSYSTEM: Record<OsvEcosystem, Ecosystem> = {
   RubyGems: 'ruby',
 }
 
-const INSTRUCTIONS = `Strummer answers dependency/version questions for the version of a
+const INSTRUCTIONS = `Sackville answers dependency/version questions for the version of a
 package that is ACTUALLY INSTALLED in a project (not "latest"): is it deprecated, does
 it have a known vulnerability, how far behind is it.
 
 Use \`audit_dependency\` for one package, \`audit_project\` for a compact roll-up across
 a manifest, and \`changelog_diff\` to see WHAT CHANGED between the installed version and
 an upgrade target (the sliced changelog is returned by handle — read the
-\`strummer://deps/{id}/{kind}\` resource). Vulnerability data comes from an
+\`sackville://deps/{id}/{kind}\` resource). Vulnerability data comes from an
 operator-provisioned offline OSV snapshot; when none is configured the result carries
 \`osvSnapshotLoaded:false\` — treat "no known vulnerabilities" as unknown, not clean.
 Network access to fetch package metadata/changelogs is operator-gated and off by default.`
@@ -242,7 +242,7 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
         'Scan a project manifest and roll up a COMPACT per-dependency verdict (severity, ' +
         'deprecated, outdated, finding count) plus a summary. When an artifact store is ' +
         'configured the full per-package verdicts (vulnerability lists, deprecation messages, ' +
-        'freshness) are stored BY HANDLE (`detailHandle` → the strummer://deps/{id}/{kind} ' +
+        'freshness) are stored BY HANDLE (`detailHandle` → the sackville://deps/{id}/{kind} ' +
         'resource); otherwise drill into one package with audit_dependency. Supports npm ' +
         '(package.json), PyPI (pyproject/requirements.txt), and RubyGems (Gemfile.lock/Gemfile).',
       inputSchema: {
@@ -327,7 +327,7 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
 
     server.registerResource(
       'deps-artifact',
-      new ResourceTemplate('strummer://deps/{id}/{kind}', { list: undefined }),
+      new ResourceTemplate('sackville://deps/{id}/{kind}', { list: undefined }),
       {
         title: 'Dependency artifact',
         description: 'A stored deps artifact (a sliced changelog or full audit detail) by handle',
@@ -335,7 +335,7 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
       },
       (uri, variables) => {
         const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
-        const handle = `strummer://deps/${pick(variables.id)}/${pick(variables.kind)}`
+        const handle = `sackville://deps/${pick(variables.id)}/${pick(variables.kind)}`
         const artifact = store.get(handle)
         if (!artifact) {
           throw new Error(`No stored deps artifact for ${handle}`)
@@ -362,7 +362,7 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
             'Slice a package CHANGELOG to the versions between the INSTALLED version (from) and ' +
             'an upgrade target (to), so you can see what actually changed before recommending a ' +
             'bump. Returns a COMPACT summary (versions covered, source) + the sliced markdown by ' +
-            'handle — read the strummer://deps/{id}/{kind} resource for the full text.',
+            'handle — read the sackville://deps/{id}/{kind} resource for the full text.',
           inputSchema: {
             project: z
               .string()
@@ -434,10 +434,10 @@ export function registerDepsTools(server: McpServer, opts: DepsToolsOptions = {}
   }
 }
 
-/** Build a standalone Strummer dependency-intelligence MCP server. */
+/** Build a standalone Sackville dependency-intelligence MCP server. */
 export function createDepsServer(opts: DepsToolsOptions = {}): McpServer {
   const server = new McpServer(
-    { name: 'strummer-deps', version: '0.0.0' },
+    { name: 'sackville-deps', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerDepsTools(server, opts)

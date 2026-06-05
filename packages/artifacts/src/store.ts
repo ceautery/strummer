@@ -55,7 +55,7 @@ export interface ArtifactStoreOptions {
 
 /**
  * Parse a `RetentionPolicy` from raw env strings (each bin's per-pillar
- * `STRUMMER_<PILLAR>_ARTIFACT_MAX_AGE_MS` / `_MAX_ENTRIES` / `_MAX_BYTES`). Returns
+ * `SACKVILLE_<PILLAR>_ARTIFACT_MAX_AGE_MS` / `_MAX_ENTRIES` / `_MAX_BYTES`). Returns
  * `undefined` when NONE is set (⇒ no GC — opt-in). A non-numeric or negative value is
  * ignored (treated as unset) so a typo never silently deletes everything.
  */
@@ -106,12 +106,12 @@ function assertSafeSegment(value: string, what: string): void {
 /**
  * On-disk-backed store for verification artifacts (traces, screenshots, video,
  * HAR, audit reports, changelog diffs, coverage reports…), addressed by a
- * `strummer://<prefix>/<id>/<kind>` handle. Artifacts are large/binary, so they
+ * `sackville://<prefix>/<id>/<kind>` handle. Artifacts are large/binary, so they
  * are written to disk and returned by handle — never inlined into a tool result.
  *
  * The handle `prefix` is **parameterized** so each pillar emits its own handle
- * space over one shared store (`browser/run` → `strummer://browser/run/<id>/<kind>`;
- * `deps` → `strummer://deps/<id>/<kind>`). Extracted from the browser pillar per
+ * space over one shared store (`browser/run` → `sackville://browser/run/<id>/<kind>`;
+ * `deps` → `sackville://deps/<id>/<kind>`). Extracted from the browser pillar per
  * ADR 0010; a persistent/remote backend can replace this later — the handle
  * contract stays the same.
  *
@@ -127,7 +127,7 @@ export class ArtifactStore {
 
   /**
    * @param baseDir on-disk root for stored artifact bytes (created if absent).
-   * @param prefix the handle namespace between `strummer://` and `/<id>/<kind>`
+   * @param prefix the handle namespace between `sackville://` and `/<id>/<kind>`
    *   (may contain `/`, e.g. `browser/run`); each segment must be a safe segment.
    */
   private readonly retention?: RetentionPolicy
@@ -149,7 +149,7 @@ export class ArtifactStore {
 
   /** The handle a (`runId`, `kind`) pair maps to — reconstruct without re-storing. */
   handleFor(runId: string, kind: string): string {
-    return `strummer://${this.prefix}/${runId}/${kind}`
+    return `sackville://${this.prefix}/${runId}/${kind}`
   }
 
   /** Persist `body` under run `runId` as artifact `kind`; returns its handle. */
@@ -266,7 +266,7 @@ export class ArtifactStore {
   /** Forget the in-process handles of an evicted id, so a later `get()` misses → disk
    * (also gone) → `undefined`, never a read of a deleted path. */
   private dropHandles(id: string): void {
-    const p = `strummer://${this.prefix}/${id}/`
+    const p = `sackville://${this.prefix}/${id}/`
     for (const key of this.artifacts.keys()) if (key.startsWith(p)) this.artifacts.delete(key)
   }
 
@@ -296,10 +296,10 @@ export class ArtifactStore {
     }
   }
 
-  /** Parse `strummer://<prefix>/<id>/<kind>`; validate every segment. */
+  /** Parse `sackville://<prefix>/<id>/<kind>`; validate every segment. */
   private parseHandle(handle: string): ParsedHandle {
-    const rest = handle.startsWith('strummer://') ? handle.slice('strummer://'.length) : undefined
-    if (rest === undefined) throw new Error(`ArtifactStore: not a strummer:// handle: ${handle}`)
+    const rest = handle.startsWith('sackville://') ? handle.slice('sackville://'.length) : undefined
+    if (rest === undefined) throw new Error(`ArtifactStore: not a sackville:// handle: ${handle}`)
     const parts = rest.split('/')
     if (parts.length < 3) throw new Error(`ArtifactStore: malformed handle: ${handle}`)
     const kind = parts.pop() as string

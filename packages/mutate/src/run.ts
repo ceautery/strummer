@@ -1,5 +1,5 @@
 /**
- * The gated, diff-scoped mutation run — the live half of `@strummer/mutate`. It **spawns**
+ * The gated, diff-scoped mutation run — the live half of `@sackville/mutate`. It **spawns**
  * Stryker (`stryker run`, an injected subprocess like flake's `vitest` and coverage's
  * `vitest related`), then reads the JSON report Stryker writes and feeds it to the pure
  * {@link summarizeMutation}.
@@ -96,10 +96,10 @@ export class MutateGateError extends Error {
     super(message)
     this.name = 'MutateGateError'
     // Brand as a gate DENIAL (ADR 0013 Addendum, milestone 5c): the run-driving
-    // `@strummer/verify` reads this global-registry symbol via `isGateDenial` to map a
+    // `@sackville/verify` reads this global-registry symbol via `isGateDenial` to map a
     // denial to `skipReason:'gate-not-set'` (never `errored`) WITHOUT importing engine
     // code. The `Symbol.for` key string is the cross-package contract.
-    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('strummer.gate-denial')] = true
+    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('sackville.gate-denial')] = true
   }
 }
 
@@ -339,7 +339,7 @@ export async function runMutmut(
   const scopedPyproject = synthesizeScopedMutmutPyproject(basePyproject, plan)
 
   // Fresh sandbox cwd (the mutants/ cache is sticky), with the scoped pyproject written over the copy.
-  const sandbox = deps.sandboxDir ?? mkdtempSync(join(tmpdir(), 'strummer-mutmut-'))
+  const sandbox = deps.sandboxDir ?? mkdtempSync(join(tmpdir(), 'sackville-mutmut-'))
   copyProjectInto(config.projectRoot, sandbox)
   writeFileSync(join(sandbox, 'pyproject.toml'), scopedPyproject)
 
@@ -386,7 +386,7 @@ export async function runCosmicRay(
     sessionDir?: string
     /** Existence check for the selected files (FS by default; injected in tests). */
     exists?: (path: string) => boolean
-    /** Scoped config filename written into projectRoot (relative). Default `.strummer-cosmic.toml`. */
+    /** Scoped config filename written into projectRoot (relative). Default `.sackville-cosmic.toml`. */
     scopedConfigName?: string
   } = {},
 ): Promise<RunMutationResult> {
@@ -394,7 +394,7 @@ export async function runCosmicRay(
   const runner = deps.runner ?? defaultCosmicRayRunner
   const opts = { cwd: config.projectRoot, timeoutMs: config.timeoutMs }
   const configPath = input.configPath ?? 'cosmic-ray.toml'
-  const sessionDir = deps.sessionDir ?? mkdtempSync(join(tmpdir(), 'strummer-mutate-'))
+  const sessionDir = deps.sessionDir ?? mkdtempSync(join(tmpdir(), 'sackville-mutate-'))
   const session = join(sessionDir, 'session.sqlite')
 
   // Whole-project (today's behavior) when no scope is requested.
@@ -432,7 +432,7 @@ export async function runCosmicRay(
   // live in projectRoot so its RELATIVE module-path resolves there (cosmic-ray then reports relative
   // module_path keys, which reconcileScope compares against the selected files directly).
   const scoped = synthesizeScopedCosmicRayConfig(baseToml, files)
-  const scopedName = deps.scopedConfigName ?? '.strummer-cosmic.toml'
+  const scopedName = deps.scopedConfigName ?? '.sackville-cosmic.toml'
   const scopedAbs = join(config.projectRoot, scopedName)
   writeFileSync(scopedAbs, scoped.toml)
   try {

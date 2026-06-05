@@ -14,7 +14,7 @@ The contract pillar validated only the **response** half of an exchange
 (`validateOpenApiResponse` / `validateGraphqlOperation`). The request half — does the
 request **body** conform to `requestBody`, are required path/query/header **parameters**
 present and well-typed — was unchecked. Adding it deepens the cross-pillar verdict
-directly: `verify_change` / `strummer verify run` (via the capture→contract bridge) and
+directly: `verify_change` / `sackville verify run` (via the capture→contract bridge) and
 the direct `validate_request` surface now catch request-side drift, not just response
 drift.
 
@@ -79,7 +79,7 @@ New `ContractFindingKind`s: `request-body-schema`, `missing-required-body`,
 - MCP `validate_request` (sibling of `validate_response`, always registered; authoritative;
   refuses a GraphQL envelope via `isGraphqlEnvelope`).
 - CLI `api validate-request --openapi --method --path [--body] [--query] [--header]`.
-- `validate_capture` / `verify_change` / `strummer verify run` pick up request validation
+- `validate_capture` / `verify_change` / `sackville verify run` pick up request validation
   through the bridge transparently (no input change).
 
 ## Invariants held

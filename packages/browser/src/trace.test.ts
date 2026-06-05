@@ -37,7 +37,7 @@ describe('queryTrace — parse a real Playwright trace.zip', () => {
     await page.getByRole('textbox', { name: 'Name' }).fill('Alice')
     await page.getByRole('button', { name: 'Go' }).click()
     await page.waitForTimeout(200)
-    const tmp = join(tmpdir(), 'strummer-trace-test.zip')
+    const tmp = join(tmpdir(), 'sackville-trace-test.zip')
     await ctx.tracing.stop({ path: tmp })
     await ctx.close()
     traceZip = readFileSync(tmp)

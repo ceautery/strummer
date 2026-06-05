@@ -16,7 +16,7 @@ import type { ArtifactStore } from './artifacts.js'
 
 /** A finished video capture, returned by handle with a compact summary. */
 export interface VideoSummary {
-  /** `strummer://browser/run/<id>/video` — the recorded webm, by handle. */
+  /** `sackville://browser/run/<id>/video` — the recorded webm, by handle. */
   handle: string
   byteSize: number
   contentType: 'video/webm'

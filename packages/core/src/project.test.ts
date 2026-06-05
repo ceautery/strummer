@@ -7,7 +7,7 @@ import { detectInstalledVersion } from './project.js'
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-proj-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-proj-'))
 })
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })

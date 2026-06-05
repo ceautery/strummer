@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from strummer_ingest.types_map import normalize_type
+from sackville_ingest.types_map import normalize_type
 
 _INDEX = Path(__file__).parent / "data" / "devdocs_react" / "index.json"
 

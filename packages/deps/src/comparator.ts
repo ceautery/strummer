@@ -7,7 +7,7 @@
  * The comparator is **injected** (the bin/surface builds an ecosystem→comparator map), so the
  * pure core depends only on this interface + its existing `semver` pin — the per-ecosystem
  * pins (`@renovatebot/pep440`, `@renovatebot/ruby-semver`) live at the wiring layer, never as a
- * transitive import of `@strummer/deps`'s core (the ADR-0010 explicit-pins / no-transitive rule).
+ * transitive import of `@sackville/deps`'s core (the ADR-0010 explicit-pins / no-transitive rule).
  *
  * Only methods an existing call site needs are present. `compare`/`gt`/`lt`/`lte` assume valid,
  * already-`clean`ed inputs (the OSV scan cleans + handles the `"0"` sentinel before calling).

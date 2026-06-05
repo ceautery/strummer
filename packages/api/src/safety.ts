@@ -1,4 +1,4 @@
-import { type DnsLookup, resolveAndPin, SsrfError } from '@strummer/safety'
+import { type DnsLookup, resolveAndPin, SsrfError } from '@sackville/safety'
 
 /** Methods that don't mutate server state run freely. */
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -16,7 +16,7 @@ export interface SsrfOptions {
 /**
  * Refuse a request on SSRF grounds before it leaves. Applies to EVERY request
  * (safe + mutating) — the cloud-metadata endpoint is reachable by a plain GET.
- * Reuses the shared `@strummer/safety` classifier: metadata host literals and
+ * Reuses the shared `@sackville/safety` classifier: metadata host literals and
  * blocked-range IPs are always refused; loopback/private are refused only when
  * `allowPrivate` is false; a hostname is resolved and its address vetted (so a
  * name pointing at an internal/metadata IP is caught). Throws `SsrfError` when

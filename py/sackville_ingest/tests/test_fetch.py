@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from strummer_ingest.fetch import clean_attribution, devdocs_url
+from sackville_ingest.fetch import clean_attribution, devdocs_url
 
 
 def test_devdocs_url_with_and_without_mtime():

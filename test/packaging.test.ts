@@ -54,16 +54,16 @@ describe('package publish hygiene (ADR 0019)', () => {
         expect(pkg.publishConfig?.access).toBe('public')
         // repository.directory + a case-exact url are required for npm provenance.
         expect(pkg.repository?.directory).toBe(`packages/${dir}`)
-        expect(pkg.repository?.url).toBe('git+https://github.com/ceautery/strummer.git')
+        expect(pkg.repository?.url).toBe('git+https://github.com/ceautery/sackville.git')
       })
     })
   }
 })
 
-describe('@strummer/mcp install isolation — heavy engines are OPTIONAL peers (ADR 0019 §B)', () => {
+describe('sackville install isolation — heavy engines are OPTIONAL peers (ADR 0019 §B)', () => {
   // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
   const mcp = readPackageJson('mcp') as any
-  const HEAVY = ['@strummer/browser', '@strummer/core', '@strummer/embed', '@strummer/flake']
+  const HEAVY = ['@sackville/browser', '@sackville/core', '@sackville/embed', '@sackville/flake']
 
   it('does NOT list the heavy engines (or playwright-core) as hard dependencies', () => {
     const deps = Object.keys(mcp.dependencies ?? {})
@@ -85,25 +85,25 @@ describe('@strummer/mcp install isolation — heavy engines are OPTIONAL peers (
 describe('onboarding example .mcp.json (ADR 0019 §14)', () => {
   // biome-ignore lint/suspicious/noExplicitAny: JSON config is untyped.
   const cfg = JSON.parse(readFileSync(join(repoRoot, 'examples/mcp/.mcp.json'), 'utf8')) as any
-  const server = cfg.mcpServers?.strummer
+  const server = cfg.mcpServers?.sackville
   // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
   const mcp = readPackageJson('mcp') as any
 
-  it('declares the aggregate strummer server', () => {
+  it('declares the aggregate sackville server', () => {
     expect(server).toBeDefined()
     expect(server.command).toBe('npx')
-    expect(server.args).toContain('@strummer/mcp')
+    expect(server.args).toContain('sackville')
   })
 
-  it('the documented `npx @strummer/mcp` resolves to a REAL bin (no npx trap)', () => {
+  it('the documented `npx sackville` resolves to a REAL bin (no npx trap)', () => {
     // npx runs the bin matching the package name's last segment — `mcp` for
-    // @strummer/mcp. If that bin is missing, `npx @strummer/mcp` errors.
-    expect(mcp.bin?.mcp).toBeDefined()
+    // sackville. If that bin is missing, `npx sackville` errors.
+    expect(mcp.bin?.sackville).toBeDefined()
   })
 
   it('only sets operator namespaced env (no agent inputs leak into config)', () => {
     for (const key of Object.keys(server.env ?? {})) {
-      expect(key.startsWith('STRUMMER_')).toBe(true)
+      expect(key.startsWith('SACKVILLE_')).toBe(true)
     }
   })
 })

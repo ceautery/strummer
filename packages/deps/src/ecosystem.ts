@@ -2,7 +2,7 @@
  * Ecosystem dispatch — the pure (+ filesystem, like {@link loadOsvSnapshot}) glue that
  * maps an OSV ecosystem to its version algebra, its OSV match-name convention, and the
  * way its project manifest declares dependencies. Extracted from the MCP deps surface so
- * the surface AND the `strummer deps` CLI share one source of truth for ecosystem
+ * the surface AND the `sackville deps` CLI share one source of truth for ecosystem
  * behaviour (ADR 0012: semver silently mis-coerces PEP 440 / Gem, so the comparator must
  * be chosen by ecosystem, never defaulted).
  */
@@ -16,7 +16,7 @@ import { pep440Comparator } from './pep440.js'
 import { normalizePypiName, pythonManifestNames } from './pypi.js'
 import { rubyManifestNames } from './rubygems.js'
 
-/** OSV ecosystem names Strummer audits end-to-end (npm/PyPI/RubyGems). */
+/** OSV ecosystem names Sackville audits end-to-end (npm/PyPI/RubyGems). */
 export const OSV_ECOSYSTEMS = ['npm', 'PyPI', 'RubyGems'] as const
 export type OsvEcosystem = (typeof OSV_ECOSYSTEMS)[number]
 

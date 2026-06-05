@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { HistoryStore, type TestRunner } from '@strummer/flake'
+import { HistoryStore, type TestRunner } from '@sackville/flake'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createFlakeServer, type FlakeToolsOptions } from './flake.js'
 

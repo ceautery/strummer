@@ -32,10 +32,10 @@ importers:
       '@napi-rs/keyring':
         specifier: ^1.3.0
         version: 1.3.0
-      '@strummer/assert':
+      '@sackville/assert':
         specifier: workspace:*
         version: link:../assert
-      '@strummer/safety':
+      '@sackville/safety':
         specifier: workspace:*
         version: link:../safety
       '@usebruno/lang':
@@ -75,16 +75,16 @@ importers:
       '@axe-core/playwright':
         specifier: 4.11.3
         version: 4.11.3(playwright-core@1.60.0)
-      '@strummer/api':
+      '@sackville/api':
         specifier: workspace:*
         version: link:../api
-      '@strummer/artifacts':
+      '@sackville/artifacts':
         specifier: workspace:*
         version: link:../artifacts
-      '@strummer/assert':
+      '@sackville/assert':
         specifier: workspace:*
         version: link:../assert
-      '@strummer/safety':
+      '@sackville/safety':
         specifier: workspace:*
         version: link:../safety
       '@usebruno/lang':
@@ -121,43 +121,43 @@ importers:
 
   packages/cli:
     dependencies:
-      '@strummer/api':
+      '@sackville/api':
         specifier: workspace:*
         version: link:../api
-      '@strummer/artifacts':
+      '@sackville/artifacts':
         specifier: workspace:*
         version: link:../artifacts
-      '@strummer/browser':
+      '@sackville/browser':
         specifier: workspace:*
         version: link:../browser
-      '@strummer/core':
+      '@sackville/core':
         specifier: workspace:*
         version: link:../core
-      '@strummer/coverage':
+      '@sackville/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@strummer/deps':
+      '@sackville/deps':
         specifier: workspace:*
         version: link:../deps
-      '@strummer/embed':
+      '@sackville/embed':
         specifier: workspace:*
         version: link:../embed
-      '@strummer/flake':
+      '@sackville/flake':
         specifier: workspace:*
         version: link:../flake
-      '@strummer/lsp':
+      '@sackville/lsp':
         specifier: workspace:*
         version: link:../lsp
-      '@strummer/mutate':
+      '@sackville/mutate':
         specifier: workspace:*
         version: link:../mutate
-      '@strummer/safety':
+      '@sackville/safety':
         specifier: workspace:*
         version: link:../safety
-      '@strummer/verdict':
+      '@sackville/verdict':
         specifier: workspace:*
         version: link:../verdict
-      '@strummer/verify':
+      '@sackville/verify':
         specifier: workspace:*
         version: link:../verify
       playwright-core:
@@ -192,7 +192,7 @@ importers:
 
   packages/coverage:
     dependencies:
-      '@strummer/diff':
+      '@sackville/diff':
         specifier: workspace:*
         version: link:../diff
 
@@ -204,10 +204,10 @@ importers:
       '@renovatebot/ruby-semver':
         specifier: 5.0.0
         version: 5.0.0
-      '@strummer/diff':
+      '@sackville/diff':
         specifier: workspace:*
         version: link:../diff
-      '@strummer/severity':
+      '@sackville/severity':
         specifier: workspace:*
         version: link:../severity
       fflate:
@@ -253,50 +253,50 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
-      '@strummer/api':
+      '@sackville/api':
         specifier: workspace:*
         version: link:../api
-      '@strummer/artifacts':
+      '@sackville/artifacts':
         specifier: workspace:*
         version: link:../artifacts
-      '@strummer/coverage':
+      '@sackville/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@strummer/deps':
+      '@sackville/deps':
         specifier: workspace:*
         version: link:../deps
-      '@strummer/diff':
+      '@sackville/diff':
         specifier: workspace:*
         version: link:../diff
-      '@strummer/lsp':
+      '@sackville/lsp':
         specifier: workspace:*
         version: link:../lsp
-      '@strummer/mutate':
+      '@sackville/mutate':
         specifier: workspace:*
         version: link:../mutate
-      '@strummer/safety':
+      '@sackville/safety':
         specifier: workspace:*
         version: link:../safety
-      '@strummer/verdict':
+      '@sackville/verdict':
         specifier: workspace:*
         version: link:../verdict
-      '@strummer/verify':
+      '@sackville/verify':
         specifier: workspace:*
         version: link:../verify
       zod:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
-      '@strummer/browser':
+      '@sackville/browser':
         specifier: workspace:*
         version: link:../browser
-      '@strummer/core':
+      '@sackville/core':
         specifier: workspace:*
         version: link:../core
-      '@strummer/embed':
+      '@sackville/embed':
         specifier: workspace:*
         version: link:../embed
-      '@strummer/flake':
+      '@sackville/flake':
         specifier: workspace:*
         version: link:../flake
       '@types/better-sqlite3':
@@ -325,45 +325,45 @@ importers:
 
   packages/verdict:
     dependencies:
-      '@strummer/severity':
+      '@sackville/severity':
         specifier: workspace:*
         version: link:../severity
     devDependencies:
-      '@strummer/api':
+      '@sackville/api':
         specifier: workspace:*
         version: link:../api
-      '@strummer/coverage':
+      '@sackville/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@strummer/deps':
+      '@sackville/deps':
         specifier: workspace:*
         version: link:../deps
-      '@strummer/flake':
+      '@sackville/flake':
         specifier: workspace:*
         version: link:../flake
-      '@strummer/mutate':
+      '@sackville/mutate':
         specifier: workspace:*
         version: link:../mutate
 
   packages/verify:
     dependencies:
-      '@strummer/verdict':
+      '@sackville/verdict':
         specifier: workspace:*
         version: link:../verdict
     devDependencies:
-      '@strummer/api':
+      '@sackville/api':
         specifier: workspace:*
         version: link:../api
-      '@strummer/coverage':
+      '@sackville/coverage':
         specifier: workspace:*
         version: link:../coverage
-      '@strummer/deps':
+      '@sackville/deps':
         specifier: workspace:*
         version: link:../deps
-      '@strummer/flake':
+      '@sackville/flake':
         specifier: workspace:*
         version: link:../flake
-      '@strummer/mutate':
+      '@sackville/mutate':
         specifier: workspace:*
         version: link:../mutate
 

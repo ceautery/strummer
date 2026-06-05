@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { Redactor } from '@strummer/safety'
+import { Redactor } from '@sackville/safety'
 import { type Browser, type BrowserContext, chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PageDriver } from './driver.js'
@@ -24,13 +24,13 @@ describe('BrowserGate policy (pure, operator-set)', () => {
   })
 
   it('brands GateError as a gate denial via the global symbol (5e: cross-package, no import)', () => {
-    // The run-driving @strummer/verify reads Symbol.for('strummer.gate-denial') to map a
+    // The run-driving @sackville/verify reads Symbol.for('sackville.gate-denial') to map a
     // gate denial to skipReason:'gate-not-set' WITHOUT importing engine code — matching
     // CoverageGateError/FlakeGateError/MutationGateError. Inert for runFlow-swallowed
     // in-flow denials (gate on flow completeness instead), but load-bearing for the
     // pre-runFlow createSession→checkNavigation reject path.
     const err = new GateError('denied')
-    expect((err as unknown as Record<symbol, unknown>)[Symbol.for('strummer.gate-denial')]).toBe(
+    expect((err as unknown as Record<symbol, unknown>)[Symbol.for('sackville.gate-denial')]).toBe(
       true,
     )
   })

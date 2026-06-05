@@ -1,15 +1,15 @@
--- Strummer index schema — THE CONTRACT between the Python ingester (writer)
--- and the TypeScript core (reader). Keep schema/strummer.schema.json in sync;
--- both sides assert strummer_meta.schema_version before operating.
+-- Sackville index schema — THE CONTRACT between the Python ingester (writer)
+-- and the TypeScript core (reader). Keep schema/sackville.schema.json in sync;
+-- both sides assert sackville_meta.schema_version before operating.
 --
 -- Invariants (tested on both sides):
---   * strummer_meta.embed_dim == the float[N] in docs_vec below
+--   * sackville_meta.embed_dim == the float[N] in docs_vec below
 --   * docs.id == docs_fts.rowid == docs_vec.doc_id
 --   * the FTS sync triggers below exist (no manual FTS writes)
 
 -- Contract / version guard. Seeded by the ingester with:
 --   schema_version, embed_model, embed_dim, built_at, builder_version
-CREATE TABLE strummer_meta (
+CREATE TABLE sackville_meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
@@ -59,7 +59,7 @@ CREATE TRIGGER docs_au AFTER UPDATE ON docs BEGIN
 END;
 
 -- Vector index for semantic search. The float[N] dimension is a CONTRACT
--- constant and MUST equal strummer_meta.embed_dim (384 for bge-small-en-v1.5).
+-- constant and MUST equal sackville_meta.embed_dim (384 for bge-small-en-v1.5).
 -- library/version/type are pushdown filter columns for KNN queries.
 CREATE VIRTUAL TABLE docs_vec USING vec0 (
   doc_id    INTEGER PRIMARY KEY,

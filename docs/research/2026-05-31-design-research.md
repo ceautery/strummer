@@ -6,14 +6,14 @@ Raw output of the 6-stream design-research workflow + synthesis. Distilled into 
 
 This is a synthesis/architecture task, not a code task. No tools needed — I'll produce the recommendation directly.
 
-# Strummer Milestone 1 — Docs Pillar Architecture
+# Sackville Milestone 1 — Docs Pillar Architecture
 
 ## 1. Repo / package layout
 
 pnpm workspace monorepo, Node 22, with the Python ingester as a sibling package inside the same repo (not published to npm; built/distributed via uv).
 
 ```
-strummer/
+sackville/
   pnpm-workspace.yaml          # packages globs + version catalog
   biome.json
   package.json                 # private root
@@ -25,16 +25,16 @@ strummer/
     cli/                       # thin CLI adapter over core (#!/usr/bin/env node)
       src/index.ts
   py/
-    strummer_ingest/           # uv-managed Python package; console_scripts CLI
+    sackville_ingest/           # uv-managed Python package; console_scripts CLI
       pyproject.toml
-      src/strummer_ingest/{cli,sources,extract,chunk,embed,db}.py
+      src/sackville_ingest/{cli,sources,extract,chunk,embed,db}.py
   schema/
-    strummer.schema.sql         # THE CONTRACT — single source of truth DDL
-    strummer.schema.json        # version constant + dim + tokenizer, machine-readable
+    sackville.schema.sql         # THE CONTRACT — single source of truth DDL
+    sackville.schema.json        # version constant + dim + tokenizer, machine-readable
   fixtures/                    # tiny committed .docset + golden .sqlite for tests
 ```
 
-Key rule: `core` is the only package that touches SQLite. `mcp` and `cli` are thin adapters depending on `core` via `workspace:*`. The Python side and the TS side never RPC; they meet only at `schema/strummer.schema.sql` and the on-disk `.sqlite` file. **Both languages read the schema version from `schema/strummer.schema.json` and refuse to operate on a mismatched DB** — this is what makes the file-as-contract safe.
+Key rule: `core` is the only package that touches SQLite. `mcp` and `cli` are thin adapters depending on `core` via `workspace:*`. The Python side and the TS side never RPC; they meet only at `schema/sackville.schema.sql` and the on-disk `.sqlite` file. **Both languages read the schema version from `schema/sackville.schema.json` and refuse to operate on a mismatched DB** — this is what makes the file-as-contract safe.
 
 ## 2. Tool + library + version picks
 
@@ -66,11 +66,11 @@ Low-confidence / flag-for-attention picks:
 
 ## 3. SQLite index schema — the TS↔Python contract
 
-`schema/strummer.schema.sql`. Python writes it; TS reads it. Note the explicit `strummer_meta` table carrying schema version + embedding model + dim so both sides can assert compatibility.
+`schema/sackville.schema.sql`. Python writes it; TS reads it. Note the explicit `sackville_meta` table carrying schema version + embedding model + dim so both sides can assert compatibility.
 
 ```sql
 -- contract/version guard
-CREATE TABLE strummer_meta(
+CREATE TABLE sackville_meta(
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
@@ -125,7 +125,7 @@ CREATE VIRTUAL TABLE docs_vec USING vec0(
 ```
 
 Contract invariants to encode as tests on **both** sides:
-- `strummer_meta.embed_dim` must equal the `float[N]` in the vec0 DDL.
+- `sackville_meta.embed_dim` must equal the `float[N]` in the vec0 DDL.
 - `docs.id` == `docs_fts.rowid` == `docs_vec.doc_id`.
 - FTS triggers must exist (no manual sync).
 - Build with WAL, then `wal_checkpoint(TRUNCATE)` + `VACUUM` so the shipped file is a single clean artifact the TS reader opens read-only.
@@ -134,32 +134,32 @@ Contract invariants to encode as tests on **both** sides:
 
 Two tools. Search returns **compact metadata + resource links only — never inlines bodies.** Full text is fetched on demand via a Resource. This is the core token-economy move (Claude Code warns >10k, caps 25k, persists oversized to disk).
 
-`strummer.search_docs`
+`sackville.search_docs`
 - Input (Zod): `query: string`, `library?: string`, `version?: string`, `type?: string`, `limit?: number (default 8, max 25)`, `cursor?: string`
 - Behavior: hybrid RRF (FTS5 MATCH + vec0 KNN), version filter pushed to **both** halves.
-- structuredContent: `{ results: [{ id, title, symbol, type, library, version, score, snippet, resourceUri }], nextCursor?: string }` where `snippet` is a short FTS `snippet()` excerpt (~12 tokens) and `resourceUri` is `strummer://doc/{id}`.
+- structuredContent: `{ results: [{ id, title, symbol, type, library, version, score, snippet, resourceUri }], nextCursor?: string }` where `snippet` is a short FTS `snippet()` excerpt (~12 tokens) and `resourceUri` is `sackville://doc/{id}`.
 - Also emit the same JSON as a text content block (some clients break on structuredContent alone).
 
-`strummer.get_doc`
-- Input: `id: number` (or accept the `strummer://doc/{id}` URI)
+`sackville.get_doc`
+- Input: `id: number` (or accept the `sackville://doc/{id}` URI)
 - structuredContent: `{ id, title, heading_path, library, version, url, attribution, body }` — the one place full body text is returned, and only when the agent explicitly asks.
 
-Resource: `strummer://doc/{id}` mirrors `get_doc` so agents can follow resource links without a tool call.
+Resource: `sackville://doc/{id}` mirrors `get_doc` so agents can follow resource links without a tool call.
 
 Server `instructions` (≤2KB, since Tool Search is on): state that search returns summaries+links and the agent must call `get_doc`/follow the resource link for full content; describe the version-pin semantics. Paginate with opaque cursor; small default limit.
 
 ## 5. Ingestion pipeline stages (Python CLI)
 
-`strummer-ingest build --source <docset|devdocs> --in <path> --out strummer.sqlite [--library X --version Z]`
+`sackville-ingest build --source <docset|devdocs> --in <path> --out sackville.sqlite [--library X --version Z]`
 
 1. **Acquire/identify source.** Two adapters behind one interface:
    - *Dash docset*: parse `Contents/Info.plist` (real plist parser — may be binary). Probe `sqlite_master`: `searchIndex` (canonical, ~99% of community docsets) vs `ZTOKEN` Core Data join. M1: implement plain-HTML + `searchIndex` only; tarix/brotli/Core Data are later passes.
    - *DevDocs*: ingest prebuilt `index.json` (entries: name/path/type) + `db.json` (path→HTML). Carry the `release` string as `version`. Both adapters normalize to the **same internal record** `(library, version, title, symbol, type, url, attribution, html)`.
 2. **Resolve + extract.** Resolve `path` (relative file / `#anchor` / http URL — handle all three). Extract main content with trafilatura; use selectolax to retain code blocks, tables, heading anchors. Split shared pages by `#anchor` so entries stay finer-grained than pages.
 3. **Chunk** by heading/section with overlap; compute `heading_path`.
-4. **Type-normalize** Dash's ~76-value enum / DevDocs types onto Strummer's taxonomy via a mapping table.
+4. **Type-normalize** Dash's ~76-value enum / DevDocs types onto Sackville's taxonomy via a mapping table.
 5. **Embed** each chunk with model2vec potion-retrieval-32M → float32, 512-dim.
-6. **Write DB** (apply `schema/strummer.schema.sql`, seed `strummer_meta`, insert `docs` so triggers populate FTS, insert vectors into `docs_vec`). WAL during build → checkpoint → VACUUM.
+6. **Write DB** (apply `schema/sackville.schema.sql`, seed `sackville_meta`, insert `docs` so triggers populate FTS, insert vectors into `docs_vec`). WAL during build → checkpoint → VACUUM.
 7. **Emit** machine-readable summary on stdout (counts, schema_version), logs on stderr, meaningful exit codes. Support resumable/incremental ingestion (long builds exceed subprocess timeouts).
 
 Licensing gate (must-have, not optional): record per-doc `attribution`; respect each docset/DevDocs upstream license. **Microsoft/Apple/Oracle are excluded from DevDocs**; Dash licenses are per-folder. Indexing locally is generally fine; redistribution is not — surface attribution in results.
@@ -185,9 +185,9 @@ Want the human to weigh in on:
 
 Goal: prove Python writes a file that TS reads and queries — the entire contract — with the least code.
 
-1. Write `schema/strummer.schema.sql` + `schema/strummer.schema.json` (`{schema_version:1, embed_dim:512, embed_model:"potion-retrieval-32M"}`).
-2. **RED (TS, in `core`):** a Vitest test that opens a fixture DB at `fixtures/golden.sqlite`, loads sqlite-vec, asserts `strummer_meta.schema_version == 1`, and runs `search_docs("useState", library="react")` expecting exactly one known result row `{symbol:"useState", version:"19.0"}`. Fails because no fixture/no query code.
-3. **GREEN (Python):** a minimal `strummer-ingest` path that applies the schema, seeds `strummer_meta`, inserts **one** hand-crafted `docs` row (`react/19.0/useState`, tiny body) and **one** zero/constant 512-dim vector into `docs_vec`, checkpoints + VACUUMs, writes `fixtures/golden.sqlite`. (No real scraping/embedding yet — a literal fixture row.)
+1. Write `schema/sackville.schema.sql` + `schema/sackville.schema.json` (`{schema_version:1, embed_dim:512, embed_model:"potion-retrieval-32M"}`).
+2. **RED (TS, in `core`):** a Vitest test that opens a fixture DB at `fixtures/golden.sqlite`, loads sqlite-vec, asserts `sackville_meta.schema_version == 1`, and runs `search_docs("useState", library="react")` expecting exactly one known result row `{symbol:"useState", version:"19.0"}`. Fails because no fixture/no query code.
+3. **GREEN (Python):** a minimal `sackville-ingest` path that applies the schema, seeds `sackville_meta`, inserts **one** hand-crafted `docs` row (`react/19.0/useState`, tiny body) and **one** zero/constant 512-dim vector into `docs_vec`, checkpoints + VACUUMs, writes `fixtures/golden.sqlite`. (No real scraping/embedding yet — a literal fixture row.)
 4. **GREEN (TS):** implement `core.openDb()` + `core.searchDocs()` doing the FTS-only branch (vec optional) so the test passes.
 
 This single cycle exercises every contract surface — schema file, meta/version guard, `docs`↔`docs_fts`↔`docs_vec` id alignment, sqlite-vec loading on both runtimes, and the search shape the MCP tool will wrap — without committing to a real source adapter, real embeddings, or RRF tuning. Real Dash/DevDocs ingestion and hybrid ranking layer on next, against the now-proven boundary.
@@ -212,11 +212,11 @@ This single cycle exercises every contract surface — schema file, meta/version
 **Citations:**
 - [modelcontextprotocol sdk on npm](https://www.npmjs.com/package/@modelcontextprotocol/sdk)
 
-### Kapeli Dash docset format and feasibility of Strummer ingesting existing docsets
+### Kapeli Dash docset format and feasibility of Sackville ingesting existing docsets
 **Confidence:** high  
-**Summary:** A Dash .docset is a plain macOS-style bundle directory: docs live as ordinary HTML files under Contents/Resources/Documents/ and an index lives in a SQLite file at Contents/Resources/docSet.dsidx. There are TWO index schemas: the simple/canonical Dash one (a single searchIndex table with name/type/path) used by virtually all user-contributed docsets, and the legacy Apple/Xcode Core Data schema (ZTOKEN/ZTOKENNAME/ZTOKENTYPE/ZFILEPATH/ZTOKENMETAINFORMATION/ZSEARCHINDEX) used by docsets bundled with Xcode. Reading a docset programmatically is straightforward: open the SQLite, read (name, type, path), and resolve path (a relative file path, possibly with #anchor, or an http URL) against Documents/. Most docsets store plain HTML; some are compressed (older tarix.tgz + tarixIndex.db; Dash 6 and newer Apple docsets use a SHA-1/UUID-named cache with brotli compression). For Strummer, ingesting existing Dash docsets is very feasible and a strong bootstrap strategy: the format is open, the index is just SQLite, and the type taxonomy is already normalized. The main caveats are the two index variants, the compression formats, and per-docset documentation licensing.
+**Summary:** A Dash .docset is a plain macOS-style bundle directory: docs live as ordinary HTML files under Contents/Resources/Documents/ and an index lives in a SQLite file at Contents/Resources/docSet.dsidx. There are TWO index schemas: the simple/canonical Dash one (a single searchIndex table with name/type/path) used by virtually all user-contributed docsets, and the legacy Apple/Xcode Core Data schema (ZTOKEN/ZTOKENNAME/ZTOKENTYPE/ZFILEPATH/ZTOKENMETAINFORMATION/ZSEARCHINDEX) used by docsets bundled with Xcode. Reading a docset programmatically is straightforward: open the SQLite, read (name, type, path), and resolve path (a relative file path, possibly with #anchor, or an http URL) against Documents/. Most docsets store plain HTML; some are compressed (older tarix.tgz + tarixIndex.db; Dash 6 and newer Apple docsets use a SHA-1/UUID-named cache with brotli compression). For Sackville, ingesting existing Dash docsets is very feasible and a strong bootstrap strategy: the format is open, the index is just SQLite, and the type taxonomy is already normalized. The main caveats are the two index variants, the compression formats, and per-docset documentation licensing.
 
-**Recommendation:** Yes — Strummer should ingest existing Dash docsets to bootstrap its index; it is one of the cheapest, highest-quality sources of pre-curated, pre-typed dev documentation available. Concrete plan: (1) Treat a docset as a directory; read Contents/Info.plist (parse as XML or binary plist) for CFBundleName, dashIndexFilePath, DashDocSetFallbackURL, and DashDocSetFamily. (2) Open Contents/Resources/docSet.dsidx with a stock SQLite driver. Probe the schema: if a 'searchIndex' table exists, SELECT name, type, path — this covers ~99% of community docsets. If instead ZTOKEN exists, run the Core Data join to produce equivalent (name, type, path+#anchor) tuples. Normalize both into Strummer's own (title, type, href) records and map Dash's type strings onto Strummer's symbol taxonomy (the ~76-value enum is a ready-made mapping table). (3) Resolve each path: strip/keep the #fragment, join against Contents/Resources/Documents/. If the file is missing, check for tarix.tgz+tarixIndex.db (look up the offset/length in tarixIndex.db and read that slice of the gzip-decompressed tar) or an Apple-style brotli cache; fall back to DashDocSetFallbackURL only if you want online fetch. (4) For body text/embeddings, parse the resolved HTML (strip nav/chrome, keep the anchored section) rather than relying on Dash's optional FTS tables. Start with the plain-HTML, searchIndex-schema path first (covers the long tail of Dash-User-Contributions); add tarix and Core Data handling as second/third passes. Pull initial docsets from Kapeli/Dash-User-Contributions on GitHub. IMPORTANT on licensing: the docset format/metadata is freely usable, but the bundled HTML is the upstream project's documentation under its own license — read each docset's README/docset.json and respect those terms before redistributing or republishing content; indexing locally for search is generally fine, rehosting may not be.
+**Recommendation:** Yes — Sackville should ingest existing Dash docsets to bootstrap its index; it is one of the cheapest, highest-quality sources of pre-curated, pre-typed dev documentation available. Concrete plan: (1) Treat a docset as a directory; read Contents/Info.plist (parse as XML or binary plist) for CFBundleName, dashIndexFilePath, DashDocSetFallbackURL, and DashDocSetFamily. (2) Open Contents/Resources/docSet.dsidx with a stock SQLite driver. Probe the schema: if a 'searchIndex' table exists, SELECT name, type, path — this covers ~99% of community docsets. If instead ZTOKEN exists, run the Core Data join to produce equivalent (name, type, path+#anchor) tuples. Normalize both into Sackville's own (title, type, href) records and map Dash's type strings onto Sackville's symbol taxonomy (the ~76-value enum is a ready-made mapping table). (3) Resolve each path: strip/keep the #fragment, join against Contents/Resources/Documents/. If the file is missing, check for tarix.tgz+tarixIndex.db (look up the offset/length in tarixIndex.db and read that slice of the gzip-decompressed tar) or an Apple-style brotli cache; fall back to DashDocSetFallbackURL only if you want online fetch. (4) For body text/embeddings, parse the resolved HTML (strip nav/chrome, keep the anchored section) rather than relying on Dash's optional FTS tables. Start with the plain-HTML, searchIndex-schema path first (covers the long tail of Dash-User-Contributions); add tarix and Core Data handling as second/third passes. Pull initial docsets from Kapeli/Dash-User-Contributions on GitHub. IMPORTANT on licensing: the docset format/metadata is freely usable, but the bundled HTML is the upstream project's documentation under its own license — read each docset's README/docset.json and respect those terms before redistributing or republishing content; indexing locally for search is generally fine, rehosting may not be.
 
 **Versions:**
 - Dash for macOS 6 (current major; introduced the modern brotli/UUID cache storage and FTS defaults)
@@ -265,7 +265,7 @@ This single cycle exercises every contract surface — schema file, meta/version
 
 ### DevDocs (freeCodeCamp/devdocs) as a documentation data source and format for version-pinned docs ingestion
 **Confidence:** high  
-**Summary:** DevDocs is a Ruby scraper framework plus a thin web app. Its scrapers (UrlScraper over HTTP via Typhoeus, FileScraper over local files) crawl upstream docs, run each page through an HTML::Pipeline filter chain (Nokogiri-based HTML filters then string text filters), and emit per-doc a set of normalized HTML partials plus two JSON files: index.json (searchable metadata: an `entries` array of {name, path, type} and a `types` array of {name, count, slug}) and db.json (a flat object mapping each `path` to its HTML content fragment string). A global manifest (docs.json / served as docs.json on the documents server) lists each available doc with name, slug, version, release, mtime, db_size, etc. The DevDocs *software* is MPL-2.0, but each scraped doc carries the *upstream* doc's own license; DevDocs only accepts docs whose license permits redistribution of modified versions (which is why Microsoft/MSDN, Apple, and Oracle docs are excluded). Versions are modeled as separate docs via a tilde slug convention (e.g. vue, vue~2, vue~1, node~14_lts), each with its own db.json/index.json and a `release` string. For Strummer's version-pinned use case, the format is genuinely reusable: ingest db.json+index.json directly rather than re-scraping, but reuse scraper *definitions* selectively for libraries DevDocs doesn't cover at the needed version.
+**Summary:** DevDocs is a Ruby scraper framework plus a thin web app. Its scrapers (UrlScraper over HTTP via Typhoeus, FileScraper over local files) crawl upstream docs, run each page through an HTML::Pipeline filter chain (Nokogiri-based HTML filters then string text filters), and emit per-doc a set of normalized HTML partials plus two JSON files: index.json (searchable metadata: an `entries` array of {name, path, type} and a `types` array of {name, count, slug}) and db.json (a flat object mapping each `path` to its HTML content fragment string). A global manifest (docs.json / served as docs.json on the documents server) lists each available doc with name, slug, version, release, mtime, db_size, etc. The DevDocs *software* is MPL-2.0, but each scraped doc carries the *upstream* doc's own license; DevDocs only accepts docs whose license permits redistribution of modified versions (which is why Microsoft/MSDN, Apple, and Oracle docs are excluded). Versions are modeled as separate docs via a tilde slug convention (e.g. vue, vue~2, vue~1, node~14_lts), each with its own db.json/index.json and a `release` string. For Sackville's version-pinned use case, the format is genuinely reusable: ingest db.json+index.json directly rather than re-scraping, but reuse scraper *definitions* selectively for libraries DevDocs doesn't cover at the needed version.
 
 **Recommendation:** Adopt a hybrid, with ingestion of DevDocs OUTPUT as the primary path and the scraper DEFINITIONS as a fallback authoring reference — do NOT run DevDocs' Ruby scraper stack as a live dependency.
 
@@ -292,7 +292,7 @@ Net: ingest the output, mirror its schema as your canonical format, lean on scra
 - Versioning: each library version is a SEPARATE doc with its own slug using a tilde convention (vue~2, vue~1, node~14_lts; the newest version usually takes the bare slug like vue). Each has its own db.json/index.json and a required `release` attribute (e.g. Vue 2 doc reports release 2.7.14). There is no in-file multi-version structure; versions are siblings, not nested.
 - Licensing is two-tier: the scraper/app software is Mozilla Public License v2.0. Each generated doc bundle is governed by the UPSTREAM doc's own license, supplied to the scraper via the required :attribution parameter (an HTML copyright/license string appended to every page by AttributionFilter). DevDocs only ships docs whose license permits redistribution of modified versions.
 - Redistribution is real and built-in: DevDocs distributes prebuilt bundles. Thor commands docs:generate (scrape), docs:package (bundle for download), docs:download (fetch prebuilt), docs:manifest (build the app's docs.json). Bundles are served from downloads.devdocs.io / documents.devdocs.io (S3: devdocs-downloads and devdocs-documents buckets). The local public/docs/docs.json manifest tracks which docs are present and is gitignored.
-- Excluded vendors due to license restrictions on redistributing modified docs: Microsoft (MSDN), Apple, Oracle. These will NOT be available via DevDocs output and must be sourced independently if Strummer needs them.
+- Excluded vendors due to license restrictions on redistributing modified docs: Microsoft (MSDN), Apple, Oracle. These will NOT be available via DevDocs output and must be sourced independently if Sackville needs them.
 - DevDocs also wishes (not strictly required by MPL) that generated doc files be attributed to DevDocs itself, in addition to the upstream attribution.
 
 **Gotchas:**
@@ -303,7 +303,7 @@ Net: ingest the output, mirror its schema as your canonical format, lean on scra
 - Prebuilt bundle URLs (downloads/documents.devdocs.io, S3 buckets) are infrastructure conventions that can change; they are not a versioned, stable public API contract. Pin to a self-hosted mirror (docs:download/docs:package) rather than hot-linking their S3 if you depend on availability.
 - public/docs/docs.json is local state (gitignored) reflecting what's downloaded locally; don't confuse it with the canonical published manifest served from the documents host.
 - The scraper definitions are Ruby + Nokogiri + HTML::Pipeline (Typhoeus for HTTP). Running them as-is pulls in a Ruby toolchain; porting selectors to another language is straightforward but the filter chain semantics (URL normalization, path rewriting) must be replicated or your db.json paths/links won't resolve consistently.
-- DevDocs additionally requests attribution to DevDocs itself on generated files, separate from upstream attribution — relevant if Strummer redistributes the bundles rather than just indexing them internally.
+- DevDocs additionally requests attribution to DevDocs itself on generated files, separate from upstream attribution — relevant if Sackville redistributes the bundles rather than just indexing them internally.
 
 **Citations:**
 - [DevDocs Scraper Reference (architecture, filters, attribution)](https://github.com/freeCodeCamp/devdocs/blob/main/docs/scraper-reference.md)

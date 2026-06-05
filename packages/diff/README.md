@@ -1,11 +1,11 @@
-# @strummer/diff
+# @sackville/diff
 
 The shared changed-set primitive: pure, zero-dependency unified-diff parsing.
 
-Extracted out of `@strummer/coverage` (mirroring the `@strummer/safety` /
-`@strummer/assert` / `@strummer/artifacts` extractions) the moment a second
+Extracted out of `@sackville/coverage` (mirroring the `@sackville/safety` /
+`@sackville/assert` / `@sackville/artifacts` extractions) the moment a second
 consumer appeared — milestone 5d diff-scopes every verification pillar from one
-diff, and `@strummer/verify` must runtime-import the parser to derive each
+diff, and `@sackville/verify` must runtime-import the parser to derive each
 pillar's scope. Keeping it a dependency-free package is what lets `verify` import
 it without dragging in a pillar's spawn-capable code (its zero-spawn invariant).
 

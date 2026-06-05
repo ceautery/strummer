@@ -2,7 +2,7 @@
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
+import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville/artifacts'
 import {
   CHANGELOG_FILENAMES,
   gemRepoUrl,
@@ -16,8 +16,8 @@ import {
   type RubyGemMetadata,
   type RubyGemsVersion,
   rubygemsToPackument,
-} from '@strummer/deps'
-import { resolveAndPin } from '@strummer/safety'
+} from '@sackville/deps'
+import { resolveAndPin } from '@sackville/safety'
 import {
   type ChangelogFetcher,
   createDepsServer,
@@ -112,7 +112,7 @@ function makeFetcher(
 
 /**
  * The deps NETWORK surface from operator env — the OSV snapshot dir + an SSRF-pinned
- * packument fetcher, gated on `STRUMMER_DEPS_ALLOW_NETWORK` (OFF by default). One source
+ * packument fetcher, gated on `SACKVILLE_DEPS_ALLOW_NETWORK` (OFF by default). One source
  * for the security-critical fetcher construction, shared by the deps server bin AND the
  * verify bin's deps run-driving wiring (slice 5d). `fetchPackument` is undefined when
  * network is off. Never reads a verify/run env — the verify bin composes its own
@@ -123,16 +123,16 @@ export function depsNetworkConfig(env: Record<string, string | undefined> = proc
   allowNetwork: boolean
   fetchPackument?: PackumentFetcher
 } {
-  const allowNetwork = bool(env.STRUMMER_DEPS_ALLOW_NETWORK)
+  const allowNetwork = bool(env.SACKVILLE_DEPS_ALLOW_NETWORK)
   return {
-    osvDir: env.STRUMMER_DEPS_OSV_DB_DIR || undefined,
+    osvDir: env.SACKVILLE_DEPS_OSV_DB_DIR || undefined,
     allowNetwork,
     fetchPackument: allowNetwork
       ? makeFetcher(
-          env.STRUMMER_DEPS_NPM_REGISTRY || 'https://registry.npmjs.org',
-          env.STRUMMER_DEPS_PYPI_REGISTRY || 'https://pypi.org/pypi',
-          env.STRUMMER_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
-          bool(env.STRUMMER_DEPS_ALLOW_PRIVATE),
+          env.SACKVILLE_DEPS_NPM_REGISTRY || 'https://registry.npmjs.org',
+          env.SACKVILLE_DEPS_PYPI_REGISTRY || 'https://pypi.org/pypi',
+          env.SACKVILLE_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
+          bool(env.SACKVILLE_DEPS_ALLOW_PRIVATE),
         )
       : undefined,
   }
@@ -198,13 +198,13 @@ export function depsConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): DepsBinConfig {
   return {
-    osvDir: env.STRUMMER_DEPS_OSV_DB_DIR || undefined,
-    artifactDir: env.STRUMMER_DEPS_ARTIFACT_DIR || undefined,
-    allowNetwork: bool(env.STRUMMER_DEPS_ALLOW_NETWORK),
-    registry: env.STRUMMER_DEPS_NPM_REGISTRY || 'https://registry.npmjs.org',
-    pypiRegistry: env.STRUMMER_DEPS_PYPI_REGISTRY || 'https://pypi.org/pypi',
-    rubygemsRegistry: env.STRUMMER_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
-    allowPrivate: bool(env.STRUMMER_DEPS_ALLOW_PRIVATE),
+    osvDir: env.SACKVILLE_DEPS_OSV_DB_DIR || undefined,
+    artifactDir: env.SACKVILLE_DEPS_ARTIFACT_DIR || undefined,
+    allowNetwork: bool(env.SACKVILLE_DEPS_ALLOW_NETWORK),
+    registry: env.SACKVILLE_DEPS_NPM_REGISTRY || 'https://registry.npmjs.org',
+    pypiRegistry: env.SACKVILLE_DEPS_PYPI_REGISTRY || 'https://pypi.org/pypi',
+    rubygemsRegistry: env.SACKVILLE_DEPS_RUBYGEMS_REGISTRY || 'https://rubygems.org/api/v1',
+    allowPrivate: bool(env.SACKVILLE_DEPS_ALLOW_PRIVATE),
   }
 }
 
@@ -234,9 +234,9 @@ function depsToolsOptions(
       config.artifactDir !== undefined
         ? new ArtifactStore(config.artifactDir, 'deps', {
             retention: retentionFromEnv({
-              maxAgeMs: env.STRUMMER_DEPS_ARTIFACT_MAX_AGE_MS,
-              maxEntries: env.STRUMMER_DEPS_ARTIFACT_MAX_ENTRIES,
-              maxBytes: env.STRUMMER_DEPS_ARTIFACT_MAX_BYTES,
+              maxAgeMs: env.SACKVILLE_DEPS_ARTIFACT_MAX_AGE_MS,
+              maxEntries: env.SACKVILLE_DEPS_ARTIFACT_MAX_ENTRIES,
+              maxBytes: env.SACKVILLE_DEPS_ARTIFACT_MAX_BYTES,
             }),
             sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
           })
@@ -260,13 +260,13 @@ export function setupDepsFromEnv(
 /**
  * Build the deps MCP server from operator env. Network is OFF by default; the OSV
  * snapshot is operator-provisioned out-of-band:
- *   STRUMMER_DEPS_OSV_DB_DIR=/var/lib/strummer/osv   # <dir>/<ecosystem>/all.zip
- *   STRUMMER_DEPS_ARTIFACT_DIR=/var/lib/strummer/deps # backs changelog_diff handles
- *   STRUMMER_DEPS_ALLOW_NETWORK=1                     # enable packument + changelog fetch
- *   STRUMMER_DEPS_NPM_REGISTRY=https://registry.npmjs.org
- *   STRUMMER_DEPS_PYPI_REGISTRY=https://pypi.org/pypi  # PyPI JSON API base
- *   STRUMMER_DEPS_RUBYGEMS_REGISTRY=https://rubygems.org/api/v1  # RubyGems API base
- *   STRUMMER_DEPS_ALLOW_PRIVATE=1                     # permit a local registry mirror
+ *   SACKVILLE_DEPS_OSV_DB_DIR=/var/lib/sackville/osv   # <dir>/<ecosystem>/all.zip
+ *   SACKVILLE_DEPS_ARTIFACT_DIR=/var/lib/sackville/deps # backs changelog_diff handles
+ *   SACKVILLE_DEPS_ALLOW_NETWORK=1                     # enable packument + changelog fetch
+ *   SACKVILLE_DEPS_NPM_REGISTRY=https://registry.npmjs.org
+ *   SACKVILLE_DEPS_PYPI_REGISTRY=https://pypi.org/pypi  # PyPI JSON API base
+ *   SACKVILLE_DEPS_RUBYGEMS_REGISTRY=https://rubygems.org/api/v1  # RubyGems API base
+ *   SACKVILLE_DEPS_ALLOW_PRIVATE=1                     # permit a local registry mirror
  */
 export function buildDepsServerFromEnv(
   env: Record<string, string | undefined> = process.env,

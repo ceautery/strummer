@@ -8,7 +8,7 @@ import {
   runMutation,
   runMutmut,
   summarizeMutation,
-} from '@strummer/mutate'
+} from '@sackville/mutate'
 import { z } from 'zod'
 
 export interface MutateToolsOptions {
@@ -24,7 +24,7 @@ export interface MutateToolsOptions {
   runner?: MutationRunner
 }
 
-const INSTRUCTIONS = `Strummer reports mutation-testing results — are the tests MEANINGFUL,
+const INSTRUCTIONS = `Sackville reports mutation-testing results — are the tests MEANINGFUL,
 not just present? A surviving mutant is a code change no test caught: a passing-but-vacuous
 assertion. This is the complement to the coverage pillar's forgotten-assertion catch.
 
@@ -162,10 +162,10 @@ export function registerMutateTools(server: McpServer, opts: MutateToolsOptions 
   }
 }
 
-/** Build a standalone Strummer mutate MCP server. */
+/** Build a standalone Sackville mutate MCP server. */
 export function createMutateServer(opts: MutateToolsOptions = {}): McpServer {
   const server = new McpServer(
-    { name: 'strummer-mutate', version: '0.0.0' },
+    { name: 'sackville-mutate', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerMutateTools(server, opts)

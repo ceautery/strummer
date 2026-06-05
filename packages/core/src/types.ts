@@ -1,4 +1,4 @@
-/** Metadata read from a Strummer index's `strummer_meta` table. */
+/** Metadata read from a Sackville index's `sackville_meta` table. */
 export interface SchemaMeta {
   schemaVersion: number
   embedModel: string

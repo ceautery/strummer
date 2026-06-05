@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from strummer_ingest.devdocs import iter_fragments
+from sackville_ingest.devdocs import iter_fragments
 
 DATA = Path(__file__).parent / "data" / "devdocs_react"
 

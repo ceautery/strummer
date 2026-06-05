@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-/** Package ecosystems Strummer can detect an installed version in. */
+/** Package ecosystems Sackville can detect an installed version in. */
 export type Ecosystem = 'node' | 'python' | 'ruby'
 
 /** Where a detected version came from (most authoritative first, per ecosystem). */

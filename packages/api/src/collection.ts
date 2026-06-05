@@ -67,7 +67,7 @@ interface EnvJson {
 
 /**
  * Load a Bruno collection directory: each `<name>.bru` request (+ optional
- * `<name>.strummer.yml` sidecar), plus any `environments/<Env>.bru` files.
+ * `<name>.sackville.yml` sidecar), plus any `environments/<Env>.bru` files.
  */
 export function loadCollection(dir: string): Collection {
   const requests = new Map<string, RequestEntry>()
@@ -78,7 +78,7 @@ export function loadCollection(dir: string): Collection {
     const request = toRequest(stem, parsed)
 
     const entry: RequestEntry = { request, assertions: [], captures: [] }
-    const sidecar = join(dir, `${stem}.strummer.yml`)
+    const sidecar = join(dir, `${stem}.sackville.yml`)
     if (existsSync(sidecar)) {
       const yaml = (parseYaml(readFileSync(sidecar, 'utf8')) ?? {}) as Sidecar
       entry.assertions = yaml.assertions ?? []

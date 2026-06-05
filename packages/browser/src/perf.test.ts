@@ -33,7 +33,7 @@ describe('auditPerf — real Lighthouse perf audit', () => {
   })
 
   it('returns a shape-checked perf summary + full LHR/HTML by handle', async () => {
-    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-perf-')))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-perf-')))
     const result = await auditPerf(baseUrl, {
       runId: 'perfrun',
       store,
@@ -63,15 +63,15 @@ describe('auditPerf — real Lighthouse perf audit', () => {
     expect(summary.metrics.every((m) => typeof m.numericValue === 'number')).toBe(true)
 
     // full reports are stored by handle (never inlined)
-    expect(result.reportHandle).toBe('strummer://browser/run/perfrun/perf')
-    expect(result.htmlHandle).toBe('strummer://browser/run/perfrun/perf-html')
+    expect(result.reportHandle).toBe('sackville://browser/run/perfrun/perf')
+    expect(result.htmlHandle).toBe('sackville://browser/run/perfrun/perf-html')
     const lhr = JSON.parse(store.get(result.reportHandle)?.body.toString('utf8') ?? '{}')
     expect(lhr.categories.performance).toBeDefined()
     expect(store.get(result.htmlHandle)?.body.toString('utf8').startsWith('<!')).toBe(true)
   })
 
   it('applies the redactor to the stored reports', async () => {
-    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-perf-')))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-perf-')))
     const result = await auditPerf(baseUrl, {
       runId: 'perfrun2',
       store,

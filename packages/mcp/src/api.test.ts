@@ -11,14 +11,14 @@ import { type ApiToolsOptions, createApiServer } from './api.js'
 
 /** Build a temp Bruno collection with the requests the tests exercise. */
 function makeCollection(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'strummer-api-'))
+  const dir = mkdtempSync(join(tmpdir(), 'sackville-api-'))
   writeFileSync(join(dir, 'bruno.json'), JSON.stringify({ version: '1', name: 'test' }))
   writeFileSync(
     join(dir, 'get-health.bru'),
     'meta {\n  name: get-health\n}\nget {\n  url: {{baseUrl}}/health\n}\n',
   )
   writeFileSync(
-    join(dir, 'get-health.strummer.yml'),
+    join(dir, 'get-health.sackville.yml'),
     'assertions:\n  - source: status\n    op: equals\n    value: 200\n',
   )
   writeFileSync(
@@ -32,7 +32,7 @@ function makeCollection(): string {
   return dir
 }
 
-describe('strummer API MCP tools', () => {
+describe('sackville API MCP tools', () => {
   let server: Server
   let baseUrl: string
   let dir: string
@@ -133,7 +133,7 @@ describe('strummer API MCP tools', () => {
     expect(sc.sent).toBe(true)
     expect(sc.response?.status).toBe(200)
     expect(sc.response?.assertions.every((a) => a.pass)).toBe(true)
-    expect(sc.response?.bodyHandle).toMatch(/^strummer:\/\/run\/.+\/body$/)
+    expect(sc.response?.bodyHandle).toMatch(/^sackville:\/\/run\/.+\/body$/)
   })
 
   it('serves the run body via the resource', async () => {
@@ -189,7 +189,7 @@ describe('strummer API MCP tools', () => {
     }
     expect(sc.steps).toHaveLength(1)
     expect(sc.steps[0]).toMatchObject({ name: 'get-health', sent: true, assertionsPassed: true })
-    expect(sc.steps[0]?.bodyHandle).toMatch(/^strummer:\/\/run\/.+\/body$/)
+    expect(sc.steps[0]?.bodyHandle).toMatch(/^sackville:\/\/run\/.+\/body$/)
   })
 
   it('validate_response validates against an inline OpenAPI spec', async () => {
@@ -370,7 +370,7 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
     const c = await connect({ allowCapture: false, resolveHar: () => HAR })
     const res = await c.callTool({
       name: 'validate_capture',
-      arguments: { harHandle: 'strummer://browser/run/x/har', openapiSpec: SPEC },
+      arguments: { harHandle: 'sackville://browser/run/x/har', openapiSpec: SPEC },
     })
     expect(res.isError).toBe(true)
   })
@@ -379,7 +379,7 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
     const c = await connect({ allowCapture: true, resolveHar: () => HAR })
     const res = await c.callTool({
       name: 'validate_capture',
-      arguments: { harHandle: 'strummer://browser/run/x/har', openapiSpec: SPEC },
+      arguments: { harHandle: 'sackville://browser/run/x/har', openapiSpec: SPEC },
     })
     const sc = res.structuredContent as {
       clean: boolean
@@ -399,7 +399,7 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
       verifyRedact: (s) => s.replace(/widgets/gi, '‹redacted›'),
       storeVerifyDetail: (_id, _kind, body) => {
         storedBody = body
-        return 'strummer://verify/test/capture-verdict'
+        return 'sackville://verify/test/capture-verdict'
       },
     })
     // Force missing-operation findings (which echo the path) by validating against
@@ -407,7 +407,7 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
     const res = await c.callTool({
       name: 'validate_capture',
       arguments: {
-        harHandle: 'strummer://browser/run/x/har',
+        harHandle: 'sackville://browser/run/x/har',
         openapiSpec: { openapi: '3.1.0', paths: {} },
       },
     })
@@ -430,7 +430,7 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
     const res = await c.callTool({
       name: 'validate_capture',
       arguments: {
-        harHandle: 'strummer://browser/run/x/har',
+        harHandle: 'sackville://browser/run/x/har',
         graphqlSchema: GQL_SDL_DRIFT,
         graphqlEndpoint: '/graphql',
       },
@@ -444,7 +444,7 @@ describe('validate_capture — the capture→contract bridge (ADR 0013 slice 6)'
     const c = await connect({ allowCapture: true, resolveHar: () => GQL_HAR })
     const res = await c.callTool({
       name: 'validate_capture',
-      arguments: { harHandle: 'strummer://browser/run/x/har' },
+      arguments: { harHandle: 'sackville://browser/run/x/har' },
     })
     expect(res.isError).toBe(true)
   })

@@ -1,15 +1,15 @@
-Strummer
+Sackville
 Copyright 2026 Curtis Autery
 
-This product includes software developed by Curtis Autery and the Strummer
+This product includes software developed by Curtis Autery and the Sackville
 contributors.
 
 Licensed under the Apache License, Version 2.0. See the LICENSE file.
 
 ---
 
-Strummer ingests and indexes third-party documentation. Indexed content
-remains under its own upstream license; Strummer records per-document
+Sackville ingests and indexes third-party documentation. Indexed content
+remains under its own upstream license; Sackville records per-document
 attribution in each index (the `attribution` column) and surfaces it in
-results. The Apache-2.0 license above covers the Strummer software itself,
+results. The Apache-2.0 license above covers the Sackville software itself,
 not the documentation it indexes.

@@ -1,7 +1,7 @@
-# strummer-ingest
+# sackville-ingest
 
-The Python half of Strummer: it ingests documentation and writes the SQLite
-index (the on-disk contract) that `@strummer/mcp` serves. See `ARCHITECTURE.md`.
+The Python half of Sackville: it ingests documentation and writes the SQLite
+index (the on-disk contract) that `sackville` serves. See `ARCHITECTURE.md`.
 
 ## Pipeline
 
@@ -17,7 +17,7 @@ index (the on-disk contract) that `@strummer/mcp` serves. See `ARCHITECTURE.md`.
   on-page table-of-contents lists stripped); `symbol_from_heading` recovers a
   symbol from signature headings.
 - **`types_map`** — DevDocs (`normalize_type`) and Dash (`normalize_dash_type`)
-  type strings → Strummer taxonomy
+  type strings → Sackville taxonomy
   (`hook`/`component`/`directive`/`api`/`guide`/`lint`/`legacy`/`function`/
   `method`/`class`/`reference`).
 - **`embed`** — `FastEmbedEmbedder` (bge-small-en-v1.5, 384-d) for real builds;
@@ -28,7 +28,7 @@ index (the on-disk contract) that `@strummer/mcp` serves. See `ARCHITECTURE.md`.
 ## Build the React 19 index
 
 ```bash
-uv run strummer-ingest build --slug react --library react --out ../../data/react.sqlite
+uv run sackville-ingest build --slug react --library react --out ../../data/react.sqlite
 # offline embeddings (no model download): add  --embedder fake
 # from local files instead of fetching:   --index index.json --db db.json --version 19.2
 ```
@@ -38,11 +38,11 @@ output (multi-MB) is a reproducible artifact under `data/` (gitignored).
 
 ```bash
 # From a Dash docset bundle instead (version is required; --home optional):
-uv run strummer-ingest build --docset path/to/Widget.docset \
+uv run sackville-ingest build --docset path/to/Widget.docset \
   --library widget --version 1.0 --home https://widget.dev/ --out ../../data/widget.sqlite
 ```
 
-Then serve it: `strummer-mcp ../../data/react.sqlite` (see `packages/mcp`).
+Then serve it: `sackville-mcp ../../data/react.sqlite` (see `packages/mcp`).
 
 ## Known rough edges (tracked for refinement)
 

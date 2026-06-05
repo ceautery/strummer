@@ -6,7 +6,7 @@ this disagrees with that archive, this file wins.
 
 ## 1. Shape
 
-Strummer is a **headless MCP server + CLI**, agent-first. Capabilities are MCP
+Sackville is a **headless MCP server + CLI**, agent-first. Capabilities are MCP
 tools/resources with structured, token-efficient output; large artifacts are
 returned by **handle/resource link**, never inlined.
 
@@ -14,7 +14,7 @@ returned by **handle/resource link**, never inlined.
 meet only at a SQLite file on disk and the schema that defines it. No live RPC.
 
 ```
-strummer/
+sackville/
   pnpm-workspace.yaml
   package.json                 # private root; scripts; packageManager pnpm@11.4.0
   biome.json                   # lint + format (TS)
@@ -27,19 +27,19 @@ strummer/
     cli/                       # thin CLI adapter over core (shebang bin)
       src/index.ts
   py/
-    strummer_ingest/           # uv-managed Python package; console_scripts CLI
+    sackville_ingest/           # uv-managed Python package; console_scripts CLI
       pyproject.toml
-      src/strummer_ingest/{cli,sources,extract,chunk,embed,db}.py
+      src/sackville_ingest/{cli,sources,extract,chunk,embed,db}.py
   schema/
-    strummer.schema.sql        # THE CONTRACT — single source of truth DDL
-    strummer.schema.json       # machine-readable: schema_version, embed_dim, embed_model
+    sackville.schema.sql        # THE CONTRACT — single source of truth DDL
+    sackville.schema.json       # machine-readable: schema_version, embed_dim, embed_model
   fixtures/                    # tiny committed fixtures + golden .sqlite for tests
 ```
 
 **Invariant:** only `packages/core` touches SQLite. `mcp` and `cli` depend on
 `core` via `workspace:*` and stay thin. Both languages read
-`schema/strummer.schema.json` and **refuse to operate on a DB whose
-`strummer_meta.schema_version` doesn't match** — that is what makes
+`schema/sackville.schema.json` and **refuse to operate on a DB whose
+`sackville_meta.schema_version` doesn't match** — that is what makes
 file-as-contract safe.
 
 ## 2. Stack & versions (current as of 2026-05-31)
@@ -78,9 +78,9 @@ assert `sqlite-vec` loads at startup.
 
 ## 3. The contract — SQLite schema
 
-`schema/strummer.schema.sql` (Python writes, TS reads read-only). Highlights:
+`schema/sackville.schema.sql` (Python writes, TS reads read-only). Highlights:
 
-- `strummer_meta(key,value)` — seeded with `schema_version`, `embed_model`,
+- `sackville_meta(key,value)` — seeded with `schema_version`, `embed_model`,
   `embed_dim`, `built_at`, `builder_version`. Both sides assert compatibility.
 - `docs(id, library, version, title, symbol, type, heading_path, url,
   attribution, body)` — canonical fragments; `version` is the pinned doc release.
@@ -89,7 +89,7 @@ assert `sqlite-vec` loads at startup.
 - `docs_vec` — `vec0` virtual table, `embedding float[384] distance_metric=cosine`,
   with `library/version/type` as KNN-pushdown filter columns.
 
-**Tested invariants on both sides:** `strummer_meta.embed_dim` == the `float[N]`
+**Tested invariants on both sides:** `sackville_meta.embed_dim` == the `float[N]`
 in the vec0 DDL; `docs.id == docs_fts.rowid == docs_vec.doc_id`; FTS triggers
 exist; shipped DB is checkpointed (`wal_checkpoint(TRUNCATE)`) + `VACUUM`ed into
 a single clean file opened read-only by TS.
@@ -101,23 +101,23 @@ bodies are fetched on demand. (Claude Code warns >10k tokens, caps at 25k,
 persists oversized output to disk.) Always emit `structuredContent` **and** a
 matching JSON text block (some clients break on structuredContent alone).
 
-- `strummer.search_docs` — in: `query`, optional `library`/`version`/`type`,
+- `sackville.search_docs` — in: `query`, optional `library`/`version`/`type`,
   `limit` (default 8, max 25), `cursor`. Hybrid **RRF** (FTS5 `bm25` + vec0 KNN),
   version filter pushed to **both** halves. Out: `{ results: [{ id, title,
   symbol, type, library, version, score, snippet, resourceUri }], nextCursor? }`
   where `snippet` is a short FTS `snippet()` excerpt and `resourceUri` is
-  `strummer://doc/{id}`.
-- `strummer.get_doc` — in: `id` (or the `strummer://doc/{id}` URI). Out: the full
+  `sackville://doc/{id}`.
+- `sackville.get_doc` — in: `id` (or the `sackville://doc/{id}` URI). Out: the full
   fragment incl. `body`, `heading_path`, `url`, `attribution`. The **only** place
   full body text is returned.
-- Resource `strummer://doc/{id}` mirrors `get_doc` for link-following.
+- Resource `sackville://doc/{id}` mirrors `get_doc` for link-following.
 
 Server `instructions` (≤2KB): explain search-returns-summaries+links, the
 version-pin semantics, and pagination.
 
 ## 5. Ingestion pipeline (Python CLI)
 
-`strummer-ingest build --source <docset|devdocs> --in <path> --out X.sqlite
+`sackville-ingest build --source <docset|devdocs> --in <path> --out X.sqlite
 [--library L --version V]`
 
 1. **Acquire/identify** via two adapters behind one interface, normalizing to a
@@ -132,7 +132,7 @@ version-pin semantics, and pagination.
    trafilatura for main content; selectolax to retain code/tables/anchors; split
    shared pages by `#anchor`.
 3. **Chunk** by heading/section with overlap; compute `heading_path`.
-4. **Type-normalize** Dash's ~76-value enum / DevDocs types onto Strummer's
+4. **Type-normalize** Dash's ~76-value enum / DevDocs types onto Sackville's
    taxonomy via a mapping table.
 5. **Embed** chunks (model2vec → float32, 512-dim).
 6. **Write DB** — apply schema, seed meta, insert `docs` (triggers fill FTS),
@@ -150,7 +150,7 @@ Run before every commit (wired into root scripts during scaffold):
 
 ```
 pnpm lint && pnpm test                              # Biome + Vitest, all TS packages
-cd py/strummer_ingest && uv run ruff check . \
+cd py/sackville_ingest && uv run ruff check . \
   && uv run ruff format --check . && uv run pytest  # Ruff + pytest
 ```
 
@@ -164,7 +164,7 @@ These came out of the research as genuine forks.
 1. **Embedding model + dimension — RESOLVED.** **fastembed / bge-small-en-v1.5,
    384-dim.** Contextual, strong on "how-do-I" queries, local/offline after a
    one-time download. `embed_dim=384` and `embed_model="bge-small-en-v1.5"` are
-   frozen into the schema; pluggable via `strummer_meta.embed_model`, but a
+   frozen into the schema; pluggable via `sackville_meta.embed_model`, but a
    dimension change is a migration.
 2. **Version-pin fallback.** Decided default: resolve installed semver to the
    nearest **same-major** doc release, record the resolved version in results,
@@ -179,12 +179,12 @@ These came out of the research as genuine forks.
 
 ## 8. First red→green (proves the whole boundary)
 
-1. Author `schema/strummer.schema.sql` + `schema/strummer.schema.json`
+1. Author `schema/sackville.schema.sql` + `schema/sackville.schema.json`
    (`{schema_version:1, embed_dim:384, embed_model:"bge-small-en-v1.5"}`).
 2. **RED (TS/core):** Vitest opens `fixtures/golden.sqlite`, loads sqlite-vec,
    asserts `schema_version==1`, runs `searchDocs("useState", {library:"react"})`,
    expects one row `{symbol:"useState", version:"19.0"}`. Fails (no fixture/code).
-3. **GREEN (Python):** minimal `strummer-ingest` applies the schema, seeds meta,
+3. **GREEN (Python):** minimal `sackville-ingest` applies the schema, seeds meta,
    inserts one literal `docs` row + one constant 512-dim vector, checkpoints +
    VACUUMs into `fixtures/golden.sqlite`. (No real scraping/embedding yet.)
 4. **GREEN (TS):** implement `core.openDb()` + `core.searchDocs()` (FTS branch;
@@ -197,27 +197,27 @@ committing to real adapters, embeddings, or RRF tuning.
 
 ---
 
-## 9. Pillar 2 — Web API testing (`@strummer/api`)
+## 9. Pillar 2 — Web API testing (`@sackville/api`)
 
 Decisions in ADR 0004; research in `docs/research/2026-05-31-pillar2-api-testing.md`.
 All TypeScript — collections are git-friendly files, no Python/SQLite.
 
 ```
 packages/api/src/
-  collection/  # .bru <-> thin domain model (via @usebruno/lang); sidecar *.strummer.yml
+  collection/  # .bru <-> thin domain model (via @usebruno/lang); sidecar *.sackville.yml
   vars/        # layered scope resolver + {{var}} / {{secret:NAME}} interpolation, captures
   runner/      # undici dispatcher: execute request, capture status/headers/body/timing
   assert/      # declarative assertion engine (status/header/jsonpath/schema/responseTime)
   secrets/     # SecretStore (keyring | env) + value Redactor
   script/      # QuickJS-sandboxed pre/post scripts (curated bru/expect API)
   contract/    # OpenAPI 3.1 (ajv-direct, ADR 0005) + GraphQL (graphql-js) validation
-  artifacts/   # resource-handle store: strummer://run/<id>/body  (bodies never inlined)
+  artifacts/   # resource-handle store: sackville://run/<id>/body  (bodies never inlined)
   index.ts
 ```
 
 - **Format:** Bruno `.bru` (mirror Bruno's on-disk layout) parsed by `@usebruno/lang`
-  V2 fns → a thin internal model. Strummer's richer assertions/captures live in a
-  sidecar `<request>.strummer.yml` so the `.bru` stays Bruno-compatible.
+  V2 fns → a thin internal model. Sackville's richer assertions/captures live in a
+  sidecar `<request>.sackville.yml` so the `.bru` stays Bruno-compatible.
 - **Runner:** `undici` 8 `request()` (control over body consumption + TTFB/full
   timing; proxy/mTLS). Layered var resolution
   `runtime/captured > request > folder > collection > environment`.
@@ -227,7 +227,7 @@ packages/api/src/
   runtime scope for request chaining.
 - **Scripts (opt-in power):** pre/post JS in a QuickJS WASM sandbox.
 - **Secrets:** `{{secret:NAME}}` resolved only at the transport boundary;
-  `@napi-rs/keyring` with mandatory `STRUMMER_SECRET_<NAME>` env fallback (Linux/
+  `@napi-rs/keyring` with mandatory `SACKVILLE_SECRET_<NAME>` env fallback (Linux/
   CI); values redacted (incl. base64/url encodings) from all returned artifacts.
 - **Safety (server-side, deny-by-default):** GET/HEAD/OPTIONS free; mutations
   dry-run unless `allowUnsafe` + host/method allowlist; SSRF range-block;
@@ -242,12 +242,12 @@ Load a request from a `.bru` collection + its sidecar, interpolate `{{baseUrl}}`
 execute against an **in-process** `node:http` server (ephemeral port, no external
 network), evaluate declarative assertions (status + jsonpath), and return
 `{ status, latencyMs, assertions[], bodyHandle }` with the body behind a
-`strummer://run/<id>/body` handle. Secrets, mutation gating, scripts, contract
+`sackville://run/<id>/body` handle. Secrets, mutation gating, scripts, contract
 validation, and MCP/CLI wiring layer on next.
 
 ---
 
-## 10. Pillar 3 — Browser / UI testing (`@strummer/browser`)
+## 10. Pillar 3 — Browser / UI testing (`@sackville/browser`)
 
 Decisions in ADR 0006; research in `docs/research/2026-05-31-pillar3-browser-testing.md`.
 All TypeScript, built **thin on stable `playwright-core` 1.60.0** (NOT a wrap of
@@ -263,10 +263,10 @@ packages/browser/src/
   steps/       # imperative step tools over ref-ids -> semantic locators
                # (navigate/click/fill/select/press/wait_for/snapshot/query/get_*)
   assert/      # browser assertion sources (text/element-visible/value/url/
-               # ariaSnapshot) — REUSES @strummer/api's declarative engine
+               # ariaSnapshot) — REUSES @sackville/api's declarative engine
   safety/      # deny-by-default action gate; interception-based mutation dry-run;
                # Tier-1 route allowlist; Tier-2 loopback DNS-pinning SSRF proxy
-  artifacts/   # ON-DISK ArtifactStore: strummer://browser/run/<id>/<kind>
+  artifacts/   # ON-DISK ArtifactStore: sackville://browser/run/<id>/<kind>
                # {path,contentType,byteSize,sha256}; trace/screenshot/video/HAR/
                # console/network/storageState; redacted before write
   trace/       # browser_trace_query: wraps `npx playwright trace` CLI
@@ -287,7 +287,7 @@ packages/assert/   # NEW shared module: declarative-assertion operator core
   Each step returns a token-capped snapshot **diff + handle**, never the full tree.
   Vision/coordinate tools ship behind an operator-gated `vision` capability.
 - **Artifacts by handle.** trace.zip / video / HAR / console+network logs /
-  screenshots / storageState / audit reports → `strummer://browser/run/<id>/<kind>`
+  screenshots / storageState / audit reports → `sackville://browser/run/<id>/<kind>`
   from an on-disk store; tool results carry only structured summaries.
 - **Safety (server-side, deny-by-default, operator-set).** Reads free; navigation/
   mutation/download/upload/dialog-accept/auth gated behind operator unlock +
@@ -323,7 +323,7 @@ The **a11y-audit summarizer** against an in-process `node:http` fixture (a page
 with one `<img>` missing `alt`): launch headless chromium once via
 `playwright-core` 1.60.0 → `AxeBuilder({page}).analyze()` → assert `summarize()`
 returns `violationCount>=1` + the `image-alt` rule bucketed by impact + the full
-Results addressable by a `strummer://browser/run/<id>/a11y` handle. No pixels, no
+Results addressable by a `sackville://browser/run/<id>/a11y` handle. No pixels, no
 perf, no network — deterministic and offline. Exercises every seam (launch,
 fixture server, audit, token-efficient summary, on-disk handle store) at minimum
 size; visual baselines and Lighthouse scores (the flaky parts) come in later

@@ -7,7 +7,7 @@ import type { FileCoverage } from './uncovered.js'
 
 const tmpDirs: string[] = []
 function tmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'strummer-runscoped-'))
+  const dir = mkdtempSync(join(tmpdir(), 'sackville-runscoped-'))
   tmpDirs.push(dir)
   return dir
 }
@@ -53,7 +53,7 @@ describe('runScoped — gated, impact-scoped vitest run (injected runner)', () =
 
   it('a CoverageGateError is branded as a gate denial (ADR 0013 Addendum — cross-pillar contract)', () => {
     const err = new CoverageGateError('nope') as unknown as Record<symbol, unknown>
-    expect(err[Symbol.for('strummer.gate-denial')]).toBe(true)
+    expect(err[Symbol.for('sackville.gate-denial')]).toBe(true)
   })
 
   it('refuses a project root that is not on the operator allowlist', async () => {

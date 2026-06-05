@@ -1,4 +1,4 @@
-import type { DnsLookup } from '@strummer/safety'
+import type { DnsLookup } from '@sackville/safety'
 import { describe, expect, it } from 'vitest'
 import { assertSsrfAllowed, checkGate, isMutating } from './safety.js'
 

@@ -5,7 +5,7 @@ import type { ArtifactStore } from './artifacts.js'
 
 export interface A11yAuditResult {
   summary: A11ySummary
-  /** `strummer://browser/run/<id>/a11y[-s<index>]` — the full axe report, by handle. */
+  /** `sackville://browser/run/<id>/a11y[-s<index>]` — the full axe report, by handle. */
   resultsHandle: string
 }
 

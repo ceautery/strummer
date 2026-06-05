@@ -11,11 +11,11 @@ design-research workflow (`docs/research/2026-05-31-pillar2-api-testing.md`).
 
 ## Decisions
 
-### 1. New package `@strummer/api`
+### 1. New package `@sackville/api`
 
 A pure-TS engine (collection IO, HTTP runner, assertions, var/secret resolution,
 contract validation, JS sandbox) consumed by thin `mcp` + `cli` adapters. The
-**safety gate lives in `@strummer/api`**, so every surface enforces it identically.
+**safety gate lives in `@sackville/api`**, so every surface enforces it identically.
 
 ### 2. Collection format: **Bruno `.bru` + a thin domain model**
 
@@ -33,11 +33,11 @@ OpenAPI via `@usebruno/converters`; HAR→`.bru` is our own small generator.
 > Insomnia v4 / OpenAPI 3.x / HAR all supported; multipart/file bodies +
 > non-header auth deferred.
 
-### 3. Strummer assertions/captures: **sidecar `*.strummer.yml`**
+### 3. Sackville assertions/captures: **sidecar `*.sackville.yml`**
 
-Strummer's richer assertion sources (jsonpath, JSON-schema, responseTime) and
+Sackville's richer assertion sources (jsonpath, JSON-schema, responseTime) and
 captures exceed Bruno's native `assert` block, so they live in a sidecar
-`<request>.strummer.yml` next to each `.bru`. The `.bru` stays 100% Bruno-GUI
+`<request>.sackville.yml` next to each `.bru`. The `.bru` stays 100% Bruno-GUI
 compatible and round-trips losslessly.
 
 ### 4. Safety: **deny-by-default for mutations**
@@ -47,14 +47,14 @@ GET/HEAD/OPTIONS run freely. POST/PUT/PATCH/DELETE **dry-run** by default
 actually sending requires an explicit unlock: run-scoped `allowUnsafe` (`--unsafe`)
 **plus** a host+method allowlist. Block private/link-local/metadata ranges (SSRF),
 validate the post-redirect final host+method, no auto-retry for non-idempotent
-calls. Enforced server-side in `@strummer/api`.
+calls. Enforced server-side in `@sackville/api`.
 
 ### 5. Secrets: references + pluggable store + value-redaction
 
 Collections reference secrets as `{{secret:NAME}}` (never inline values).
 `SecretStore` backends, selected `explicit > keyring > env`:
 `@napi-rs/keyring` (macOS/Win/Linux-desktop; no node-gyp) with a **mandatory env
-fallback** (`STRUMMER_SECRET_<NAME>`) for the headless Linux container/CI. Values
+fallback** (`SACKVILLE_SECRET_<NAME>`) for the headless Linux container/CI. Values
 resolve only at the transport boundary and are **redacted** (incl. common
 encodings) from every artifact/result returned to the agent.
 

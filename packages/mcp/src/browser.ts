@@ -19,12 +19,12 @@ import {
   RunRecorder,
   runFlow,
   type VideoSummary,
-} from '@strummer/browser'
+} from '@sackville/browser'
 import type { Page } from 'playwright-core'
 import { z } from 'zod'
 
 /**
- * Agent-facing MCP surface over the `@strummer/browser` engine (ADR 0006; the
+ * Agent-facing MCP surface over the `@sackville/browser` engine (ADR 0006; the
  * `browser-mcp-design` fan-out). Stateful, session-oriented: an agent opens a
  * session, drives it over a sequence of stateless tool calls, and closes it.
  *
@@ -33,7 +33,7 @@ import { z } from 'zod'
  * artifact-capture enablement, and the `Redactor` all come from the server bin's
  * config. No tool argument can flip a safety flag. Large artifacts (snapshots,
  * trace/console/network) are returned **by handle** via the
- * `strummer://browser/run/{runId}/{kind}` resource — never inlined.
+ * `sackville://browser/run/{runId}/{kind}` resource — never inlined.
  */
 export interface BrowserToolsOptions {
   /** The shared manager, built by the bin WITH the operator gate (so each
@@ -138,7 +138,7 @@ interface BrowserSession {
   videoSummary?: VideoSummary
 }
 
-const INSTRUCTIONS = `Strummer drives a real browser for UI testing, ARIA-snapshot first.
+const INSTRUCTIONS = `Sackville drives a real browser for UI testing, ARIA-snapshot first.
 
 Open a session with \`browser_open_session\` (returns a sessionId + runId), then
 drive it: \`browser_navigate\`, \`browser_snapshot\`, and the interaction tools
@@ -150,7 +150,7 @@ supersedes earlier refs, so use the freshest snapshot. Reads
 invalidate refs. Close with \`browser_close_session\` to release the context and
 collect artifact handles. Full snapshots, the a11y report, screenshots
 (\`browser_screenshot\`, operator-gated), and trace/console/network logs are
-returned by handle — read the \`strummer://browser/run/{runId}/{kind}\` resource.
+returned by handle — read the \`sackville://browser/run/{runId}/{kind}\` resource.
 
 For deterministic offline runs, \`browser_replay_har\` (operator-gated) serves the
 session from a recorded HAR instead of the network — call it BEFORE navigating.
@@ -175,7 +175,7 @@ function reply(structured: Record<string, unknown>) {
   return { content: [text(structured)], structuredContent: structured }
 }
 
-/** Register Strummer's browser-testing tools + run-artifact resource onto a server. */
+/** Register Sackville's browser-testing tools + run-artifact resource onto a server. */
 export function registerBrowserTools(server: McpServer, opts: BrowserToolsOptions): void {
   const { manager, gate, artifacts } = opts
   const redact = opts.redact ?? ((v: string) => v)
@@ -736,7 +736,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
       title: 'Screenshot',
       description:
         'Capture a PNG screenshot of the current page, stored by handle (never inlined). Returns a ' +
-        'summary; read the image via the strummer://browser/run/{runId}/screenshot-s<n> resource. ' +
+        'summary; read the image via the sackville://browser/run/{runId}/screenshot-s<n> resource. ' +
         'Requires operator enablement — a screenshot is pixels and cannot be redacted.',
       inputSchema: {
         sessionId,
@@ -1173,11 +1173,11 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
       },
     },
     async (args) => {
-      const handle = `strummer://browser/run/${args.runId}/trace`
+      const handle = `sackville://browser/run/${args.runId}/trace`
       const artifact = artifacts.get(handle)
       if (!artifact) {
         throw new Error(
-          `no trace for run ${args.runId} — was trace capture enabled (STRUMMER_BROWSER_CAPTURE_TRACE)?`,
+          `no trace for run ${args.runId} — was trace capture enabled (SACKVILLE_BROWSER_CAPTURE_TRACE)?`,
         )
       }
       const result = queryTrace(artifact.body, {
@@ -1192,7 +1192,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
 
   server.registerResource(
     'browser-run',
-    new ResourceTemplate('strummer://browser/run/{runId}/{kind}', { list: undefined }),
+    new ResourceTemplate('sackville://browser/run/{runId}/{kind}', { list: undefined }),
     {
       title: 'Browser run artifact',
       description:
@@ -1201,7 +1201,7 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
     (uri, variables) => {
       const runId = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId
       const kind = Array.isArray(variables.kind) ? variables.kind[0] : variables.kind
-      const handle = `strummer://browser/run/${runId}/${kind}`
+      const handle = `sackville://browser/run/${runId}/${kind}`
       // storageState is password-equivalent: written for the operator, never served
       // back to the agent (it would expose live session cookies/tokens).
       if (kind === 'storage-state') {
@@ -1234,10 +1234,10 @@ export function registerBrowserTools(server: McpServer, opts: BrowserToolsOption
   )
 }
 
-/** Build a standalone Strummer browser MCP server over a prepared manager. */
+/** Build a standalone Sackville browser MCP server over a prepared manager. */
 export function createBrowserServer(opts: BrowserToolsOptions): McpServer {
   const server = new McpServer(
-    { name: 'strummer-browser', version: '0.0.0' },
+    { name: 'sackville-browser', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerBrowserTools(server, opts)

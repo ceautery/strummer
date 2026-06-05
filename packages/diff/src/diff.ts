@@ -11,7 +11,7 @@
  * Pure and offline: producing the diff (shelling out to `git`) and matching its
  * repo-relative paths to absolute keys / package manifests are caller concerns.
  * Keeping the parse pure is what lets every consuming gate stay deterministic — and
- * what lets `@strummer/verify` runtime-import this without dragging in a pillar's
+ * what lets `@sackville/verify` runtime-import this without dragging in a pillar's
  * spawn-capable code (this package has zero dependencies).
  *
  * The parser is a state machine that tracks each hunk's declared line counts (from its

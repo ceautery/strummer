@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Redactor } from '@strummer/safety'
+import { Redactor } from '@sackville/safety'
 import { type Browser, type BrowserContext, chromium } from 'playwright-core'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactStore } from './artifacts.js'
@@ -48,7 +48,7 @@ describe('RunRecorder — artifact capture (real headless chromium)', () => {
   }, 60_000)
 
   beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'strummer-rec-'))
+    baseDir = mkdtempSync(join(tmpdir(), 'sackville-rec-'))
     store = new ArtifactStore(baseDir)
     redactor = new Redactor()
     redactor.register('token', 's3cr3t-value')
@@ -73,7 +73,7 @@ describe('RunRecorder — artifact capture (real headless chromium)', () => {
     await page.close()
 
     // --- trace (binary, by handle) ---
-    expect(artifacts.trace?.handle).toBe('strummer://browser/run/run-1/trace')
+    expect(artifacts.trace?.handle).toBe('sackville://browser/run/run-1/trace')
     expect(artifacts.trace?.byteSize).toBeGreaterThan(0)
     const trace = store.get(artifacts.trace?.handle ?? '')
     expect(trace?.contentType).toBe('application/zip')

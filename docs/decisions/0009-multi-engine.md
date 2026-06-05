@@ -11,7 +11,7 @@ the dev container". That annotation was **wrong** (corrected 2026-06-01):
 `playwright-core` 1.60.0 ships a working `install` / `install-deps` CLI, the
 Playwright CDN is reachable, and once `install-deps` provides the system libs
 (GTK/etc. for Firefox; WebKitGTK deps for WebKit) **both engines launch and drive
-headless** — verified end-to-end through the full Strummer stack
+headless** — verified end-to-end through the full Sackville stack
 (`engineLauncher` → `BrowserManager` → `PageDriver`: navigate → ARIA snapshot →
 ref click → re-snapshot) against an in-process fixture. So this was never an infra
 blocker; it was an unbuilt feature.
@@ -26,7 +26,7 @@ snapshot serializer produced byte-identical `- button "Go"` output). So
 
 Add engine **selection** at the launch seam, leaving the engine-agnostic core
 (`BrowserManager` takes an injected `launch()` thunk) untouched. New
-`@strummer/browser` `engine.ts`:
+`@sackville/browser` `engine.ts`:
 
 - `BrowserEngine = 'chromium' | 'firefox' | 'webkit'`; `resolveEngine(name)`
   (default chromium, **throws** on an unknown value so an operator typo fails loud
@@ -40,11 +40,11 @@ Add engine **selection** at the launch seam, leaving the engine-agnostic core
   chromium**.
 
 Surfaces:
-- **Bin**: `STRUMMER_BROWSER_ENGINE` (resolved early, before the proxy is
+- **Bin**: `SACKVILLE_BROWSER_ENGINE` (resolved early, before the proxy is
   allocated); `config.engine` + per-engine `launchArgs` surfaced. **One engine per
   server instance** (per-session engine selection — which would require launching
   multiple browsers — is out of scope).
-- **CLI**: `strummer browser … --engine chromium|firefox|webkit`; an unknown
+- **CLI**: `sackville browser … --engine chromium|firefox|webkit`; an unknown
   value is a clean exit-1.
 - **CI / dev image**: `playwright-core install --with-deps chromium firefox
   webkit` (the dev `docker/Dockerfile`, gitignored, provisions all three). The

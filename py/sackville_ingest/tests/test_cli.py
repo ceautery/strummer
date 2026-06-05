@@ -1,4 +1,4 @@
-"""End-to-end CLI tests for `strummer-ingest build` source wiring."""
+"""End-to-end CLI tests for `sackville-ingest build` source wiring."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from strummer_ingest.cli import main
+from sackville_ingest.cli import main
 
 
 def _make_docset(root: Path) -> Path:

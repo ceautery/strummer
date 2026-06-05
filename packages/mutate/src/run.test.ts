@@ -29,7 +29,7 @@ let dir: string
 let reportPath: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-mutate-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-mutate-'))
   reportPath = join(dir, 'mutation.json')
 })
 afterEach(() => {
@@ -62,7 +62,7 @@ describe('runMutation gate', () => {
 
   it('a MutateGateError is branded as a gate denial (ADR 0013 Addendum — cross-pillar contract)', () => {
     const err = new MutateGateError('nope') as unknown as Record<symbol, unknown>
-    expect(err[Symbol.for('strummer.gate-denial')]).toBe(true)
+    expect(err[Symbol.for('sackville.gate-denial')]).toBe(true)
   })
 
   it('denies when the root is not allowlisted', async () => {
@@ -156,7 +156,7 @@ describe('runMutmut — diff-scoped (ADR 0010 addendum 2)', () => {
   const results = (lines: string[]): string => lines.join('\n')
 
   beforeEach(() => {
-    proj = mkdtempSync(join(tmpdir(), 'strummer-mm-proj-'))
+    proj = mkdtempSync(join(tmpdir(), 'sackville-mm-proj-'))
     mkdirSync(join(proj, 'pkg'), { recursive: true })
     writeFileSync(join(proj, 'pkg', '__init__.py'), '')
     writeFileSync(join(proj, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
@@ -293,7 +293,7 @@ describe('runCosmicRay — diff-scoped (ADR 0010 addendum 2)', () => {
       .join('\n')
 
   beforeEach(() => {
-    proj = mkdtempSync(join(tmpdir(), 'strummer-cr-proj-'))
+    proj = mkdtempSync(join(tmpdir(), 'sackville-cr-proj-'))
     mkdirSync(join(proj, 'pkg'), { recursive: true })
     writeFileSync(join(proj, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
     writeFileSync(join(proj, 'pkg', 'strutil.py'), 'def shout(s):\n    return s.upper()\n')
@@ -322,11 +322,11 @@ describe('runCosmicRay — diff-scoped (ADR 0010 addendum 2)', () => {
     expect(result.ran).toBe(true)
     expect(scopedToml).toContain('module-path = [ "pkg/calc.py" ]')
     // init/exec carry the synthesized scoped config, not the base.
-    expect(argvs[0]?.[1]).toBe('.strummer-cosmic.toml')
+    expect(argvs[0]?.[1]).toBe('.sackville-cosmic.toml')
     expect(result.scopedFiles).toEqual(['pkg/calc.py'])
     expect(result.requestedFiles).toEqual(['pkg/calc.py'])
     // the temp scoped config is cleaned up afterwards
-    expect(existsSync(join(proj, '.strummer-cosmic.toml'))).toBe(false)
+    expect(existsSync(join(proj, '.sackville-cosmic.toml'))).toBe(false)
   })
 
   it('a fully out-of-tree scope is a pre-spawn noop (ran:false, scopeEmpty), never spawns', async () => {

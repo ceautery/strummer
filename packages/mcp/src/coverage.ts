@@ -8,7 +8,7 @@ import {
   runScopedPython,
   type TestRunner,
   uncoveredInDiff,
-} from '@strummer/coverage'
+} from '@sackville/coverage'
 import { z } from 'zod'
 
 export interface CoverageToolsOptions {
@@ -22,7 +22,7 @@ export interface CoverageToolsOptions {
   runner?: TestRunner
 }
 
-const INSTRUCTIONS = `Strummer reports test coverage scoped to a change — the "forgotten
+const INSTRUCTIONS = `Sackville reports test coverage scoped to a change — the "forgotten
 assertion" catch: of the lines a diff ADDED, which executable ones did no test exercise.
 
 \`uncovered_in_diff\` is a free, read-only analysis: give it a unified diff and a coverage
@@ -189,10 +189,10 @@ export function registerCoverageTools(server: McpServer, opts: CoverageToolsOpti
   }
 }
 
-/** Build a standalone Strummer coverage MCP server. */
+/** Build a standalone Sackville coverage MCP server. */
 export function createCoverageServer(opts: CoverageToolsOptions = {}): McpServer {
   const server = new McpServer(
-    { name: 'strummer-coverage', version: '0.0.0' },
+    { name: 'sackville-coverage', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerCoverageTools(server, opts)

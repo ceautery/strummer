@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Redactor } from '@strummer/safety'
+import { Redactor } from '@sackville/safety'
 import { strToU8, unzipSync, zipSync } from 'fflate'
 import { type Browser, chromium } from 'playwright-core'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,8 +45,8 @@ describe('finalizeHar — recorded HAR capture (real headless chromium)', () => 
   }, 60_000)
 
   beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), 'strummer-har-store-'))
-    harDir = mkdtempSync(join(tmpdir(), 'strummer-har-out-'))
+    baseDir = mkdtempSync(join(tmpdir(), 'sackville-har-store-'))
+    harDir = mkdtempSync(join(tmpdir(), 'sackville-har-out-'))
     store = new ArtifactStore(baseDir)
     redactor = new Redactor()
     redactor.register('token', 's3cr3t-value')
@@ -82,7 +82,7 @@ describe('finalizeHar — recorded HAR capture (real headless chromium)', () => 
     })
 
     expect(summary).toBeDefined()
-    expect(summary?.handle).toBe('strummer://browser/run/run-har/har')
+    expect(summary?.handle).toBe('sackville://browser/run/run-har/har')
     expect(summary?.byteSize).toBeGreaterThan(0)
     // the document load + the /api/data XHR
     expect(summary?.entryCount).toBeGreaterThanOrEqual(2)
@@ -140,8 +140,8 @@ describe('finalizeHar — recorded HAR capture (real headless chromium)', () => 
 describe('finalizeHar — attach-body redaction by declared mimeType (5e)', () => {
   it('redacts a registered secret in a text-like body stored under a non-text filename', () => {
     const SECRET = 'tok-LIVE-abcdef'
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-har-attach-'))
-    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-har-attach-store-')))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-har-attach-'))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-har-attach-store-')))
     const redactor = new Redactor()
     redactor.register('token', SECRET)
 
@@ -197,8 +197,8 @@ describe('finalizeHar — attach-body redaction by declared mimeType (5e)', () =
   })
 
   it('leaves a genuinely binary body (octet-stream) untouched', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-har-bin-'))
-    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-har-bin-store-')))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-har-bin-'))
+    const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-har-bin-store-')))
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     const har = {
       log: {

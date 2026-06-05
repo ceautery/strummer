@@ -1,8 +1,8 @@
-import type { ContractResult } from '@strummer/api'
-import type { DiffCoverageReport } from '@strummer/coverage'
-import type { DependencyAudit } from '@strummer/deps'
-import type { FlakeVerdict } from '@strummer/flake'
-import type { MutationSummary } from '@strummer/mutate'
+import type { ContractResult } from '@sackville/api'
+import type { DiffCoverageReport } from '@sackville/coverage'
+import type { DependencyAudit } from '@sackville/deps'
+import type { FlakeVerdict } from '@sackville/flake'
+import type { MutationSummary } from '@sackville/mutate'
 import { describe, expect, it } from 'vitest'
 import {
   type CaptureVerdictFacts,

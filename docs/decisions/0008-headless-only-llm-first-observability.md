@@ -12,7 +12,7 @@ live browser session render, via either headless + `--remote-debugging-port`
 
 Two things changed the calculus:
 
-1. **Strummer is LLM-first.** The primary user is an agent, and the human's
+1. **Sackville is LLM-first.** The primary user is an agent, and the human's
    highest-value interaction is *asking questions about a run* — e.g. "navigate
    to the personnel page and tell me what AJAX requests happen" — not physically
    watching pixels paint. The CLI is a thin wrapper that lets a new dev see how

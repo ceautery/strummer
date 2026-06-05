@@ -14,8 +14,8 @@ folded into the synthesis recorded here.
 
 ## Synthesis (the recommended design)
 
-Phase 3 adds Strummer's browser/UI testing pillar as a **new pure-TypeScript
-package, `@strummer/browser`, built thin on stable `playwright-core` 1.60.0** —
+Phase 3 adds Sackville's browser/UI testing pillar as a **new pure-TypeScript
+package, `@sackville/browser`, built thin on stable `playwright-core` 1.60.0** —
 NOT a wrap of `@playwright/mcp`. The pillar reimplements the API pillar's house
 pattern (a pure engine that owns the safety gate + artifact plumbing, consumed
 by thin `mcp` + `cli` adapters) for a browser: a long-lived headless Chromium
@@ -23,7 +23,7 @@ drives pages via the **accessibility/ARIA-snapshot model** (token-efficient,
 deterministic) with vision/coordinate tools as an operator-gated capability.
 Every large artifact (trace.zip, screenshots, video, HAR, console/network logs,
 storageState, axe/Lighthouse reports) is returned only by a
-`strummer://browser/run/<id>/<kind>` handle with a token-cheap structured
+`sackville://browser/run/<id>/<kind>` handle with a token-cheap structured
 summary; nothing is inlined.
 
 Safety is operator-set and deny-by-default, layered: a Tier-1
@@ -42,7 +42,7 @@ file, version-pinned browser binaries.
 
 ### Numbered decisions (→ ADR 0006)
 
-1. **New package `@strummer/browser`, thin on `playwright-core`; engine owns the
+1. **New package `@sackville/browser`, thin on `playwright-core`; engine owns the
    safety gate.** Do not wrap/embed `@playwright/mcp` as a runtime dependency.
    *Alt rejected:* wrap as primary (alpha core pin, inline artifacts, churny
    0.0.x line); embed as optional backend via `createConnection()` (deferred to
@@ -56,7 +56,7 @@ file, version-pinned browser binaries.
 3. **All artifacts by handle; on-disk store; trace via the 1.60 trace CLI.**
    Capture trace.zip (`tracing.start{screenshots,snapshots,sources}`→`stop`),
    optional video (webm), HAR, and own console/network logs to a per-run temp
-   dir; register each as `strummer://browser/run/<id>/<kind>`. Tool results
+   dir; register each as `sackville://browser/run/<id>/<kind>`. Tool results
    return only structured summaries + handles. Expose trace via a
    `browser_trace_query` tool that wraps the agent-targeted `npx playwright
    trace` subcommands, with a direct trace.zip JSON-lines parser as the
@@ -74,7 +74,7 @@ file, version-pinned browser binaries.
    allowlist and unconditionally aborts private/link-local/metadata literals
    (169.254.169.254, 169.254/16, 127/8, 10/8, 172.16/12, 192.168/16, ::1,
    fc00::/7, fe80::/10, 0.0.0.0, metadata.google.internal). Tier-2: launch
-   Chromium through Strummer's own loopback forward proxy (`proxy:{server}`)
+   Chromium through Sackville's own loopback forward proxy (`proxy:{server}`)
    that re-resolves + pins the resolved IP, rejects blocked ranges, re-checks on
    each redirect — reusing the shared range classifier. *Alt rejected:* route
    only (DNS-rebinding hole); proxy only (loses legible per-request decisions).
@@ -96,7 +96,7 @@ file, version-pinned browser binaries.
    operator upload-allowlist dir. Container default: keep the Chromium sandbox
    (seccomp + dropped caps + read-only FS + non-root); `--no-sandbox` is an
    operator-gated fallback recorded in the ADR. Capture levels operator-set
-   (`STRUMMER_BROWSER_ARTIFACTS=trace,console,network` default; `+video`,
+   (`SACKVILLE_BROWSER_ARTIFACTS=trace,console,network` default; `+video`,
    `+fullpage`, `+har-bodies` must be unlocked).
 8. **Audit tools (a11y + perf) ride the same handle/summary split.**
    `browser.audit.a11y` via `@axe-core/playwright` 4.11.3
@@ -110,13 +110,13 @@ file, version-pinned browser binaries.
 ### Cross-pillar refactor
 
 Lift the SSRF/private-IP range classifier (`ipaddr.js`-based) and the
-secret-resolution + redaction boundary out of `@strummer/api` into a small
-shared **`@strummer/safety`** module consumed by both `api` and `browser`, so one
+secret-resolution + redaction boundary out of `@sackville/api` into a small
+shared **`@sackville/safety`** module consumed by both `api` and `browser`, so one
 allow/deny + redaction policy governs both pillars. The artifact handle store is
 *extended, not reused verbatim*: today's `packages/api/src/artifacts.ts` is an
 in-memory `Map` of strings; browser artifacts are large/binary, so
-`@strummer/browser` gets an **on-disk-backed** `ArtifactStore` keyed
-`strummer://browser/run/<id>/<kind>[/<sub>]` storing
+`@sackville/browser` gets an **on-disk-backed** `ArtifactStore` keyed
+`sackville://browser/run/<id>/<kind>[/<sub>]` storing
 `{path, contentType, byteSize, sha256}`.
 
 ### Stack picks (versions verified against the npm registry on 2026-05-31)
@@ -124,7 +124,7 @@ in-memory `Map` of strings; browser artifacts are large/binary, so
 | Package | Version | Purpose |
 | --- | --- | --- |
 | `playwright-core` | **1.60.0** | Sole engine (lifecycle, ARIA snapshot, tracing+HAR, recordVideo, route, proxy, downloads/uploads, dialogs, httpCredentials, storageState, screenshots). Pinned stable (Apache-2.0, node≥18); pins the Chromium binary revision. |
-| `@modelcontextprotocol/sdk` | 1.29.x | MCP surface (matches the rest of Strummer). |
+| `@modelcontextprotocol/sdk` | 1.29.x | MCP surface (matches the rest of Sackville). |
 | `npx playwright trace` (ships with `playwright` 1.60.0) | 1.60.0 | Agent-targeted headless trace reader wrapped by `browser_trace_query`. Introduced 1.59. |
 | `@axe-core/playwright` | 4.11.3 | a11y audit (MPL-2.0; peer `playwright-core>=1.0.0`). |
 | `axe-core` | 4.11.4 | Underlying a11y engine (transitive, MPL-2.0). |
@@ -161,7 +161,7 @@ returns a tiny HTML page with one known violation (`<img>` with no `alt`),
 once via `playwright-core` 1.60.0, navigate to `http://127.0.0.1:{port}`; (3)
 `AxeBuilder({page}).analyze()`; (4) assert `summarize(results)` returns
 `violationCount>=1`, includes the `image-alt` rule id bucketed by impact, and
-that the full Results are addressable by a `strummer://browser/run/<id>/a11y`
+that the full Results are addressable by a `sackville://browser/run/<id>/a11y`
 handle. Make it pass with the smallest `summarize()` + an on-disk-backed
 `ArtifactStore.put/get`. Exercises every architectural seam at minimum size,
 fully deterministic and offline (`image-alt` is a rock-stable axe finding), and
@@ -208,7 +208,7 @@ defers visual baselines + Lighthouse scores (the flaky parts) to later slices.
 - ✅ **SUPPORTED** — Playwright performs **no** secret redaction in captured
   console/network/HAR/trace artifacts (maintainers explicitly punt it to the
   user; the one shipped redaction is the `Authorization` header in an APIContext
-  request-timeout *call log* only). Confirms Strummer must run its own redaction
+  request-timeout *call log* only). Confirms Sackville must run its own redaction
   pass before any artifact write.
 
 ---
@@ -242,7 +242,7 @@ testdino.com/blog/playwright-mcp-troubleshooting.
 ### Stream B — Agent driving / authoring model
 
 Hybrid imperative step tools over ARIA-snapshot ref-ids; reuse the
-`@strummer/api` assertion engine (add `text`/`element-visible`/`value`/`url`/
+`@sackville/api` assertion engine (add `text`/`element-visible`/`value`/`url`/
 `ariaSnapshot` sources, auto-waiting); `.bru`-style steps file + sidecar using
 semantic locators (refs invalidate). Reject autonomous record/replay for v1.
 
@@ -258,7 +258,7 @@ github.com/microsoft/playwright-mcp · bug0.com/blog/stagehand-passmark.
 ### Stream C — Artifacts & observability
 
 Record to a per-run temp dir, register each as
-`strummer://browser/run/<id>/<kind>`; tool results return only summaries +
+`sackville://browser/run/<id>/<kind>`; tool results return only summaries +
 handles. Trace consumed via the 1.59+ agent-targeted CLI (hybrid with a
 JSON-lines parser fallback). Visual comparator: `toHaveScreenshot` (pixelmatch)
 default, `odiff` opt-in for large corpora; baselines generated **in the pinned

@@ -1,6 +1,6 @@
 """SQLite index writer — the Python half of the file-as-contract boundary.
 
-Loads sqlite-vec, applies schema/strummer.schema.sql, and provides typed insert
+Loads sqlite-vec, applies schema/sackville.schema.sql, and provides typed insert
 helpers. Both the DDL and the version/dim constants come from the repo-root
 ``schema/`` directory so Python and TypeScript can never drift.
 """
@@ -21,14 +21,14 @@ def _schema_dir() -> Path:
     seeds = (Path(__file__).resolve(), Path.cwd().resolve())
     for seed in seeds:
         for base in (seed, *seed.parents):
-            if (base / "schema" / "strummer.schema.sql").exists():
+            if (base / "schema" / "sackville.schema.sql").exists():
                 return base / "schema"
-    raise FileNotFoundError("could not locate schema/strummer.schema.sql")
+    raise FileNotFoundError("could not locate schema/sackville.schema.sql")
 
 
 SCHEMA_DIR = _schema_dir()
-SCHEMA_SQL = (SCHEMA_DIR / "strummer.schema.sql").read_text()
-SCHEMA_JSON = json.loads((SCHEMA_DIR / "strummer.schema.json").read_text())
+SCHEMA_SQL = (SCHEMA_DIR / "sackville.schema.sql").read_text()
+SCHEMA_JSON = json.loads((SCHEMA_DIR / "sackville.schema.json").read_text())
 
 SCHEMA_VERSION: int = SCHEMA_JSON["schema_version"]
 EMBED_MODEL: str = SCHEMA_JSON["embed_model"]
@@ -55,9 +55,9 @@ def seed_meta(
     builder_version: str,
     built_at: str | None = None,
 ) -> None:
-    """Seed strummer_meta. Pass a fixed ``built_at`` for deterministic fixtures."""
+    """Seed sackville_meta. Pass a fixed ``built_at`` for deterministic fixtures."""
     conn.executemany(
-        "INSERT INTO strummer_meta(key, value) VALUES (?, ?)",
+        "INSERT INTO sackville_meta(key, value) VALUES (?, ?)",
         [
             ("schema_version", str(SCHEMA_VERSION)),
             ("embed_model", EMBED_MODEL),

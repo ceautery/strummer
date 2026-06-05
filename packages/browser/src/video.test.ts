@@ -10,8 +10,8 @@ describe('finalizeVideo — store a recorded webm by handle', () => {
   let store: ArtifactStore
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'strummer-video-'))
-    store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-video-store-')))
+    dir = mkdtempSync(join(tmpdir(), 'sackville-video-'))
+    store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-video-store-')))
   })
   afterEach(() => {
     // store/dir are temp; leave cleanup to the OS (tests are isolated by mkdtemp).
@@ -24,7 +24,7 @@ describe('finalizeVideo — store a recorded webm by handle', () => {
     const summary = await finalizeVideo({ videoPath, runId: 'run-1', store })
 
     expect(summary).toBeDefined()
-    expect(summary?.handle).toBe('strummer://browser/run/run-1/video')
+    expect(summary?.handle).toBe('sackville://browser/run/run-1/video')
     expect(summary?.contentType).toBe('video/webm')
     expect(summary?.byteSize).toBe(Buffer.from('fake-webm-bytes').byteLength)
     // the artifact is retrievable as the raw bytes (video is unredactable pixels)

@@ -5,9 +5,9 @@
 
 ## Context
 
-The browser pillar (`@strummer/browser` + `strummer-browser-mcp`) runs a **real
+The browser pillar (`@sackville/browser` + `sackville-browser-mcp`) runs a **real
 Chromium** that loads **attacker-influenced web content** and is driven by an
-**LLM agent**. That is the most exposed surface in Strummer: a renderer exploit,
+**LLM agent**. That is the most exposed surface in Sackville: a renderer exploit,
 a malicious page, or a confused-deputy agent all execute *inside the server
 process's host*.
 
@@ -26,10 +26,10 @@ to the host. ADR 0006 §7 named the container posture in one line ("keep the
 sandbox: seccomp + dropped caps + read-only FS + non-root; `--no-sandbox` is an
 operator-gated fallback"). This ADR specifies that posture in full — it is the
 **last line of defense** behind the in-process spine, and the deployment
-contract for operators running `strummer-browser-mcp` in production.
+contract for operators running `sackville-browser-mcp` in production.
 
 > **Scope.** This ADR is **operator deployment guidance** plus the in-process
-> launch flags Strummer already sets. The Linux dev-container harness that hosts
+> launch flags Sackville already sets. The Linux dev-container harness that hosts
 > Claude Code (`docker/`, `docker-compose.yml`) is untracked/gitignored local
 > tooling and is **not** the production profile described here; the example
 > manifests below are illustrative, not shipped files.
@@ -58,8 +58,8 @@ The properties to preserve under a renderer compromise:
 
 The multi-process Chromium sandbox (the renderer running unprivileged, brokered
 through the zygote) is the **primary** containment for a renderer exploit — it
-must stay on. Strummer launches with the sandbox **on by default**;
-`STRUMMER_BROWSER_NO_SANDBOX` (→ `--no-sandbox`) is an **explicit operator
+must stay on. Sackville launches with the sandbox **on by default**;
+`SACKVILLE_BROWSER_NO_SANDBOX` (→ `--no-sandbox`) is an **explicit operator
 opt-in** only (already implemented in `bin-browser.ts`). `--no-sandbox` removes
 the in-Chromium renderer/host barrier, leaving the OS/container boundary as the
 *only* line — acceptable solely when the container boundary below is fully
@@ -115,12 +115,12 @@ space only where genuinely needed, each as a **tmpfs or an explicit volume**:
 
 - `tmpfs` `/tmp` (and the browser's user-data/cache dir under it).
 - A **dedicated `/dev/shm`** sized for Chromium (default 64 MB crashes it):
-  prefer **`--shm-size=1g`** (or set `STRUMMER_BROWSER_*` to pass
+  prefer **`--shm-size=1g`** (or set `SACKVILLE_BROWSER_*` to pass
   `--disable-dev-shm-usage`, which routes shared memory to `/tmp`). **Avoid
   `--ipc=host`** — it punches a hole in process isolation for the sake of shared
   memory, defeating part of this ADR.
 - The operator artifact/IO dirs that already exist as env-gated knobs —
-  `STRUMMER_BROWSER_ARTIFACTS_DIR`, and (only if enabled) `DOWNLOAD_DIR`,
+  `SACKVILLE_BROWSER_ARTIFACTS_DIR`, and (only if enabled) `DOWNLOAD_DIR`,
   `UPLOAD_DIR`, `HAR_DIR`, `REPLAY_HAR_DIR`, `FLOWS_DIR`, `VIDEO_DIR` — mounted as
   **named volumes**, writable, owned by the runtime UID. Everything else stays
   read-only.
@@ -132,7 +132,7 @@ already path-confined in-process).
 ### 7. Disable WebRTC and QUIC in the hardened profile
 
 WebRTC and QUIC are **alternate egress paths** that can sidestep an HTTP(S)
-forward proxy. Strummer already neutralizes WebRTC at launch
+forward proxy. Sackville already neutralizes WebRTC at launch
 (`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`, ADR 0006 §5). The
 hardened profile additionally **disables QUIC** (`--disable-quic`) so all
 traffic is forced onto the TCP HTTP(S) paths the SSRF proxy actually sees, and
@@ -171,8 +171,8 @@ the documented APIs; the container layer assumes those are bypassed.
 ```yaml
 # docker-compose snippet — the OPERATOR's production profile, not the dev harness.
 services:
-  strummer-browser-mcp:
-    image: strummer-browser-mcp        # FROM mcr.microsoft.com/playwright:v1.60.0-noble
+  sackville-browser-mcp:
+    image: sackville-browser-mcp        # FROM mcr.microsoft.com/playwright:v1.60.0-noble
     user: "pwuser"                     # non-root (§3)
     read_only: true                    # read-only rootfs (§6)
     cap_drop: ["ALL"]                  # no ambient caps (§4)
@@ -182,10 +182,10 @@ services:
     shm_size: "1g"                     # Chromium /dev/shm (§6); NOT --ipc=host
     tmpfs: ["/tmp"]                    # writable scratch + user-data-dir (§6)
     volumes:
-      - artifacts:/var/strummer/artifacts   # the only writable persistence (§6)
+      - artifacts:/var/sackville/artifacts   # the only writable persistence (§6)
     environment:
-      STRUMMER_BROWSER_ALLOWED_HOSTS: "app.example.com"
-      # STRUMMER_BROWSER_NO_SANDBOX stays UNSET — keep the sandbox (§1)
+      SACKVILLE_BROWSER_ALLOWED_HOSTS: "app.example.com"
+      # SACKVILLE_BROWSER_NO_SANDBOX stays UNSET — keep the sandbox (§1)
     # egress restricted to the allowlist at the network layer (§8)
 ```
 
@@ -212,7 +212,7 @@ args in the hardened profile (§7).
   a **milestone change** that re-validates this profile, in lockstep with ADR
   0006's binary-pinning rule.
 - **Operator burden.** This is deployment configuration the operator must apply;
-  Strummer ships the launch flags (`--no-sandbox` gating, WebRTC arg, `--disable-
+  Sackville ships the launch flags (`--no-sandbox` gating, WebRTC arg, `--disable-
   quic` in the hardened profile) but cannot enforce the host-level mounts, seccomp,
   caps, or egress policy from inside the process. The ADR is the contract; CI/Docs
   reference it.

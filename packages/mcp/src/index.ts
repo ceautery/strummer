@@ -17,7 +17,7 @@ export {
   registerDepsTools,
 } from './deps.js'
 export {
-  createStrummerServer,
+  createSackvilleServer,
   type DocsToolsOptions,
   registerDocsTools,
   type ServerOptions,

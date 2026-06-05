@@ -1,10 +1,10 @@
 {
-  "name": "@strummer/cli",
+  "name": "@sackville/cli",
   "version": "0.0.0",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "strummer": "./dist/bin.mjs"
+    "sackville-cli": "./dist/bin.mjs"
   },
   "exports": {
     ".": {
@@ -21,19 +21,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@strummer/api": "workspace:*",
-    "@strummer/artifacts": "workspace:*",
-    "@strummer/browser": "workspace:*",
-    "@strummer/core": "workspace:*",
-    "@strummer/coverage": "workspace:*",
-    "@strummer/deps": "workspace:*",
-    "@strummer/embed": "workspace:*",
-    "@strummer/flake": "workspace:*",
-    "@strummer/lsp": "workspace:*",
-    "@strummer/mutate": "workspace:*",
-    "@strummer/safety": "workspace:*",
-    "@strummer/verdict": "workspace:*",
-    "@strummer/verify": "workspace:*",
+    "@sackville/api": "workspace:*",
+    "@sackville/artifacts": "workspace:*",
+    "@sackville/browser": "workspace:*",
+    "@sackville/core": "workspace:*",
+    "@sackville/coverage": "workspace:*",
+    "@sackville/deps": "workspace:*",
+    "@sackville/embed": "workspace:*",
+    "@sackville/flake": "workspace:*",
+    "@sackville/lsp": "workspace:*",
+    "@sackville/mutate": "workspace:*",
+    "@sackville/safety": "workspace:*",
+    "@sackville/verdict": "workspace:*",
+    "@sackville/verify": "workspace:*",
     "playwright-core": "1.60.0"
   },
   "devDependencies": {
@@ -53,7 +53,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ceautery/strummer.git",
+    "url": "git+https://github.com/ceautery/sackville.git",
     "directory": "packages/cli"
   }
 }

@@ -181,14 +181,16 @@ describe('no bin imports the index barrel (ADR 0019 §A4)', () => {
 
 describe('verify does not statically pull an optional-peer engine (ADR 0019 §B6)', () => {
   // verify is in the curated default set, so importing bin-verify.ts must NOT load
-  // an OPTIONAL-PEER engine (@strummer/flake → better-sqlite3, @strummer/browser →
+  // an OPTIONAL-PEER engine (@sackville/flake → better-sqlite3, @sackville/browser →
   // playwright-core) at module top level — else the api+deps+verify default would
   // fail in an install that didn't add that engine. Those runs use a lazy
   // `await import(...)`; `import type` is fine (erased at build).
   const src = readFileSync(`${here}/bin-verify.ts`, 'utf8')
   for (const pkg of ['flake', 'browser']) {
-    it(`bin-verify.ts has no value import of @strummer/${pkg}`, () => {
-      const valueImport = new RegExp(`import\\s+(?!type\\b)[\\w{},*\\s]+from\\s+'@strummer/${pkg}'`)
+    it(`bin-verify.ts has no value import of @sackville/${pkg}`, () => {
+      const valueImport = new RegExp(
+        `import\\s+(?!type\\b)[\\w{},*\\s]+from\\s+'@sackville/${pkg}'`,
+      )
       expect(src).not.toMatch(valueImport)
     })
   }
@@ -197,10 +199,10 @@ describe('verify does not statically pull an optional-peer engine (ADR 0019 §B6
 describe('api+verify gate prefixing — compose, never widen (ADR 0019 §A8)', () => {
   // The api gate is read through ONE shared helper used by BOTH the api pillar and
   // verify's produce-api capture path. In aggregate mode it must read the api pillar's
-  // OWN STRUMMER_API_* namespace, so a single bare STRUMMER_ALLOW_UNSAFE in a shared
+  // OWN SACKVILLE_API_* namespace, so a single bare SACKVILLE_ALLOW_UNSAFE in a shared
   // process cannot unlock BOTH pillars at once.
-  const bareUnsafe = { STRUMMER_ALLOW_UNSAFE: '1', STRUMMER_ALLOWED_HOSTS: 'x.test' }
-  const apiUnsafe = { STRUMMER_API_ALLOW_UNSAFE: '1', STRUMMER_API_ALLOWED_HOSTS: 'x.test' }
+  const bareUnsafe = { SACKVILLE_ALLOW_UNSAFE: '1', SACKVILLE_ALLOWED_HOSTS: 'x.test' }
+  const apiUnsafe = { SACKVILLE_API_ALLOW_UNSAFE: '1', SACKVILLE_API_ALLOWED_HOSTS: 'x.test' }
 
   it('standalone (bare): bare names grant; the prefixed names do nothing', () => {
     const gate = apiSafetyGateFromEnv(bareUnsafe)
@@ -215,26 +217,28 @@ describe('api+verify gate prefixing — compose, never widen (ADR 0019 §A8)', (
     expect(gate.allowedHosts).toEqual([])
   })
 
-  it('aggregate: only the prefixed STRUMMER_API_* names grant', () => {
+  it('aggregate: only the prefixed SACKVILLE_API_* names grant', () => {
     const gate = apiSafetyGateFromEnv(apiUnsafe, { aggregate: true })
     expect(gate.allowUnsafe).toBe(true)
     expect(gate.allowedHosts).toEqual(['x.test'])
   })
 
   it('keyring + block-private + the secret namespace are prefixed too', () => {
-    expect(apiSafetyGateFromEnv({ STRUMMER_KEYRING: '1' }, { aggregate: true }).keyring).toBe(false)
-    expect(apiSafetyGateFromEnv({ STRUMMER_API_KEYRING: '1' }, { aggregate: true }).keyring).toBe(
+    expect(apiSafetyGateFromEnv({ SACKVILLE_KEYRING: '1' }, { aggregate: true }).keyring).toBe(
+      false,
+    )
+    expect(apiSafetyGateFromEnv({ SACKVILLE_API_KEYRING: '1' }, { aggregate: true }).keyring).toBe(
       true,
     )
     // block-private flips allowPrivate; bare is ignored in aggregate.
     expect(
-      apiSafetyGateFromEnv({ STRUMMER_BLOCK_PRIVATE: '1' }, { aggregate: true }).allowPrivate,
+      apiSafetyGateFromEnv({ SACKVILLE_BLOCK_PRIVATE: '1' }, { aggregate: true }).allowPrivate,
     ).toBe(true)
     expect(
-      apiSafetyGateFromEnv({ STRUMMER_API_BLOCK_PRIVATE: '1' }, { aggregate: true }).allowPrivate,
+      apiSafetyGateFromEnv({ SACKVILLE_API_BLOCK_PRIVATE: '1' }, { aggregate: true }).allowPrivate,
     ).toBe(false)
-    expect(apiSecretPrefix({ aggregate: true })).toBe('STRUMMER_API_SECRET_')
-    expect(apiSecretPrefix()).toBe('STRUMMER_SECRET_')
+    expect(apiSecretPrefix({ aggregate: true })).toBe('SACKVILLE_API_SECRET_')
+    expect(apiSecretPrefix()).toBe('SACKVILLE_SECRET_')
   })
 
   it('apiConfigFromEnv threads the mode (standalone bare unchanged)', () => {
@@ -244,21 +248,21 @@ describe('api+verify gate prefixing — compose, never widen (ADR 0019 §A8)', (
   })
 })
 
-describe('strummer-mcp is repointed to the aggregate bin (ADR 0019 §A2/§11)', () => {
+describe('sackville-mcp is repointed to the aggregate bin (ADR 0019 §A2/§11)', () => {
   // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
   const pkg = JSON.parse(readFileSync(`${here}/../package.json`, 'utf8')) as any
 
-  it('strummer-mcp + the default `mcp` bin map to the aggregate (./dist/bin.mjs)', () => {
-    expect(pkg.bin['strummer-mcp']).toBe('./dist/bin.mjs')
-    expect(pkg.bin.mcp).toBe('./dist/bin.mjs') // so `npx @strummer/mcp` resolves
+  it('sackville-mcp + the default `mcp` bin map to the aggregate (./dist/bin.mjs)', () => {
+    expect(pkg.bin['sackville-mcp']).toBe('./dist/bin.mjs')
+    expect(pkg.bin.sackville).toBe('./dist/bin.mjs') // so `npx sackville` resolves
   })
 
-  it('the docs-only server moved to strummer-docs-mcp', () => {
-    expect(pkg.bin['strummer-docs-mcp']).toBe('./dist/bin-docs.mjs')
+  it('the docs-only server moved to sackville-docs-mcp', () => {
+    expect(pkg.bin['sackville-docs-mcp']).toBe('./dist/bin-docs.mjs')
   })
 
   it('the narrow per-pillar bins remain available', () => {
-    for (const b of ['strummer-api-mcp', 'strummer-browser-mcp', 'strummer-verify-mcp']) {
+    for (const b of ['sackville-api-mcp', 'sackville-browser-mcp', 'sackville-verify-mcp']) {
       expect(pkg.bin[b]).toBeDefined()
     }
   })

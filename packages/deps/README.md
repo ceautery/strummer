@@ -1,11 +1,11 @@
-# @strummer/deps
+# @sackville/deps
 
 **Dependency / version intelligence** — the first Phase-4 cross-cutting verification
 pillar (see `docs/decisions/0010-phase4-cross-cutting-verification.md`).
 
 The agent-first question it answers: *"is the dependency version actually installed
 in my project safe and current to keep using, and what changes if I bump it?"*
-Strummer already nailed version-pinning in the docs pillar — answering for **the
+Sackville already nailed version-pinning in the docs pillar — answering for **the
 version that is installed** (not "latest") is the same prime directive applied to
 security and freshness. This is exactly where coding agents hallucinate ("upgrade to
 latest") or stay silent on EOL/CVE risk.
@@ -17,8 +17,8 @@ behind operator config:
   installedVersion)` reduce already-fetched registry/advisory data to a structured
   verdict — no network, no subprocess — so the green gate stays deterministic.
 - **Advisory data is file-as-data.** Vulnerability lookups read an operator-
-  provisioned on-disk OSV snapshot (`STRUMMER_DEPS_OSV_DB_DIR`); network is
-  off by default. When enabled, egress is SSRF-pinned via `@strummer/safety`
+  provisioned on-disk OSV snapshot (`SACKVILLE_DEPS_OSV_DB_DIR`); network is
+  off by default. When enabled, egress is SSRF-pinned via `@sackville/safety`
   `resolveAndPin` + an operator allowlist — never an agent-supplied URL.
 - **Big artifacts by handle.** Changelog/release-note diffs are returned by
   resource handle, never inlined.
@@ -31,7 +31,7 @@ behind operator config:
   is honoured).
 
 ```ts
-import { auditDeprecation } from '@strummer/deps'
+import { auditDeprecation } from '@sackville/deps'
 
 auditDeprecation(requestPackument, '2.88.2')
 // → { isDeprecated: true, message: '…', scope: 'version' }
@@ -47,7 +47,7 @@ auditDeprecation(lodashPackument, '4.17.21')
   inclusive; explicit `versions`; filtered by ecosystem + name).
 
 ```ts
-import { matchVulnerabilities } from '@strummer/deps'
+import { matchVulnerabilities } from '@sackville/deps'
 
 matchVulnerabilities(lodashAdvisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15')
 // → [{ id: 'GHSA-…', severity: 'moderate', fixedIn: ['4.17.21'], … }]
@@ -61,9 +61,9 @@ matchVulnerabilities(lodashAdvisories, { ecosystem: 'npm', name: 'lodash' }, '4.
   absent — never a silent "zero vulnerabilities". Zero network.
 
 ```ts
-import { loadOsvSnapshot, matchVulnerabilities } from '@strummer/deps'
+import { loadOsvSnapshot, matchVulnerabilities } from '@sackville/deps'
 
-const { advisories, snapshotDate } = loadOsvSnapshot(process.env.STRUMMER_DEPS_OSV_DB_DIR!, 'npm')
+const { advisories, snapshotDate } = loadOsvSnapshot(process.env.SACKVILLE_DEPS_OSV_DB_DIR!, 'npm')
 matchVulnerabilities(advisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15')
 ```
 
@@ -72,11 +72,11 @@ matchVulnerabilities(advisories, { ecosystem: 'npm', name: 'lodash' }, '4.17.15'
   the *installed* version: `{ deprecated, vulnerabilities, worstSeverity, freshness
   (latest / latestSameMajor / isOutdated), recommendedTarget (conservative
   newest-same-major), snapshotDate, hasFindings }`. Pure — the caller gathers the
-  inputs (detect the installed version via `@strummer/core` `detectInstalledVersion`,
+  inputs (detect the installed version via `@sackville/core` `detectInstalledVersion`,
   load advisories via `loadOsvSnapshot`, fetch the packument).
 
 ```ts
-import { auditDependency } from '@strummer/deps'
+import { auditDependency } from '@sackville/deps'
 
 auditDependency({
   packageName: 'oldpkg', ecosystem: 'npm', installedVersion: '1.0.0',
@@ -88,11 +88,11 @@ auditDependency({
 
 Since shipped: the vuln-aware `minimumSafeUpgrade` target + `behindBy` freshness; CVSS-vector →
 bucket scoring; the `audit_dependency` / `audit_project` / `changelog_diff` MCP tools + the
-`strummer-deps-mcp` bin (wiring `detectInstalledVersion` + `loadOsvSnapshot` + an operator-gated,
+`sackville-deps-mcp` bin (wiring `detectInstalledVersion` + `loadOsvSnapshot` + an operator-gated,
 SSRF-pinned packument fetch); and **multi-ecosystem support (ADR 0012)** — a pluggable
 `VersionComparator` (npm=semver, PyPI=PEP 440 on `@renovatebot/pep440`, RubyGems=Gem on
 `@renovatebot/ruby-semver`) so OSV `ECOSYSTEM` ranges are evaluated with the ecosystem's own
 ordering, plus PyPI/RubyGems packument + manifest readers. Both `audit_dependency` and
 `audit_project` now cover npm, PyPI, and RubyGems.
 
-Staged in `ROADMAP.md`: `changelog_diff` for PyPI/RubyGems (npm-only today); a `strummer deps` CLI.
+Staged in `ROADMAP.md`: `changelog_diff` for PyPI/RubyGems (npm-only today); a `sackville deps` CLI.

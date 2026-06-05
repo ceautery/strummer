@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { MutationRunner } from '@strummer/mutate'
+import type { MutationRunner } from '@sackville/mutate'
 import { describe, expect, it, vi } from 'vitest'
 import { run } from './index.js'
 import { runVerify } from './verify.js'
@@ -16,7 +16,7 @@ function capture() {
   }
 }
 
-const dir = mkdtempSync(join(tmpdir(), 'strummer-verify-cli-'))
+const dir = mkdtempSync(join(tmpdir(), 'sackville-verify-cli-'))
 function fixture(name: string, value: unknown): string {
   const p = join(dir, name)
   writeFileSync(p, JSON.stringify(value))
@@ -131,7 +131,7 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
   it('--mutate-tool cosmic-ray routes to the cosmic-ray runner (init→exec→dump), diff-scoped', async () => {
     // A real temp project (cosmic-ray reads its base config + the selected file); the runner is
     // injected so nothing spawns. The dump is keyed by the relative selected path so reconcile passes.
-    const proj = mkdtempSync(join(tmpdir(), 'strummer-verify-cr-'))
+    const proj = mkdtempSync(join(tmpdir(), 'sackville-verify-cr-'))
     mkdirSync(join(proj, 'pkg'), { recursive: true })
     writeFileSync(join(proj, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
     writeFileSync(

@@ -2,7 +2,7 @@ import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { MutationRunner } from '@strummer/mutate'
+import type { MutationRunner } from '@sackville/mutate'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from './index.js'
 import { runMutate } from './mutate.js'
@@ -23,11 +23,11 @@ function capture() {
 
 let dir: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-cli-mutate-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-cli-mutate-'))
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-describe('strummer mutate CLI', () => {
+describe('sackville mutate CLI', () => {
   it('summarize prints the mutation score and survivors from a Stryker report', async () => {
     const c = capture()
     const code = await run(['mutate', 'summarize', STRYKER_FIXTURE], c.io)

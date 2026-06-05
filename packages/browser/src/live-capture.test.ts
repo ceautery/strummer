@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ArtifactStore } from '@strummer/artifacts'
+import { ArtifactStore } from '@sackville/artifacts'
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserFlow, FlowResult } from './flow.js'
 import type { HarSummary } from './har.js'
@@ -17,7 +17,7 @@ function fakeRuntime(): CaptureRuntime {
     gate: {},
     redact: (s: string) => s,
     resolveSecret: () => undefined,
-    config: { harDir: '/tmp/strummer-har' },
+    config: { harDir: '/tmp/sackville-har' },
     shutdown: vi.fn(async () => {}),
   } as unknown as CaptureRuntime
 }
@@ -31,12 +31,12 @@ const HAR_SUMMARY: HarSummary = {
 }
 
 /** Build deps with all browser-touching seams faked; `store` is a REAL verify-prefix store
- * so the finalize handle is genuinely `strummer://verify/<id>/har`. */
+ * so the finalize handle is genuinely `sackville://verify/<id>/har`. */
 function deps(
   flowResult: FlowResult,
   over: Partial<LiveCaptureDeps> = {},
 ): { deps: LiveCaptureDeps; runtime: CaptureRuntime } {
-  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'strummer-lc-')), 'verify')
+  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-lc-')), 'verify')
   const runtime = fakeRuntime()
   const d: LiveCaptureDeps = {
     runtimeFactory: async () => runtime,
@@ -71,7 +71,7 @@ describe('driveBrowserFlowToHar (5e)', () => {
   it('drives a completed flow → returns the stored HAR under the store prefix', async () => {
     const { deps: d, runtime } = deps(PASSED)
     const out = await driveBrowserFlowToHar({ flow: 'login' }, d)
-    expect(out.harHandle).toMatch(/^strummer:\/\/verify\/cap-1\/har$/)
+    expect(out.harHandle).toMatch(/^sackville:\/\/verify\/cap-1\/har$/)
     expect(runtime.shutdown).toHaveBeenCalledOnce() // single-shot teardown
   })
 

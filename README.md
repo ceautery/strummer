@@ -1,15 +1,15 @@
-# Strummer
+# Sackville
 
-[![CI](https://github.com/ceautery/strummer/actions/workflows/ci.yml/badge.svg)](https://github.com/ceautery/strummer/actions/workflows/ci.yml)
+[![CI](https://github.com/ceautery/sackville/actions/workflows/ci.yml/badge.svg)](https://github.com/ceautery/sackville/actions/workflows/ci.yml)
 
 **An LLM-agent-first developer testing & verification toolkit.**
 
-Strummer gives a coding agent (Claude Code) the capabilities it struggles with
+Sackville gives a coding agent (Claude Code) the capabilities it struggles with
 on its own: knowing the *current, version-pinned* idioms of the languages and
 libraries in front of it, and *exercising* the software it writes — across web
 APIs and real browsers — then reading the results back in a form it can act on.
 
-Strummer is primarily a **headless [MCP](https://modelcontextprotocol.io)
+Sackville is primarily a **headless [MCP](https://modelcontextprotocol.io)
 server**: every capability is exposed as agent-native tools and resources, with
 structured, token-efficient output. Humans drive the same core through a CLI.
 
@@ -38,33 +38,33 @@ hybrid search over MCP + CLI, multi-ecosystem version detection, DevDocs + Dash
 adapters). The **API-testing pillar's core is complete** too — `.bru` runner,
 secrets, deny-by-default mutation safety, captures/chaining, QuickJS scripts,
 OpenAPI/GraphQL contract validation, and both an MCP tool surface and a
-`strummer api …` CLI. The **browser/UI pillar (`@strummer/browser`, on
+`sackville api …` CLI. The **browser/UI pillar (`@sackville/browser`, on
 `playwright-core`) is feature-complete on both surfaces** — the engine (browser
 lifecycle manager, ARIA-snapshot capture + imperative step tools, deny-by-default
-action gate, two-tier SSRF defense sharing `@strummer/safety`, and an artifact
+action gate, two-tier SSRF defense sharing `@sackville/safety`, and an artifact
 pipeline of trace/console/network by handle), a session-oriented **MCP surface**
-(`registerBrowserTools` + the `strummer-browser-mcp` bin) with a per-session mutex
-and the `strummer://browser/run/{runId}/{kind}` resource, the full **secret
+(`registerBrowserTools` + the `sackville-browser-mcp` bin) with a per-session mutex
+and the `sackville://browser/run/{runId}/{kind}` resource, the full **secret
 boundary** (`{{secret:NAME}}` fill, origin-scoped `httpCredentials`, `storageState`
 by handle, redaction across console/network/snapshot/reads/trace), and operator
 hardening (service-worker block, WebRTC-egress neutralization, session wall-clock +
 max-pages + max-contexts caps). The complete **deny-by-default gating bundle**
 (downloads quarantine, uploads confined to an allowlist dir, dialog dismiss, auth via
 `httpCredentials`), an on-demand **screenshot** step tool, **browser assertions**
-(reusing a shared `@strummer/assert` operator core — one assertion engine across
+(reusing a shared `@sackville/assert` operator core — one assertion engine across
 pillars — with auto-waiting), a **trace-query** tool (action timeline from a
 trace.zip), a **Lighthouse perf audit**, **network heavy mode** (HAR capture —
 redacted, by handle — and `routeFromHAR` replay for deterministic offline runs),
 **persisted `.bru` browser-step flows** (replayable, semantic-locator-keyed — over
-both `strummer browser run` and the MCP `browser_run_flow` tool), **video capture**
+both `sackville browser run` and the MCP `browser_run_flow` tool), **video capture**
 (webm by handle), **vision/coordinate caps** (operator-gated coordinate click/move
 for canvas / non-AX-tree UI), **visual-regression diffing** (`browser_visual_compare`
-via pixelmatch, baseline by handle), a human **`strummer browser` CLI** (snapshot/
+via pixelmatch, baseline by handle), a human **`sackville browser` CLI** (snapshot/
 audit/screenshot/run), and a **container-hardening ADR** (the deployment/kernel
 boundary, [ADR 0007](./docs/decisions/0007-container-hardening.md)) have all landed,
 along with **multi-engine** (Chromium + Firefox + WebKit;
 [ADR 0009](./docs/decisions/0009-multi-engine.md)) — so the browser pillar is
-feature-complete. Strummer is **headless-only**: developer live-view was dropped in
+feature-complete. Sackville is **headless-only**: developer live-view was dropped in
 favor of LLM-first observability — the trace/HAR/console/video artifacts let the
 agent answer "what happened on this page" better than a human watching it render
 ([ADR 0008](./docs/decisions/0008-headless-only-llm-first-observability.md)).
@@ -74,39 +74,39 @@ agent surface); only explicitly-staged, non-blocking tails remain. The sequence 
 by a research + adversarial-verification fan-out
 ([ADR 0010](./docs/decisions/0010-phase4-cross-cutting-verification.md)):
 dependency intelligence ∥ coverage → flaky-test detection → mutation testing → an LSP
-bridge (last). The first pillar, **`@strummer/deps` (dependency/version
+bridge (last). The first pillar, **`@sackville/deps` (dependency/version
 intelligence)**, has its pure, offline core complete — deprecation, OSV vulnerability
 matching (incl. CVSS-vector severity scoring), on-disk OSV-snapshot loading, freshness
 (`behindBy`), a vuln-aware `minimumSafeUpgrade` target, and a composed `auditDependency`
 verdict for the version *actually installed*. Its **agent surface has shipped** — the
 `audit_dependency`/`audit_project`/`changelog_diff` MCP tools (artifacts by handle over
-the shared `@strummer/artifacts`) + the `strummer-deps-mcp` bin — plus the Python/PyPI +
+the shared `@sackville/artifacts`) + the `sackville-deps-mcp` bin — plus the Python/PyPI +
 RubyGems advisory adapters (`audit_dependency` + `audit_project` across all three
-ecosystems) and a human **`strummer deps` CLI** (`audit`/`audit-project`/`changelog`). All
-four Phase-4 verification pillars now also ship a human `strummer <pillar>` CLI
+ecosystems) and a human **`sackville deps` CLI** (`audit`/`audit-project`/`changelog`). All
+four Phase-4 verification pillars now also ship a human `sackville <pillar>` CLI
 (`mutate`/`coverage`/`flake`/`deps`), each a thin wrapper over its engine.
 
-The parallel track, **`@strummer/coverage`**, is also complete — the "forgotten
+The parallel track, **`@sackville/coverage`**, is also complete — the "forgotten
 assertion" catch: given a diff it reports the lines a change *added* that no test
 exercised (`parseUnifiedDiff` + `uncoveredNewLines` + `uncoveredInDiff`, with an explicit
 non-executable third state), plus a gated, impact-scoped `runScoped` that runs only the
 tests a change touches (`vitest related`) with coverage. Agent surface: the
 `uncovered_in_diff` (read-only) + `run_scoped` (operator-gated) MCP tools +
-`strummer-coverage-mcp` bin.
+`sackville-coverage-mcp` bin.
 
-The **test-quality chain is complete through mutation**. **`@strummer/flake`**
+The **test-quality chain is complete through mutation**. **`@sackville/flake`**
 (flaky-test detection) is done — a pure Wilson/binomial classifier
 (`flaky`/`reliable`/`broken`/`insufficient-data` + a `flakeScore`), a private
 `better-sqlite3` run-history store, `vitest --reporter=json` ingestion, an
 operator-gated quarantine with mandatory expiry, a gated suite-repeat runner, and the
 `flake_status`/`flake_candidates`/`flake_release`/`flake_run`/`flake_quarantine` MCP
-surface + `strummer-flake-mcp` bin. **`@strummer/mutate`** (mutation testing) is done —
+surface + `sackville-flake-mcp` bin. **`@sackville/mutate`** (mutation testing) is done —
 a pure `summarizeMutation` over the mutation-testing-elements report schema (score +
 survivor list), a gated, diff-scoped `runMutation` spawning `stryker run`, and the
-`mutate_summarize`/`mutate_run` MCP surface + `strummer-mutate-mcp` bin (the
+`mutate_summarize`/`mutate_run` MCP surface + `sackville-mutate-mcp` bin (the
 Stryker/Vitest-4 compat blocker was resolved — [ADR 0010 update](./docs/decisions/0010-phase4-cross-cutting-verification.md)).
 
-The last pillar, **`@strummer/lsp`** (semantic code navigation — the documented,
+The last pillar, **`@sackville/lsp`** (semantic code navigation — the documented,
 fenced exception to the no-live-RPC rule), is **done**: design locked in
 [ADR 0011](./docs/decisions/0011-lsp-bridge.md) (a research + 2-critic adversarial
 fan-out), shipped as five slices — the pure position-encoding core (utf-8/16/32) and
@@ -114,14 +114,14 @@ LSP-result normalizers, a `vscode-jsonrpc` client (encoding negotiation, tri-sta
 readiness, deadlock-safe replies), the `(language, projectRoot)`-keyed manager (per-file
 mutex, in-flight-aware reaper) + operator-bound server registry, the gated `query.ts`
 engine, and the `lsp_find_definition`/`lsp_find_references`/`lsp_hover` (gated as a group)
-+ always-on `lsp_languages` MCP surface + `strummer-lsp-mcp` bin. The whole pillar is
++ always-on `lsp_languages` MCP surface + `sackville-lsp-mcp` bin. The whole pillar is
 tested against a fake in-process JSON-RPC peer replaying recorded real-server payloads —
 no real language server runs in the green gate. The capability-gated read tails
 (`lsp_type_definition`/`_document_symbols`/`_call_hierarchy`) and **write-mode**
 (`lsp_rename` — dry-run by default, applies to disk only behind a separate
-`STRUMMER_LSP_ALLOW_WRITE` gate; single- and multi-file via a sorted multi-URI lock with
+`SACKVILLE_LSP_ALLOW_WRITE` gate; single- and multi-file via a sorted multi-URI lock with
 stage-then-commit + staleness guards) have since landed (ADR 0011 addendum), as has a human
-**`strummer lsp` CLI** (single-shot navigation + `rename`, the engine injectable so the gate
+**`sackville lsp` CLI** (single-shot navigation + `rename`, the engine injectable so the gate
 never spawns a real server). Since then **`workspace/symbol`** search (`lsp_workspace_symbols`),
 **`diagnostics`** (`lsp_diagnostics` — `documentDiagnostics` dispatches by capability: the PULL
 model `textDocument/diagnostic` for servers advertising `diagnosticProvider` (rust-analyzer), else
@@ -149,51 +149,51 @@ toolchain cross-version resolution matrix.
 **Phase 5 (cross-pillar verification) is complete** — the pillars now compose
 ([ADR 0013](./docs/decisions/0013-cross-pillar-verification.md)). Two milestones, both
 compose-only / zero-spawn. **5a — the capture→contract bridge**: `harEntriesToFacts` +
-`validateCapturedTraffic` in `@strummer/api` turn a stored browser/API HAR into facts the
+`validateCapturedTraffic` in `@sackville/api` turn a stored browser/API HAR into facts the
 *already-shipped* `validateOpenApiResponse` consumes (attach-body resolution, JSON/origin
 filter, server-base-path reconciliation, an exercised-operations drift walk) — no request is
 re-run; surfaced as the gated `validate_capture` MCP tool (a HAR is operator-gated bytes, so
-resolving one needs `STRUMMER_VERIFY_ALLOW_CAPTURE`; every finding message + captured path is
-redacted) + the `strummer api validate-capture` CLI. **5b — the unified change verdict**: a new
-pure **`@strummer/verdict`** package folds the four Phase-4 signals + the contract sub-verdict
+resolving one needs `SACKVILLE_VERIFY_ALLOW_CAPTURE`; every finding message + captured path is
+redacted) + the `sackville api validate-capture` CLI. **5b — the unified change verdict**: a new
+pure **`@sackville/verdict`** package folds the four Phase-4 signals + the contract sub-verdict
 into one `CompositeVerdict` (type-only pillar imports, *zero runtime pillar deps*). The
 load-bearing rule: **absence is never a pass** — a missing/no-signal pillar yields
 `inconclusive`, never `pass`; there is no baked-in severity threshold (the caller declares the
-cut). Surfaced as the `request_verdict` MCP tool + `strummer-verify-mcp` bin + a `strummer verify`
-CLI. The shared `@strummer/artifacts` store also gained prefix-qualified, hardened cross-prefix
+cut). Surfaced as the `request_verdict` MCP tool + `sackville-verify-mcp` bin + a `sackville verify`
+CLI. The shared `@sackville/artifacts` store also gained prefix-qualified, hardened cross-prefix
 rehydration so one pillar can resolve another's by-handle artifact. **A Phase-5 tail since landed —
 GraphQL drift over captured traffic**: `validateCapturedTraffic`'s contract is now the discriminated
 `CaptureContract { openapi?, graphql?: {endpointPath, sdl} }`, GraphQL entries route to the shipped
 `validateGraphqlOperation` (never the OpenAPI validator), and absence stays non-passing (GraphQL with
 no SDL ⇒ no-signal); backed by a real Playwright `content:'attach'` capture fixture. **5c — run-driving
-`verify` has since landed** (ADR 0013 Addendum): a new `@strummer/verify` package + the `verify_change`
-MCP tool + `strummer verify run` CLI DRIVE the gated pillars (coverage/flake/mutate + the consume-only
+`verify` has since landed** (ADR 0013 Addendum): a new `@sackville/verify` package + the `verify_change`
+MCP tool + `sackville verify run` CLI DRIVE the gated pillars (coverage/flake/mutate + the consume-only
 contract) and fold them into one verdict in a single call. The gate contract is **"compose, never
-widen"** — `verify` reuses each pillar's *own* gate plus a separate `STRUMMER_VERIFY_ENABLE_RUN`
+widen"** — `verify` reuses each pillar's *own* gate plus a separate `SACKVILLE_VERIFY_ENABLE_RUN`
 opt-in ("both required"); a pillar whose gate is unmet is `skipped:gate-not-set`, never run; the
 orchestrator imports zero spawn-capable code. **5d — diff-scoping + deps run-wiring has since landed**:
-a shared zero-dependency **`@strummer/diff`** (`parseUnifiedDiff` + `changedFiles`) lets `verify_change`
+a shared zero-dependency **`@sackville/diff`** (`parseUnifiedDiff` + `changedFiles`) lets `verify_change`
 scope coverage/mutate/flake from ONE diff; a pure `changedDependencies(diff)` + a reusable
-`auditProjectDependencies` runner wire deps into the run path (`STRUMMER_DEPS_ALLOW_NETWORK` under
-`ENABLE_RUN`) + `strummer verify run --deps`. **5e — `verify` driving a LIVE capture has since landed**
-(ADR 0013 Addendum 3): `verify_change`'s `contract` input + `strummer verify run --flow` DRIVE an
+`auditProjectDependencies` runner wire deps into the run path (`SACKVILLE_DEPS_ALLOW_NETWORK` under
+`ENABLE_RUN`) + `sackville verify run --deps`. **5e — `verify` driving a LIVE capture has since landed**
+(ADR 0013 Addendum 3): `verify_change`'s `contract` input + `sackville verify run --flow` DRIVE an
 operator-authored browser flow → capture the HAR → validate it, behind the full browser gate; the shared
-`@strummer/browser` `driveBrowserFlowToHar` gates on **flow completeness, not HAR emptiness** (a
+`@sackville/browser` `driveBrowserFlowToHar` gates on **flow completeness, not HAR emptiness** (a
 partially-failed flow's HAR is never validated — absence stays non-passing), with a union redactor at
-both the archive and the findings. **5f — `verify` driving the `@strummer/api` RUNNER to *produce* the HAR
+both the archive and the findings. **5f — `verify` driving the `@sackville/api` RUNNER to *produce* the HAR
 has since landed** (ADR 0013 Addendum 4): the SECOND produce source — `verify_change`'s `contract.request`
-+ `strummer verify run --request` DRIVE the api runner for an operator-authored request (by NAME) →
-synthesize a HAR (`@strummer/api` `har-synth.ts`: per-hop entries, the real request body for GraphQL, a
++ `sackville verify run --request` DRIVE the api runner for an operator-authored request (by NAME) →
+synthesize a HAR (`@sackville/api` `har-synth.ts`: per-hop entries, the real request body for GraphQL, a
 shared `redactHarZip` pass `finalizeHar` now delegates to) → validate it, behind the api pillar's own gate
-+ `STRUMMER_API_COLLECTIONS_DIR`; transport-completeness guards throw ⇒ inconclusive, and the new
-`@strummer/verdict` `fromCaptureVerdict` folds a not-`clean` capture to inconclusive (closing a latent
++ `SACKVILLE_API_COLLECTIONS_DIR`; transport-completeness guards throw ⇒ inconclusive, and the new
+`@sackville/verdict` `fromCaptureVerdict` folds a not-`clean` capture to inconclusive (closing a latent
 absence-as-pass hole across the consume + both produce paths). **Two follow-on tails have since landed:**
-the shared **`@strummer/severity`** scale was extracted out of `@strummer/deps` into its own pure zero-dep
+the shared **`@sackville/severity`** scale was extracted out of `@sackville/deps` into its own pure zero-dep
 leaf (`QualitativeSeverity`/`QUALITATIVE_RANK` + the verdict scale; `none`≠`unknown` kept distinct); and
 **request-body & parameter contract validation** ([ADR 0014](./docs/decisions/0014-request-contract-validation.md))
 — a new `validateOpenApiRequest` sibling validates the request half (body + path/query/header params) and
 threads into the capture→contract bridge + verdict (via an `unverified`→`noSignal` fold so a
-present-but-uncheckable request can't pass) + a direct `validate_request` MCP tool / `strummer api
+present-but-uncheckable request can't pass) + a direct `validate_request` MCP tool / `sackville api
 validate-request` CLI. The live **`api run --openapi`** path then folded the request check in too (a
 `runRequestForContract` out-of-band channel surfaces the un-redacted sent request without widening
 `RunResult`). Most recently, **GraphQL-request variable validation**
@@ -227,26 +227,26 @@ pytest+coverage.py run-scoping) all landed. Staged (not amputated): GraphQL dire
 ```bash
 # one-time setup
 pnpm install && pnpm build          # TypeScript packages
-( cd py/strummer_ingest && uv sync )  # Python ingester
+( cd py/sackville_ingest && uv sync )  # Python ingester
 
 # build a version-pinned React docs index (Python ingester)
-cd py/strummer_ingest
-uv run strummer-ingest build --slug react   --library react --out ../../data/react.sqlite
-uv run strummer-ingest build --slug react~18 --library react --out ../../data/react.sqlite --append
+cd py/sackville_ingest
+uv run sackville-ingest build --slug react   --library react --out ../../data/react.sqlite
+uv run sackville-ingest build --slug react~18 --library react --out ../../data/react.sqlite --append
 
 # search it from the terminal (hybrid FTS + vector ranking)
 cd ../..
-export STRUMMER_INDEX=$PWD/data/react.sqlite
+export SACKVILLE_INDEX=$PWD/data/react.sqlite
 node packages/cli/dist/bin.mjs versions react
 node packages/cli/dist/bin.mjs search "run code after render" --library react --installed ^18.0.0
 
 # or expose it to an agent over MCP
-claude mcp add strummer -- strummer-mcp $STRUMMER_INDEX
+claude mcp add sackville -- sackville-mcp $SACKVILLE_INDEX
 ```
 
-The CLI (`@strummer/cli`) and MCP server (`@strummer/mcp`) are thin surfaces over
-`@strummer/core`; query embedding lives in `@strummer/embed`; ingestion is the
-Python `py/strummer_ingest`.
+The CLI (`@sackville/cli`) and MCP server (`sackville`) are thin surfaces over
+`@sackville/core`; query embedding lives in `@sackville/embed`; ingestion is the
+Python `py/sackville_ingest`.
 
 ## For contributors / agents
 

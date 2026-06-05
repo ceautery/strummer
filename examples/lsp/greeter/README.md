@@ -1,6 +1,6 @@
-# greeter — sample project for `strummer lsp`
+# greeter — sample project for `sackville lsp`
 
-A tiny, real TypeScript project to drive the [`strummer lsp` CLI](../../../packages/cli/README.md#verification-phase-4-pillars)
+A tiny, real TypeScript project to drive the [`sackville lsp` CLI](../../../packages/cli/README.md#verification-phase-4-pillars)
 against a live Language Server. Two files:
 
 - [`greeter.ts`](./greeter.ts) — a free `hello(name)` function and a `class Greeter`
@@ -14,7 +14,7 @@ here it is a project **you run live**, not a recording.
 
 ## Prerequisites
 
-`strummer lsp` spawns the operator-bound server as a subprocess — it does **not** bundle
+`sackville lsp` spawns the operator-bound server as a subprocess — it does **not** bundle
 one. Install the TypeScript language server (and TypeScript) so it is on `PATH`:
 
 ```bash
@@ -25,14 +25,14 @@ export PATH="$PWD/node_modules/.bin:$PATH"
 
 (or install `typescript-language-server` globally). The operator registry is in
 [`servers.json`](./servers.json) — pass it with `--servers "$(cat servers.json)"` or set
-`STRUMMER_LSP_SERVERS` to its contents.
+`SACKVILLE_LSP_SERVERS` to its contents.
 
 ## Driving it
 
 ```bash
 S="node packages/cli/dist/bin.mjs"             # from the repo root, after `pnpm -r build`
 P=examples/lsp/greeter
-export STRUMMER_LSP_SERVERS="$(cat $P/servers.json)"
+export SACKVILLE_LSP_SERVERS="$(cat $P/servers.json)"
 
 # Which languages are bound (no server spawned):
 $S lsp languages

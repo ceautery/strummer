@@ -2,12 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-04
-- **Extends:** ADR 0010 (the shared `@strummer/artifacts` extraction) + ADR 0013 slice 1
+- **Extends:** ADR 0010 (the shared `@sackville/artifacts` extraction) + ADR 0013 slice 1
   (the prefix-qualified on-disk layout + realpath confinement).
 
 ## Context
 
-`@strummer/artifacts` `ArtifactStore` is disk-backed and **append-only**: `put()` writes
+`@sackville/artifacts` `ArtifactStore` is disk-backed and **append-only**: `put()` writes
 `<baseDir>/<prefix>/<id>/<kind>` + a `<kind>.meta.json` sidecar and never deletes. Every
 pillar writes to it — browser (traces/screenshots/video/HAR, the heaviest), deps
 (changelog/audit detail), lsp (large reference lists), verify (verdicts, produced HARs).
@@ -53,7 +53,7 @@ stores are untouched.
 ## Wiring
 
 Each long-running server bin parses opt-in retention env consistent with its existing
-`*_ARTIFACT_DIR`: `STRUMMER_<PILLAR>_ARTIFACT_MAX_AGE_MS` / `_MAX_ENTRIES` / `_MAX_BYTES`
+`*_ARTIFACT_DIR`: `SACKVILLE_<PILLAR>_ARTIFACT_MAX_AGE_MS` / `_MAX_ENTRIES` / `_MAX_BYTES`
 (`bin-browser`, `bin-deps`, `bin-lsp`, `bin-verify`). Unset ⇒ no policy ⇒ no GC. CLI
 single-shot stores use `mkdtemp` dirs the OS/test harness reclaims, so they wire nothing.
 

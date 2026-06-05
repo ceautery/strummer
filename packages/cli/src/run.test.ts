@@ -31,7 +31,7 @@ describe('cli run', () => {
       0,
     )
     expect(c.out()).toContain('useState')
-    expect(c.out()).toContain('strummer://doc/')
+    expect(c.out()).toContain('sackville://doc/')
   })
 
   it('search --json emits structured output', async () => {
@@ -59,7 +59,7 @@ describe('cli run', () => {
   })
 
   it('detect --ecosystem python reads a non-Node manifest', async () => {
-    const proj = mkdtempSync(join(tmpdir(), 'strummer-pyproj-'))
+    const proj = mkdtempSync(join(tmpdir(), 'sackville-pyproj-'))
     try {
       writeFileSync(join(proj, 'requirements.txt'), 'django==5.0.1\n')
       const c = capture()

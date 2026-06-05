@@ -36,9 +36,9 @@ export interface PerfSummary {
 
 export interface PerfAuditResult {
   summary: PerfSummary
-  /** `strummer://browser/run/<id>/perf[-s<n>]` — the full LHR JSON, by handle. */
+  /** `sackville://browser/run/<id>/perf[-s<n>]` — the full LHR JSON, by handle. */
   reportHandle: string
-  /** `strummer://browser/run/<id>/perf[-s<n>]-html` — the HTML report, by handle. */
+  /** `sackville://browser/run/<id>/perf[-s<n>]-html` — the HTML report, by handle. */
   htmlHandle: string
 }
 

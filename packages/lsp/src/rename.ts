@@ -245,7 +245,7 @@ export const defaultRenameWriter: RenameWriter = {
         if (op.kind !== 'write') continue
         mkdirSync(dirname(op.absPath), { recursive: true })
         tempCounter += 1
-        const tmp = `${op.absPath}.strummer-rename-${process.pid}-${tempCounter}`
+        const tmp = `${op.absPath}.sackville-rename-${process.pid}-${tempCounter}`
         writeFileSync(tmp, op.newText, 'utf8')
         const fd = openSync(tmp, 'r+')
         fsyncSync(fd)
@@ -349,7 +349,7 @@ export interface LspRenameEngineOptions {
    * inactive (no scan); the bin/CLI/MCP wire `defaultListFiles` to turn it on (cf. `redact`). */
   listFiles?: ProjectFileLister
   writer?: RenameWriter
-  /** Secret redaction over every surfaced hunk (default identity; the bin wires @strummer/safety). */
+  /** Secret redaction over every surfaced hunk (default identity; the bin wires @sackville/safety). */
   redact?: (text: string) => string
 }
 

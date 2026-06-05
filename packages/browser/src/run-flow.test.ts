@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { Redactor } from '@strummer/safety'
+import { Redactor } from '@sackville/safety'
 import { type Browser, type BrowserContext, chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PageDriver } from './driver.js'

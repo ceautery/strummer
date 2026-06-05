@@ -20,7 +20,7 @@ function stampMtime(baseDir: string, prefix: string, id: string, seconds: number
 
 const tmpDirs: string[] = []
 function tmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'strummer-artifacts-'))
+  const dir = mkdtempSync(join(tmpdir(), 'sackville-artifacts-'))
   tmpDirs.push(dir)
   return dir
 }
@@ -33,13 +33,13 @@ describe('ArtifactStore — shared on-disk store with a parameterized handle pre
   it('mints handles under the configured prefix (browser pillar)', () => {
     const store = new ArtifactStore(tmp(), 'browser/run')
     const handle = store.put('run1', 'trace', 'hi', 'application/zip')
-    expect(handle).toBe('strummer://browser/run/run1/trace')
+    expect(handle).toBe('sackville://browser/run/run1/trace')
   })
 
   it('mints handles under a different prefix (deps pillar) over the same code', () => {
     const store = new ArtifactStore(tmp(), 'deps')
     const handle = store.put('lodash', 'changelog', 'diff', 'text/markdown')
-    expect(handle).toBe('strummer://deps/lodash/changelog')
+    expect(handle).toBe('sackville://deps/lodash/changelog')
   })
 
   it('writes bytes to disk and resolves them back by handle with metadata', () => {
@@ -80,8 +80,8 @@ describe('ArtifactStore — cross-prefix resolution + hardening (ADR 0013 slice 
     a.put('shared', 'blob', 'from-browser', 'text/plain')
     b.put('shared', 'blob', 'from-verify', 'text/plain')
     // Each resolves its OWN bytes — no overwrite.
-    expect(a.get('strummer://browser/run/shared/blob')?.body.toString('utf8')).toBe('from-browser')
-    expect(b.get('strummer://verify/shared/blob')?.body.toString('utf8')).toBe('from-verify')
+    expect(a.get('sackville://browser/run/shared/blob')?.body.toString('utf8')).toBe('from-browser')
+    expect(b.get('sackville://verify/shared/blob')?.body.toString('utf8')).toBe('from-verify')
   })
 
   it('recovers contentType from the sidecar on rehydrate; legacy artifact ⇒ inferred octet-stream', () => {
@@ -90,7 +90,7 @@ describe('ArtifactStore — cross-prefix resolution + hardening (ADR 0013 slice 
     writer.put('lodash', 'changelog', '# diff', 'text/markdown')
     // A fresh store (cold process) has an empty in-process map — forces rehydrate.
     const reader = new ArtifactStore(dir, 'deps')
-    const got = reader.get('strummer://deps/lodash/changelog')
+    const got = reader.get('sackville://deps/lodash/changelog')
     expect(got?.contentType).toBe('text/markdown')
     expect(got?.contentTypeInferred).toBeFalsy()
 
@@ -98,7 +98,7 @@ describe('ArtifactStore — cross-prefix resolution + hardening (ADR 0013 slice 
     const legacyDir = join(dir, 'deps', 'legacy')
     mkdirSync(legacyDir, { recursive: true })
     writeFileSync(join(legacyDir, 'blob'), 'raw')
-    const legacy = reader.get('strummer://deps/legacy/blob')
+    const legacy = reader.get('sackville://deps/legacy/blob')
     expect(legacy?.body.toString('utf8')).toBe('raw')
     expect(legacy?.contentType).toBe('application/octet-stream')
     expect(legacy?.contentTypeInferred).toBe(true)
@@ -106,10 +106,10 @@ describe('ArtifactStore — cross-prefix resolution + hardening (ADR 0013 slice 
 
   it('refuses a handle whose id/kind contains traversal or separators', () => {
     const store = new ArtifactStore(tmp(), 'verify')
-    expect(() => store.get('strummer://verify/../../etc/passwd')).toThrow()
-    expect(() => store.get('strummer://verify/ok/..')).toThrow()
+    expect(() => store.get('sackville://verify/../../etc/passwd')).toThrow()
+    expect(() => store.get('sackville://verify/ok/..')).toThrow()
     // A prefix segment cannot escape either.
-    expect(() => store.get('strummer://../evil/id/kind')).toThrow()
+    expect(() => store.get('sackville://../evil/id/kind')).toThrow()
   })
 
   it('refuses to put() an id/kind that is not a safe segment', () => {
@@ -123,11 +123,11 @@ describe('ArtifactStore — cross-prefix resolution + hardening (ADR 0013 slice 
     const outside = tmp()
     writeFileSync(join(outside, 'secret'), 'TOP SECRET')
     // Plant a symlink <baseDir>/verify/leak -> <outside>, so a well-formed handle
-    // strummer://verify/leak/secret would resolve through it.
+    // sackville://verify/leak/secret would resolve through it.
     mkdirSync(join(dir, 'verify'), { recursive: true })
     symlinkSync(outside, join(dir, 'verify', 'leak'), 'dir')
     const store = new ArtifactStore(dir, 'verify')
-    expect(() => store.get('strummer://verify/leak/secret')).toThrow()
+    expect(() => store.get('sackville://verify/leak/secret')).toThrow()
   })
 
   it('accepts Buffer bodies (binary artifacts) unchanged', () => {
@@ -141,12 +141,12 @@ describe('ArtifactStore — cross-prefix resolution + hardening (ADR 0013 slice 
 
   it('returns undefined for an unknown handle', () => {
     const store = new ArtifactStore(tmp(), 'browser/run')
-    expect(store.get('strummer://browser/run/nope/trace')).toBeUndefined()
+    expect(store.get('sackville://browser/run/nope/trace')).toBeUndefined()
   })
 
   it('exposes handleFor so callers can reconstruct a handle without re-storing', () => {
     const store = new ArtifactStore(tmp(), 'browser/run')
-    expect(store.handleFor('r', 'har')).toBe('strummer://browser/run/r/har')
+    expect(store.handleFor('r', 'har')).toBe('sackville://browser/run/r/har')
   })
 })
 
@@ -157,7 +157,7 @@ describe('ArtifactStore — retention / GC (ADR 0017)', () => {
     for (const id of ['a', 'b', 'c']) store.put(id, 'k', 'x', 'text/plain')
     expect(store.sweep()).toEqual([]) // explicit sweep is a no-op without a policy
     for (const id of ['a', 'b', 'c']) {
-      expect(store.get(`strummer://p/${id}/k`)?.body.toString('utf8')).toBe('x')
+      expect(store.get(`sackville://p/${id}/k`)?.body.toString('utf8')).toBe('x')
     }
   })
 
@@ -174,9 +174,9 @@ describe('ArtifactStore — retention / GC (ADR 0017)', () => {
     stampMtime(dir, 'p', 'mid', 2000)
     stampMtime(dir, 'p', 'new', 3000)
     expect(store.sweep().sort()).toEqual(['old'])
-    expect(store.get('strummer://p/old/k')).toBeUndefined()
-    expect(store.get('strummer://p/mid/k')).toBeDefined()
-    expect(store.get('strummer://p/new/k')).toBeDefined()
+    expect(store.get('sackville://p/old/k')).toBeUndefined()
+    expect(store.get('sackville://p/mid/k')).toBeDefined()
+    expect(store.get('sackville://p/new/k')).toBeDefined()
   })
 
   it('maxAgeMs evicts <id> dirs older than now - maxAgeMs (mtime), keeps fresher', () => {
@@ -188,8 +188,8 @@ describe('ArtifactStore — retention / GC (ADR 0017)', () => {
     stampMtime(dir, 'p', 'stale', (now - 10_000) / 1000) // 10s old → evicted
     stampMtime(dir, 'p', 'fresh', (now - 1000) / 1000) // 1s old → kept
     expect(store.sweep().sort()).toEqual(['stale'])
-    expect(store.get('strummer://p/stale/k')).toBeUndefined()
-    expect(store.get('strummer://p/fresh/k')).toBeDefined()
+    expect(store.get('sackville://p/stale/k')).toBeUndefined()
+    expect(store.get('sackville://p/fresh/k')).toBeDefined()
   })
 
   it('maxBytes evicts oldest-first until the prefix subtree is under the cap', () => {
@@ -208,9 +208,9 @@ describe('ArtifactStore — retention / GC (ADR 0017)', () => {
     stampMtime(dir, 'p', 'o2', 2000)
     stampMtime(dir, 'p', 'o3', 3000)
     expect(store.sweep().sort()).toEqual(['o1'])
-    expect(store.get('strummer://p/o1/k')).toBeUndefined()
-    expect(store.get('strummer://p/o2/k')).toBeDefined()
-    expect(store.get('strummer://p/o3/k')).toBeDefined()
+    expect(store.get('sackville://p/o1/k')).toBeUndefined()
+    expect(store.get('sackville://p/o2/k')).toBeDefined()
+    expect(store.get('sackville://p/o3/k')).toBeDefined()
   })
 
   it('a sweep only touches its OWN prefix subtree (never a foreign pillar)', () => {
@@ -221,7 +221,7 @@ describe('ArtifactStore — retention / GC (ADR 0017)', () => {
     const deps = new ArtifactStore(dir, 'deps', { retention: { maxEntries: 0 } })
     deps.put('d1', 'changelog', 'y', 'text/markdown')
     deps.sweep()
-    expect(browser.get('strummer://browser/run/b1/har')).toBeDefined()
+    expect(browser.get('sackville://browser/run/b1/har')).toBeDefined()
   })
 
   it('put() runs a THROTTLED opportunistic sweep (injected clock, sweepIntervalMs)', () => {
@@ -239,12 +239,12 @@ describe('ArtifactStore — retention / GC (ADR 0017)', () => {
     store.put('b', 'k', 'x', 'text/plain') // 500 < 1000 ⇒ THROTTLED, no sweep
     stampMtime(dir, 'p', 'b', 2)
     // Proof of throttle: despite maxEntries:1, `a` is still present (no sweep yet).
-    expect(store.get('strummer://p/a/k')).toBeDefined()
+    expect(store.get('sackville://p/a/k')).toBeDefined()
     t = 1500
     store.put('c', 'k', 'x', 'text/plain') // 1500 - 0 ≥ 1000 ⇒ sweep: keep newest 1 (`c`)
-    expect(store.get('strummer://p/a/k')).toBeUndefined()
-    expect(store.get('strummer://p/b/k')).toBeUndefined()
-    expect(store.get('strummer://p/c/k')).toBeDefined()
+    expect(store.get('sackville://p/a/k')).toBeUndefined()
+    expect(store.get('sackville://p/b/k')).toBeUndefined()
+    expect(store.get('sackville://p/c/k')).toBeDefined()
   })
 
   it('retentionFromEnv parses set dimensions, ignores invalid, and is undefined when unset', () => {

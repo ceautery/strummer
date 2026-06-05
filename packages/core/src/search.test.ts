@@ -21,7 +21,7 @@ describe('docs search over a Python-built index (polyglot boundary)', () => {
     db?.close()
   })
 
-  it('verifies the schema contract from strummer_meta', () => {
+  it('verifies the schema contract from sackville_meta', () => {
     const meta = readMeta(db)
     expect(meta.schemaVersion).toBe(EXPECTED_SCHEMA_VERSION)
     expect(meta.embedDim).toBe(EXPECTED_EMBED_DIM)

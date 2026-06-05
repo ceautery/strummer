@@ -1,5 +1,5 @@
 {
-  "name": "@strummer/verdict",
+  "name": "@sackville/verdict",
   "version": "0.0.0",
   "type": "module",
   "license": "Apache-2.0",
@@ -18,14 +18,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@strummer/severity": "workspace:*"
+    "@sackville/severity": "workspace:*"
   },
   "devDependencies": {
-    "@strummer/api": "workspace:*",
-    "@strummer/coverage": "workspace:*",
-    "@strummer/deps": "workspace:*",
-    "@strummer/flake": "workspace:*",
-    "@strummer/mutate": "workspace:*"
+    "@sackville/api": "workspace:*",
+    "@sackville/coverage": "workspace:*",
+    "@sackville/deps": "workspace:*",
+    "@sackville/flake": "workspace:*",
+    "@sackville/mutate": "workspace:*"
   },
   "publishConfig": {
     "access": "public",
@@ -40,7 +40,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ceautery/strummer.git",
+    "url": "git+https://github.com/ceautery/sackville.git",
     "directory": "packages/verdict"
   }
 }

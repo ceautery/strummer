@@ -1,4 +1,4 @@
-# `@strummer/coverage` test fixtures
+# `@sackville/coverage` test fixtures
 
 No real test/coverage tool runs in `pnpm gate` — fixtures are captured once,
 out-of-gate, and committed.

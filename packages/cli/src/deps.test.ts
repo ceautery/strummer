@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { OsvAdvisory, Packument } from '@strummer/deps'
+import type { OsvAdvisory, Packument } from '@sackville/deps'
 import { strToU8, zipSync } from 'fflate'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runDeps } from './deps.js'
@@ -68,7 +68,7 @@ let dir: string
 let project: string
 let osvDir: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-cli-deps-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-cli-deps-'))
   // A project with lodash (vulnerable + outdated) and tiny (clean) installed.
   project = join(dir, 'project')
   mkdirSync(project, { recursive: true })
@@ -95,7 +95,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-describe('strummer deps CLI', () => {
+describe('sackville deps CLI', () => {
   it('audit reports a vulnerable, outdated package and exits 1', async () => {
     const c = capture()
     const code = await runDeps(['audit', project, 'lodash', '--osv-db', osvDir], c.io, {

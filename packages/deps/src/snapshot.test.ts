@@ -25,7 +25,7 @@ function buildSnapshot(
   advisories: OsvAdvisory[],
   extraEntries: Record<string, string> = {},
 ): string {
-  const root = mkdtempSync(join(tmpdir(), 'strummer-osv-'))
+  const root = mkdtempSync(join(tmpdir(), 'sackville-osv-'))
   tmpDirs.push(root)
   const ecoDir = join(root, ecosystem)
   mkdirSync(ecoDir, { recursive: true })

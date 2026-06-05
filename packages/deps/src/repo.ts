@@ -1,6 +1,6 @@
 /**
  * Source-repository derivation — the pure half of `changelog_diff`'s "where is the CHANGELOG?"
- * step, shared by the MCP deps server bin AND the `strummer deps` CLI (one source of truth, like
+ * step, shared by the MCP deps server bin AND the `sackville deps` CLI (one source of truth, like
  * {@link ./ecosystem.js}). Each ecosystem advertises its source repo differently:
  *   - **npm**: the packument `repository` field (a string or `{ url }`).
  *   - **PyPI**: `info.project_urls` — a free-form label→URL map (`Source`/`Repository`/`Homepage`…).

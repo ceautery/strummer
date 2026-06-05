@@ -20,22 +20,22 @@ so it is captured here rather than trusted as-proposed.
 
 ## Decision
 
-### Sequence (by leverage-per-effort, with Strummer's agent-first mission)
+### Sequence (by leverage-per-effort, with Sackville's agent-first mission)
 
 Two independent tracks, then the test-quality chain, then LSP last:
 
-1. **`@strummer/deps` — dependency/version intelligence** *(track B, built first)*
-2. **`@strummer/coverage` — uncovered-new-line + impact-scoped runner** *(track A)*
-3. **`@strummer/flake` — flaky-test detection & quarantine**
-4. **`@strummer/mutate` — mutation testing** *(gated on a Stryker/Vitest-4 compat spike first)*
-5. **`@strummer/lsp` — semantic code navigation** *(last)*
+1. **`@sackville/deps` — dependency/version intelligence** *(track B, built first)*
+2. **`@sackville/coverage` — uncovered-new-line + impact-scoped runner** *(track A)*
+3. **`@sackville/flake` — flaky-test detection & quarantine**
+4. **`@sackville/mutate` — mutation testing** *(gated on a Stryker/Vitest-4 compat spike first)*
+5. **`@sackville/lsp` — semantic code navigation** *(last)*
 
 Rationale for the head of the list: **deps** has the cleanest architectural fit of
 the five — its core is fully offline-deterministic via an operator-provisioned
 on-disk OSV advisory snapshot (a true file-as-data boundary, the most
-Strummer-idiomatic shape), it has no test-runner-reentrancy hazard, and it extends
+Sackville-idiomatic shape), it has no test-runner-reentrancy hazard, and it extends
 already-shipped trusted assets (`detectInstalledVersion`/`resolveVersion` in
-`@strummer/core`). It answers upgrade/EOL/CVE — a question **nothing** in the repo
+`@sackville/core`). It answers upgrade/EOL/CVE — a question **nothing** in the repo
 already covers and which agents get wrong unprompted ("upgrade to latest"), with no
 TDD habit protecting them. **coverage** is the parallel opener for the test-quality
 track; its *leverage was downgraded* (under our TDD prime directive the agent
@@ -47,14 +47,14 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
 
 ### Cross-cutting decisions (apply to every Phase-4 pillar)
 
-- **Shared `@strummer/artifacts`.** Today's `ArtifactStore` lives **inside**
-  `@strummer/browser` and hardcodes the `strummer://browser/run/<id>/<kind>` prefix
+- **Shared `@sackville/artifacts`.** Today's `ArtifactStore` lives **inside**
+  `@sackville/browser` and hardcodes the `sackville://browser/run/<id>/<kind>` prefix
   — it cannot be reused as-is. Before the first handle-emitting Phase-4 slice, we
   **extract** it into a new shared package with a **parameterized prefix** (browser
-  keeps emitting its existing handles; coverage/deps emit `strummer://coverage/...`
-  / `strummer://deps/...`). The cost is paid **once** rather than duplicated
+  keeps emitting its existing handles; coverage/deps emit `sackville://coverage/...`
+  / `sackville://deps/...`). The cost is paid **once** rather than duplicated
   per pillar; the refactor touches the browser pillar's green gate and is done under
-  TDD (behavior-preserving, mirroring the `@strummer/safety` / `@strummer/assert`
+  TDD (behavior-preserving, mirroring the `@sackville/safety` / `@sackville/assert`
   extractions).
 - **Explicit version pins — no transitive imports.** `istanbul-lib-coverage`,
   `fflate`, etc. appear in the lockfile **only as transitive deps** of other
@@ -67,8 +67,8 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
   load-bearing even when the boolean is set (api: `allowedHosts` + `allowUnsafe`;
   browser: upload/quarantine dir + `ALLOW_*`). Any Phase-4 surface that **runs
   code** (coverage `runScoped`, flake quarantine **writes**, mutation runs) uses the
-  same shape — e.g. `STRUMMER_COVERAGE_PROJECT_ROOTS` (primary allowlist) +
-  `STRUMMER_COVERAGE_ALLOW_RUN` (secondary boolean) + a wall-clock cap. Read-only
+  same shape — e.g. `SACKVILLE_COVERAGE_PROJECT_ROOTS` (primary allowlist) +
+  `SACKVILLE_COVERAGE_ALLOW_RUN` (secondary boolean) + a wall-clock cap. Read-only
   analysis (diff parse, pure differs/summarizers) is free, like a GET. Safety is
   **operator-set, never an agent input** — no tool can self-authorize.
 - **TS/Vitest first; Python staged, not amputated.** Each pillar has a clean
@@ -105,19 +105,19 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
   mutation a subprocess output-scraper (effort L→XL). The spike runs before slot 4
   is committed.
 - **Wrong API reference:** the deps research cited `assertSsrfAllowed` from
-  `@strummer/safety`, which **does not exist** — the real symbols are
+  `@sackville/safety`, which **does not exist** — the real symbols are
   `resolveAndPin` / `isBlockedHost` / `classifyAddress` / `SsrfError`. All
   deps/changelog egress routes through `resolveAndPin` + an operator allowlist.
 - **flake owns a second SQLite database** (a private run-history table via
-  `better-sqlite3`), **outside** the `schema/strummer.schema.sql` "only `core`
+  `better-sqlite3`), **outside** the `schema/sackville.schema.sql` "only `core`
   touches SQLite" docs-pillar invariant. Allowed, but noted here explicitly: it is a
   new, private store, not a crossing of the polyglot contract.
 
 ## Consequences
 
-- Phase 4 opens with `@strummer/deps` (slice 1: a pure, offline `auditDeprecation`
-  reducer over a committed npm-packument fixture), with `@strummer/coverage` as the
-  parallel track. The shared `@strummer/artifacts` extraction lands with the first
+- Phase 4 opens with `@sackville/deps` (slice 1: a pure, offline `auditDeprecation`
+  reducer over a committed npm-packument fixture), with `@sackville/coverage` as the
+  parallel track. The shared `@sackville/artifacts` extraction lands with the first
   handle-emitting slice.
 - Relates to ADR 0004/0005 (api), ADR 0006–0009 (browser). The research +
   adversarial transcript is the workflow `phase4-design-research`; this ADR is its
@@ -126,7 +126,7 @@ polyglot rule outright (a live, stateful, version-coupled subprocess JSON-RPC pe
 ## Update — 2026-06-01: Stryker/Vitest-4 compat spike RESOLVED (mutation unblocked)
 
 The mutation-testing slot was gated on a spike (above): Stryker's `vitest-runner`
-historically advertised Vitest v1–3, while Strummer is pinned to Vitest 4.1.x. The spike
+historically advertised Vitest v1–3, while Sackville is pinned to Vitest 4.1.x. The spike
 is **resolved positively** — current `@stryker-mutator/vitest-runner` (9.x, e.g. 9.6.1)
 declares `peerDependencies: { vitest: ">=2.0.0", "@stryker-mutator/core": "<matching>" }`
 and the maintainers shipped explicit **Vitest 4 (and 4.1)** support, including a fix for
@@ -136,7 +136,7 @@ L→XL).
 
 Two design consequences this firms up:
 
-- **Stryker is NOT a gate dependency / not pinned into `@strummer/mutate`.** A real
+- **Stryker is NOT a gate dependency / not pinned into `@sackville/mutate`.** A real
   mutation run mutates the source and re-runs the whole suite per mutant — slow and
   inherently non-deterministic, so it fails the "no out-of-gate tier" determinism bar.
   Mirroring flake/coverage, the live run is an **injected runner** (default spawns the
@@ -294,8 +294,8 @@ summary was never mutated — the partial-scope sentinel — and the runner thro
   false-inconclusive, zero false-pass). **Fork F:** emit only slice-0-verified keys.
 - **Fork C:** a changed `.py` outside the operator's owned tree ⇒ `unmatched` (report-gap default;
   widen opt-in) — never silently scoped, never auto-extended.
-- **Fork D:** extend verify — `STRUMMER_MUTATE_TOOL` (`stryker`|`cosmic-ray`|`mutmut`, default
-  stryker) + `STRUMMER_MUTATE_CONFIG_PATH` in `bin-verify`, `--mutate-tool`/`--mutate-config` in
+- **Fork D:** extend verify — `SACKVILLE_MUTATE_TOOL` (`stryker`|`cosmic-ray`|`mutmut`, default
+  stryker) + `SACKVILLE_MUTATE_CONFIG_PATH` in `bin-verify`, `--mutate-tool`/`--mutate-config` in
   the verify CLI; route `ctx.changedFiles → mutateFiles`. Operator-set, never extension-inferred.
 
 ### Slice 0 — the empirical tool-fact gate (out-of-gate, reference env)

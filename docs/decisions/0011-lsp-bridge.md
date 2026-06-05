@@ -1,4 +1,4 @@
-# ADR 0011 — `@strummer/lsp`: the semantic-navigation LSP bridge
+# ADR 0011 — `@sackville/lsp`: the semantic-navigation LSP bridge
 
 - **Status:** Accepted (design; no production code yet)
 - **Date:** 2026-06-01
@@ -9,7 +9,7 @@
 
 ## Context
 
-`@strummer/lsp` is the final Phase-4 candidate (ADR 0010 sequence step 5): semantic
+`@sackville/lsp` is the final Phase-4 candidate (ADR 0010 sequence step 5): semantic
 code navigation — go-to-definition, find-references, hover, and (staged)
 type-definition / document-symbols / call-hierarchy — by driving a real **Language
 Server Protocol** server as a subprocess and exposing its answers to an agent over
@@ -20,7 +20,7 @@ live, stateful, bidirectional JSON-RPC session with a version-coupled subprocess
 
 Per CLAUDE.md (brainstorm-before-building, fan-out, adversarial verification) the
 design was produced by a research workflow: three parallel research streams
-(LSP protocol mechanics; the Node/TS client + prior-art survey; Strummer-fit
+(LSP protocol mechanics; the Node/TS client + prior-art survey; Sackville-fit
 grounded in the shipped pillars) → synthesis → **two adversarial critics**
 (determinism/correctness; architecture-fit). As with ADR 0010, the adversarial
 pass materially changed the design and caught concrete traps; the corrections are
@@ -43,7 +43,7 @@ test-runner gate. We reuse the test-runners' *gate shape* (paired
 from the browser pillar (below). This reframing resolves most of the adversarial
 findings.
 
-### `@strummer/lsp` is the documented exception to ARCHITECTURE §1
+### `@sackville/lsp` is the documented exception to ARCHITECTURE §1
 
 ARCHITECTURE §1: "Polyglot core, file-based boundary … No live RPC." ADR 0010
 already named LSP "the only candidate that violates §1 outright." We keep that
@@ -53,12 +53,12 @@ squarely §1-compatible; an LSP session is the opposite). The exception is fence
 hard invariants:
 
 - **§1 itself is untouched.** The only TS↔Python boundary remains the SQLite index
-  file + its schema. LSP is TS↔external-process and crosses **no** Strummer language
+  file + its schema. LSP is TS↔external-process and crosses **no** Sackville language
   boundary.
-- **The LSP subprocess must never open `schema/strummer.schema.sql` or any Strummer
+- **The LSP subprocess must never open `schema/sackville.schema.sql` or any Sackville
   SQLite.** The docs index is off-limits to it.
 - **Results are ephemeral.** No LSP output is cached into the index or persisted
-  beyond an in-flight call's `@strummer/artifacts` handle.
+  beyond an in-flight call's `@sackville/artifacts` handle.
 
 This keeps §1 a bright line with one named, fenced exception — not a fuzzy carve-out
 the next contributor reaches for elsewhere.
@@ -86,7 +86,7 @@ gopls invokes `go` (module downloads → network); tsserver loads `tsconfig` plu
 - **Operator binds the language→command registry; the agent supplies only a
   `language` string.** A language absent from the operator registry is refused, never
   spawned. No tool input can name a binary, argv, or path. The registry is **JSON**
-  (`STRUMMER_LSP_SERVERS`), with `command` and `args[]` **structurally separate** —
+  (`SACKVILLE_LSP_SERVERS`), with `command` and `args[]` **structurally separate** —
   never a `lang=cmd args;…` mini-DSL the engine re-splits (server commands routinely
   contain spaces, `=`, and wrapper prefixes like `rustup run …`).
 
@@ -162,7 +162,7 @@ version-awareness (that would violate the principle, not merely defer it):
 - **Record `serverInfo.{name,version}` from the `initialize` result in every
   navigation result and on every artifact handle** — free (it is in the protocol),
   and turns "silently wrong" into "wrong-but-attributed".
-- **v1 warn-on-mismatch**: reuse `@strummer/core` `detectInstalledVersion` to detect
+- **v1 warn-on-mismatch**: reuse `@sackville/core` `detectInstalledVersion` to detect
   the project's typescript/go/rust toolchain and emit a non-fatal `versionWarning`
   when the bound server's reported version is implausible for it. The full
   toolchain-resolution matrix stages; the warn hook is a v1 obligation.
@@ -179,7 +179,7 @@ were hand-rolled only because the converter was unavailable offline — a forced
 not a preference). Hand-rolling ~200 lines of framing buys nothing and gets the
 correctness corners (charset, partial reads, cancellation, progress tokens) subtly
 wrong. Per ADR 0010's "explicit pins, no transitive imports": **both packages are
-added as explicitly pinned direct deps** of `@strummer/lsp` (3.17.x line, stable,
+added as explicitly pinned direct deps** of `@sackville/lsp` (3.17.x line, stable,
 no native build); the protocol package is imported **types-only** where possible so
 its churn lands as a type-level, not runtime, coupling.
 
@@ -241,8 +241,8 @@ The v1 cut is the **de-risking MVP**, not an arbitrary line:
   unsupported tool and always knows the provenance.
 - Tool naming follows the house `verb_noun` form (`lsp_find_definition`), documented.
 - Large results (hundreds of references, document symbols for a big file) return a
-  **compact head inline + the full list by handle** via `@strummer/artifacts` (prefix
-  `lsp`, resource `strummer://lsp/{id}/{kind}`, registered only when a store is set) —
+  **compact head inline + the full list by handle** via `@sackville/artifacts` (prefix
+  `lsp`, resource `sackville://lsp/{id}/{kind}`, registered only when a store is set) —
   the deps/coverage rule. A file body is **never** inlined.
 - **Staged, not amputated** (CLAUDE.md directive 4 — recorded in ROADMAP):
   `lsp_type_definition`, `lsp_document_symbols`, `lsp_call_hierarchy` (behind
@@ -253,7 +253,7 @@ The v1 cut is the **de-risking MVP**, not an arbitrary line:
 ### Proposed module layout (`packages/lsp/src/`)
 
 - `encoding.ts` — pure `toLspCharacter` / inverse (utf-8/16/32). *First slice.*
-- `normalize.ts` — pure LSP-result → compact-Strummer-shape reducers (locations,
+- `normalize.ts` — pure LSP-result → compact-Sackville-shape reducers (locations,
   symbols, hover, tri-state). Pure, fixture-tested. *First slice.*
 - `client.ts` — the LSP JSON-RPC client over a connection (handshake, capability
   gating, didOpen/refcount, tri-state query, deadlock-safe inbound replies); holds the
@@ -266,7 +266,7 @@ The v1 cut is the **de-risking MVP**, not an arbitrary line:
 - `index.ts` — barrel.
 
 MCP surface in `packages/mcp/src/lsp.ts` + `bin-lsp.ts`; env
-`STRUMMER_LSP_ALLOW_RUN` / `_PROJECT_ROOTS` / `_TIMEOUT_MS` / `_SERVERS` (JSON) /
+`SACKVILLE_LSP_ALLOW_RUN` / `_PROJECT_ROOTS` / `_TIMEOUT_MS` / `_SERVERS` (JSON) /
 `_ARTIFACT_DIR` (+ optional `_MAX_SERVERS` / `_IDLE_TTL_MS`), parsed with the shared
 `bool`/`csv`/`num` helpers; the executable-tail guard copied verbatim.
 
@@ -278,7 +278,7 @@ MCP surface in `packages/mcp/src/lsp.ts` + `bin-lsp.ts`; env
   before any process is spawned. Then the `client.ts` handshake/tri-state against the
   fake in-process peer; then the gated `manager`/`query` engine; then the MCP surface
   + bin.
-- `@strummer/lsp` is the **documented, fenced exception** to ARCHITECTURE §1; §1
+- `@sackville/lsp` is the **documented, fenced exception** to ARCHITECTURE §1; §1
   otherwise stands. A future ARCHITECTURE update should cite this ADR at §1.
 - The pillar deliberately has **no real-server test in `pnpm gate`** — a stricter
   determinism posture than the other Phase-4 pillars, justified and recorded here.
@@ -308,11 +308,11 @@ MCP surface in `packages/mcp/src/lsp.ts` + `bin-lsp.ts`; env
 
 ## 1. Overview
 
-`lsp_rename` adds the first **write** capability to `@strummer/lsp`: a semantic, cross-file symbol rename driven by the live language server's `textDocument/rename`. It is the final staged tail of Phase 4 and the documented extension of ADR-0011's live-LSP exception to ARCHITECTURE §1.
+`lsp_rename` adds the first **write** capability to `@sackville/lsp`: a semantic, cross-file symbol rename driven by the live language server's `textDocument/rename`. It is the final staged tail of Phase 4 and the documented extension of ADR-0011's live-LSP exception to ARCHITECTURE §1.
 
 **Posture (locked):** `lsp_rename` is **dry-run by default** — it computes the server's `WorkspaceEdit`, normalizes and validates it (offsets, overlap, confinement), and returns a human-readable preview with **zero disk writes and zero server-state mutation**. It applies to disk **only** behind a **separate operator gate `allowWrite`** that is distinct from and strictly *requires* the read gate `allowRun` (`allowWrite` is meaningless without `allowRun` — see §4). Every edited file is confined to the allowlisted project root, **realpath-hardened**, before any byte is read or written. Apply stages all files in memory, then commits temp-file-then-atomic-rename.
 
-**v1 scope cut (staged, not amputated):** v1 applies only `TextDocumentEdit` text edits. Any `WorkspaceEdit` containing `CreateFile`/`RenameFile`/`DeleteFile` resource operations is surfaced in the preview but **refused on apply** — refusal is **unconditional and early**, before any confinement, read, or staging work. **v1 also refuses any multi-file rename until the multi-URI lock primitive lands** (§4) — until then write-mode applies only when every edited URI equals the queried URI; multi-file renames are previewable but not applicable. Full conflict reconciliation, resource-op execution, multi-file write, and a `strummer lsp` CLI remain staged.
+**v1 scope cut (staged, not amputated):** v1 applies only `TextDocumentEdit` text edits. Any `WorkspaceEdit` containing `CreateFile`/`RenameFile`/`DeleteFile` resource operations is surfaced in the preview but **refused on apply** — refusal is **unconditional and early**, before any confinement, read, or staging work. **v1 also refuses any multi-file rename until the multi-URI lock primitive lands** (§4) — until then write-mode applies only when every edited URI equals the queried URI; multi-file renames are previewable but not applicable. Full conflict reconciliation, resource-op execution, multi-file write, and a `sackville lsp` CLI remain staged.
 
 ## 2. Protocol handling
 
@@ -332,7 +332,7 @@ workspaceEdit: { documentChanges: true, resourceOperations: [], normalizesLineEn
 - `documentChanges: true` — gets the ordered, versioned form tsserver actually emits; this is what our fixtures test against.
 - `resourceOperations: []` (empty, **not** `['create','rename','delete']`) — honestly signals we do **not** apply file ops, nudging well-behaved servers toward pure-`TextEdit` renames. We still defend against servers that send them anyway (refuse on apply). **Whether tsserver 5.3.0 honors the empty array on an ordinary rename is a Slice-B fixture-capture blocker** (Open Q in §10 / §7): if the real payload routinely contains resource ops on common renames, the v1 refuse path is the common path and the v1 cut must be revisited *before* coding the refuse logic.
 - `changeAnnotationSupport` is **not** advertised. A spec-compliant server therefore will not send annotations. If one does anyway, an `AnnotatedTextEdit` carrying a **`needsConfirmation`** annotation is kept in the **preview only** (surfaced as `needsConfirmation: true` + the annotation label) and **excluded from apply**; a non-confirmation annotation is normalized to `{range,newText}` with the label preserved in preview metadata. Annotations are never silently dropped (closing critic 2-finding-12).
-- `normalizesLineEndings: false` — Strummer sends bytes verbatim; the apply core never normalizes CRLF, consistent with `encoding.ts`.
+- `normalizesLineEndings: false` — Sackville sends bytes verbatim; the apply core never normalizes CRLF, consistent with `encoding.ts`.
 
 ### 2.2 `textDocument/rename`
 
@@ -355,7 +355,7 @@ When advertised, `prepareRename` runs first as a cheap pre-flight; result is the
 
 A server may send a server→client `workspace/applyEdit` mid-rename. Its result type is an **object, not `null`** — answering `null` is invalid and the unanswered id-bearing request deadlocks the shared server (the exact failure `client.ts:17-20` warns of). Add `ApplyWorkspaceEditRequest` to `installInboundHandlers` (`client.ts:280-292`) returning:
 ```ts
-{ applied: false, failureReason: 'strummer applies rename edits itself; server-initiated edits are declined' }
+{ applied: false, failureReason: 'sackville applies rename edits itself; server-initiated edits are declined' }
 ```
 The fixtures README must record (from the captured fixture) that tsserver 5.3.0 returns the full `WorkspaceEdit` directly from `textDocument/rename` and does **not** drive renames via server-initiated `applyEdit`. A server that *only* drives renames via `applyEdit` is **unsupported** by this model; in that case we surface a structured `refused: 'rename-not-resolvable (server drives edits via applyEdit, unsupported in v1)'` rather than silently returning an empty edit (closing critic 1-finding-9).
 
@@ -409,7 +409,7 @@ A `newName` is sent verbatim to the server and then written verbatim into every 
 **Two operator gates that layer, with enforced implication:**
 - `allowRun` (existing) — required to even **compute** a rename. Always required.
 - `allowWrite` (new) — required to **touch disk**. Operator-set only, never a tool argument.
-- **Implication is enforced, not asserted** (closing critic 2-finding-3): the rename tool/engine is **not constructed/registered unless `allowRun` is true**. `allowWrite=1` with `allowRun=0/unset` is a **hard bin-startup error** (`STRUMMER_LSP_ALLOW_WRITE requires STRUMMER_LSP_ALLOW_RUN`). The two stay independent booleans (read-nav without write is grantable), but `allowWrite` alone is rejected at startup.
+- **Implication is enforced, not asserted** (closing critic 2-finding-3): the rename tool/engine is **not constructed/registered unless `allowRun` is true**. `allowWrite=1` with `allowRun=0/unset` is a **hard bin-startup error** (`SACKVILLE_LSP_ALLOW_WRITE requires SACKVILLE_LSP_ALLOW_RUN`). The two stay independent booleans (read-nav without write is grantable), but `allowWrite` alone is rejected at startup.
 
 `decideRename(): 'preview' | 'apply'` (modeled on `BrowserGate.decideMutation`, `gate.ts:81-89`) returns `'apply'` only when `allowWrite` is set **and** every edited URI confines to an allowlisted root **and** (v1) the edit touches only the queried URI; otherwise `'preview'`. With `allowWrite` off the **injected `writer` seam is never reached** — apply is unreachable, and a dry-run path **never reaches `applyEdited`/`didChange`** (§5). A Slice F test asserts the connection sends **no `didChange`** in dry-run (closing critic 2-finding-2).
 
@@ -428,7 +428,7 @@ A `newName` is sent verbatim to the server and then written verbatim into every 
 
 **Staleness — content-hash drift is the SOLE authority and always hard-refuses** (closing critic 1-finding-5): at compute time capture the hash of the **exact bytes used for compute** (the `didOpen`/buffer text); before Phase-2 re-read and **hard-refuse the whole batch on any drift**, regardless of the `version` field. TextEdit offsets are only valid against the text they were computed from; never splice them onto drifted disk content. `OptionalVersionedTextDocumentIdentifier.version: null` means "no extra version signal" — it does **not** license applying against changed disk. A **non-null** version disagreeing with the open doc also aborts. Full version reconciliation stays staged.
 
-**Pre-compute buffer reconcile** (closing critic 2-finding-9): the server computed its edit against the text Strummer `didOpen`'d (open-once, possibly minutes old per the 15-min TTL). Before computing the rename, if the file is open and its `didOpen` text differs from current disk, send a `didChange` full-text resync **first** so the returned offsets match the text `applyTextEdits` will splice — then compute. This is the actual correctness fix; the post-compute hash check guards the compute→commit window.
+**Pre-compute buffer reconcile** (closing critic 2-finding-9): the server computed its edit against the text Sackville `didOpen`'d (open-once, possibly minutes old per the 15-min TTL). Before computing the rename, if the file is open and its `didOpen` text differs from current disk, send a `didChange` full-text resync **first** so the returned offsets match the text `applyTextEdits` will splice — then compute. This is the actual correctness fix; the post-compute hash check guards the compute→commit window.
 
 ## 5. Doc-sync after write
 
@@ -460,19 +460,19 @@ client.applyEdited(uri, newText): void  // if uri is in the open map: send didCh
 ```
 - **`oldText` is sliced with the absolute offsets from `lspPositionToOffset`, NEVER reconstructed from line:column via `splitLines`** (closing critic 1-finding-3) — `fromLspPosition` is used **only to render the human line:column label**, never to compute the byte span shown as `oldText`. A CRLF preview fixture asserts `oldText` byte-matches disk. Hunks are bounded to the edit span + a small clamped margin; **file bodies are never inlined** (ADR-0011 §"a file body is never inlined").
 - **Out-of-root edits show path + edit count ONLY — never `oldText`/`newText`** (closing critic 2-finding-7): we must not read+surface a file already decided to be outside the allowlist; `outOfRoot: true` flags it as not-applicable. (In single-file-apply v1 an out-of-root edit means the whole apply is refused anyway.)
-- **Secret redaction** runs over every `oldText`/`newText` via `@strummer/safety` (the shared redaction already used by `api`/`browser`) before they hit the preview or the artifact (closing critic 2-finding-7).
-- The **full** WorkspaceEdit preview is offloaded by `@strummer/artifacts` — **prefix `'lsp'`, kind `'rename-preview'`**, `strummer://lsp/{id}/rename-preview` — with a capped per-file head inline, mirroring the reference-list pattern (`lsp.ts:145-160`). Artifact retention is **bounded like the reference-list artifacts** and contains no out-of-root file bodies and no unredacted secrets.
+- **Secret redaction** runs over every `oldText`/`newText` via `@sackville/safety` (the shared redaction already used by `api`/`browser`) before they hit the preview or the artifact (closing critic 2-finding-7).
+- The **full** WorkspaceEdit preview is offloaded by `@sackville/artifacts` — **prefix `'lsp'`, kind `'rename-preview'`**, `sackville://lsp/{id}/rename-preview` — with a capped per-file head inline, mirroring the reference-list pattern (`lsp.ts:145-160`). Artifact retention is **bounded like the reference-list artifacts** and contains no out-of-root file bodies and no unredacted secrets.
 
 **Apply result (`applied: true`):** same shape plus a `kind: 'applied-edit'` audit artifact recording exactly which files were written and their **pre/post SHA-256 digests** for auditability. Per-file digests are the v1 audit bar; a full unified diff under a separate handle kind is staged (Open Q in §10).
 
 **Bin (`bin-lsp.ts`):**
-- Parse `allowWrite: bool(env.STRUMMER_LSP_ALLOW_WRITE)` into `LspBinConfig` alongside `allowRun` (`bin-lsp.ts:99-107`).
-- **Validate `allowWrite ⇒ allowRun` at build time**; throw `STRUMMER_LSP_ALLOW_WRITE requires STRUMMER_LSP_ALLOW_RUN` when violated (§4).
+- Parse `allowWrite: bool(env.SACKVILLE_LSP_ALLOW_WRITE)` into `LspBinConfig` alongside `allowRun` (`bin-lsp.ts:99-107`).
+- **Validate `allowWrite ⇒ allowRun` at build time**; throw `SACKVILLE_LSP_ALLOW_WRITE requires SACKVILLE_LSP_ALLOW_RUN` when violated (§4).
 - In the existing `if (config.registry)` block (`bin-lsp.ts:115`), construct `LspRenameEngine` with `manager + allowedRoots + allowWrite + the real stage-then-commit writer seam`, and wire `rename: (input) => renameEngine.rename(input)` into `createLspServer`.
 - Document in the bin env header (`bin-lsp.ts:79-91`):
   ```
-  STRUMMER_LSP_ALLOW_WRITE=1   # enables lsp_rename to write to disk; default off = dry-run preview only
-                               # requires STRUMMER_LSP_ALLOW_RUN (hard error otherwise)
+  SACKVILLE_LSP_ALLOW_WRITE=1   # enables lsp_rename to write to disk; default off = dry-run preview only
+                               # requires SACKVILLE_LSP_ALLOW_RUN (hard error otherwise)
   ```
 
 ## 7. Test/fixture posture
@@ -502,7 +502,7 @@ client.applyEdited(uri, newText): void  // if uri is in the open map: send didCh
 - **Slice E** — `client.applyEdited()` `didChange` doc-sync + the `open`-map refactor to `{refs,version}` + per-URI monotonic counter (flag the `releaseDoc` touch); peer-test strictly-increasing versions on both branches; add the inbound `applyEdit` deadlock-guard + regression test.
 - **Slice F (single-file)** — `LspRenameEngine` (`rename.ts`): dry-run preview path (zero writes, zero `didChange`, confine-all-first, human-coord labels, offset-faithful `oldText`, secret redaction, `allowWrite`-off asserts writer never reached); then the **single-file apply path** (`allowWrite` on, queried-URI-only) via the stage-then-commit writer seam — pre-compute reconcile, hash-drift hard-refuse, post-apply `didChange`, golden-file byte assertion.
 - **Slice F′ (multi-file, prerequisite-gated)** — `manager.runWithUris(entry, uris[], fn)` (sorted lock chain, deadlock-safe) **then** enable multi-file apply in the engine (confine-all, all-locks-held stage+commit+`didChange`, partial-failure report). Until this lands, multi-file renames are preview-only (refused on apply). Independently committable after Slice F.
-- **Slice G** — `lsp_rename` MCP tool in `lsp.ts` + by-handle `rename-preview`/`applied-edit` artifacts; `STRUMMER_LSP_ALLOW_WRITE` wiring + the `allowWrite⇒allowRun` startup validation in `bin-lsp.ts`.
+- **Slice G** — `lsp_rename` MCP tool in `lsp.ts` + by-handle `rename-preview`/`applied-edit` artifacts; `SACKVILLE_LSP_ALLOW_WRITE` wiring + the `allowWrite⇒allowRun` startup validation in `bin-lsp.ts`.
 - **Slice H** — fold this contract into ADR-0011 + STATUS/ROADMAP/memory notes.
 
 ## 9. Adversarial corrections (finding → resolution)
@@ -525,7 +525,7 @@ client.applyEdited(uri, newText): void  // if uri is in the open map: send didCh
 4. *resourceOps confinement contradictory with refuse* → **folded.** Resource-op refusal is unconditional and early, before any confinement; resource-op confinement explicitly staged for the future un-stage slice (§2.5).
 5. *Confine ordering vs Phase-1 reads* → **folded.** Strict order normalize → confine-all → reads; out-of-root URI causes zero reads (asserted) (§4).
 6. *Multi-file holds only queried lock* → **folded** (same as critic-1 #1).
-7. *Secret/path leakage in preview + artifact* → **folded.** No hunk bodies for out-of-root edits; `@strummer/safety` redaction over hunks; project-relative paths only; bounded artifact retention (§6).
+7. *Secret/path leakage in preview + artifact* → **folded.** No hunk bodies for out-of-root edits; `@sackville/safety` redaction over hunks; project-relative paths only; bounded artifact retention (§6).
 8. *newName guard "optional"* → **folded.** Made mandatory pure validator `isPlausibleRenameName`, validated before sending to server (§3.4, Slice A).
 9. *Server buffer stale vs disk pre-compute* → **folded.** Pre-compute `didChange` reconcile when `didOpen` text differs from disk (§4, §5).
 10. *Partial restore can corrupt; paths leak* → **folded** (same as critic-1 #2; project-relative report paths).
@@ -620,7 +620,7 @@ client advertises `workspaceEdit.resourceOperations` — so we flipped it from `
   `didClose(old)` + `didOpen(new)` carrying the refcount + languageId (a fresh document → version
   restarts at 1); `didFileDelete` closes+evicts. Both run inside the held lock, so a `RenameFile`
   of an open file can't leave a silently-stale buffer keyed to a non-existent path in the shared
-  daemon. (Strummer opens only the queried file, so the common case is a no-op — but the primitive
+  daemon. (Sackville opens only the queried file, so the common case is a no-op — but the primitive
   is correct for the general case.)
 - **Preview/audit hygiene** (B8): resource-op paths are surfaced PROJECT-RELATIVE (never an absolute
   URI / home-dir leak); an endpoint outside every root shows `(out of project root)`.
@@ -644,7 +644,7 @@ filesystem-data-loss / LSP-spec / gate-security lenses → synthesis); the adver
 **Shipped — `overwrite` truncate-and-replace, behind a SEPARATE operator gate.** A `CreateFile` or
 `RenameFile` carrying `overwrite: true` now APPLIES, clobbering an **existing regular file**, but
 only behind a new deny-by-default sub-gate `allowDestructiveResourceOps` (modeled on
-`allowPartialRename`; env `STRUMMER_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS`, CLI
+`allowPartialRename`; env `SACKVILLE_LSP_ALLOW_DESTRUCTIVE_RESOURCE_OPS`, CLI
 `--allow-destructive-resource-ops`). The gate is **self-enforcing** in the engine — it re-requires
 `allowWrite` even though the bin/CLI also hard-error on the contradiction (mirrors `assertAllowed`
 re-checking `allowRun`). The destroyed bytes are audited (a `<path> (overwritten)` digest row,

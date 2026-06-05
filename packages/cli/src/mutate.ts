@@ -11,15 +11,15 @@ import {
   runMutation,
   runMutmut,
   summarizeMutation,
-} from '@strummer/mutate'
+} from '@sackville/mutate'
 import type { CliIO } from './index.js'
 
 /**
- * `strummer mutate` — the human surface over `@strummer/mutate`.
+ * `sackville mutate` — the human surface over `@sackville/mutate`.
  *
  * `summarize` is a pure report viewer (Stryker JSON or `mutmut results` text). `run` is the
  * gated, diff-scopable mutation run. The CLI's human IS the operator, so the run gate is a
- * straight-through `--allow-run` flag (mirroring `strummer api --unsafe`): the typed project
+ * straight-through `--allow-run` flag (mirroring `sackville api --unsafe`): the typed project
  * root is auto-allowed (explicit operator intent). The `runner` is injectable so the suite
  * never spawns a real Stryker (ADR 0010: no real spawn in the gate).
  */
@@ -133,7 +133,7 @@ async function cmdRun(
     const config = {
       projectRoot,
       // The human typed this root, so it is the operator allowlist (explicit intent),
-      // exactly as `strummer browser` auto-allows the typed host.
+      // exactly as `sackville browser` auto-allows the typed host.
       allowedRoots: [resolve(projectRoot)],
       allowRun: values['allow-run'] ?? false,
       timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,

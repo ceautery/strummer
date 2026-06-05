@@ -11,11 +11,11 @@ import {
   runAndRecord,
   runAndRecordPytest,
   type TestRunner,
-} from '@strummer/flake'
+} from '@sackville/flake'
 import type { CliIO } from './index.js'
 
 /**
- * `strummer flake` — the human surface over `@strummer/flake`.
+ * `sackville flake` — the human surface over `@sackville/flake`.
  *
  * Reads (`status`/`candidates`) + `ingest`/`release` are always available against the
  * operator's private run-history DB (`--db`). `run` (spawns vitest) and `quarantine`
@@ -49,7 +49,7 @@ export async function runFlake(
   }
 }
 
-/** Open the operator's history DB (from `--db`/`STRUMMER_FLAKE_DB`), run the command, close. */
+/** Open the operator's history DB (from `--db`/`SACKVILLE_FLAKE_DB`), run the command, close. */
 async function withStore(
   args: string[],
   io: CliIO,
@@ -58,9 +58,9 @@ async function withStore(
   // `--db` is parsed here too so a missing path is caught before any work; the command
   // re-parses its own flags (parseArgs ignores unknown-but-declared elsewhere is false, so
   // we pass the full args through — each command declares `db` in its own options).
-  const dbPath = readDbFlag(args) ?? io.env?.STRUMMER_FLAKE_DB
+  const dbPath = readDbFlag(args) ?? io.env?.SACKVILLE_FLAKE_DB
   if (!dbPath) {
-    io.err('no run-history DB given: pass --db <file> or set STRUMMER_FLAKE_DB\n')
+    io.err('no run-history DB given: pass --db <file> or set SACKVILLE_FLAKE_DB\n')
     return 1
   }
   const store = HistoryStore.open(dbPath)

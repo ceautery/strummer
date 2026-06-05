@@ -1,6 +1,6 @@
 import { readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { redactHarZip, summarizeHar } from '@strummer/api'
+import { redactHarZip, summarizeHar } from '@sackville/api'
 import { strFromU8, unzipSync } from 'fflate'
 import type { ArtifactStore } from './artifacts.js'
 
@@ -20,13 +20,13 @@ import type { ArtifactStore } from './artifacts.js'
  * stays operator-gated rather than on by default.
  */
 
-// The blanket-redaction pass + the `.har` tally live in `@strummer/api` `har-synth.ts`
+// The blanket-redaction pass + the `.har` tally live in `@sackville/api` `har-synth.ts`
 // (extracted 5f slice 1) so both this file wrapper AND a SYNTHESIZED in-memory api HAR
 // share ONE redaction code path (incl. the attach-by-declared-mimeType coverage).
 
 /** A finished HAR capture, returned by handle with a compact summary. */
 export interface HarSummary {
-  /** `strummer://browser/run/<id>/har` — the recorded HAR archive (.zip), by handle. */
+  /** `sackville://browser/run/<id>/har` — the recorded HAR archive (.zip), by handle. */
   handle: string
   byteSize: number
   /** Number of network entries (`log.entries.length`). */
@@ -54,7 +54,7 @@ export interface FinalizeHarOptions {
   runId: string
   store: ArtifactStore
   /** Applied to every text entry before write. Default identity; the server bin
-   * wires the real `@strummer/safety` `Redactor` here. */
+   * wires the real `@sackville/safety` `Redactor` here. */
   redact?: (value: string) => string
 }
 

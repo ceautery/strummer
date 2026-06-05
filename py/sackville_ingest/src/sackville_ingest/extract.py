@@ -1,7 +1,7 @@
 """HTML chunking — split a documentation page into heading-bounded sections.
 
 :func:`split_sections` walks a parsed HTML body in document order. Every
-``<h1>``/``<h2>``/``<h3>`` starts a new :class:`~strummer_ingest.model.Section`;
+``<h1>``/``<h2>``/``<h3>`` starts a new :class:`~sackville_ingest.model.Section`;
 the content elements between headings accumulate into the current section's
 body text. Code-block text (``<pre>``/``<code>``) is preserved.
 """
@@ -12,7 +12,7 @@ import re
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from strummer_ingest.model import Section
+from sackville_ingest.model import Section
 
 _HEADING_LEVELS = {"h1": 1, "h2": 2, "h3": 3}
 _WS_RE = re.compile(r"\s+")

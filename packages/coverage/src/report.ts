@@ -13,7 +13,7 @@
  * the coverage map can't cause a wrong attribution). Pure/offline.
  */
 
-import { parseUnifiedDiff } from '@strummer/diff'
+import { parseUnifiedDiff } from '@sackville/diff'
 import { type FileCoverage, type UncoveredNewLines, uncoveredNewLines } from './uncovered.js'
 
 export interface DiffCoverageFile {

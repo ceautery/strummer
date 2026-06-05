@@ -14,7 +14,7 @@
  * This reuses each pillar's REAL gate decision (`assertAllowed`) — there is no
  * reimplemented gate predicate here to drift out of sync.
  */
-export const GATE_DENIAL: unique symbol = Symbol.for('strummer.gate-denial')
+export const GATE_DENIAL: unique symbol = Symbol.for('sackville.gate-denial')
 
 /** True when `reason` is branded as a pillar gate DENIAL (not a runtime failure). */
 export function isGateDenial(reason: unknown): boolean {

@@ -1,10 +1,10 @@
-# @strummer/mcp
+# sackville
 
-The Strummer MCP server — exposes Strummer's pillars to an LLM agent as MCP tools
-and resources. **`strummer-mcp` is the AGGREGATE server**: one stdio process that
+The Sackville MCP server — exposes Sackville's pillars to an LLM agent as MCP tools
+and resources. **`sackville-mcp` is the AGGREGATE server**: one stdio process that
 serves every *enabled* pillar (docs, api, browser, coverage, deps, flake, lsp,
 mutate, verify). Narrow single-pillar bins also ship for minimal deployments
-(`strummer-docs-mcp`, `strummer-api-mcp`, `strummer-browser-mcp`, …).
+(`sackville-docs-mcp`, `sackville-api-mcp`, `sackville-browser-mcp`, …).
 
 ## Quickstart — the aggregate server
 
@@ -13,30 +13,30 @@ Add one block to your MCP client config (see [`examples/mcp/.mcp.json`](../../ex
 ```jsonc
 {
   "mcpServers": {
-    "strummer": {
+    "sackville": {
       "command": "npx",
-      "args": ["-y", "@strummer/mcp"],
+      "args": ["-y", "sackville"],
       "env": {
         // Pick which pillars to expose (unset ⇒ the curated default docs+api+deps+verify).
-        "STRUMMER_TOOLSETS": "api,deps,verify",
+        "SACKVILLE_TOOLSETS": "api,deps,verify",
         // Each pillar reads its OWN operator gate; run/write tools appear only when set.
-        "STRUMMER_API_ALLOWED_HOSTS": "api.example.com"
+        "SACKVILLE_API_ALLOWED_HOSTS": "api.example.com"
       }
     }
   }
 }
 ```
 
-- **Selecting pillars** — `STRUMMER_TOOLSETS` is a comma list of pillar names; unset
+- **Selecting pillars** — `SACKVILLE_TOOLSETS` is a comma list of pillar names; unset
   enables the curated read-heavy default. It only *selects* — it never grants a
-  capability (each pillar still reads its own `STRUMMER_<PILLAR>_*` gate).
-- **Install isolation** — a bare `npm i @strummer/mcp` is **native-free**. The heavy
-  engines (`@strummer/browser` → playwright, `@strummer/core`/`@strummer/embed` → the
-  docs index, `@strummer/flake` → SQLite) are **optional peers**: install the ones whose
+  capability (each pillar still reads its own `SACKVILLE_<PILLAR>_*` gate).
+- **Install isolation** — a bare `npm i sackville` is **native-free**. The heavy
+  engines (`@sackville/browser` → playwright, `@sackville/core`/`@sackville/embed` → the
+  docs index, `@sackville/flake` → SQLite) are **optional peers**: install the ones whose
   pillars you enable. A pillar whose engine isn't installed (or, for docs, whose
-  `STRUMMER_INDEX` is unset) is *loud-disabled* at startup — the server still starts.
+  `SACKVILLE_INDEX` is unset) is *loud-disabled* at startup — the server still starts.
 - **Compose, never widen** — in the aggregate the api + verify pillars read the prefixed
-  `STRUMMER_API_*` / `STRUMMER_API_SECRET_*` namespace, so no bare flag unlocks two
+  `SACKVILLE_API_*` / `SACKVILLE_API_SECRET_*` namespace, so no bare flag unlocks two
   pillars at once. Safety config is always operator-set, never an agent input.
 
 ## Docs tools
@@ -53,10 +53,10 @@ Add one block to your MCP client config (see [`examples/mcp/.mcp.json`](../../ex
 
 ## Docs resource
 
-- **`strummer://doc/{id}`** — the same full fragment as `get_doc`, so agents can
+- **`sackville://doc/{id}`** — the same full fragment as `get_doc`, so agents can
   follow a search hit's `resourceUri` without a tool call.
 
-## API tools (`strummer-api-mcp`)
+## API tools (`sackville-api-mcp`)
 
 Over a Bruno `.bru` collection directory (passed as the `dir` tool argument, so
 one server serves many collections):
@@ -80,14 +80,14 @@ one server serves many collections):
   (e.g. `form/explode=true` objects, string-item delimited arrays, fractional `multipleOf`
   numbers) are skipped as uncheckable, never a false finding (ADR 0016). A GraphQL envelope
   is refused, not schema-failed.
-- Resource **`strummer://run/{runId}/body`** — fetch a stored response body by
+- Resource **`sackville://run/{runId}/body`** — fetch a stored response body by
   its handle (bodies are never inlined).
 
 **Safety:** `allowUnsafe` / `allowedHosts` are **operator-controlled** — set on
 the bin via env, never exposed as tool inputs (an agent can't authorize its own
 mutating requests). Mutations dry-run unless both are set (ADR 0004).
 
-## Browser tools (`strummer-browser-mcp`)
+## Browser tools (`sackville-browser-mcp`)
 
 Stateful, session-oriented (open → drive → close); all large artifacts by handle:
 
@@ -104,7 +104,7 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   read-like; reads are redacted and don't invalidate refs.
 - **`browser_assert`** — evaluate declarative assertions against the live page
   (a free read). Page sources `url`/`title`/`ariaSnapshot`; element sources
-  `text`/`value`/`visible`/`count` (by ref or role+name); the shared `@strummer/assert`
+  `text`/`value`/`visible`/`count` (by ref or role+name); the shared `@sackville/assert`
   operator set (`equals`/`contains`/`matches`/`gt`/…). Each **auto-waits** to its
   timeout; observed values are redacted. Returns `{pass, results}`.
 - **`browser_audit_a11y`** — axe-core audit; compact summary + report by handle.
@@ -153,20 +153,20 @@ Stateful, session-oriented (open → drive → close); all large artifacts by ha
   execute) and redactor as the live step tools; `{{var}}` values are caller-supplied
   (non-secret), `{{secret:NAME}}` resolves server-side (fail-closed, never echoed).
   Operator-gated + deny-by-default (requires a `FLOWS_DIR`; the flow is named, never a
-  caller-supplied path). The human-CLI counterpart is `strummer browser run`.
+  caller-supplied path). The human-CLI counterpart is `sackville browser run`.
 - **Video capture** — with an operator `VIDEO_DIR` set, each session records a
   `.webm`; `browser_close_session` finalizes it (written on context close) and
   surfaces it by `video` handle. Operator-gated off by default — video is
   unredactable pixels (same posture as the trace/screenshots); an optional size cap
   (`VIDEO_WIDTH`/`VIDEO_HEIGHT`) bounds the frame size, the session wall-clock cap
   bounds duration.
-- Resource **`strummer://browser/run/{runId}/{kind}`** — fetch a stored artifact
+- Resource **`sackville://browser/run/{runId}/{kind}`** — fetch a stored artifact
   (`snapshot-s<gen>` / `a11y-s<n>` / `screenshot-s<n>` / `trace` / `console` /
   `network` / `har` / `video`) by handle; binary kinds (trace.zip, screenshot PNG,
   HAR .zip, video webm) come back as a base64 blob. The password-equivalent
   `storage-state` kind is **refused** (operator-path only).
 
-**Safety (all operator-set via `STRUMMER_BROWSER_*` env, never tool inputs):**
+**Safety (all operator-set via `SACKVILLE_BROWSER_*` env, never tool inputs):**
 navigation/mutation deny-by-default (`ALLOW_UNSAFE`, `ALLOWED_HOSTS`); a **mandatory**
 DNS-pinning SSRF proxy (loopback forced through it; `ALLOW_PRIVATE` opt-in);
 service-workers blocked + WebRTC egress neutralized; JS dialogs dismissed by
@@ -188,14 +188,14 @@ all off unless explicitly enabled.
 ## Run
 
 ```bash
-strummer-mcp <index.sqlite>          # docs; or: STRUMMER_INDEX=… strummer-mcp
+sackville-mcp <index.sqlite>          # docs; or: SACKVILLE_INDEX=… sackville-mcp
 
 # API testing — mutations dry-run unless explicitly unlocked:
-strummer-api-mcp
-STRUMMER_ALLOW_UNSAFE=1 STRUMMER_ALLOWED_HOSTS=api.example.com strummer-api-mcp
+sackville-api-mcp
+SACKVILLE_ALLOW_UNSAFE=1 SACKVILLE_ALLOWED_HOSTS=api.example.com sackville-api-mcp
 
 # Browser testing — deny-by-default; unlock + allowlist per operator policy:
-STRUMMER_BROWSER_ALLOWED_HOSTS=app.test,127.0.0.1 strummer-browser-mcp
+SACKVILLE_BROWSER_ALLOWED_HOSTS=app.test,127.0.0.1 sackville-browser-mcp
 ```
 
 All three speak MCP over stdio.
@@ -203,9 +203,9 @@ All three speak MCP over stdio.
 ### Register with Claude Code
 
 ```bash
-claude mcp add strummer         -- strummer-mcp /path/to/index.sqlite
-claude mcp add strummer-api     -- strummer-api-mcp
-claude mcp add strummer-browser -- strummer-browser-mcp
+claude mcp add sackville         -- sackville-mcp /path/to/index.sqlite
+claude mcp add sackville-api     -- sackville-api-mcp
+claude mcp add sackville-browser -- sackville-browser-mcp
 ```
 
 ## Token economy

@@ -33,7 +33,7 @@ query (transformers.js) and document (fastembed) embeddings share one space.
 
 ## Consequences
 
-- `@strummer/mcp` gains `@huggingface/transformers` (+ onnxruntime-node). The
+- `sackville` gains `@huggingface/transformers` (+ onnxruntime-node). The
   bge model (~130 MB) downloads once on first query and is cached.
 - `core.searchDocs` stays embedder-agnostic: it takes an optional `queryVector`
   and does the FTS + vec KNN + RRF fusion. The server owns the embedder and

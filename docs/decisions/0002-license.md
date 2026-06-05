@@ -5,14 +5,14 @@
 
 ## Context
 
-Strummer is a developer-tooling project (MCP server + CLI + Python ingester)
+Sackville is a developer-tooling project (MCP server + CLI + Python ingester)
 intended for wide adoption, including as an agent capability embedded in
 commercial workflows. It also ingests third-party documentation and records
 upstream attribution.
 
 ## Decision
 
-License the Strummer software under the **Apache License 2.0**. Copyright
+License the Sackville software under the **Apache License 2.0**. Copyright
 **Curtis Autery, 2026**. A `NOTICE` file accompanies the `LICENSE`.
 
 ## Rationale
@@ -20,7 +20,7 @@ License the Strummer software under the **Apache License 2.0**. Copyright
 - **Permissive** — no adoption friction for commercial/embedded use (copyleft
   would deter it).
 - **Explicit patent grant + retaliation clause** — MIT is silent on patents.
-  Strummer implements non-trivial techniques (hybrid FTS + vector ranking,
+  Sackville implements non-trivial techniques (hybrid FTS + vector ranking,
   agent-facing protocols) and targets dev-infrastructure use, where a real
   patent license matters. This also aligns with the MCP SDKs' licensing.
 - **NOTICE mechanism** — a conventional home for attribution, apt for a tool
@@ -31,7 +31,7 @@ License the Strummer software under the **Apache License 2.0**. Copyright
 
 ## Consequences
 
-- All published packages carry `Apache-2.0`: `package.json` (`@strummer/*`),
+- All published packages carry `Apache-2.0`: `package.json` (`@sackville/*`),
   `pyproject.toml`.
 - Distributions must retain `LICENSE` + `NOTICE`; downstreams must propagate the
   NOTICE attributions per §4(d).

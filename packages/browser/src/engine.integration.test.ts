@@ -46,7 +46,7 @@ function refFor(driver: PageDriver, role: string, name: string): string {
 // Run for firefox + webkit, but only where the engine binary is actually
 // installed (the dev image + CI provision all three; a chromium-only env skips
 // gracefully so the green gate stays 100%). Chromium is covered by the rest of
-// the suite. This proves the SAME Strummer stack (engineLauncher → BrowserManager
+// the suite. This proves the SAME Sackville stack (engineLauncher → BrowserManager
 // → PageDriver: navigate → ARIA snapshot → ref click → re-snapshot) drives a real
 // Firefox and WebKit, not just Chromium.
 for (const engine of ['firefox', 'webkit'] as BrowserEngine[]) {

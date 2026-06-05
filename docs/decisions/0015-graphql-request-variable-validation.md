@@ -107,7 +107,7 @@ VALUES.
 - **Engine:** `validateGraphqlOperation` (extended, above).
 - **Capture→contract bridge:** `graphqlOperationOf` extracts `variables`; the GraphQL branch
   drives variable validation (non-authoritative) + the `noSignal` fold. Reachable from
-  `validate_capture` / `verify_change` / `strummer verify run` with no input change.
+  `validate_capture` / `verify_change` / `sackville verify run` with no input change.
 - **MCP `validate_response`:** gains an optional `variables` input (authoritative; findings
   message+path redacted via the operator redactor, as today).
 - **CLI `api validate --graphql`:** gains `--variables <file|inline-json>` (authoritative).

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import type { MutationRunner } from '@strummer/mutate'
+import type { MutationRunner } from '@sackville/mutate'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMutateServer, type MutateToolsOptions } from './mutate.js'
 
@@ -30,7 +30,7 @@ function call(client: Client, name: string, args: Record<string, unknown> = {}) 
 let dir: string
 let reportPath: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'strummer-mutate-mcp-'))
+  dir = mkdtempSync(join(tmpdir(), 'sackville-mutate-mcp-'))
   reportPath = join(dir, 'mutation.json')
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))

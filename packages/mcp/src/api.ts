@@ -13,7 +13,7 @@ import {
   validateGraphqlOperation,
   validateOpenApiRequest,
   validateOpenApiResponse,
-} from '@strummer/api'
+} from '@sackville/api'
 import { z } from 'zod'
 
 export interface ApiToolsOptions {
@@ -30,11 +30,11 @@ export interface ApiToolsOptions {
    * OPERATOR-controlled: permit `validate_capture` to resolve + parse a stored
    * browser HAR (ADR 0013 §3a). A HAR is operator-gated bytes with known-incomplete
    * redaction, so reading one is NOT free — it requires this explicit opt-in
-   * (`STRUMMER_VERIFY_ALLOW_CAPTURE`). Never an agent input.
+   * (`SACKVILLE_VERIFY_ALLOW_CAPTURE`). Never an agent input.
    */
   allowCapture?: boolean
   /**
-   * Injected getter that resolves a HAR handle (e.g. `strummer://browser/run/<id>/har`)
+   * Injected getter that resolves a HAR handle (e.g. `sackville://browser/run/<id>/har`)
    * to its raw `.zip` bytes — wired by the bin from the shared artifact store
    * (cross-prefix rehydrate). When absent, `validate_capture` is not registered.
    */
@@ -52,13 +52,13 @@ export interface ApiToolsOptions {
   scalarCoercers?: Record<string, ScalarCoercer>
 }
 
-const INSTRUCTIONS = `Strummer drives version-pinned API tests from a Bruno collection on disk.
+const INSTRUCTIONS = `Sackville drives version-pinned API tests from a Bruno collection on disk.
 
 Use \`list_requests\` to see a collection's requests, \`get_request\` to inspect one
 (it reports required secret NAMES, never values), \`run_request\`/\`run_collection\`
 to execute them, and \`validate_response\` to check a response/operation against an
 OpenAPI or GraphQL contract. Responses are returned by handle: read the
-\`strummer://run/{runId}/body\` resource for a full body. Mutating requests are
+\`sackville://run/{runId}/body\` resource for a full body. Mutating requests are
 dry-run unless the OPERATOR has unlocked them — that is not something a caller can
 authorize.`
 
@@ -88,7 +88,7 @@ function requiredSecrets(entry: RequestEntry): string[] {
   return [...found].sort()
 }
 
-/** Register Strummer's API-testing tools + run-body resource onto a server. */
+/** Register Sackville's API-testing tools + run-body resource onto a server. */
 export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}): void {
   // A single shared store so stored bodies stay fetchable via the resource.
   const artifacts = opts.artifacts ?? new ArtifactStore()
@@ -165,7 +165,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
       title: 'Run a request',
       description:
         'Execute one request and evaluate its assertions. The full response body is returned ' +
-        'by handle (read the strummer://run/{runId}/body resource). Mutating requests are ' +
+        'by handle (read the sackville://run/{runId}/body resource). Mutating requests are ' +
         'dry-run unless the operator has unlocked them.',
       inputSchema: {
         dir: z.string().describe('absolute path to the collection directory'),
@@ -282,7 +282,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
       },
     },
     (args) => {
-      let result: import('@strummer/api').ContractResult
+      let result: import('@sackville/api').ContractResult
       if (args.graphqlSchema !== undefined) {
         // Resolve the selected names against the OPERATOR-bound registry (unknown → ignored).
         const selected: Record<string, ScalarCoercer> = {}
@@ -409,7 +409,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
         inputSchema: {
           harHandle: z
             .string()
-            .describe('handle of a stored HAR, e.g. strummer://browser/run/<id>/har'),
+            .describe('handle of a stored HAR, e.g. sackville://browser/run/<id>/har'),
           openapiSpec: z.unknown().optional().describe('a parsed OpenAPI 3.1 document'),
           graphqlSchema: z
             .string()
@@ -428,7 +428,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
       (args) => {
         if (opts.allowCapture !== true) {
           throw new Error(
-            'validate_capture is disabled: the operator must set STRUMMER_VERIFY_ALLOW_CAPTURE to ' +
+            'validate_capture is disabled: the operator must set SACKVILLE_VERIFY_ALLOW_CAPTURE to ' +
               'resolve an operator-gated HAR (its redaction is known-incomplete).',
           )
         }
@@ -439,9 +439,9 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
         }
         const bytes = resolveHar(args.harHandle)
         if (!bytes) throw new Error(`no stored HAR for ${args.harHandle}`)
-        const contract: import('@strummer/api').CaptureContract = {
+        const contract: import('@sackville/api').CaptureContract = {
           ...(args.openapiSpec !== undefined
-            ? { openapi: args.openapiSpec as import('@strummer/api').CaptureContract['openapi'] }
+            ? { openapi: args.openapiSpec as import('@sackville/api').CaptureContract['openapi'] }
             : {}),
           ...(args.graphqlSchema !== undefined
             ? {
@@ -484,7 +484,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
 
   server.registerResource(
     'run-body',
-    new ResourceTemplate('strummer://run/{runId}/body', { list: undefined }),
+    new ResourceTemplate('sackville://run/{runId}/body', { list: undefined }),
     {
       title: 'Run response body',
       description: 'Full stored response body for a run, by handle',
@@ -492,7 +492,7 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
     },
     (uri, variables) => {
       const raw = Array.isArray(variables.runId) ? variables.runId[0] : variables.runId
-      const handle = `strummer://run/${raw}/body`
+      const handle = `sackville://run/${raw}/body`
       const artifact = artifacts.get(handle)
       if (!artifact) {
         throw new Error(`No stored body for ${handle}`)
@@ -504,10 +504,10 @@ export function registerApiTools(server: McpServer, opts: ApiToolsOptions = {}):
   )
 }
 
-/** Build a standalone Strummer API MCP server. */
+/** Build a standalone Sackville API MCP server. */
 export function createApiServer(opts: ApiToolsOptions = {}): McpServer {
   const server = new McpServer(
-    { name: 'strummer-api', version: '0.0.0' },
+    { name: 'sackville-api', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerApiTools(server, opts)

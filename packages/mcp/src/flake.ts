@@ -10,7 +10,7 @@ import {
   runAndRecordPytest,
   type TestRunner,
   type VitestJsonReport,
-} from '@strummer/flake'
+} from '@sackville/flake'
 import { z } from 'zod'
 
 export interface FlakeToolsOptions {
@@ -26,7 +26,7 @@ export interface FlakeToolsOptions {
   now?: () => string
 }
 
-const INSTRUCTIONS = `Strummer reports test flakiness from a recorded run history (a private
+const INSTRUCTIONS = `Sackville reports test flakiness from a recorded run history (a private
 SQLite store of pass/fail outcomes over time) and lets an operator quarantine a flaky test
 for a BOUNDED window.
 
@@ -264,10 +264,10 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
   }
 }
 
-/** Build a standalone Strummer flake MCP server. */
+/** Build a standalone Sackville flake MCP server. */
 export function createFlakeServer(opts: FlakeToolsOptions): McpServer {
   const server = new McpServer(
-    { name: 'strummer-flake', version: '0.0.0' },
+    { name: 'sackville-flake', version: '0.0.0' },
     { instructions: INSTRUCTIONS },
   )
   registerFlakeTools(server, opts)

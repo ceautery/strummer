@@ -1,4 +1,4 @@
-# `@strummer/mutate` test fixtures
+# `@sackville/mutate` test fixtures
 
 Golden reports the pure summarizer/parsers are tested against. No real mutation tool
 runs in `pnpm gate` — these are captured once, out-of-gate, and committed.

@@ -10,7 +10,7 @@
  *
  * NOTE: this gate covers method/allowlist policy. SSRF private-range blocking
  * and the connection-time DNS-pinning proxy are layered on in the next slice
- * (`@strummer/safety`), which closes the DNS-rebinding hole hostname matching
+ * (`@sackville/safety`), which closes the DNS-rebinding hole hostname matching
  * alone cannot see.
  */
 
@@ -20,13 +20,13 @@ export class GateError extends Error {
     super(message)
     this.name = 'GateError'
     // Brand as a gate DENIAL (ADR 0013 Addendum 3, milestone 5e): the run-driving
-    // `@strummer/verify` reads this global-registry symbol via `isGateDenial` to map a
+    // `@sackville/verify` reads this global-registry symbol via `isGateDenial` to map a
     // denial to `skipReason:'gate-not-set'` (never `errored`) WITHOUT importing engine
     // code — matching CoverageGateError/FlakeGateError/MutationGateError. The
     // `Symbol.for` key string is the cross-package contract. (Inert for in-flow denials
     // that `runFlow` swallows — verify gates on flow completeness — but load-bearing for
     // the pre-`runFlow` `createSession`→`checkNavigation` reject path.)
-    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('strummer.gate-denial')] = true
+    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('sackville.gate-denial')] = true
   }
 }
 

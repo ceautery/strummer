@@ -14,13 +14,13 @@ echo "== TypeScript :: vitest =="
 pnpm test
 
 echo "== Python :: ruff (lint) =="
-( cd py/strummer_ingest && uv run ruff check . )
+( cd py/sackville_ingest && uv run ruff check . )
 
 echo "== Python :: ruff (format) =="
-( cd py/strummer_ingest && uv run ruff format --check . )
+( cd py/sackville_ingest && uv run ruff format --check . )
 
 echo "== Python :: pytest =="
-( cd py/strummer_ingest && uv run pytest )
+( cd py/sackville_ingest && uv run pytest )
 
 echo
 echo "ALL GREEN ✅"

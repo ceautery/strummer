@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import type { FileCoverage, TestRunner } from '@strummer/coverage'
+import type { FileCoverage, TestRunner } from '@sackville/coverage'
 import { afterAll, describe, expect, it } from 'vitest'
 import { type CoverageToolsOptions, createCoverageServer } from './coverage.js'
 
 const tmpDirs: string[] = []
 function tmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'strummer-cov-mcp-'))
+  const dir = mkdtempSync(join(tmpdir(), 'sackville-cov-mcp-'))
   tmpDirs.push(dir)
   return dir
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@strummer/deps",
+  "name": "@sackville/deps",
   "version": "0.0.0",
   "type": "module",
   "license": "Apache-2.0",
@@ -20,8 +20,8 @@
   "dependencies": {
     "@renovatebot/pep440": "5.0.0",
     "@renovatebot/ruby-semver": "5.0.0",
-    "@strummer/diff": "workspace:*",
-    "@strummer/severity": "workspace:*",
+    "@sackville/diff": "workspace:*",
+    "@sackville/severity": "workspace:*",
     "fflate": "^0.8.3",
     "semver": "^7.8.1"
   },
@@ -41,7 +41,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ceautery/strummer.git",
+    "url": "git+https://github.com/ceautery/sackville.git",
     "directory": "packages/deps"
   }
 }

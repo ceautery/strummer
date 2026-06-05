@@ -9,7 +9,7 @@ afterAll(() => {
   for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true })
 })
 
-describe('strummer-deps-mcp bin config (operator env)', () => {
+describe('sackville-deps-mcp bin config (operator env)', () => {
   it('defaults to no snapshot/artifacts, network off, public registry, private blocked', () => {
     expect(buildDepsServerFromEnv({}).config).toEqual({
       osvDir: undefined,
@@ -22,34 +22,34 @@ describe('strummer-deps-mcp bin config (operator env)', () => {
     })
   })
 
-  it('reads the PyPI registry base from STRUMMER_DEPS_PYPI_REGISTRY', () => {
+  it('reads the PyPI registry base from SACKVILLE_DEPS_PYPI_REGISTRY', () => {
     const { config } = buildDepsServerFromEnv({
-      STRUMMER_DEPS_PYPI_REGISTRY: 'https://pypi.example.test/pypi',
+      SACKVILLE_DEPS_PYPI_REGISTRY: 'https://pypi.example.test/pypi',
     })
     expect(config.pypiRegistry).toBe('https://pypi.example.test/pypi')
   })
 
-  it('reads the RubyGems registry base from STRUMMER_DEPS_RUBYGEMS_REGISTRY', () => {
+  it('reads the RubyGems registry base from SACKVILLE_DEPS_RUBYGEMS_REGISTRY', () => {
     const { config } = buildDepsServerFromEnv({
-      STRUMMER_DEPS_RUBYGEMS_REGISTRY: 'https://gems.example.test/api/v1',
+      SACKVILLE_DEPS_RUBYGEMS_REGISTRY: 'https://gems.example.test/api/v1',
     })
     expect(config.rubygemsRegistry).toBe('https://gems.example.test/api/v1')
   })
 
-  it('reads the OSV snapshot dir from STRUMMER_DEPS_OSV_DB_DIR', () => {
-    const { config } = buildDepsServerFromEnv({ STRUMMER_DEPS_OSV_DB_DIR: '/var/lib/osv' })
+  it('reads the OSV snapshot dir from SACKVILLE_DEPS_OSV_DB_DIR', () => {
+    const { config } = buildDepsServerFromEnv({ SACKVILLE_DEPS_OSV_DB_DIR: '/var/lib/osv' })
     expect(config.osvDir).toBe('/var/lib/osv')
   })
 
-  it('reads the artifact dir from STRUMMER_DEPS_ARTIFACT_DIR (enables changelog_diff)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-bin-'))
+  it('reads the artifact dir from SACKVILLE_DEPS_ARTIFACT_DIR (enables changelog_diff)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-deps-bin-'))
     tmpDirs.push(dir)
-    const { config } = buildDepsServerFromEnv({ STRUMMER_DEPS_ARTIFACT_DIR: dir })
+    const { config } = buildDepsServerFromEnv({ SACKVILLE_DEPS_ARTIFACT_DIR: dir })
     expect(config.artifactDir).toBe(dir)
   })
 
-  it('enables network only via STRUMMER_DEPS_ALLOW_NETWORK', () => {
-    expect(buildDepsServerFromEnv({ STRUMMER_DEPS_ALLOW_NETWORK: '1' }).config.allowNetwork).toBe(
+  it('enables network only via SACKVILLE_DEPS_ALLOW_NETWORK', () => {
+    expect(buildDepsServerFromEnv({ SACKVILLE_DEPS_ALLOW_NETWORK: '1' }).config.allowNetwork).toBe(
       true,
     )
     expect(buildDepsServerFromEnv({}).config.allowNetwork).toBe(false)
@@ -57,8 +57,8 @@ describe('strummer-deps-mcp bin config (operator env)', () => {
 
   it('overrides the registry and permits a private mirror', () => {
     const { config } = buildDepsServerFromEnv({
-      STRUMMER_DEPS_NPM_REGISTRY: 'http://localhost:4873',
-      STRUMMER_DEPS_ALLOW_PRIVATE: 'true',
+      SACKVILLE_DEPS_NPM_REGISTRY: 'http://localhost:4873',
+      SACKVILLE_DEPS_ALLOW_PRIVATE: 'true',
     })
     expect(config.registry).toBe('http://localhost:4873')
     expect(config.allowPrivate).toBe(true)
@@ -66,6 +66,6 @@ describe('strummer-deps-mcp bin config (operator env)', () => {
 
   it('always builds a usable server', () => {
     expect(buildDepsServerFromEnv({}).server).toBeDefined()
-    expect(buildDepsServerFromEnv({ STRUMMER_DEPS_ALLOW_NETWORK: '1' }).server).toBeDefined()
+    expect(buildDepsServerFromEnv({ SACKVILLE_DEPS_ALLOW_NETWORK: '1' }).server).toBeDefined()
   })
 })

@@ -1,10 +1,10 @@
 /**
- * The private run-history store — `@strummer/flake`'s own SQLite database.
+ * The private run-history store — `@sackville/flake`'s own SQLite database.
  *
  * Per ADR 0010 this is a **second SQLite owner**, deliberately OUTSIDE the docs-pillar
- * "only `@strummer/core` touches SQLite" invariant: it is a new, private store for test
+ * "only `@sackville/core` touches SQLite" invariant: it is a new, private store for test
  * run outcomes, not a crossing of the Python↔TS polyglot contract (which remains the
- * `schema/strummer.schema.sql` index that `core` reads). It records each test's pass/fail
+ * `schema/sackville.schema.sql` index that `core` reads). It records each test's pass/fail
  * history over time and reads it back as the `TestHistory[]` the pure classifier consumes.
  *
  * The schema is intentionally tiny: one append-only `test_run` row per recorded outcome,

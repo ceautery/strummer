@@ -37,14 +37,14 @@ function csv(value: string | undefined): string[] {
 export function mutateConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): MutateBinConfig {
-  const timeoutRaw = env.STRUMMER_MUTATE_TIMEOUT_MS
+  const timeoutRaw = env.SACKVILLE_MUTATE_TIMEOUT_MS
   const timeoutMs =
     timeoutRaw !== undefined && timeoutRaw.trim() !== '' ? Number(timeoutRaw) : undefined
   return {
-    allowRun: bool(env.STRUMMER_MUTATE_ALLOW_RUN),
-    allowedRoots: csv(env.STRUMMER_MUTATE_PROJECT_ROOTS),
+    allowRun: bool(env.SACKVILLE_MUTATE_ALLOW_RUN),
+    allowedRoots: csv(env.SACKVILLE_MUTATE_PROJECT_ROOTS),
     timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
-    reportPath: env.STRUMMER_MUTATE_REPORT_PATH || undefined,
+    reportPath: env.SACKVILLE_MUTATE_REPORT_PATH || undefined,
   }
 }
 
@@ -72,11 +72,11 @@ export function setupMutateFromEnv(
 /**
  * Build the mutate MCP server from operator env. `mutate_summarize` (read-only) is always
  * available; `mutate_run` runs Stryker, so it is enabled only with the paired gate — BOTH
- * a truthy `STRUMMER_MUTATE_ALLOW_RUN` and a non-empty `STRUMMER_MUTATE_PROJECT_ROOTS`:
- *   STRUMMER_MUTATE_ALLOW_RUN=1
- *   STRUMMER_MUTATE_PROJECT_ROOTS=/abs/project,/abs/other
- *   STRUMMER_MUTATE_TIMEOUT_MS=1800000
- *   STRUMMER_MUTATE_REPORT_PATH=/abs/project/reports/mutation/mutation.json
+ * a truthy `SACKVILLE_MUTATE_ALLOW_RUN` and a non-empty `SACKVILLE_MUTATE_PROJECT_ROOTS`:
+ *   SACKVILLE_MUTATE_ALLOW_RUN=1
+ *   SACKVILLE_MUTATE_PROJECT_ROOTS=/abs/project,/abs/other
+ *   SACKVILLE_MUTATE_TIMEOUT_MS=1800000
+ *   SACKVILLE_MUTATE_REPORT_PATH=/abs/project/reports/mutation/mutation.json
  */
 export function buildMutateServerFromEnv(
   env: Record<string, string | undefined> = process.env,

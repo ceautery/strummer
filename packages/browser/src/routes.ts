@@ -13,7 +13,7 @@ import type { BrowserGate } from './gate.js'
  * to test a local app. What Tier-1 cannot see is the IP a *hostname* resolves to
  * (Playwright exposes no resolved IP at intercept time), so an allowlisted
  * hostname that DNS-rebinds to a private IP is closed by the Tier-2
- * connection-time proxy (`@strummer/safety` `resolveAndPin`), layered on next.
+ * connection-time proxy (`@sackville/safety` `resolveAndPin`), layered on next.
  */
 export async function installSafetyRoutes(
   context: BrowserContext,

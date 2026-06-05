@@ -8,7 +8,7 @@
  *
  * 1. **It runs code**, so it is behind a *paired* deny-by-default operator gate — an
  *    `allowRun` boolean AND an `allowedRoots` allowlist, with a wall-clock cap. Both are
- *    operator-set (the bin reads `STRUMMER_COVERAGE_ALLOW_RUN` / `_PROJECT_ROOTS` /
+ *    operator-set (the bin reads `SACKVILLE_COVERAGE_ALLOW_RUN` / `_PROJECT_ROOTS` /
  *    `_TIMEOUT_MS`); no caller input can self-authorize a run.
  * 2. **Child-process boundary.** The repo has a single root `vitest.config.ts`, so the
  *    in-process `startVitest` API can't be used from inside the outer Vitest worker
@@ -31,10 +31,10 @@ export class CoverageGateError extends Error {
     super(message)
     this.name = 'CoverageGateError'
     // Brand as a gate DENIAL (ADR 0013 Addendum, milestone 5c): the run-driving
-    // `@strummer/verify` reads this global-registry symbol via `isGateDenial` to map a
+    // `@sackville/verify` reads this global-registry symbol via `isGateDenial` to map a
     // denial to `skipReason:'gate-not-set'` (never `errored`) WITHOUT importing engine
     // code. The `Symbol.for` key string is the cross-package contract.
-    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('strummer.gate-denial')] = true
+    ;(this as unknown as Record<symbol, unknown>)[Symbol.for('sackville.gate-denial')] = true
   }
 }
 
@@ -148,7 +148,7 @@ export async function runScoped(
   }
 
   const runner = deps.runner ?? defaultVitestRunner
-  const coverageDir = deps.coverageDir ?? mkdtempSync(join(tmpdir(), 'strummer-cov-'))
+  const coverageDir = deps.coverageDir ?? mkdtempSync(join(tmpdir(), 'sackville-cov-'))
   const argv = scopedArgv(input.changedFiles, coverageDir)
 
   const { exitCode } = await runner(argv, { cwd: config.projectRoot, timeoutMs: config.timeoutMs })

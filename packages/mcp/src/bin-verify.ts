@@ -9,13 +9,13 @@ import {
   runRequestToHar,
   StaticSecretStore,
   validateCapturedTraffic,
-} from '@strummer/api'
-import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
-import { runScoped } from '@strummer/coverage'
-import { changedDependencies } from '@strummer/deps'
-import { runCosmicRay, runMutation, runMutmut } from '@strummer/mutate'
-import { Redactor } from '@strummer/safety'
-import { gateDenied } from '@strummer/verify'
+} from '@sackville/api'
+import { ArtifactStore, DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville/artifacts'
+import { runScoped } from '@sackville/coverage'
+import { changedDependencies } from '@sackville/deps'
+import { runCosmicRay, runMutation, runMutmut } from '@sackville/mutate'
+import { Redactor } from '@sackville/safety'
+import { gateDenied } from '@sackville/verify'
 import { type AggregateMode, apiSafetyGateFromEnv, apiSecretPrefix } from './bin-api.js'
 import { depsNetworkConfig } from './bin-deps.js'
 import { auditProjectDependencies } from './deps.js'
@@ -36,8 +36,8 @@ import {
  * an operator's per-pillar grant).
  *
  * RUN-DRIVING (`verify_change`) is gated "both required" (§gate(b)): it is wired ONLY
- * when `STRUMMER_VERIFY_ENABLE_RUN` is set, AND then each pillar's runner is wired ONLY
- * when that pillar's OWN gate is satisfied (its real `STRUMMER_<PILLAR>_ALLOW_RUN` +
+ * when `SACKVILLE_VERIFY_ENABLE_RUN` is set, AND then each pillar's runner is wired ONLY
+ * when that pillar's OWN gate is satisfied (its real `SACKVILLE_<PILLAR>_ALLOW_RUN` +
  * roots, the single source of truth shared with the standalone server). So enabling a
  * pillar's server runner never silently lets THIS server run it — that needs the
  * separate, conscious `ENABLE_RUN` opt-in. No tool input can set a gate ("never widen").
@@ -97,7 +97,7 @@ const EMPTY_COVERAGE = {
  * — the single source of truth shared by the standalone `buildVerifyServerFromEnv` and the
  * aggregate `setupVerifyFromEnv` (ADR 0019), so the two surfaces can never drift. Verify
  * COMPOSES other pillars: each requested pillar runner is wired here ONLY when its OWN gate
- * is satisfied, behind the conscious `STRUMMER_VERIFY_ENABLE_RUN` "both required" switch. It
+ * is satisfied, behind the conscious `SACKVILLE_VERIFY_ENABLE_RUN` "both required" switch. It
  * constructs no long-lived OS resource — the `ArtifactStore` sweeps opportunistically on
  * `put()` (no timer), the flake `HistoryStore` is opened/closed per run thunk, and the browser
  * runtime is built+torn-down lazily inside the produce thunk — so the setup has no `shutdown`.
@@ -110,9 +110,9 @@ function parseVerify(
   opts: VerifyToolsOptions
 } {
   const config: VerifyBinConfig = {
-    artifactsRoot: env.STRUMMER_ARTIFACTS_ROOT || undefined,
-    allowCapture: bool(env.STRUMMER_VERIFY_ALLOW_CAPTURE),
-    enableRun: bool(env.STRUMMER_VERIFY_ENABLE_RUN),
+    artifactsRoot: env.SACKVILLE_ARTIFACTS_ROOT || undefined,
+    allowCapture: bool(env.SACKVILLE_VERIFY_ALLOW_CAPTURE),
+    enableRun: bool(env.SACKVILLE_VERIFY_ENABLE_RUN),
   }
 
   // The operator redactor (registered secret values) — applied to capture findings AND
@@ -121,7 +121,7 @@ function parseVerify(
   const redactor = new Redactor()
   const verifySecrets = new Map<string, string>()
   for (const [key, value] of Object.entries(env)) {
-    const m = /^STRUMMER_VERIFY_SECRET_(.+)$/.exec(key)
+    const m = /^SACKVILLE_VERIFY_SECRET_(.+)$/.exec(key)
     if (m?.[1] && value) {
       redactor.register(m[1], value)
       verifySecrets.set(m[1], value)
@@ -139,9 +139,9 @@ function parseVerify(
   if (config.artifactsRoot) {
     const store = new ArtifactStore(config.artifactsRoot, 'verify', {
       retention: retentionFromEnv({
-        maxAgeMs: env.STRUMMER_VERIFY_ARTIFACT_MAX_AGE_MS,
-        maxEntries: env.STRUMMER_VERIFY_ARTIFACT_MAX_ENTRIES,
-        maxBytes: env.STRUMMER_VERIFY_ARTIFACT_MAX_BYTES,
+        maxAgeMs: env.SACKVILLE_VERIFY_ARTIFACT_MAX_AGE_MS,
+        maxEntries: env.SACKVILLE_VERIFY_ARTIFACT_MAX_ENTRIES,
+        maxBytes: env.SACKVILLE_VERIFY_ARTIFACT_MAX_BYTES,
       }),
       sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
     })
@@ -161,9 +161,9 @@ function parseVerify(
   if (config.enableRun) {
     const rd: RunDrivingOptions = { redact }
 
-    const covRoots = csv(env.STRUMMER_COVERAGE_PROJECT_ROOTS)
-    if (bool(env.STRUMMER_COVERAGE_ALLOW_RUN) && covRoots.length > 0) {
-      const timeoutMs = num(env.STRUMMER_COVERAGE_TIMEOUT_MS)
+    const covRoots = csv(env.SACKVILLE_COVERAGE_PROJECT_ROOTS)
+    if (bool(env.SACKVILLE_COVERAGE_ALLOW_RUN) && covRoots.length > 0) {
+      const timeoutMs = num(env.SACKVILLE_COVERAGE_TIMEOUT_MS)
       rd.coverage = async (ctx) => {
         const r = await runScoped(
           { projectRoot: ctx.projectRoot, allowedRoots: covRoots, allowRun: true, timeoutMs },
@@ -173,16 +173,16 @@ function parseVerify(
       }
     }
 
-    const flakeRoots = csv(env.STRUMMER_FLAKE_PROJECT_ROOTS)
-    const flakeDb = env.STRUMMER_FLAKE_DB
-    if (bool(env.STRUMMER_FLAKE_ALLOW_RUN) && flakeRoots.length > 0 && flakeDb) {
-      const timeoutMs = num(env.STRUMMER_FLAKE_TIMEOUT_MS)
+    const flakeRoots = csv(env.SACKVILLE_FLAKE_PROJECT_ROOTS)
+    const flakeDb = env.SACKVILLE_FLAKE_DB
+    if (bool(env.SACKVILLE_FLAKE_ALLOW_RUN) && flakeRoots.length > 0 && flakeDb) {
+      const timeoutMs = num(env.SACKVILLE_FLAKE_TIMEOUT_MS)
       rd.flake = async (ctx) => {
-        // Lazy: only pull @strummer/flake (better-sqlite3) when a flake run actually
+        // Lazy: only pull @sackville/flake (better-sqlite3) when a flake run actually
         // fires — so the api+deps+verify default works in an install that did NOT add
-        // the optional @strummer/flake engine (ADR 0019 split). Mirrors the lazy
-        // @strummer/browser import in the produce-capture path.
-        const { HistoryStore, runAndRecord } = await import('@strummer/flake')
+        // the optional @sackville/flake engine (ADR 0019 split). Mirrors the lazy
+        // @sackville/browser import in the produce-capture path.
+        const { HistoryStore, runAndRecord } = await import('@sackville/flake')
         const store = HistoryStore.open(flakeDb)
         try {
           const r = await runAndRecord(
@@ -198,17 +198,17 @@ function parseVerify(
       }
     }
 
-    const mutRoots = csv(env.STRUMMER_MUTATE_PROJECT_ROOTS)
-    if (bool(env.STRUMMER_MUTATE_ALLOW_RUN) && mutRoots.length > 0) {
-      const timeoutMs = num(env.STRUMMER_MUTATE_TIMEOUT_MS)
-      const reportPath = env.STRUMMER_MUTATE_REPORT_PATH
+    const mutRoots = csv(env.SACKVILLE_MUTATE_PROJECT_ROOTS)
+    if (bool(env.SACKVILLE_MUTATE_ALLOW_RUN) && mutRoots.length > 0) {
+      const timeoutMs = num(env.SACKVILLE_MUTATE_TIMEOUT_MS)
+      const reportPath = env.SACKVILLE_MUTATE_REPORT_PATH
       // Fork D: the operator picks the tool (default stryker — the TS engine). The Python tools
       // (cosmic-ray PRIMARY / mutmut) honor `mutateFiles` via a synthesized scoped config + a
-      // STRUMMER_MUTATE_CONFIG_PATH base config (cosmic-ray.toml / pyproject.toml). The diff →
+      // SACKVILLE_MUTATE_CONFIG_PATH base config (cosmic-ray.toml / pyproject.toml). The diff →
       // ctx.changedFiles scopes the run; under-scope/empty-session throws ⇒ verify folds to
       // inconclusive (absence-is-never-a-pass).
-      const tool = env.STRUMMER_MUTATE_TOOL
-      const configPath = env.STRUMMER_MUTATE_CONFIG_PATH
+      const tool = env.SACKVILLE_MUTATE_TOOL
+      const configPath = env.SACKVILLE_MUTATE_CONFIG_PATH
       rd.mutate = async (ctx) => {
         const cfg = {
           projectRoot: ctx.projectRoot,
@@ -228,12 +228,12 @@ function parseVerify(
     }
 
     // Deps run-driving: its OWN gate is NETWORK (deps fetches packuments, it does not
-    // run project code), so it is wired under ENABLE_RUN iff STRUMMER_DEPS_ALLOW_NETWORK
+    // run project code), so it is wired under ENABLE_RUN iff SACKVILLE_DEPS_ALLOW_NETWORK
     // is set — the same single source as the deps server bin. The diff scopes the audit
     // to the changed packages (`changedDependencies`); a diff that changed no deps falls
     // back to the whole project. (This bin's audit is npm-only — its packument fetcher is
     // npm; PyPI/RubyGems verify-run wiring is a separate slice, though the scoping primitive
-    // now supports all three. The `strummer verify run --deps` CLI threads the ecosystem.)
+    // now supports all three. The `sackville verify run --deps` CLI threads the ecosystem.)
     const deps = depsNetworkConfig(env)
     if (deps.allowNetwork && deps.fetchPackument) {
       const fetchPackument = deps.fetchPackument
@@ -262,18 +262,18 @@ function parseVerify(
       // of ENABLE_RUN + the capture gate: a host allowlist (+ the mandatory SSRF proxy),
       // a HAR sink, and a by-name flows dir. Unmet ⇒ a produce request is gate-denied
       // (skipReason:'gate-not-set'), never spawns. No new env ("compose, never widen").
-      const browserHosts = csv(env.STRUMMER_BROWSER_ALLOWED_HOSTS)
-      const harDir = env.STRUMMER_BROWSER_HAR_DIR
-      const flowsDir = env.STRUMMER_BROWSER_FLOWS_DIR
+      const browserHosts = csv(env.SACKVILLE_BROWSER_ALLOWED_HOSTS)
+      const harDir = env.SACKVILLE_BROWSER_HAR_DIR
+      const flowsDir = env.SACKVILLE_BROWSER_FLOWS_DIR
       const produceEnabled = browserHosts.length > 0 && Boolean(harDir) && Boolean(flowsDir)
 
       // PRODUCE-API is an API-PILLAR run, so it composes the api pillar's OWN gate (the
       // same envs the api server reads — allowUnsafe/allowedHosts/allowPrivate + the
       // {{secret:NAME}} store) on top of ENABLE_RUN + the capture gate, PLUS the by-name
       // collections dir. No new env beyond the collections dir; no tool input sets a gate.
-      const collectionsDir = env.STRUMMER_API_COLLECTIONS_DIR
+      const collectionsDir = env.SACKVILLE_API_COLLECTIONS_DIR
       // The api pillar's OWN gate, read through the shared helper so aggregate mode
-      // pins it to STRUMMER_API_* (a bare STRUMMER_ALLOW_UNSAFE can't unlock verify's
+      // pins it to SACKVILLE_API_* (a bare SACKVILLE_ALLOW_UNSAFE can't unlock verify's
       // api-runner capture in a shared process — ADR 0019 §A8); standalone reads bare.
       const apiGate = apiSafetyGateFromEnv(env, mode)
       const apiAllowUnsafe = apiGate.allowUnsafe
@@ -295,14 +295,14 @@ function parseVerify(
           const verdict = validateCapturedTraffic(har, buildCaptureContract(ctx), { redact })
           return { results: verdict.results, verdict }
         }
-        // PRODUCE-API: drive the @strummer/api runner for an operator-authored request,
+        // PRODUCE-API: drive the @sackville/api runner for an operator-authored request,
         // synthesize + validate its HAR. Gate-deny (⇒ gate-not-set) when no collections
-        // dir is set. A mutating request without STRUMMER_ALLOW_UNSAFE dry-runs ⇒ the
+        // dir is set. A mutating request without SACKVILLE_ALLOW_UNSAFE dry-runs ⇒ the
         // driver's non-sent guard throws ⇒ inconclusive — the api server's posture, reused.
         if (ctx.mode === 'produce-api') {
           if (!collectionsDir) {
             throw gateDenied(
-              'api-runner capture is not enabled (needs STRUMMER_API_COLLECTIONS_DIR)',
+              'api-runner capture is not enabled (needs SACKVILLE_API_COLLECTIONS_DIR)',
             )
           }
           // The agent supplies a NAME, never a path — refuse any traversal/separator.
@@ -337,15 +337,15 @@ function parseVerify(
         // spawn when the browser gate is unmet.
         if (!produceEnabled || !flowsDir) {
           throw gateDenied(
-            'live browser capture is not enabled (needs STRUMMER_BROWSER_ALLOWED_HOSTS + _HAR_DIR + _FLOWS_DIR)',
+            'live browser capture is not enabled (needs SACKVILLE_BROWSER_ALLOWED_HOSTS + _HAR_DIR + _FLOWS_DIR)',
           )
         }
-        // Lazy: only pull @strummer/browser (playwright-core) when a produce capture
+        // Lazy: only pull @sackville/browser (playwright-core) when a produce capture
         // actually runs — compose-only / API-only / consume-only operators never load it.
         const [
           { buildBrowserRuntimeFromEnv, buildBrowserRedactorFromEnv },
           { driveBrowserFlowToHar },
-        ] = await Promise.all([import('./bin-browser.js'), import('@strummer/browser')])
+        ] = await Promise.all([import('./bin-browser.js'), import('@sackville/browser')])
         // The UNION redactor (browser secrets + HTTP creds ∪ verify secrets), used at BOTH
         // chokepoints — finalizeHar (the archive) and validateCapturedTraffic (the findings)
         // — so a browser-registered secret never survives in either. More aggressive

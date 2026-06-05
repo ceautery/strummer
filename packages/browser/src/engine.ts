@@ -7,7 +7,7 @@ import {
   webkit,
 } from 'playwright-core'
 
-/** The browser engines Strummer can drive. Chromium is the default and the
+/** The browser engines Sackville can drive. Chromium is the default and the
  * most-hardened (it gets the loopback-bypass + WebRTC-neutralize launch args);
  * Firefox/WebKit are for cross-engine parity and rely on the Tier-1 route
  * allowlist + the SSRF proxy for egress control (see `engineLaunchOptions`). */

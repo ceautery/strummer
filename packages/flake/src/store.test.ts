@@ -94,7 +94,7 @@ describe('HistoryStore', () => {
   })
 
   it('persists across reopen of a file-backed store', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-flake-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-flake-'))
     const path = join(dir, 'history.db')
     try {
       const a = HistoryStore.open(path)

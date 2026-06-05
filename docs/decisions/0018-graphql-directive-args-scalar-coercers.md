@@ -8,7 +8,7 @@
 - **Engine:** `packages/api/src/graphql.ts`. **Bridge:** `packages/api/src/har-capture.ts`.
   **Surfaces:** `packages/mcp/src/api.ts`, `packages/cli/src/api.ts`.
 - **Design:** forged via a design fan-out — 3 parallel research streams (graphql-js
-  directive-validation semantics; custom-scalar coercion mechanics; the existing Strummer
+  directive-validation semantics; custom-scalar coercion mechanics; the existing Sackville
   seam + an adversarial false-positive sweep) → synthesis → 2 adversarial critics (both
   returned *ship-with-fixes*; 3 blockers + concerns all folded in below) → corrected design.
   All 5 open forks human-ratified (see "Resolved forks").

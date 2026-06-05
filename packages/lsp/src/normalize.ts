@@ -1,7 +1,7 @@
 /**
  * Pure LSP-result normalizers (ADR 0011, slice 1). LSP responses are polymorphic in ways
  * that silently corrupt an agent-facing tool if mishandled — these reducers collapse each
- * shape to one Strummer form, with no I/O. The traps the adversarial pass flagged:
+ * shape to one Sackville form, with no I/O. The traps the adversarial pass flagged:
  *
  * - **`Location` vs `LocationLink`.** definition/typeDefinition return
  *   `Location | Location[] | LocationLink[] | null`; `LocationLink` uses `targetUri` /
@@ -327,7 +327,7 @@ export interface RawDocumentDiagnosticReport {
 
 /**
  * Diagnostics from a PULL-model `textDocument/diagnostic` report. A `full` report carries `items`;
- * an `unchanged` report means "identical to the previousResultId" — Strummer's single-shot reads
+ * an `unchanged` report means "identical to the previousResultId" — Sackville's single-shot reads
  * send no previousResultId, so a server should always answer `full`; we treat `unchanged`/absent
  * defensively as no items. The items themselves are normalized by the shared `normalizeDiagnostics`
  * (the report is just the pull envelope around the same `Diagnostic[]` the push model publishes).

@@ -3,7 +3,7 @@
  *
  *   - {@link normalizePypiName}: PEP 503 name normalization (lowercase, runs of `-_.` → `-`).
  *     OSV stores PyPI advisory package names in this normalized form, so the queried name must
- *     be normalized before matching. (It is identical to `@strummer/core`'s internal `canonPy`,
+ *     be normalized before matching. (It is identical to `@sackville/core`'s internal `canonPy`,
  *     which already normalizes for version *detection* — repeated here so the OSV-matching name
  *     is normalized without a core dependency.)
  *   - {@link pypiJsonToPackument}: map the PyPI JSON API (`/pypi/<project>/json`) response into

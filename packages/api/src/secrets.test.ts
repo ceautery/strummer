@@ -14,16 +14,16 @@ describe('secret stores', () => {
     expect(await store.get('MISSING')).toBeUndefined()
   })
 
-  it('EnvSecretStore reads STRUMMER_SECRET_<NAME>', async () => {
-    const store = new EnvSecretStore({ STRUMMER_SECRET_API_KEY: 'k123' })
+  it('EnvSecretStore reads SACKVILLE_SECRET_<NAME>', async () => {
+    const store = new EnvSecretStore({ SACKVILLE_SECRET_API_KEY: 'k123' })
     expect(await store.get('API_KEY')).toBe('k123')
     expect(await store.get('OTHER')).toBeUndefined()
   })
 
-  it('EnvSecretStore honours a custom prefix (aggregate STRUMMER_API_SECRET_)', async () => {
+  it('EnvSecretStore honours a custom prefix (aggregate SACKVILLE_API_SECRET_)', async () => {
     const store = new EnvSecretStore(
-      { STRUMMER_API_SECRET_TOKEN: 'a1', STRUMMER_SECRET_TOKEN: 'bare' },
-      'STRUMMER_API_SECRET_',
+      { SACKVILLE_API_SECRET_TOKEN: 'a1', SACKVILLE_SECRET_TOKEN: 'bare' },
+      'SACKVILLE_API_SECRET_',
     )
     expect(await store.get('TOKEN')).toBe('a1')
   })
@@ -41,28 +41,28 @@ describe('secret stores', () => {
 
 describe('resolveSecretStore', () => {
   it('defaults to env-only', async () => {
-    process.env.STRUMMER_SECRET_RS_DEFAULT = 'envval'
+    process.env.SACKVILLE_SECRET_RS_DEFAULT = 'envval'
     try {
       expect(await resolveSecretStore().get('RS_DEFAULT')).toBe('envval')
     } finally {
-      delete process.env.STRUMMER_SECRET_RS_DEFAULT
+      delete process.env.SACKVILLE_SECRET_RS_DEFAULT
     }
   })
 
   it('keyring:true chains the keyring ahead of env but still falls back to env', async () => {
     // No OS keyring entry in CI/container, so the keyring store resolves
     // undefined and the chained env store supplies the value.
-    process.env.STRUMMER_SECRET_RS_KEYRING = 'envfallback'
+    process.env.SACKVILLE_SECRET_RS_KEYRING = 'envfallback'
     try {
       expect(await resolveSecretStore({ keyring: true }).get('RS_KEYRING')).toBe('envfallback')
     } finally {
-      delete process.env.STRUMMER_SECRET_RS_KEYRING
+      delete process.env.SACKVILLE_SECRET_RS_KEYRING
     }
   })
 
   it('reads from an injected env + custom prefix (aggregate api namespace)', async () => {
-    const env = { STRUMMER_API_SECRET_TOK: 'agg', STRUMMER_SECRET_TOK: 'bare' }
-    const store = resolveSecretStore({ env, envPrefix: 'STRUMMER_API_SECRET_' })
+    const env = { SACKVILLE_API_SECRET_TOK: 'agg', SACKVILLE_SECRET_TOK: 'bare' }
+    const store = resolveSecretStore({ env, envPrefix: 'SACKVILLE_API_SECRET_' })
     expect(await store.get('TOK')).toBe('agg')
   })
 })

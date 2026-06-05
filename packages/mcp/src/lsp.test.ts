@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ArtifactStore } from '@strummer/artifacts'
+import { ArtifactStore } from '@sackville/artifacts'
 import type {
   LspQueryInput,
   LspQueryResult,
@@ -11,7 +11,7 @@ import type {
   LspRenameResult,
   ServerDescription,
   ServerRegistry,
-} from '@strummer/lsp'
+} from '@sackville/lsp'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createLspServer, type LspToolsOptions, toolchainMismatchWarning } from './lsp.js'
 
@@ -56,7 +56,7 @@ function firstJson<T = ToolJson>(arr: unknown): T {
 
 const tmpDirs: string[] = []
 function tmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'strummer-lsp-mcp-'))
+  const dir = mkdtempSync(join(tmpdir(), 'sackville-lsp-mcp-'))
   tmpDirs.push(dir)
   return dir
 }
@@ -348,7 +348,7 @@ describe('lsp navigation tools', () => {
     expect(data.symbolCount).toBe(120)
     expect(data.workspaceSymbols?.length).toBeLessThan(120)
     expect(data.truncated).toBe(true)
-    expect(data.fullHandle).toMatch(/^strummer:\/\/lsp\//)
+    expect(data.fullHandle).toMatch(/^sackville:\/\/lsp\//)
     const full = await client.readResource({ uri: data.fullHandle as string })
     expect(firstJson<unknown[]>(full.contents)).toHaveLength(120)
   })
@@ -520,7 +520,7 @@ describe('lsp navigation tools', () => {
     expect(data.locationCount).toBe(120)
     expect(data.locations?.length).toBeLessThan(120) // only the head is inlined
     expect(data.truncated).toBe(true)
-    expect(data.fullHandle).toMatch(/^strummer:\/\/lsp\//)
+    expect(data.fullHandle).toMatch(/^sackville:\/\/lsp\//)
 
     const full = await client.readResource({ uri: data.fullHandle as string })
     const served = firstJson<unknown[]>(full.contents)
@@ -662,7 +662,7 @@ describe('lsp_rename (write-mode surface)', () => {
     const res = await client.callTool({ name: 'lsp_rename', arguments: RENAME_ARGS })
     const data = firstJson<RenameJson>(res.content)
     expect(data.truncated).toBe(true)
-    expect(data.fullHandle).toMatch(/^strummer:\/\/lsp\/rename-preview-/)
+    expect(data.fullHandle).toMatch(/^sackville:\/\/lsp\/rename-preview-/)
     const full = await client.readResource({ uri: data.fullHandle as string })
     const served = firstJson<LspRenameResult>(full.contents)
     expect(served.edits).toHaveLength(120)

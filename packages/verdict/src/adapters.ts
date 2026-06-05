@@ -1,17 +1,17 @@
 /**
  * The five per-pillar adapters (ADR 0013 §1, slices 8–9). Each maps a pillar's
  * native result onto the shared `PillarVerdict` shape. **Type-only imports** of the
- * pillar result interfaces — `@strummer/verdict` must never import a pillar runtime
+ * pillar result interfaces — `@sackville/verdict` must never import a pillar runtime
  * (that would drag `better-sqlite3`/`playwright-core` in and break the
  * independent-gate posture). The inline severity choices are documented per
  * mapping; the load-bearing rule is that no `no-signal`/absence path ever returns
  * `pass`.
  */
-import type { ContractResult } from '@strummer/api'
-import type { DiffCoverageReport } from '@strummer/coverage'
-import type { DependencyAudit } from '@strummer/deps'
-import type { FlakeVerdict } from '@strummer/flake'
-import type { MutationSummary } from '@strummer/mutate'
+import type { ContractResult } from '@sackville/api'
+import type { DiffCoverageReport } from '@sackville/coverage'
+import type { DependencyAudit } from '@sackville/deps'
+import type { FlakeVerdict } from '@sackville/flake'
+import type { MutationSummary } from '@sackville/mutate'
 import { maxSeverity, type Severity } from './severity.js'
 import type { PillarVerdict } from './types.js'
 
@@ -72,7 +72,7 @@ export function fromContractResults(
 /**
  * The capture-verdict facts a contract sub-verdict needs to fold WITHOUT laundering an
  * unverifiable entry into a pass (5f, ADR 0013 Addendum 4). A superset of
- * `@strummer/api`'s `CaptureContractVerdict` — its no-signal/unresolved entries push NO
+ * `@sackville/api`'s `CaptureContractVerdict` — its no-signal/unresolved entries push NO
  * `ContractResult`, so `fromContractResults` (results-only) can't see them. `clean` is
  * the load-bearing flag (`entriesValidated>0 ∧ unresolvedBodies===0 ∧ noSignal===0 ∧ all
  * valid`).

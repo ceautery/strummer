@@ -1,4 +1,4 @@
-"""A tiny greeter module for the `strummer lsp` quickstart."""
+"""A tiny greeter module for the `sackville lsp` quickstart."""
 
 
 def hello(name: str) -> str:

@@ -39,12 +39,12 @@ function csv(value: string | undefined): string[] {
 export function coverageConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): CoverageBinConfig {
-  const timeoutRaw = env.STRUMMER_COVERAGE_TIMEOUT_MS
+  const timeoutRaw = env.SACKVILLE_COVERAGE_TIMEOUT_MS
   const timeoutMs =
     timeoutRaw !== undefined && timeoutRaw.trim() !== '' ? Number(timeoutRaw) : undefined
   return {
-    allowRun: bool(env.STRUMMER_COVERAGE_ALLOW_RUN),
-    allowedRoots: csv(env.STRUMMER_COVERAGE_PROJECT_ROOTS),
+    allowRun: bool(env.SACKVILLE_COVERAGE_ALLOW_RUN),
+    allowedRoots: csv(env.SACKVILLE_COVERAGE_PROJECT_ROOTS),
     timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
   }
 }
@@ -72,11 +72,11 @@ export function setupCoverageFromEnv(
 /**
  * Build the coverage MCP server from operator env. `uncovered_in_diff` (read-only) is
  * always available; `run_scoped` runs the project's tests, so it is enabled only with the
- * paired gate — BOTH a truthy `STRUMMER_COVERAGE_ALLOW_RUN` and a non-empty
- * `STRUMMER_COVERAGE_PROJECT_ROOTS` allowlist (the allowlist is load-bearing on its own):
- *   STRUMMER_COVERAGE_ALLOW_RUN=1
- *   STRUMMER_COVERAGE_PROJECT_ROOTS=/abs/project,/abs/other
- *   STRUMMER_COVERAGE_TIMEOUT_MS=120000
+ * paired gate — BOTH a truthy `SACKVILLE_COVERAGE_ALLOW_RUN` and a non-empty
+ * `SACKVILLE_COVERAGE_PROJECT_ROOTS` allowlist (the allowlist is load-bearing on its own):
+ *   SACKVILLE_COVERAGE_ALLOW_RUN=1
+ *   SACKVILLE_COVERAGE_PROJECT_ROOTS=/abs/project,/abs/other
+ *   SACKVILLE_COVERAGE_TIMEOUT_MS=120000
  */
 export function buildCoverageServerFromEnv(
   env: Record<string, string | undefined> = process.env,

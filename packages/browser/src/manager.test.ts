@@ -111,12 +111,12 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
   })
 
   it('records a HAR per context when an operator harDir is set (content:attach, full)', async () => {
-    const t = setup({ harDir: '/tmp/strummer-har' })
+    const t = setup({ harDir: '/tmp/sackville-har' })
     await t.manager.createSession('sess-1')
     const recordHar = t.browser.contexts[0]?.options?.recordHar as
       | { path: string; content: string; mode: string }
       | undefined
-    expect(recordHar?.path).toBe('/tmp/strummer-har/sess-1.zip')
+    expect(recordHar?.path).toBe('/tmp/sackville-har/sess-1.zip')
     expect(recordHar?.content).toBe('attach')
     expect(recordHar?.mode).toBe('full')
   })
@@ -130,22 +130,22 @@ describe('BrowserManager (fake browser, deterministic clock)', () => {
   })
 
   it('records video per context when an operator videoDir is set (with optional size cap)', async () => {
-    const t = setup({ videoDir: '/tmp/strummer-video', videoSize: { width: 640, height: 480 } })
+    const t = setup({ videoDir: '/tmp/sackville-video', videoSize: { width: 640, height: 480 } })
     await t.manager.createSession('sess-1')
     const recordVideo = t.browser.contexts[0]?.options?.recordVideo as
       | { dir: string; size?: { width: number; height: number } }
       | undefined
-    expect(recordVideo?.dir).toBe('/tmp/strummer-video')
+    expect(recordVideo?.dir).toBe('/tmp/sackville-video')
     expect(recordVideo?.size).toEqual({ width: 640, height: 480 })
   })
 
   it('records video with no size cap when videoSize is omitted', async () => {
-    const t = setup({ videoDir: '/tmp/strummer-video' })
+    const t = setup({ videoDir: '/tmp/sackville-video' })
     await t.manager.createSession('s1')
     const recordVideo = t.browser.contexts[0]?.options?.recordVideo as
       | { dir: string; size?: unknown }
       | undefined
-    expect(recordVideo?.dir).toBe('/tmp/strummer-video')
+    expect(recordVideo?.dir).toBe('/tmp/sackville-video')
     expect(recordVideo?.size).toBeUndefined()
   })
 
@@ -351,7 +351,7 @@ describe('BrowserManager (real headless chromium integration)', () => {
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
     const { harPathFor } = await import('./har.js')
-    const harDir = mkdtempSync(join(tmpdir(), 'strummer-har-mgr-'))
+    const harDir = mkdtempSync(join(tmpdir(), 'sackville-har-mgr-'))
     const manager = new BrowserManager({
       launch: () => chromium.launch({ headless: true, args: ['--no-sandbox'] }),
       harDir,

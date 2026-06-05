@@ -6,7 +6,7 @@ import { buildSnapshot, captureSnapshot, diffSnapshots } from './snapshot.js'
 // A representative slice of Playwright's public `locator.ariaSnapshot()` output:
 // element lines (`- role "name" [attr=v]`), a `text:` value node, and `/url`
 // property lines nested under links. (playwright-core 1.60.0 has no ref ids and
-// no _snapshotForAI, so Strummer mints its own refs over this stable format.)
+// no _snapshotForAI, so Sackville mints its own refs over this stable format.)
 const YAML = `- heading "Hello" [level=1]
 - navigation:
   - link "Home":
@@ -78,7 +78,7 @@ describe('snapshot redaction seam', () => {
     const { ArtifactStore } = await import('./artifacts.js')
     const store = new ArtifactStore(
       (await import('node:fs')).mkdtempSync(
-        (await import('node:path')).join((await import('node:os')).tmpdir(), 'strummer-snap-'),
+        (await import('node:path')).join((await import('node:os')).tmpdir(), 'sackville-snap-'),
       ),
     )
     const snap = await captureSnapshot(source, { runId: 'r1', store, redact: mask })
@@ -93,7 +93,7 @@ describe('per-generation immutable snapshot handles', () => {
     const { ArtifactStore } = await import('./artifacts.js')
     const store = new ArtifactStore(
       (await import('node:fs')).mkdtempSync(
-        (await import('node:path')).join((await import('node:os')).tmpdir(), 'strummer-snap-'),
+        (await import('node:path')).join((await import('node:os')).tmpdir(), 'sackville-snap-'),
       ),
     )
     const s1 = await captureSnapshot(
@@ -112,8 +112,8 @@ describe('per-generation immutable snapshot handles', () => {
         generation: 2,
       },
     )
-    expect(s1.fullHandle).toBe('strummer://browser/run/r/snapshot-s1')
-    expect(s2.fullHandle).toBe('strummer://browser/run/r/snapshot-s2')
+    expect(s1.fullHandle).toBe('sackville://browser/run/r/snapshot-s1')
+    expect(s2.fullHandle).toBe('sackville://browser/run/r/snapshot-s2')
     // both still resolve to their own distinct trees (no overwrite)
     expect(store.get(s1.fullHandle as string)?.body.toString('utf8')).toContain('button "One"')
     expect(store.get(s2.fullHandle as string)?.body.toString('utf8')).toContain('button "Two"')
@@ -161,12 +161,12 @@ describe('captureSnapshot (structural source; no browser)', () => {
     const { ArtifactStore } = await import('./artifacts.js')
     const store = new ArtifactStore(
       (await import('node:fs')).mkdtempSync(
-        (await import('node:path')).join((await import('node:os')).tmpdir(), 'strummer-snap-'),
+        (await import('node:path')).join((await import('node:os')).tmpdir(), 'sackville-snap-'),
       ),
     )
     const snap = await captureSnapshot(source, { runId: 'r1', store })
     expect(snap.nodeCount).toBe(7)
-    expect(snap.fullHandle).toBe('strummer://browser/run/r1/snapshot')
+    expect(snap.fullHandle).toBe('sackville://browser/run/r1/snapshot')
     const stored = store.get(snap.fullHandle as string)
     expect(stored?.body.toString('utf8')).toContain('[ref=e7]')
   })

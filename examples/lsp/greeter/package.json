@@ -1,8 +1,8 @@
 {
-  "name": "@strummer-examples/lsp-greeter",
+  "name": "@sackville-examples/lsp-greeter",
   "version": "0.0.0",
   "private": true,
-  "description": "A tiny TypeScript project for the strummer lsp quickstart",
+  "description": "A tiny TypeScript project for the sackville lsp quickstart",
   "type": "module",
   "devDependencies": {
     "typescript": "5.3.3",

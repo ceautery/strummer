@@ -2,7 +2,7 @@
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { HistoryStore } from '@strummer/flake'
+import { HistoryStore } from '@sackville/flake'
 import { createFlakeServer, type FlakeToolsOptions, registerFlakeTools } from './flake.js'
 import type { PillarSetup } from './pillars.js'
 
@@ -49,17 +49,17 @@ function num(value: string | undefined): number | undefined {
 export function flakeConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): FlakeBinConfig {
-  const dbPath = env.STRUMMER_FLAKE_DB
+  const dbPath = env.SACKVILLE_FLAKE_DB
   if (!dbPath) {
-    throw new Error('STRUMMER_FLAKE_DB must be set to the run-history database path')
+    throw new Error('SACKVILLE_FLAKE_DB must be set to the run-history database path')
   }
   return {
     dbPath,
-    allowRun: bool(env.STRUMMER_FLAKE_ALLOW_RUN),
-    allowedRoots: csv(env.STRUMMER_FLAKE_PROJECT_ROOTS),
-    timeoutMs: num(env.STRUMMER_FLAKE_TIMEOUT_MS),
-    allowQuarantine: bool(env.STRUMMER_FLAKE_ALLOW_QUARANTINE),
-    maxExpiryMs: num(env.STRUMMER_FLAKE_MAX_EXPIRY_MS) ?? 0,
+    allowRun: bool(env.SACKVILLE_FLAKE_ALLOW_RUN),
+    allowedRoots: csv(env.SACKVILLE_FLAKE_PROJECT_ROOTS),
+    timeoutMs: num(env.SACKVILLE_FLAKE_TIMEOUT_MS),
+    allowQuarantine: bool(env.SACKVILLE_FLAKE_ALLOW_QUARANTINE),
+    maxExpiryMs: num(env.SACKVILLE_FLAKE_MAX_EXPIRY_MS) ?? 0,
   }
 }
 
@@ -104,12 +104,12 @@ export function setupFlakeFromEnv(
  * Build the flake MCP server from operator env. The read tools (status/candidates/release)
  * are always available once a DB path is set; the code-running and write tools are each
  * behind their own paired deny-by-default gate:
- *   STRUMMER_FLAKE_DB=/var/lib/strummer/flake-history.db   # required
- *   STRUMMER_FLAKE_ALLOW_RUN=1                             # + non-empty PROJECT_ROOTS → flake_run
- *   STRUMMER_FLAKE_PROJECT_ROOTS=/abs/project,/abs/other
- *   STRUMMER_FLAKE_TIMEOUT_MS=300000
- *   STRUMMER_FLAKE_ALLOW_QUARANTINE=1                      # + MAX_EXPIRY_MS>0 → flake_quarantine
- *   STRUMMER_FLAKE_MAX_EXPIRY_MS=604800000                 # 7 days
+ *   SACKVILLE_FLAKE_DB=/var/lib/sackville/flake-history.db   # required
+ *   SACKVILLE_FLAKE_ALLOW_RUN=1                             # + non-empty PROJECT_ROOTS → flake_run
+ *   SACKVILLE_FLAKE_PROJECT_ROOTS=/abs/project,/abs/other
+ *   SACKVILLE_FLAKE_TIMEOUT_MS=300000
+ *   SACKVILLE_FLAKE_ALLOW_QUARANTINE=1                      # + MAX_EXPIRY_MS>0 → flake_quarantine
+ *   SACKVILLE_FLAKE_MAX_EXPIRY_MS=604800000                 # 7 days
  */
 export function buildFlakeServerFromEnv(
   env: Record<string, string | undefined> = process.env,

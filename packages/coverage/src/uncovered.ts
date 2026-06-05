@@ -3,7 +3,7 @@
  * file's istanbul coverage and the set of lines a diff *added/changed*, classify each
  * new line as covered, uncovered, or non-executable, and surface the
  * executable-but-unhit ones: the **forgotten-assertion catch** that is the genuinely
- * novel win under Strummer's TDD gate (a generic "what's uncovered" report largely
+ * novel win under Sackville's TDD gate (a generic "what's uncovered" report largely
  * duplicates the suite the agent already runs — the new lines a change introduced
  * without a test exercising them is the signal worth isolating).
  *

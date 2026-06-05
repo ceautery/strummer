@@ -1,6 +1,6 @@
 /**
  * Pillar-agnostic declarative assertion operators — the comparison layer shared
- * by every Strummer pillar (the API engine and the browser engine), so there is
+ * by every Sackville pillar (the API engine and the browser engine), so there is
  * **one assertion operator vocabulary** across the toolkit. Each pillar resolves
  * its own `actual` value (an HTTP response field, a live DOM element's text, …)
  * and then calls `applyOp` to compare it with the `expected` value.

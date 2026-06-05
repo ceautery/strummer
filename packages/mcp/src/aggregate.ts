@@ -2,13 +2,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { PillarSetup } from './pillars.js'
 
 /**
- * The aggregate Strummer MCP server (ADR 0019): one stdio process exposing every
+ * The aggregate Sackville MCP server (ADR 0019): one stdio process exposing every
  * ENABLED pillar's tools, composed via each bin's `setup<X>FromEnv` seam. Pillars
  * are loaded by DYNAMIC import so a process that didn't enable a heavy pillar never
  * loads its engine (playwright/sqlite/onnx). Selection is subtractive — it chooses
  * which pillars register, never grants a capability (each pillar still reads its OWN
  * gate). The api + verify pillars are composed in `aggregate` mode so they read the
- * prefixed `STRUMMER_API_*` namespace (compose, never widen — §A8).
+ * prefixed `SACKVILLE_API_*` namespace (compose, never widen — §A8).
  */
 
 /** A pillar's env→setup constructor (the `setup<X>FromEnv` a bin exports). May be
@@ -18,7 +18,7 @@ export type PillarSetupFn = (
 ) => PillarSetup | undefined | Promise<PillarSetup | undefined>
 
 export interface PillarEntry {
-  /** In the curated read-heavy default set (enabled when `STRUMMER_TOOLSETS` is unset). */
+  /** In the curated read-heavy default set (enabled when `SACKVILLE_TOOLSETS` is unset). */
   default: boolean
   /** The package whose absence makes a dynamic import fail ⇒ a LOUD DISABLE message. */
   pkg: string
@@ -35,16 +35,16 @@ export type PillarRegistry = Record<string, PillarEntry>
  */
 export const DEFAULT_PILLARS: PillarRegistry = {
   // Curated read-heavy default set (the ratified fork). docs needs an index +
-  // @strummer/core/@strummer/embed, so without them it loud-disables (effective
+  // @sackville/core/@sackville/embed, so without them it loud-disables (effective
   // zero-config default = api+deps+verify).
   docs: {
     default: true,
-    pkg: '@strummer/core',
+    pkg: '@sackville/core',
     load: async () => (await import('./docs.js')).setupDocsFromEnv,
   },
   api: {
     default: true,
-    pkg: '@strummer/api',
+    pkg: '@sackville/api',
     load: async () => {
       const m = await import('./bin-api.js')
       return (env) => m.setupApiFromEnv(env, { aggregate: true })
@@ -52,12 +52,12 @@ export const DEFAULT_PILLARS: PillarRegistry = {
   },
   deps: {
     default: true,
-    pkg: '@strummer/deps',
+    pkg: '@sackville/deps',
     load: async () => (await import('./bin-deps.js')).setupDepsFromEnv,
   },
   verify: {
     default: true,
-    pkg: '@strummer/verify',
+    pkg: '@sackville/verify',
     load: async () => {
       const m = await import('./bin-verify.js')
       return (env) => m.setupVerifyFromEnv(env, { aggregate: true })
@@ -66,33 +66,33 @@ export const DEFAULT_PILLARS: PillarRegistry = {
   // Opt-in (heavier / specialized) pillars.
   browser: {
     default: false,
-    pkg: '@strummer/browser',
+    pkg: '@sackville/browser',
     load: async () => (await import('./bin-browser.js')).setupBrowserFromEnv,
   },
   coverage: {
     default: false,
-    pkg: '@strummer/coverage',
+    pkg: '@sackville/coverage',
     load: async () => (await import('./bin-coverage.js')).setupCoverageFromEnv,
   },
   flake: {
     default: false,
-    pkg: '@strummer/flake',
+    pkg: '@sackville/flake',
     load: async () => (await import('./bin-flake.js')).setupFlakeFromEnv,
   },
   lsp: {
     default: false,
-    pkg: '@strummer/lsp',
+    pkg: '@sackville/lsp',
     load: async () => (await import('./bin-lsp.js')).setupLspFromEnv,
   },
   mutate: {
     default: false,
-    pkg: '@strummer/mutate',
+    pkg: '@sackville/mutate',
     load: async () => (await import('./bin-mutate.js')).setupMutateFromEnv,
   },
 }
 
 /**
- * Resolve the enabled pillar set from `STRUMMER_TOOLSETS` (subtractive selection):
+ * Resolve the enabled pillar set from `SACKVILLE_TOOLSETS` (subtractive selection):
  * unset ⇒ the curated default set; set ⇒ exactly the named pillars. An unknown name
  * is a loud config error (typo protection) — never silently ignored.
  */
@@ -106,7 +106,7 @@ export function parseToolsets(raw: string | undefined, registry: PillarRegistry)
   const unknown = names.filter((n) => !known.includes(n))
   if (unknown.length > 0) {
     throw new Error(
-      `unknown STRUMMER_TOOLSETS entr${unknown.length > 1 ? 'ies' : 'y'}: ${unknown.join(', ')} ` +
+      `unknown SACKVILLE_TOOLSETS entr${unknown.length > 1 ? 'ies' : 'y'}: ${unknown.join(', ')} ` +
         `(known pillars: ${known.join(', ')})`,
     )
   }
@@ -121,7 +121,7 @@ function isModuleNotFound(e: unknown): boolean {
 
 function aggregateInstructions(enabled: string[]): string {
   return (
-    'Strummer — an agent-first developer testing & verification toolkit (aggregate server).\n\n' +
+    'Sackville — an agent-first developer testing & verification toolkit (aggregate server).\n\n' +
     `Enabled toolsets: ${enabled.length ? enabled.join(', ') : '(none)'}.\n\n` +
     'Tools are namespaced by pillar — docs (search_docs/get_doc), api (run_request/' +
     'validate_response), browser_*, coverage (uncovered_in_diff/run_scoped), deps ' +
@@ -152,7 +152,7 @@ export async function buildAggregateServer(
 ): Promise<AggregateResult> {
   const registry = opts.registry ?? DEFAULT_PILLARS
   const log = opts.log ?? ((m) => process.stderr.write(`${m}\n`))
-  const requested = parseToolsets(env.STRUMMER_TOOLSETS, registry)
+  const requested = parseToolsets(env.SACKVILLE_TOOLSETS, registry)
 
   const enabled: string[] = []
   const disabled: { pillar: string; reason: string }[] = []
@@ -167,7 +167,7 @@ export async function buildAggregateServer(
     } catch (e) {
       if (isModuleNotFound(e)) {
         const reason = `engine not installed (${entry.pkg})`
-        log(`strummer: pillar "${name}" disabled — ${reason}`)
+        log(`sackville: pillar "${name}" disabled — ${reason}`)
         disabled.push({ pillar: name, reason })
         continue
       }
@@ -177,8 +177,8 @@ export async function buildAggregateServer(
     // here — that is FATAL by design (an anti-widening guard, never swallowed).
     const setup = await setupFn(env)
     if (!setup) {
-      const reason = name === 'docs' ? 'no STRUMMER_INDEX configured' : 'not configured'
-      log(`strummer: pillar "${name}" disabled — ${reason}`)
+      const reason = name === 'docs' ? 'no SACKVILLE_INDEX configured' : 'not configured'
+      log(`sackville: pillar "${name}" disabled — ${reason}`)
       disabled.push({ pillar: name, reason })
       continue
     }
@@ -187,7 +187,7 @@ export async function buildAggregateServer(
   }
 
   const server = new McpServer(
-    { name: 'strummer', version: '0.0.0' },
+    { name: 'sackville', version: '0.0.0' },
     { instructions: aggregateInstructions(enabled) },
   )
   const shutdowns: (() => Promise<void> | void)[] = []
@@ -201,7 +201,7 @@ export async function buildAggregateServer(
       try {
         await s()
       } catch (e) {
-        log(`strummer: shutdown error — ${String(e)}`)
+        log(`sackville: shutdown error — ${String(e)}`)
       }
     }
   }

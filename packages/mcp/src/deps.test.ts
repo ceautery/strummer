@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ArtifactStore } from '@strummer/artifacts'
-import type { OsvAdvisory, Packument } from '@strummer/deps'
+import { ArtifactStore } from '@sackville/artifacts'
+import type { OsvAdvisory, Packument } from '@sackville/deps'
 import { strToU8, zipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -90,7 +90,7 @@ const LODASH_ADVISORY: OsvAdvisory = {
 const tmpDirs: string[] = []
 
 function makeProject(deps: Record<string, string>, installed: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-proj-'))
+  const dir = mkdtempSync(join(tmpdir(), 'sackville-deps-proj-'))
   tmpDirs.push(dir)
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies: deps }))
   for (const [name, version] of Object.entries(installed)) {
@@ -102,7 +102,7 @@ function makeProject(deps: Record<string, string>, installed: Record<string, str
 }
 
 function makeOsvSnapshot(advisories: OsvAdvisory[], ecosystem = 'npm'): string {
-  const root = mkdtempSync(join(tmpdir(), 'strummer-deps-osv-'))
+  const root = mkdtempSync(join(tmpdir(), 'sackville-deps-osv-'))
   tmpDirs.push(root)
   const ecoDir = join(root, ecosystem)
   mkdirSync(ecoDir, { recursive: true })
@@ -121,7 +121,7 @@ async function connect(server: ReturnType<typeof createDepsServer>): Promise<Cli
 
 // ---- tests ----------------------------------------------------------------
 
-describe('strummer deps MCP surface', () => {
+describe('sackville deps MCP surface', () => {
   let osvDir: string
   let project: string
   const clients: Client[] = []
@@ -338,7 +338,7 @@ describe('strummer deps MCP surface', () => {
   })
 
   it('audit_project stores the full per-package verdicts by handle when a store is set', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-deps-art-'))
     tmpDirs.push(dir)
     const client = await connect(
       createDepsServer({ fetchPackument, osvDir, artifacts: new ArtifactStore(dir, 'deps') }),
@@ -347,7 +347,7 @@ describe('strummer deps MCP surface', () => {
 
     const res = await client.callTool({ name: 'audit_project', arguments: { project } })
     const handle = (res.structuredContent as { detailHandle: string }).detailHandle
-    expect(handle).toMatch(/^strummer:\/\/deps\/.+\/audit$/)
+    expect(handle).toMatch(/^sackville:\/\/deps\/.+\/audit$/)
 
     // The full detail (vulnerability ids, deprecation messages, freshness) is by handle,
     // never inlined in the compact roll-up.
@@ -375,7 +375,7 @@ describe('strummer deps MCP surface', () => {
     clients.push(without)
     expect((await without.listTools()).tools.map((t) => t.name)).not.toContain('changelog_diff')
 
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-deps-art-'))
     tmpDirs.push(dir)
     const withCl = await connect(
       createDepsServer({ fetchChangelog, artifacts: new ArtifactStore(dir, 'deps') }),
@@ -385,7 +385,7 @@ describe('strummer deps MCP surface', () => {
   })
 
   it('changelog_diff slices the installed→target range and returns it by handle', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-deps-art-'))
     tmpDirs.push(dir)
     const store = new ArtifactStore(dir, 'deps')
     const client = await connect(createDepsServer({ fetchChangelog, artifacts: store }))
@@ -410,7 +410,7 @@ describe('strummer deps MCP surface', () => {
     expect(sc.versionsCovered).toEqual(['4.17.21', '4.17.20'])
     expect(sc.entryCount).toBe(2)
     expect(sc.source).toBe('https://example.test/lodash/CHANGELOG.md')
-    expect(sc.handle).toBe('strummer://deps/lodash-4.17.15-to-4.17.21/changelog')
+    expect(sc.handle).toBe('sackville://deps/lodash-4.17.15-to-4.17.21/changelog')
     expect(sc.byteSize).toBeGreaterThan(0)
 
     // The full sliced markdown is fetchable via the resource (never inlined in the tool).
@@ -422,7 +422,7 @@ describe('strummer deps MCP surface', () => {
   })
 
   it('changelog_diff drives the PyPI ecosystem (fetcher + PEP 440 comparator)', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'strummer-deps-art-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-deps-art-'))
     tmpDirs.push(dir)
     const store = new ArtifactStore(dir, 'deps')
     const fetchPyChangelog: ChangelogFetcher = async (name, ecosystem) => {
@@ -462,7 +462,7 @@ describe('strummer deps MCP surface', () => {
 
   it('audit_dependency audits an installed PyPI package with PEP 440 + a normalized OSV name', async () => {
     // Django 5.0.0 is installed (requirements.txt), vulnerable per a PyPI ECOSYSTEM range.
-    const pyProject = mkdtempSync(join(tmpdir(), 'strummer-deps-py-'))
+    const pyProject = mkdtempSync(join(tmpdir(), 'sackville-deps-py-'))
     tmpDirs.push(pyProject)
     writeFileSync(join(pyProject, 'requirements.txt'), 'Django==5.0.0\n')
 
@@ -526,7 +526,7 @@ describe('strummer deps MCP surface', () => {
 
   it('audit_dependency audits an installed RubyGems package with Gem::Version ordering', async () => {
     // rails 7.0.4 is installed (Gemfile.lock), vulnerable per a RubyGems ECOSYSTEM range.
-    const rbProject = mkdtempSync(join(tmpdir(), 'strummer-deps-rb-'))
+    const rbProject = mkdtempSync(join(tmpdir(), 'sackville-deps-rb-'))
     tmpDirs.push(rbProject)
     writeFileSync(
       join(rbProject, 'Gemfile.lock'),
@@ -585,7 +585,7 @@ describe('strummer deps MCP surface', () => {
   })
 
   it('audit_project rolls up a PyPI project from requirements.txt', async () => {
-    const pyProject = mkdtempSync(join(tmpdir(), 'strummer-deps-pyproj-'))
+    const pyProject = mkdtempSync(join(tmpdir(), 'sackville-deps-pyproj-'))
     tmpDirs.push(pyProject)
     writeFileSync(join(pyProject, 'requirements.txt'), 'Django==5.0.0\nrequests==2.31.0\n')
 
@@ -637,7 +637,7 @@ describe('strummer deps MCP surface', () => {
   })
 
   it('audit_project rolls up a RubyGems project from Gemfile.lock', async () => {
-    const rbProject = mkdtempSync(join(tmpdir(), 'strummer-deps-rbproj-'))
+    const rbProject = mkdtempSync(join(tmpdir(), 'sackville-deps-rbproj-'))
     tmpDirs.push(rbProject)
     writeFileSync(
       join(rbProject, 'Gemfile.lock'),

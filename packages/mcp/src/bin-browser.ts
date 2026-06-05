@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@strummer/artifacts'
+import { DEFAULT_SWEEP_INTERVAL_MS, retentionFromEnv } from '@sackville/artifacts'
 import {
   ArtifactStore,
   auditPerf,
@@ -17,17 +17,17 @@ import {
   engineLaunchOptions,
   resolveEngine,
   type SsrfProxy,
-} from '@strummer/browser'
-import { Redactor } from '@strummer/safety'
+} from '@sackville/browser'
+import { Redactor } from '@sackville/safety'
 import { chromium } from 'playwright-core'
 import { type BrowserToolsOptions, createBrowserServer, registerBrowserTools } from './browser.js'
 import type { PillarSetup } from './pillars.js'
 
 /**
- * `strummer-browser-mcp` — the operator-configured server bin. This is the ONLY
- * reader of the `STRUMMER_BROWSER_*` operator env and the ONLY constructor of the
+ * `sackville-browser-mcp` — the operator-configured server bin. This is the ONLY
+ * reader of the `SACKVILLE_BROWSER_*` operator env and the ONLY constructor of the
  * network-egress boundary (mirrors `bin-api.ts`). Every safety knob is namespaced
- * (`STRUMMER_BROWSER_*`) with **no fallback** to the api pillar's unprefixed vars,
+ * (`SACKVILLE_BROWSER_*`) with **no fallback** to the api pillar's unprefixed vars,
  * so unlocking the API pillar never silently unlocks the browser pillar.
  *
  * The Tier-2 DNS-pinning SSRF proxy is **mandatory** — there is deliberately no
@@ -47,7 +47,7 @@ function num(v: string | undefined, dflt: number): number {
   return Number.isFinite(n) ? n : dflt
 }
 
-/** The operator redaction surface from `STRUMMER_BROWSER_*` env: registered secret values
+/** The operator redaction surface from `SACKVILLE_BROWSER_*` env: registered secret values
  * + origin-scoped HTTP Basic creds. Extracted (Fork 4) so it is the SINGLE source the
  * browser bin AND the 5e verify-driven capture's union redactor both build from — no
  * drift on which secrets register. Values never leave this function except via `redact`. */
@@ -58,12 +58,12 @@ export function buildBrowserRedactorFromEnv(env: NodeJS.ProcessEnv = process.env
   secretNames: string[]
   httpCredentials?: { username: string; password: string; origin?: string }
 } {
-  // STRUMMER_BROWSER_SECRET_<NAME>=value — register NAME→value; values are never logged
+  // SACKVILLE_BROWSER_SECRET_<NAME>=value — register NAME→value; values are never logged
   // or surfaced (only the NAME appears anywhere).
   const redactor = new Redactor()
   const secrets = new Map<string, string>()
   for (const [key, value] of Object.entries(env)) {
-    const m = /^STRUMMER_BROWSER_SECRET_(.+)$/.exec(key)
+    const m = /^SACKVILLE_BROWSER_SECRET_(.+)$/.exec(key)
     if (m?.[1] && value) {
       redactor.register(m[1], value)
       secrets.set(m[1], value)
@@ -72,9 +72,9 @@ export function buildBrowserRedactorFromEnv(env: NodeJS.ProcessEnv = process.env
   // Origin-scoped HTTP Basic auth (operator-set). Built only when BOTH username +
   // password are present; the password is registered with the redactor so it never
   // leaks via an artifact, and it never appears in the returned config.
-  const httpUsername = env.STRUMMER_BROWSER_HTTP_USERNAME
-  const httpPassword = env.STRUMMER_BROWSER_HTTP_PASSWORD
-  const httpOrigin = env.STRUMMER_BROWSER_HTTP_ORIGIN
+  const httpUsername = env.SACKVILLE_BROWSER_HTTP_USERNAME
+  const httpPassword = env.SACKVILLE_BROWSER_HTTP_PASSWORD
+  const httpOrigin = env.SACKVILLE_BROWSER_HTTP_ORIGIN
   let httpCredentials: { username: string; password: string; origin?: string } | undefined
   if (httpUsername && httpPassword) {
     redactor.register('http-credentials', httpPassword)
@@ -190,74 +190,75 @@ export async function buildBrowserRuntimeFromEnv(
   const { redactor, redact, resolveSecret, secretNames, httpCredentials } =
     buildBrowserRedactorFromEnv(env)
 
-  const allowUnsafe = bool(env.STRUMMER_BROWSER_ALLOW_UNSAFE)
-  const allowedHosts = (env.STRUMMER_BROWSER_ALLOWED_HOSTS ?? '')
+  const allowUnsafe = bool(env.SACKVILLE_BROWSER_ALLOW_UNSAFE)
+  const allowedHosts = (env.SACKVILLE_BROWSER_ALLOWED_HOSTS ?? '')
     .split(',')
     .map((h) => h.trim())
     .filter(Boolean)
-  const allowPrivate = bool(env.STRUMMER_BROWSER_ALLOW_PRIVATE)
-  const allowDialogs = bool(env.STRUMMER_BROWSER_ALLOW_DIALOGS)
-  const allowStorageState = bool(env.STRUMMER_BROWSER_ALLOW_STORAGE_STATE)
-  const allowScreenshots = bool(env.STRUMMER_BROWSER_ALLOW_SCREENSHOTS)
+  const allowPrivate = bool(env.SACKVILLE_BROWSER_ALLOW_PRIVATE)
+  const allowDialogs = bool(env.SACKVILLE_BROWSER_ALLOW_DIALOGS)
+  const allowStorageState = bool(env.SACKVILLE_BROWSER_ALLOW_STORAGE_STATE)
+  const allowScreenshots = bool(env.SACKVILLE_BROWSER_ALLOW_SCREENSHOTS)
   // Vision/coordinate input (blind pixel click/move) — off by default, like screenshots.
-  const allowVision = bool(env.STRUMMER_BROWSER_ALLOW_VISION)
+  const allowVision = bool(env.SACKVILLE_BROWSER_ALLOW_VISION)
   // Downloads: deny-by-default. An operator quarantine dir flips acceptDownloads on
   // AND tells the driver where to save; unset ⇒ contexts cancel every download.
-  const downloadDir = env.STRUMMER_BROWSER_DOWNLOAD_DIR || undefined
+  const downloadDir = env.SACKVILLE_BROWSER_DOWNLOAD_DIR || undefined
   const acceptDownloads = downloadDir !== undefined
   // Uploads: deny-by-default. An operator allowlist dir is the exfiltration control.
-  const uploadDir = env.STRUMMER_BROWSER_UPLOAD_DIR || undefined
+  const uploadDir = env.SACKVILLE_BROWSER_UPLOAD_DIR || undefined
   // "Network heavy mode": HAR capture off unless the operator sets an output dir.
   // HAR is a heavy secret surface (full req/resp headers+bodies), so it is gated
   // off like the trace; the manager records it, the surface finalizes (redacted).
-  const harDir = env.STRUMMER_BROWSER_HAR_DIR || undefined
+  const harDir = env.SACKVILLE_BROWSER_HAR_DIR || undefined
   // HAR replay (offline determinism): deny-by-default. An operator replay dir is
   // the trust boundary — the source HAR dictates what the page is served.
-  const replayDir = env.STRUMMER_BROWSER_REPLAY_HAR_DIR || undefined
+  const replayDir = env.SACKVILLE_BROWSER_REPLAY_HAR_DIR || undefined
   // Persisted flows: deny-by-default. An operator flows dir holds the replayable
   // .bru + sidecar flows browser_run_flow may run (by name, no caller path).
-  const flowsDir = env.STRUMMER_BROWSER_FLOWS_DIR || undefined
+  const flowsDir = env.SACKVILLE_BROWSER_FLOWS_DIR || undefined
   // Visual regression: compare off unless an operator baseline dir is set; recording
   // a baseline (the accepted golden) is separately gated so an agent can't rewrite it.
-  const baselineDir = env.STRUMMER_BROWSER_BASELINE_DIR || undefined
-  const allowBaselineUpdate = bool(env.STRUMMER_BROWSER_ALLOW_BASELINE_UPDATE)
+  const baselineDir = env.SACKVILLE_BROWSER_BASELINE_DIR || undefined
+  const allowBaselineUpdate = bool(env.SACKVILLE_BROWSER_ALLOW_BASELINE_UPDATE)
   // Video capture: off unless the operator sets an output dir. Video is unredactable
   // pixels (gated off like the trace/screenshots). An optional size cap needs BOTH
   // dimensions; the session wall-clock cap (SESSION_MS) bounds duration.
-  const videoDir = env.STRUMMER_BROWSER_VIDEO_DIR || undefined
-  const videoWidth = env.STRUMMER_BROWSER_VIDEO_WIDTH
-  const videoHeight = env.STRUMMER_BROWSER_VIDEO_HEIGHT
+  const videoDir = env.SACKVILLE_BROWSER_VIDEO_DIR || undefined
+  const videoWidth = env.SACKVILLE_BROWSER_VIDEO_WIDTH
+  const videoHeight = env.SACKVILLE_BROWSER_VIDEO_HEIGHT
   const videoSize =
     videoWidth && videoHeight
       ? { width: num(videoWidth, 0), height: num(videoHeight, 0) }
       : undefined
-  const headless = bool(env.STRUMMER_BROWSER_HEADLESS, true)
-  const noSandbox = bool(env.STRUMMER_BROWSER_NO_SANDBOX)
+  const headless = bool(env.SACKVILLE_BROWSER_HEADLESS, true)
+  const noSandbox = bool(env.SACKVILLE_BROWSER_NO_SANDBOX)
   // Operator-selected engine (default chromium). Resolved EARLY so a typo fails
   // loud before any resource (proxy, browser) is allocated. One engine per server.
-  const engine: BrowserEngine = resolveEngine(env.STRUMMER_BROWSER_ENGINE)
+  const engine: BrowserEngine = resolveEngine(env.SACKVILLE_BROWSER_ENGINE)
   const capture = {
-    trace: bool(env.STRUMMER_BROWSER_CAPTURE_TRACE), // OFF by default (unredacted binary)
-    console: bool(env.STRUMMER_BROWSER_CAPTURE_CONSOLE, true),
-    network: bool(env.STRUMMER_BROWSER_CAPTURE_NETWORK, true),
+    trace: bool(env.SACKVILLE_BROWSER_CAPTURE_TRACE), // OFF by default (unredacted binary)
+    console: bool(env.SACKVILLE_BROWSER_CAPTURE_CONSOLE, true),
+    network: bool(env.SACKVILLE_BROWSER_CAPTURE_NETWORK, true),
   }
-  const maxContexts = num(env.STRUMMER_BROWSER_MAX_SESSIONS, 8)
-  const idleTtlMs = num(env.STRUMMER_BROWSER_IDLE_TTL_MS, 300_000)
-  const reaperIntervalMs = num(env.STRUMMER_BROWSER_REAPER_INTERVAL_MS, idleTtlMs)
+  const maxContexts = num(env.SACKVILLE_BROWSER_MAX_SESSIONS, 8)
+  const idleTtlMs = num(env.SACKVILLE_BROWSER_IDLE_TTL_MS, 300_000)
+  const reaperIntervalMs = num(env.SACKVILLE_BROWSER_REAPER_INTERVAL_MS, idleTtlMs)
   // Optional resource caps — undefined (no cap) unless the operator sets them.
-  const maxSessionMs = env.STRUMMER_BROWSER_SESSION_MS
-    ? num(env.STRUMMER_BROWSER_SESSION_MS, 0)
+  const maxSessionMs = env.SACKVILLE_BROWSER_SESSION_MS
+    ? num(env.SACKVILLE_BROWSER_SESSION_MS, 0)
     : undefined
-  const maxPages = env.STRUMMER_BROWSER_MAX_PAGES
-    ? num(env.STRUMMER_BROWSER_MAX_PAGES, 0)
+  const maxPages = env.SACKVILLE_BROWSER_MAX_PAGES
+    ? num(env.SACKVILLE_BROWSER_MAX_PAGES, 0)
     : undefined
-  const defaultTimeoutMs = num(env.STRUMMER_BROWSER_TIMEOUT_MS, 0)
-  const defaultNavigationTimeoutMs = num(env.STRUMMER_BROWSER_NAV_TIMEOUT_MS, 0)
-  const maxNodes = env.STRUMMER_BROWSER_MAX_NODES
-    ? num(env.STRUMMER_BROWSER_MAX_NODES, 60)
+  const defaultTimeoutMs = num(env.SACKVILLE_BROWSER_TIMEOUT_MS, 0)
+  const defaultNavigationTimeoutMs = num(env.SACKVILLE_BROWSER_NAV_TIMEOUT_MS, 0)
+  const maxNodes = env.SACKVILLE_BROWSER_MAX_NODES
+    ? num(env.SACKVILLE_BROWSER_MAX_NODES, 60)
     : undefined
   const artifactsDir =
-    env.STRUMMER_BROWSER_ARTIFACTS_DIR ?? mkdtempSync(join(tmpdir(), 'strummer-browser-artifacts-'))
+    env.SACKVILLE_BROWSER_ARTIFACTS_DIR ??
+    mkdtempSync(join(tmpdir(), 'sackville-browser-artifacts-'))
 
   // MANDATORY Tier-2 DNS-pinning proxy — deliberately no disable env.
   const proxy = await createSsrfProxy({ allowPrivate })
@@ -277,9 +278,9 @@ export async function buildBrowserRuntimeFromEnv(
   const gate = new BrowserGate({ allowUnsafe, allowedHosts, allowDialogs })
   const store = new ArtifactStore(artifactsDir, {
     retention: retentionFromEnv({
-      maxAgeMs: env.STRUMMER_BROWSER_ARTIFACT_MAX_AGE_MS,
-      maxEntries: env.STRUMMER_BROWSER_ARTIFACT_MAX_ENTRIES,
-      maxBytes: env.STRUMMER_BROWSER_ARTIFACT_MAX_BYTES,
+      maxAgeMs: env.SACKVILLE_BROWSER_ARTIFACT_MAX_AGE_MS,
+      maxEntries: env.SACKVILLE_BROWSER_ARTIFACT_MAX_ENTRIES,
+      maxBytes: env.SACKVILLE_BROWSER_ARTIFACT_MAX_BYTES,
     }),
     sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS,
   })

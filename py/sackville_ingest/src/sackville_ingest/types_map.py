@@ -1,4 +1,4 @@
-"""Rule-based normalization of DevDocs type strings into Strummer's taxonomy.
+"""Rule-based normalization of DevDocs type strings into Sackville's taxonomy.
 
 DevDocs type strings look like ``"Namespace: Category"`` (e.g. ``"React: Hooks"``).
 :func:`normalize_type` maps any input string to a lowercase taxonomy label using
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 
 def normalize_type(devdocs_type: str) -> str:
-    """Map a DevDocs ``type`` string to a normalized Strummer taxonomy label.
+    """Map a DevDocs ``type`` string to a normalized Sackville taxonomy label.
 
     Matching is case-insensitive and rule-ordered; the first matching rule wins.
     Empty or unrecognized input falls back to ``"reference"``.
@@ -65,7 +65,7 @@ _DASH_TYPE_MAP = {
 
 
 def normalize_dash_type(dash_type: str) -> str:
-    """Map a Dash docset ``type`` token to a normalized Strummer taxonomy label.
+    """Map a Dash docset ``type`` token to a normalized Sackville taxonomy label.
 
     Case-insensitive; unrecognized tokens (Module, Constant, Property, Command, …)
     fall back to ``"reference"``.
