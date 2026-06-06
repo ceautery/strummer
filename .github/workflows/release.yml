@@ -40,7 +40,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0 # ADR 0019 §18: OIDC trusted publishing needs Node >= 22.14.0
+          # Latest 22.x — satisfies ADR 0019 §18's OIDC floor (Node >= 22.14.0) AND is new enough
+          # for tsdown to load configs natively. Pinning the exact floor (22.14.0) is too old:
+          # tsdown then needs the optional `unrun` loader (uninstalled) and the build fails. This
+          # matches the working ci.yml gate job.
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       - name: Pin npm >= 11.5.1 (OIDC trusted publishing)
