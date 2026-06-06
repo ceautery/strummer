@@ -1,0 +1,5 @@
+{
+  "overview": "<h1>todo-core</h1><p>A tiny in-memory todo list. Create todos, mark them done, remove them, and filter the list by status.</p><pre><code>const list = new TodoList()\nlist.add('buy milk')</code></pre>",
+  "guide/filtering": "<h1>Filtering todos</h1><p>A todo is <strong>active</strong> while it still needs doing, and <strong>completed</strong> once it is done. The <strong>active</strong> filter returns only the todos that are NOT done; the <strong>completed</strong> filter returns only the todos that ARE done. Together they partition the list, and <code>all</code> returns everything.</p>",
+  "api/filter": "<h1>filter(which)</h1><p>Returns the todos matching <code>which</code>, one of <code>all</code>, <code>active</code>, or <code>completed</code>.</p><h2 id=\"active\">active</h2><p>The active filter returns todos whose <code>done</code> flag is false (not yet completed).</p><h2 id=\"completed\">completed</h2><p>The completed filter returns todos whose <code>done</code> flag is true.</p>"
+}

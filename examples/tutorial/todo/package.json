@@ -1,0 +1,21 @@
+{
+  "name": "@sackville-tutorial/todo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny todo CLI used by the Sackville onboarding tutorial.",
+  "bin": {
+    "todo": "./src/cli.ts"
+  },
+  "scripts": {
+    "todo": "tsx src/cli.ts",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.7",
+    "tsx": "^4.19.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

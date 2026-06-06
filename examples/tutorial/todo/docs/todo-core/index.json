@@ -1,0 +1,20 @@
+{
+  "entries": [
+    {
+      "name": "todo-core",
+      "path": "overview",
+      "type": "Guide"
+    },
+    {
+      "name": "Filtering todos",
+      "path": "guide/filtering",
+      "type": "Guide"
+    },
+    {
+      "name": "TodoList.filter",
+      "path": "api/filter",
+      "type": "Method"
+    }
+  ],
+  "types": []
+}
