@@ -21,5 +21,7 @@
     "@sackville-mcp/verdict": "0.0.1-alpha.1",
     "@sackville-mcp/verify": "0.0.1-alpha.1"
   },
-  "changesets": []
+  "changesets": [
+    "canary-oidc"
+  ]
 }
