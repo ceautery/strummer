@@ -241,7 +241,7 @@ screenshots, reference lists) are returned **by resource handle**
 
 | Choice | Why |
 | --- | --- |
-| **pnpm** (workspaces) | Strict, content-addressed `node_modules` keeps the 18-package graph honest about its dependencies — no phantom imports — and `workspace:*` links are rewritten to real versions only at publish. |
+| **pnpm** (workspaces) | Strict, content-addressed `node_modules` keeps the 19-package graph honest about its dependencies — no phantom imports — and `workspace:*` links are rewritten to real versions only at publish. |
 | **Biome** | One fast Rust tool for lint **and** format across all TypeScript, replacing the ESLint + Prettier pair. Faster CI, one config, no plugin drift. |
 | **Vitest** (+ v8 coverage) | The native ESM/TypeScript test runner that powers the red→green TDD loop; its coverage output is what the `coverage` pillar consumes. |
 | **tsdown** | Emits clean ESM + `.d.ts` (and a shebang CLI bin) per package. Sackville is **ESM-only** by design. |
@@ -264,7 +264,7 @@ answer "what happened on this page" better than a human watching it render
 
 | Path | What |
 | --- | --- |
-| [`packages/`](./packages) | The TypeScript workspace (18 packages: pillar engines, shared cores, the `mcp` server, the `cli`). |
+| [`packages/`](./packages) | The TypeScript workspace (19 packages: pillar engines, shared cores, the `mcp` server, the `cli`). |
 | [`py/sackville_ingest/`](./py/sackville_ingest) | The Python documentation ingester (uv-managed). |
 | [`schema/`](./schema) | The SQLite contract (`*.sql` + `*.json`) both languages honor. |
 | [`examples/`](./examples) | Runnable samples (API collection, browser flow, LSP projects, MCP config). |
