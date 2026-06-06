@@ -1,5 +1,14 @@
 # @sackville-mcp/browser
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- @sackville-mcp/api@0.0.1-alpha.3
+- @sackville-mcp/artifacts@0.0.1-alpha.3
+- @sackville-mcp/assert@0.0.1-alpha.3
+- @sackville-mcp/safety@0.0.1-alpha.3
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes
