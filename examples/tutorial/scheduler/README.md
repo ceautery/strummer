@@ -203,10 +203,12 @@ sackville-cli mutate run $PWD --file src/interval.ts --allow-run
 ```
 
 Stryker mutates `overlaps` every way it can, re-running your tests against each
-version. Most mutants are **killed** (a test caught them). But one **survives**:
-flipping the boundary comparison (`<` ↔ `<=`) changes nothing your tests assert —
-the suite stays green either way. That surviving mutant points straight at the
-untested boundary, which is the bug *and* the missing test, in one shot.
+version. Most mutants are **killed** (a test caught them). But the **boundary
+comparison survives**: flipping `<` to `<=` changes nothing your tests assert —
+the suite stays green either way. (You'll see *two* survivors, one per operand of
+the disjoint check; both are the same boundary mistake.) Those surviving mutants
+point straight at the untested boundary — the bug *and* the missing test, in one
+shot.
 
 > `mutate run` *runs* your tests many times, so it needs `--allow-run`. It reads
 > Stryker's JSON report from `reports/mutation/mutation.json`; the bundled
@@ -219,15 +221,17 @@ untested boundary, which is the bug *and* the missing test, in one shot.
 
 Open `src/interval.ts` and fix `overlaps` so that intervals which merely touch do
 **not** overlap (the half-open rule the docs describe). Then add the assertion the
-suite was missing — a boundary test for `overlaps` (and ideally one for
-`Schedule.book` accepting a back-to-back booking) — in `test/schedule.test.ts`.
+suite was missing — a boundary test for `overlaps`. Assert that touching intervals
+do **not** overlap in **both** orders (`overlaps(a, b)` *and* `overlaps(b, a)`),
+since the disjoint check has a clause for each — that's what kills both surviving
+mutants. Ideally add one for `Schedule.book` accepting a back-to-back booking too.
 
 Re-run the tools that caught it:
 
 ```bash
 npm test                                                  # still green
 npm run roomctl -- book Oak 10:00 11:00 "retro"           # now accepted
-sackville-cli mutate run $PWD --file src/interval.ts --allow-run   # mutant now killed
+sackville-cli mutate run $PWD --file src/interval.ts --allow-run   # survivors now killed
 ```
 
 ```
