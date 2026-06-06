@@ -1,5 +1,11 @@
 # @sackville-mcp/verify
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- @sackville-mcp/verdict@0.0.1-alpha.3
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes
