@@ -71,39 +71,46 @@ Mutation testing is one of software engineering's older ideas, dormant for decad
 because it was too expensive to run, and revived by cheap compute and better
 tooling.
 
-- **1971 — origin.** Richard Lipton, then an undergraduate, proposed the idea in a
-  paper titled *"Fault Diagnosis of Computer Programs."* It is the commonly cited
-  starting point.
-- **1978 — the foundational paper.** DeMillo, Lipton, and Sayward, *"Hints on Test
-  Data Selection: Help for the Practicing Programmer"* (IEEE *Computer*), laid the
-  theory. It introduced the two assumptions mutation testing still rests on:
-  - **The competent programmer hypothesis** — programmers write code that is
-    *nearly* correct, so real faults are small deviations from a correct program.
-    Mutants (small edits) therefore resemble realistic bugs.
-  - **The coupling effect** — test data that distinguishes a program from its
-    simple (first-order) mutants also tends to catch more complex, compound faults.
-    So killing small mutants buys disproportionate fault-detection.
-- **~1980 — early implementations.** Timothy Budd's Yale PhD work formalized and
-  implemented the technique; through the 1980s the **Mothra** system (Georgia
-  Tech / Purdue; DeMillo, Offutt, King and others) made it a research workbench.
-  Jeff Offutt's work over the following decades defined much of the operator theory
-  and cost-reduction strategies (selective mutation, mutant sampling).
+- **1971 — origin.** Richard J. Lipton, then a student at Carnegie Mellon,
+  proposed the idea in a class term paper titled *"Fault Diagnosis of Computer
+  Programs."* It is the commonly cited seed of the field. [1]
+- **1977–1978 — the foundations.** The technique was developed and published
+  independently in two papers the literature credits together:
+  - Richard Hamlet, *"Testing Programs with the Aid of a Compiler"* (IEEE TSE,
+    1977) [2]; and
+  - DeMillo, Lipton, and Sayward, *"Hints on Test Data Selection: Help for the
+    Practicing Programmer"* (IEEE *Computer*, 1978) [3], which named the two
+    assumptions mutation testing still rests on:
+    - **The competent programmer hypothesis** — programmers write code that is
+      *nearly* correct, so real faults are small deviations from a correct program.
+      Mutants (small edits) therefore resemble realistic bugs.
+    - **The coupling effect** — test data that distinguishes a program from its
+      simple (first-order) mutants also tends to catch more complex, compound
+      faults. So killing small mutants buys disproportionate fault-detection.
+- **1980 — the first tool.** Timothy Budd's Yale PhD thesis, *"Mutation Analysis of
+  Program Test Data"* (advised by Lipton), gave the technique its first
+  implementation [4]. Through the 1980s the **Mothra** system (DeMillo, Guindi,
+  King, McCracken, Offutt) made it a widely distributed research workbench for
+  FORTRAN [5]; Jeff Offutt's subsequent work defined much of the operator theory
+  and the cost-reduction strategies (selective mutation, mutant sampling).
 - **The long winter.** The method is intrinsically costly: *N* mutants each require
   (in the naïve form) a full test run, so a project with thousands of mutants and a
   slow suite faces thousands of suite executions. For most of the 1980s–2000s that
   put it out of reach for everyday use.
-- **~2010s — the revival.** Faster machines, parallelism, and—critically—tools that
-  prune the work (run only the tests that *cover* a mutant; mutate only *changed*
-  code) made it practical:
-  - **PIT / pitest** (Henry Coles) brought fast, coverage-guided bytecode mutation
-    to the Java world and is largely responsible for the modern resurgence.
+- **~2010s — the revival.** Faster machines, parallelism, and — critically — tools
+  that prune the work (run only the tests that *cover* a mutant; mutate only
+  *changed* code) made it practical:
+  - **PIT / pitest** (Henry Coles; open-sourced ~2010, presented at ISSTA 2016 [6])
+    brought fast, coverage-guided bytecode mutation to the Java world and is largely
+    responsible for the modern resurgence.
   - **Stryker** (JavaScript/TypeScript, also C# and Scala) brought it to the JS
     ecosystem; **mutmut** and **cosmic-ray** brought it to Python; **mull** targets
     LLVM/C/C++.
 - **Industrial scale.** Google reported integrating mutation testing into everyday
   code review (Petrović & Ivanković, *"State of Mutation Testing at Google,"*
-  ICSE-SEIP 2018) by mutating only the lines in a diff and suppressing unproductive
-  mutants — the same **diff-scoping** strategy Sackville uses (see below).
+  ICSE-SEIP 2018 [7]) by mutating only the lines in a diff and suppressing
+  unproductive mutants on "arid" (uncovered/uninteresting) lines — the same
+  **diff-scoping** strategy Sackville uses (see below).
 
 The throughline: the *theory* was settled by 1978; everything since has been about
 making it cheap enough to run on every change.
@@ -204,13 +211,36 @@ on the `overlaps` bug above, first with the CLI and then through the MCP server.
 
 ## References
 
-- R. J. Lipton, *Fault Diagnosis of Computer Programs* (1971) — the originating idea.
-- R. A. DeMillo, R. J. Lipton, F. G. Sayward, *Hints on Test Data Selection: Help
-  for the Practicing Programmer*, IEEE *Computer* 11(4), 1978 — competent-programmer
-  hypothesis + coupling effect.
-- G. Petrović, M. Ivanković, *State of Mutation Testing at Google*, ICSE-SEIP 2018 —
-  diff-scoped mutation testing at industrial scale.
-- [Stryker](https://stryker-mutator.io/) · [mutmut](https://mutmut.readthedocs.io/) ·
-  [cosmic-ray](https://cosmic-ray.readthedocs.io/) · [PIT/pitest](https://pitest.org/)
-- Sackville internals: [ADR 0010 — cross-cutting verification](./decisions/0010-phase4-cross-cutting-verification.md);
-  the `@sackville-mcp/mutate` package; `summarizeMutation` (the pure core).
+Primary sources (numbered as cited in *A short history* above):
+
+1. R. J. Lipton. *Fault Diagnosis of Computer Programs.* Class term paper,
+   Carnegie Mellon University, 1971. (Unpublished; the commonly cited origin of
+   mutation analysis.)
+2. R. G. Hamlet. *Testing Programs with the Aid of a Compiler.* IEEE Transactions
+   on Software Engineering, SE-3(4):279–290, July 1977.
+   doi:[10.1109/TSE.1977.231145](https://doi.org/10.1109/TSE.1977.231145)
+3. R. A. DeMillo, R. J. Lipton, F. G. Sayward. *Hints on Test Data Selection: Help
+   for the Practicing Programmer.* IEEE *Computer*, 11(4):34–41, April 1978.
+   doi:[10.1109/C-M.1978.218136](https://doi.org/10.1109/C-M.1978.218136)
+   — introduced the competent-programmer hypothesis and the coupling effect.
+4. T. A. Budd. *Mutation Analysis of Program Test Data.* PhD thesis, Yale
+   University, 1980 (advisor R. J. Lipton). The first mutation-testing tool.
+5. R. A. DeMillo, D. S. Guindi, K. N. King, W. M. McCracken, A. J. Offutt. *An
+   Extended Overview of the Mothra Software Testing Environment.* Proc. 2nd
+   Workshop on Software Testing, Verification, and Analysis (TVA), Banff, Canada,
+   pp. 142–151, July 1988. doi:[10.1109/WST.1988.5369](https://doi.org/10.1109/WST.1988.5369)
+6. H. Coles, T. Laurent, C. Henard, M. Papadakis, A. Ventresque. *PIT: a Practical
+   Mutation Testing Tool for Java (demo).* Proc. 25th Int'l Symposium on Software
+   Testing and Analysis (ISSTA), pp. 449–452, 2016.
+   doi:[10.1145/2931037.2948707](https://doi.org/10.1145/2931037.2948707)
+7. G. Petrović, M. Ivanković. *State of Mutation Testing at Google.* Proc. 40th
+   Int'l Conference on Software Engineering: Software Engineering in Practice
+   (ICSE-SEIP), pp. 163–171, 2018.
+   doi:[10.1145/3183519.3183521](https://doi.org/10.1145/3183519.3183521)
+   — diff-scoped mutation analysis at industrial scale.
+
+Tools: [Stryker](https://stryker-mutator.io/) · [mutmut](https://mutmut.readthedocs.io/) ·
+[cosmic-ray](https://cosmic-ray.readthedocs.io/) · [PIT/pitest](https://pitest.org/)
+
+Sackville internals: [ADR 0010 — cross-cutting verification](./decisions/0010-phase4-cross-cutting-verification.md);
+the `@sackville-mcp/mutate` package; `summarizeMutation` (the pure core).
