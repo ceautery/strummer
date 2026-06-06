@@ -242,6 +242,10 @@ inconclusive — a CI gate on the composite would supply every pillar that matte
 
 ## 7. Bonus — produce the capture yourself, with a real browser
 
+> **Run this against the buggy app.** If you already applied the fix in step 6,
+> run `./reset.sh` first — the point here is to watch a *passing* browser flow
+> still produce a `FAIL` verdict, which only happens while the bug is present.
+
 Step 4 used a committed recording so you didn't need a browser. To make your own,
 install a browser engine and drive the persisted login flow live. `verify run
 --flow` will sign in, capture the dashboard's traffic, and validate it — the
