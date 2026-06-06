@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ContractResult } from '@sackville-mcp/api'
 import type { HarSummary } from '@sackville-mcp/browser'
@@ -227,6 +228,10 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
             .optional()
             .describe('changed source files (e.g. for coverage `vitest related`)'),
           diff: z.string().optional().describe('unified diff, for pillars that use it'),
+          diffPath: z
+            .string()
+            .optional()
+            .describe('path to a unified diff file (read into `diff`; inline `diff` wins)'),
           pillars: z
             .array(z.enum(['coverage', 'deps', 'flake', 'mutate', 'contract']))
             .optional()
@@ -282,10 +287,14 @@ export function registerVerifyTools(server: McpServer, opts: VerifyToolsOptions 
         // coverage (`vitest related`), mutate (`mutateFiles`), and flake (`files`); the
         // deps runner scopes itself from `ctx.diff` (it owns the ecosystem). "Compose,
         // never widen" — scoping only narrows what runs, it cannot widen the gate.
+        // Resolve the diff inline-or-by-path (inline wins), mirroring run_scoped — so an agent
+        // that scoped run_scoped with `diffPath` can reuse it here instead of silently getting a
+        // no-signal verdict (the diff feeds changedFiles + the deps ecosystem scope).
+        const diff = args.diff ?? (args.diffPath ? readFileSync(args.diffPath, 'utf8') : undefined)
         const ctx: RunDrivingContext = {
           projectRoot: args.projectRoot,
-          changedFiles: args.changedFiles ?? (args.diff ? changedFilesFromDiff(args.diff) : []),
-          diff: args.diff,
+          changedFiles: args.changedFiles ?? (diff ? changedFilesFromDiff(diff) : []),
+          diff,
         }
         // Default: attempt every WIRED spawn pillar. An explicitly-requested pillar that
         // is NOT wired is surfaced as skipped:gate-not-set (a denied thunk), never run.

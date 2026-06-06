@@ -575,10 +575,13 @@ stage `reportlog`. Pure/zero-spawn slices first.
         mutated ⇒ inconclusive (slice-0 capture: Stryker OMITS zero-mutant files, mutmut-Fork-B2
         shape ⇒ conservative reuse of `reconcileScope`, zero false-passes). `scopedFiles` is now
         the actually-mutated set; `requestedFiles`/`unmatched` added (2026-06-06, dogfooding pass).
+  - [x] **`verify_change` `diffPath` input** — the MCP `verify_change` tool now accepts `diffPath`
+        (read into `diff`, inline wins), mirroring `run_scoped`; closes the dogfooding-surfaced
+        API inconsistency (an agent reusing `diffPath` no longer silently gets a no-signal verdict).
+        CLI already took a `--diff` path (2026-06-06).
   - **Staged beyond this arc:** cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/`
         cache reuse; flake diff-scoping; src-layout module mapping precision for
-        `reconcileMutmutScope` (currently conservative-safe via suffix match); `verify_change`
-        `diffPath` input (mirror `run_scoped`; surfaced by the dogfooding pass).
+        `reconcileMutmutScope` (currently conservative-safe via suffix match).
 
 - [x] **Dependency/version intelligence** (`@sackville-mcp/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
       Cleanest architectural fit: pure offline verdict core + an operator-provisioned

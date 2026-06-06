@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { describe, expect, it, vi } from 'vitest'
@@ -288,6 +291,61 @@ diff --git a/src/y.ts b/src/y.ts
 `
     await c.callTool({ name: 'verify_change', arguments: { projectRoot: '/repo', diff } })
     expect(seen).toEqual(['src/x.ts', 'src/y.ts'])
+  })
+
+  it('accepts a diff by path (`diffPath`), mirroring run_scoped (parity)', async () => {
+    let seen: string[] | undefined
+    const c = await connect({
+      runDriving: {
+        coverage: async (ctx) => {
+          seen = ctx.changedFiles
+          return uncoveredReport as never
+        },
+      },
+    })
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-verify-'))
+    const diffPath = join(dir, 'change.diff')
+    writeFileSync(
+      diffPath,
+      `diff --git a/src/x.ts b/src/x.ts
+--- a/src/x.ts
++++ b/src/x.ts
+@@ -1 +1,2 @@
+ a
++b
+`,
+    )
+    try {
+      await c.callTool({ name: 'verify_change', arguments: { projectRoot: '/repo', diffPath } })
+      expect(seen).toEqual(['src/x.ts'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('an inline diff wins over diffPath', async () => {
+    let seen: string[] | undefined
+    const c = await connect({
+      runDriving: {
+        coverage: async (ctx) => {
+          seen = ctx.changedFiles
+          return uncoveredReport as never
+        },
+      },
+    })
+    const dir = mkdtempSync(join(tmpdir(), 'sackville-verify-'))
+    const diffPath = join(dir, 'change.diff')
+    writeFileSync(diffPath, '--- a/fromfile.ts\n+++ b/fromfile.ts\n@@ -1 +1,2 @@\n a\n+b\n')
+    const diff = '--- a/inline.ts\n+++ b/inline.ts\n@@ -1 +1,2 @@\n a\n+b\n'
+    try {
+      await c.callTool({
+        name: 'verify_change',
+        arguments: { projectRoot: '/repo', diff, diffPath },
+      })
+      expect(seen).toEqual(['inline.ts'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('an explicit changedFiles wins over the diff-derived set', async () => {
