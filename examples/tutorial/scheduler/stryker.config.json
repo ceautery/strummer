@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Sackville's `mutate run` passes `--reporters json --mutate <files>` itself; this config sets the test runner and a sensible default scope for a bare `npx stryker run`.",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "coverageAnalysis": "perTest",
+  "mutate": ["src/interval.ts"],
+  "reporters": ["json", "clear-text"]
+}

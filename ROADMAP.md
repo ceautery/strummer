@@ -1370,6 +1370,14 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       with one intentional `filter('active')` bug the passing suite hides; find→fix→verify twice (CLI, then
       MCP); bundled OFFLINE docset (`--embedder fake`) + `reset.sh`. Ships broken OUTSIDE the workspace +
       root Vitest scope (never reddens the gate); guarded by a TS guard + a pytest ingestion guard.
+- [x] **Level-2, multi-file tutorial** (`examples/tutorial/scheduler/`, ADR 0020 **addendum**) — a
+      meeting-room scheduler (`roomctl`) where Sackville's *semantic* tools earn their keep that the
+      64-line todo app couldn't justify. The bug: `overlaps()` uses `<` for `<=`, so back-to-back
+      bookings wrongly conflict — invisible to **coverage** (the line runs), called from **3 files**.
+      Tool arc: `search_docs` (touching≠overlap) → `lsp_find_definition`/`_references` (blast radius, no
+      grep noise) → **`mutate_run`** (a surviving `<`↔`<=` mutant = the headline "green tests aren't
+      proof" catch) → `verify_change`. Same outside-the-gate + two-guard pattern; Stryker is a sample
+      dev-dep.
 - [ ] *(staged, not amputated)* a **web/API/browser tutorial variant** exercising the `api` (OpenAPI
       contract) + `browser` pillars on a small full-stack TODO; a project documentation site.
 

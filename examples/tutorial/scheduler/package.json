@@ -1,0 +1,22 @@
+{
+  "name": "@sackville-tutorial/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A meeting-room scheduler used by the Sackville onboarding tutorial (level 2).",
+  "bin": {
+    "roomctl": "./src/cli.ts"
+  },
+  "scripts": {
+    "roomctl": "tsx src/cli.ts",
+    "test": "vitest run",
+    "mutate": "stryker run"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/vitest-runner": "^8.7.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

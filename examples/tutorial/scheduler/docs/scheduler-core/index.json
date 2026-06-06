@@ -1,0 +1,25 @@
+{
+  "entries": [
+    {
+      "name": "scheduler-core",
+      "path": "overview",
+      "type": "Guide"
+    },
+    {
+      "name": "Time intervals",
+      "path": "guide/intervals",
+      "type": "Guide"
+    },
+    {
+      "name": "overlaps",
+      "path": "api/overlaps",
+      "type": "Function"
+    },
+    {
+      "name": "Schedule.book",
+      "path": "api/book",
+      "type": "Method"
+    }
+  ],
+  "types": []
+}

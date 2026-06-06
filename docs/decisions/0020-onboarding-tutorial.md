@@ -87,3 +87,66 @@ the user to discard edits manually.
   the docset drifts or the bug is "fixed," forcing the tutorial and code to move
   together.
 - No production code changed; this is purely additive onboarding content.
+
+## Addendum (2026-06-06) — a level-2, multi-file tutorial
+
+The todo tutorial's own README concedes its weakness: on a 64-line app, `grep`
+and a quick read are honestly adequate, so the *semantic* tools (`lsp`,
+`mutate`, cross-pillar `verify`) don't visibly earn their keep. We add a second
+tutorial that fixes exactly that, reusing every decision above (pure-TS sample
+outside the gate, bundled offline docset, `reset.sh`, two guards).
+
+### Decisions (level 2)
+
+1. **A multi-file meeting-room scheduler** (`examples/tutorial/scheduler/`,
+   `roomctl`): `Interval` + an `overlaps()` helper, `Booking`, a `Schedule`
+   class (`book`/`cancel`/`conflicts`), `freeSlots()`, format utils, CLI — 6
+   source files. `overlaps()` is called from **three** files, so the value of
+   semantic navigation is real, not contrived.
+
+2. **The defect is a single-character boundary bug that coverage cannot catch.**
+   `overlaps` uses `<` where it needs `<=`, so half-open intervals that merely
+   *touch* (one ends at the minute the next begins) are wrongly reported as
+   overlapping — back-to-back bookings are rejected. The shipped suite passes
+   because it tests intervals that *clearly* overlap and *clearly* don't, never
+   the boundary. Crucially the buggy line **executes** in those tests, so line
+   **coverage reads as fully covered** — the bug is invisible to coverage. This
+   is the deliberate contrast with tutorial 1 (whose bug was an *uncovered*
+   branch coverage flags): here the headline catch is **mutation testing** — a
+   surviving `<`↔`<=` mutant proves the suite never pinned the boundary.
+
+3. **The teaching arc per tool:** `search_docs` confirms the intended
+   touching-≠-overlap semantics (version-pinned dependency truth);
+   `lsp_find_definition`/`_references` resolve `overlaps` across files and show
+   its blast radius (true call sites, none of the comment/doc/test-name noise a
+   `grep overlaps` returns); `mutate_run` surfaces the surviving mutant;
+   `verify_change` folds the fixed result into one verdict. The CLI pass and the
+   Claude-Code/MCP pass mirror each other, as in tutorial 1.
+
+4. **Same honesty guards, one new wrinkle.** A TS guard
+   (`test/tutorial-scheduler.test.ts`) pins the bug (`overlaps` returns `true`
+   for a touching pair; `Schedule.book` rejects a back-to-back booking) and the
+   docset/README sync; a pytest guard
+   (`tests/test_tutorial_scheduler.py`) ingests the `scheduler-core` docset
+   offline and asserts an FTS search for `overlap` finds the semantics page. The
+   sample carries **no spoiler comment**; `overlaps`'s doc-comment points the
+   reader at the `scheduler-core` docs for the boundary rule rather than stating
+   it.
+
+5. **Mutation testing is a sample dev dependency, not a global install.** The
+   sample's `package.json` pins `@stryker-mutator/core` +
+   `@stryker-mutator/vitest-runner`; a bundled `stryker.config.json` wires the
+   vitest runner. `sackville-cli mutate run` supplies `--reporters json --mutate
+   src/interval.ts` itself and reads `reports/mutation/mutation.json` — so the
+   README's `mutate run` step works against the local Stryker with no extra
+   setup. (As with the todo tutorial's coverage step, the Stryker *run* is not
+   executed in `pnpm gate` — only the guards are; runtime tool/version compat is
+   an operator concern, surfaced in Troubleshooting.)
+
+### Consequences (level 2)
+
+- Tutorial 1 stays the 15-minute on-ramp (docs + coverage + the loop); tutorial
+  2 is the ~25-minute follow-on where `lsp` blast-radius and `mutate` are the
+  point, on code big enough that reading-by-eye stops being enough.
+- Still purely additive: no production code changed; gate green at 1647 TS + 47
+  Py after the two new guards.
