@@ -46,7 +46,9 @@ venv/
 /docker-compose.yml
 
 # --- Claude Code (local config) ---
-.claude/
+# Ignore local config (settings.local.json, locks) but ship committed skills.
+.claude/*
+!.claude/skills/
 
 # --- macOS ---
 .DS_Store

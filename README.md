@@ -4,232 +4,131 @@
 
 **An LLM-agent-first developer testing & verification toolkit.**
 
-Sackville gives a coding agent (Claude Code) the capabilities it struggles with
-on its own: knowing the *current, version-pinned* idioms of the languages and
-libraries in front of it, and *exercising* the software it writes — across web
-APIs and real browsers — then reading the results back in a form it can act on.
+Sackville gives a coding agent (such as Claude Code) the capabilities it is worst
+at on its own: knowing the *current, version-pinned* idioms of the libraries
+actually installed in a project; *exercising* the software it writes — across web
+APIs and real browsers; *navigating* code semantically instead of by text search;
+and *verifying* that a change is actually correct, covered, and safe. Every result
+comes back in a structured, token-efficient form an agent can act on.
 
-Sackville is primarily a **headless [MCP](https://modelcontextprotocol.io)
-server**: every capability is exposed as agent-native tools and resources, with
-structured, token-efficient output. Humans drive the same core through a CLI.
+Sackville is primarily a **headless [MCP](https://modelcontextprotocol.io) server**
+— every capability is an agent-native tool or resource. Humans drive the same core
+through a **CLI** (`sackville-cli`).
 
-## The strings
+> **Status:** alpha. All packages are published to npm at `0.0.1-alpha.2`. The
+> single source of truth for "what works today" and "what's next" is
+> [`STATUS.md`](./STATUS.md); the design record is the ADR set in
+> [`docs/decisions/`](./docs/decisions/).
 
-| Pillar | What it does | Prior art it learns from |
+---
+
+## What's in the box
+
+Sackville is organized as three **pillars** plus a set of **cross-cutting
+verification** tools. Each capability is independent — install and enable only
+what you need.
+
+| Pillar | What it does | Learns from |
 | --- | --- | --- |
-| **Docs / idioms** | Version-pinned documentation search for the libraries actually installed in a project. | GitBook, DevDocs, Swagger UI, Dash |
-| **API testing** | Git-friendly request collections, environments, assertions, and an agent-drivable runner. | Postman, Insomnia, Bruno |
-| **Browser / UI testing** | Orchestrated Playwright flows with traces, screenshots, and console/network capture as agent-readable artifacts. | Playwright, Selenium, Cucumber |
+| **Docs / idioms** | Version-pinned documentation search for the libraries *actually installed* in a project (hybrid full-text + vector ranking). | DevDocs, Dash, Swagger UI |
+| **API testing** | Git-friendly `.bru` request collections, environments, assertions, secrets, an agent-drivable runner, and OpenAPI/GraphQL contract validation. | Postman, Insomnia, Bruno |
+| **Browser / UI testing** | Orchestrated Playwright flows with traces, screenshots, HAR, and console/network capture as agent-readable artifacts. | Playwright, Selenium |
 
-Cross-cutting verification tools (see [`ROADMAP.md`](./ROADMAP.md)): dependency/version
-intelligence, coverage-aware impact-scoped test runs, flaky-test detection & quarantine,
-mutation testing, and semantic code navigation via an LSP bridge have **all shipped** —
-**Phase 4 is complete** (all five pillars: engine + agent surface). **Phase 5 (cross-pillar
-verification) is complete too** — the pillars now *compose*: a captured run's traffic is
-validated against the API contract (the capture→contract bridge) and folds with the four
-Phase-4 signals into one change verdict ([ADR 0013](./docs/decisions/0013-cross-pillar-verification.md)).
-(Visual-regression diffing and API contract/schema testing already shipped inside the browser
-and API pillars.)
+| Cross-cutting tool | What it answers |
+| --- | --- |
+| **`deps`** | Is the *installed* version of this dependency deprecated, vulnerable (OSV/CVSS), or stale? What changed between versions? |
+| **`coverage`** | Which lines did this change *add* that no test exercised? (the forgotten-assertion catch) |
+| **`flake`** | Is this test flaky, reliable, or broken? (Wilson-scored over run history) |
+| **`mutate`** | Are the tests *meaningful* — do they actually catch mutations? |
+| **`lsp`** | Where is this symbol defined / referenced? What's its type? Rename it safely. (semantic navigation, not grep) |
+| **`verify`** | Fold all of the above into **one change verdict** — and *absence is never a pass*. |
 
-## Status
+The pillars **compose**: a captured browser/API run's traffic is validated against
+the API contract, then folded together with coverage, deps, flake, and mutation
+signals into a single verdict. See [ADR 0013](./docs/decisions/0013-cross-pillar-verification.md).
 
-Under active development. The **docs/idioms pillar is complete** (version-pinned
-hybrid search over MCP + CLI, multi-ecosystem version detection, DevDocs + Dash
-adapters). The **API-testing pillar's core is complete** too — `.bru` runner,
-secrets, deny-by-default mutation safety, captures/chaining, QuickJS scripts,
-OpenAPI/GraphQL contract validation, and both an MCP tool surface and a
-`sackville api …` CLI. The **browser/UI pillar (`@sackville-mcp/browser`, on
-`playwright-core`) is feature-complete on both surfaces** — the engine (browser
-lifecycle manager, ARIA-snapshot capture + imperative step tools, deny-by-default
-action gate, two-tier SSRF defense sharing `@sackville-mcp/safety`, and an artifact
-pipeline of trace/console/network by handle), a session-oriented **MCP surface**
-(`registerBrowserTools` + the `sackville-browser-mcp` bin) with a per-session mutex
-and the `sackville://browser/run/{runId}/{kind}` resource, the full **secret
-boundary** (`{{secret:NAME}}` fill, origin-scoped `httpCredentials`, `storageState`
-by handle, redaction across console/network/snapshot/reads/trace), and operator
-hardening (service-worker block, WebRTC-egress neutralization, session wall-clock +
-max-pages + max-contexts caps). The complete **deny-by-default gating bundle**
-(downloads quarantine, uploads confined to an allowlist dir, dialog dismiss, auth via
-`httpCredentials`), an on-demand **screenshot** step tool, **browser assertions**
-(reusing a shared `@sackville-mcp/assert` operator core — one assertion engine across
-pillars — with auto-waiting), a **trace-query** tool (action timeline from a
-trace.zip), a **Lighthouse perf audit**, **network heavy mode** (HAR capture —
-redacted, by handle — and `routeFromHAR` replay for deterministic offline runs),
-**persisted `.bru` browser-step flows** (replayable, semantic-locator-keyed — over
-both `sackville browser run` and the MCP `browser_run_flow` tool), **video capture**
-(webm by handle), **vision/coordinate caps** (operator-gated coordinate click/move
-for canvas / non-AX-tree UI), **visual-regression diffing** (`browser_visual_compare`
-via pixelmatch, baseline by handle), a human **`sackville browser` CLI** (snapshot/
-audit/screenshot/run), and a **container-hardening ADR** (the deployment/kernel
-boundary, [ADR 0007](./docs/decisions/0007-container-hardening.md)) have all landed,
-along with **multi-engine** (Chromium + Firefox + WebKit;
-[ADR 0009](./docs/decisions/0009-multi-engine.md)) — so the browser pillar is
-feature-complete. Sackville is **headless-only**: developer live-view was dropped in
-favor of LLM-first observability — the trace/HAR/console/video artifacts let the
-agent answer "what happened on this page" better than a human watching it render
-([ADR 0008](./docs/decisions/0008-headless-only-llm-first-observability.md)).
+---
 
-**Phase 4 (cross-cutting verification) is complete** — all five pillars shipped (engine +
-agent surface); only explicitly-staged, non-blocking tails remain. The sequence was locked
-by a research + adversarial-verification fan-out
-([ADR 0010](./docs/decisions/0010-phase4-cross-cutting-verification.md)):
-dependency intelligence ∥ coverage → flaky-test detection → mutation testing → an LSP
-bridge (last). The first pillar, **`@sackville-mcp/deps` (dependency/version
-intelligence)**, has its pure, offline core complete — deprecation, OSV vulnerability
-matching (incl. CVSS-vector severity scoring), on-disk OSV-snapshot loading, freshness
-(`behindBy`), a vuln-aware `minimumSafeUpgrade` target, and a composed `auditDependency`
-verdict for the version *actually installed*. Its **agent surface has shipped** — the
-`audit_dependency`/`audit_project`/`changelog_diff` MCP tools (artifacts by handle over
-the shared `@sackville-mcp/artifacts`) + the `sackville-deps-mcp` bin — plus the Python/PyPI +
-RubyGems advisory adapters (`audit_dependency` + `audit_project` across all three
-ecosystems) and a human **`sackville deps` CLI** (`audit`/`audit-project`/`changelog`). All
-four Phase-4 verification pillars now also ship a human `sackville <pillar>` CLI
-(`mutate`/`coverage`/`flake`/`deps`), each a thin wrapper over its engine.
+## Install & run
 
-The parallel track, **`@sackville-mcp/coverage`**, is also complete — the "forgotten
-assertion" catch: given a diff it reports the lines a change *added* that no test
-exercised (`parseUnifiedDiff` + `uncoveredNewLines` + `uncoveredInDiff`, with an explicit
-non-executable third state), plus a gated, impact-scoped `runScoped` that runs only the
-tests a change touches (`vitest related`) with coverage. Agent surface: the
-`uncovered_in_diff` (read-only) + `run_scoped` (operator-gated) MCP tools +
-`sackville-coverage-mcp` bin.
+Sackville ships as the aggregate MCP server (the unscoped **`sackville-mcp`**
+package) plus a library graph and CLI under the **`@sackville-mcp/*`** scope.
 
-The **test-quality chain is complete through mutation**. **`@sackville-mcp/flake`**
-(flaky-test detection) is done — a pure Wilson/binomial classifier
-(`flaky`/`reliable`/`broken`/`insufficient-data` + a `flakeScore`), a private
-`better-sqlite3` run-history store, `vitest --reporter=json` ingestion, an
-operator-gated quarantine with mandatory expiry, a gated suite-repeat runner, and the
-`flake_status`/`flake_candidates`/`flake_release`/`flake_run`/`flake_quarantine` MCP
-surface + `sackville-flake-mcp` bin. **`@sackville-mcp/mutate`** (mutation testing) is done —
-a pure `summarizeMutation` over the mutation-testing-elements report schema (score +
-survivor list), a gated, diff-scoped `runMutation` spawning `stryker run`, and the
-`mutate_summarize`/`mutate_run` MCP surface + `sackville-mutate-mcp` bin (the
-Stryker/Vitest-4 compat blocker was resolved — [ADR 0010 update](./docs/decisions/0010-phase4-cross-cutting-verification.md)).
+### Drive the MCP server from Claude Code
 
-The last pillar, **`@sackville-mcp/lsp`** (semantic code navigation — the documented,
-fenced exception to the no-live-RPC rule), is **done**: design locked in
-[ADR 0011](./docs/decisions/0011-lsp-bridge.md) (a research + 2-critic adversarial
-fan-out), shipped as five slices — the pure position-encoding core (utf-8/16/32) and
-LSP-result normalizers, a `vscode-jsonrpc` client (encoding negotiation, tri-state
-readiness, deadlock-safe replies), the `(language, projectRoot)`-keyed manager (per-file
-mutex, in-flight-aware reaper) + operator-bound server registry, the gated `query.ts`
-engine, and the `lsp_find_definition`/`lsp_find_references`/`lsp_hover` (gated as a group)
-+ always-on `lsp_languages` MCP surface + `sackville-lsp-mcp` bin. The whole pillar is
-tested against a fake in-process JSON-RPC peer replaying recorded real-server payloads —
-no real language server runs in the green gate. The capability-gated read tails
-(`lsp_type_definition`/`_document_symbols`/`_call_hierarchy`) and **write-mode**
-(`lsp_rename` — dry-run by default, applies to disk only behind a separate
-`SACKVILLE_LSP_ALLOW_WRITE` gate; single- and multi-file via a sorted multi-URI lock with
-stage-then-commit + staleness guards) have since landed (ADR 0011 addendum), as has a human
-**`sackville lsp` CLI** (single-shot navigation + `rename`, the engine injectable so the gate
-never spawns a real server). Since then **`workspace/symbol`** search (`lsp_workspace_symbols`),
-**`diagnostics`** (`lsp_diagnostics` — `documentDiagnostics` dispatches by capability: the PULL
-model `textDocument/diagnostic` for servers advertising `diagnosticProvider` (rust-analyzer), else
-the PUSH model `publishDiagnostics` (tsserver)), **multi-root**
-workspaces (`workspaceRoots[]` / `--workspace-root`, one server bound to many folders — including
-write-mode rename), **resource-operation write-mode** (`lsp_rename` applies
-`CreateFile`/`RenameFile`/`DeleteFile` interleaved with text edits — e.g. a module rename that
-renames its backing file — verified live against rust-analyzer), and its **safe-subset v1 cuts**
-(`ignoreIfExists`/`ignoreIfNotExists` as no-ops + editing a file also renamed/deleted in one batch,
-via a per-file `Fate` projection; conflicting batches refused) have all landed. The resource-op
-work also generalized the readiness model to servers that signal not-ready via an error. Most
-recently, **dynamic workspace-folder changes** (`didChangeWorkspaceFolders`) landed as grow-only
-warm-server reuse — a query whose root group is a superset of a warm same-language server's folders
-extends that server in place (capability-gated; ambiguous-tie/no-cap ⇒ spawn fresh) instead of
-respawning and re-indexing; verified live against rust-analyzer. Most recently, **destructive
-`overwrite`** landed (ADR 0011 addendum): a Create/Rename `overwrite:true` truncate-and-replaces an
-EXISTING regular file behind a separate, self-enforcing operator gate
-(`allowDestructiveResourceOps`), auditing the destroyed bytes and surfacing an `overwritten[]` list —
-designed via an adversarial fan-out that caught two data-loss blockers (a symlink-clobber audit lie;
-an overwrite-create that silently no-op'd a following delete), so symlink/dir targets stay refused and
-the completeness guard escalates on a destructive batch. A conservative toolchain-mismatch warning
-also lands. Staged-as-refused-by-design: recursive/dir delete (the least-reversible op) and the full
-toolchain cross-version resolution matrix.
+The aggregate server runs straight from npm with `npx` — no local install needed.
+The quickest path:
 
-**Phase 5 (cross-pillar verification) is complete** — the pillars now compose
-([ADR 0013](./docs/decisions/0013-cross-pillar-verification.md)). Two milestones, both
-compose-only / zero-spawn. **5a — the capture→contract bridge**: `harEntriesToFacts` +
-`validateCapturedTraffic` in `@sackville-mcp/api` turn a stored browser/API HAR into facts the
-*already-shipped* `validateOpenApiResponse` consumes (attach-body resolution, JSON/origin
-filter, server-base-path reconciliation, an exercised-operations drift walk) — no request is
-re-run; surfaced as the gated `validate_capture` MCP tool (a HAR is operator-gated bytes, so
-resolving one needs `SACKVILLE_VERIFY_ALLOW_CAPTURE`; every finding message + captured path is
-redacted) + the `sackville api validate-capture` CLI. **5b — the unified change verdict**: a new
-pure **`@sackville-mcp/verdict`** package folds the four Phase-4 signals + the contract sub-verdict
-into one `CompositeVerdict` (type-only pillar imports, *zero runtime pillar deps*). The
-load-bearing rule: **absence is never a pass** — a missing/no-signal pillar yields
-`inconclusive`, never `pass`; there is no baked-in severity threshold (the caller declares the
-cut). Surfaced as the `request_verdict` MCP tool + `sackville-verify-mcp` bin + a `sackville verify`
-CLI. The shared `@sackville-mcp/artifacts` store also gained prefix-qualified, hardened cross-prefix
-rehydration so one pillar can resolve another's by-handle artifact. **A Phase-5 tail since landed —
-GraphQL drift over captured traffic**: `validateCapturedTraffic`'s contract is now the discriminated
-`CaptureContract { openapi?, graphql?: {endpointPath, sdl} }`, GraphQL entries route to the shipped
-`validateGraphqlOperation` (never the OpenAPI validator), and absence stays non-passing (GraphQL with
-no SDL ⇒ no-signal); backed by a real Playwright `content:'attach'` capture fixture. **5c — run-driving
-`verify` has since landed** (ADR 0013 Addendum): a new `@sackville-mcp/verify` package + the `verify_change`
-MCP tool + `sackville verify run` CLI DRIVE the gated pillars (coverage/flake/mutate + the consume-only
-contract) and fold them into one verdict in a single call. The gate contract is **"compose, never
-widen"** — `verify` reuses each pillar's *own* gate plus a separate `SACKVILLE_VERIFY_ENABLE_RUN`
-opt-in ("both required"); a pillar whose gate is unmet is `skipped:gate-not-set`, never run; the
-orchestrator imports zero spawn-capable code. **5d — diff-scoping + deps run-wiring has since landed**:
-a shared zero-dependency **`@sackville-mcp/diff`** (`parseUnifiedDiff` + `changedFiles`) lets `verify_change`
-scope coverage/mutate/flake from ONE diff; a pure `changedDependencies(diff)` + a reusable
-`auditProjectDependencies` runner wire deps into the run path (`SACKVILLE_DEPS_ALLOW_NETWORK` under
-`ENABLE_RUN`) + `sackville verify run --deps`. **5e — `verify` driving a LIVE capture has since landed**
-(ADR 0013 Addendum 3): `verify_change`'s `contract` input + `sackville verify run --flow` DRIVE an
-operator-authored browser flow → capture the HAR → validate it, behind the full browser gate; the shared
-`@sackville-mcp/browser` `driveBrowserFlowToHar` gates on **flow completeness, not HAR emptiness** (a
-partially-failed flow's HAR is never validated — absence stays non-passing), with a union redactor at
-both the archive and the findings. **5f — `verify` driving the `@sackville-mcp/api` RUNNER to *produce* the HAR
-has since landed** (ADR 0013 Addendum 4): the SECOND produce source — `verify_change`'s `contract.request`
-+ `sackville verify run --request` DRIVE the api runner for an operator-authored request (by NAME) →
-synthesize a HAR (`@sackville-mcp/api` `har-synth.ts`: per-hop entries, the real request body for GraphQL, a
-shared `redactHarZip` pass `finalizeHar` now delegates to) → validate it, behind the api pillar's own gate
-+ `SACKVILLE_API_COLLECTIONS_DIR`; transport-completeness guards throw ⇒ inconclusive, and the new
-`@sackville-mcp/verdict` `fromCaptureVerdict` folds a not-`clean` capture to inconclusive (closing a latent
-absence-as-pass hole across the consume + both produce paths). **Two follow-on tails have since landed:**
-the shared **`@sackville-mcp/severity`** scale was extracted out of `@sackville-mcp/deps` into its own pure zero-dep
-leaf (`QualitativeSeverity`/`QUALITATIVE_RANK` + the verdict scale; `none`≠`unknown` kept distinct); and
-**request-body & parameter contract validation** ([ADR 0014](./docs/decisions/0014-request-contract-validation.md))
-— a new `validateOpenApiRequest` sibling validates the request half (body + path/query/header params) and
-threads into the capture→contract bridge + verdict (via an `unverified`→`noSignal` fold so a
-present-but-uncheckable request can't pass) + a direct `validate_request` MCP tool / `sackville api
-validate-request` CLI. The live **`api run --openapi`** path then folded the request check in too (a
-`runRequestForContract` out-of-band channel surfaces the un-redacted sent request without widening
-`RunResult`). Most recently, **GraphQL-request variable validation**
-([ADR 0015](./docs/decisions/0015-graphql-request-variable-validation.md)) — `validateGraphqlOperation` now
-validates the runtime `variables` against the operation's declared types (per-variable, findings
-reconstructed from name+type so values never leak; custom-scalar/non-object/ambiguous → `unverified`),
-wired through the capture bridge + `validate_response.variables` + `api validate --graphql --variables` +
-live `api run --graphql`. Since then the non-scalar OpenAPI param serialization matrix + non-JSON request
-bodies ([ADR 0016](./docs/decisions/0016-nonscalar-param-serialization.md), closed), artifact retention/GC
-([ADR 0017](./docs/decisions/0017-artifact-retention.md)), and the **Python half of the Phase-4
-verification pillars** ([ADR 0010 addendum](./docs/decisions/0010-phase4-cross-cutting-verification.md) —
-PyPI/RubyGems deps diff-scoping + changelog, pytest flake runner, cosmic-ray/mutmut mutation runners, and
-pytest+coverage.py run-scoping) all landed. Staged (not amputated): GraphQL directive-argument validation
-+ custom-scalar variable coercers; cosmic-ray/mutmut/pytest diff-scoping; Ruby coverage/mutation.
+```bash
+claude mcp add sackville -- npx -y sackville-mcp
+```
 
-**The single source of truth for "what phase are we on" is [`STATUS.md`](./STATUS.md).**
+Or commit a project-scoped `.mcp.json` so your whole team (and their agents) pick
+it up on clone:
 
-## Architecture at a glance
+```jsonc
+{
+  "mcpServers": {
+    "sackville": {
+      "command": "npx",
+      "args": ["-y", "sackville-mcp"],
+      "env": {
+        "SACKVILLE_TOOLSETS": "docs,api,deps,verify",
+        "SACKVILLE_INDEX": "/abs/path/to/your-docs.sqlite"
+      }
+    }
+  }
+}
+```
 
-- **Polyglot core.** TypeScript owns the MCP server, CLI, the API-testing engine,
-  and (later) browser testing. **Python owns documentation ingestion** (scraping,
-  parsing, indexing, embeddings).
-- **The boundary is a file, not a service.** For docs, Python builds a SQLite
-  index (FTS5 + optional `sqlite-vec` vectors) on disk; the TypeScript server
-  reads it at query time. No Python process sits in the request path. See
-  [`ARCHITECTURE.md`](./ARCHITECTURE.md).
-- **Target platform: macOS** (developed inside a Linux dev container).
+A bare `npx -y sackville-mcp` is **native-free** and starts with the curated
+default toolset — `docs, api, deps, verify` — printing, e.g.:
 
-## Try it (docs pillar)
+```
+sackville-mcp: enabled [api, deps, verify]; disabled [docs]
+```
+
+(`docs` activates once you point `SACKVILLE_INDEX` at a built index; see below.)
+
+### Use the CLI
+
+```bash
+# one-off, no install
+npx @sackville-mcp/cli search "run code after render" --library react --installed ^18
+
+# or install it
+npm i -g @sackville-mcp/cli      # provides the `sackville-cli` command
+sackville-cli --help
+```
+
+### Heavy pillars are opt-in
+
+The browser, docs, and flake pillars pull native/large dependencies
+(`playwright-core`, `better-sqlite3`, the embedding model). They are declared as
+**optional peer dependencies**, so a default install stays lightweight. Enable
+them by installing the peer and selecting the toolset:
+
+```bash
+# example: enable the browser pillar
+npm i @sackville-mcp/browser playwright-core
+npx playwright install chromium
+SACKVILLE_TOOLSETS=api,browser,verify npx -y sackville-mcp
+```
+
+---
+
+## Quickstart: the docs pillar end-to-end
+
+The docs pillar is the clearest demonstration of Sackville's polyglot design:
+**Python ingests** documentation into a SQLite index; the **TypeScript server/CLI
+reads** it. They never talk over a socket — the file *is* the interface.
 
 ```bash
 # one-time setup
-pnpm install && pnpm build          # TypeScript packages
-( cd py/sackville_ingest && uv sync )  # Python ingester
+pnpm install && pnpm build               # TypeScript packages
+( cd py/sackville_ingest && uv sync )    # Python ingester
 
-# build a version-pinned React docs index (Python ingester)
+# build a version-pinned React docs index (from a DevDocs slug)
 cd py/sackville_ingest
 uv run sackville-ingest build --slug react   --library react --out ../../data/react.sqlite
 uv run sackville-ingest build --slug react~18 --library react --out ../../data/react.sqlite --append
@@ -237,21 +136,129 @@ uv run sackville-ingest build --slug react~18 --library react --out ../../data/r
 # search it from the terminal (hybrid FTS + vector ranking)
 cd ../..
 export SACKVILLE_INDEX=$PWD/data/react.sqlite
-node packages/cli/dist/bin.mjs versions react
-node packages/cli/dist/bin.mjs search "run code after render" --library react --installed ^18.0.0
+sackville-cli versions react
+sackville-cli search "run code after render" --library react --installed ^18.0.0
 
 # or expose it to an agent over MCP
-claude mcp add sackville -- sackville-mcp $SACKVILLE_INDEX
+claude mcp add sackville --env SACKVILLE_INDEX=$SACKVILLE_INDEX -- npx -y sackville-mcp
 ```
 
-The CLI (`@sackville-mcp/cli`) and MCP server (`sackville`) are thin surfaces over
-`@sackville-mcp/core`; query embedding lives in `@sackville-mcp/embed`; ingestion is the
-Python `py/sackville_ingest`.
+> Tip: `--embedder fake` builds an index instantly and fully offline (no model
+> download) — handy for trying things out or for CI. The default `fastembed`
+> backend downloads a ~130 MB ONNX model once, then runs locally.
 
-## For contributors / agents
+---
 
-Read [`CLAUDE.md`](./CLAUDE.md) first — it defines how work is done here (TDD,
-the always-green gate, milestone discipline, and how to resume cold).
+## Composability
+
+Sackville is deliberately a graph of small packages rather than a monolith.
+
+- **One server, many toolsets.** The aggregate `sackville-mcp` composes every
+  enabled pillar onto one stdio process. `SACKVILLE_TOOLSETS` (comma list) selects
+  which pillars register; unset means the curated default `docs, api, deps, verify`.
+- **Or one process per pillar.** Each pillar also ships its own bin
+  (`sackville-docs-mcp`, `sackville-api-mcp`, `sackville-browser-mcp`,
+  `sackville-deps-mcp`, `sackville-coverage-mcp`, `sackville-flake-mcp`,
+  `sackville-mutate-mcp`, `sackville-lsp-mcp`, `sackville-verify-mcp`) if you'd
+  rather isolate a capability.
+- **Selection vs. capability are orthogonal.** Choosing to *register* a pillar
+  (`SACKVILLE_TOOLSETS`) is separate from *enabling its powers* (its own
+  `SACKVILLE_<PILLAR>_*` gates). A registered-but-ungated pillar exposes only its
+  read-only tools.
+- **Shared cores, no duplication.** SSRF defense + secret redaction
+  (`@sackville-mcp/safety`), the assertion engine (`@sackville-mcp/assert`), the
+  on-disk artifact store (`@sackville-mcp/artifacts`), the severity scale
+  (`@sackville-mcp/severity`), and the diff primitive (`@sackville-mcp/diff`) are
+  factored into leaf packages every pillar reuses.
+
+### The safety model: deny-by-default, operator-set
+
+Anything that **runs code, mutates state, or reaches the network** is off until an
+**operator** turns it on via environment variables — never via an agent tool input.
+An agent cannot self-authorize. A few examples:
+
+| To allow… | The operator sets… |
+| --- | --- |
+| Sending mutating HTTP requests | `SACKVILLE_API_ALLOW_UNSAFE=1` + `SACKVILLE_API_ALLOWED_HOSTS=…` |
+| Running impact-scoped tests | `SACKVILLE_COVERAGE_ALLOW_RUN=1` + `SACKVILLE_COVERAGE_PROJECT_ROOTS=…` |
+| LSP navigation / rename | `SACKVILLE_LSP_ALLOW_RUN=1` + `SACKVILLE_LSP_PROJECT_ROOTS=…` (+ `_ALLOW_WRITE` for rename) |
+| Resolving a captured HAR | `SACKVILLE_VERIFY_ALLOW_CAPTURE=1` + `SACKVILLE_ARTIFACTS_ROOT=…` |
+
+Gates are **subtractive only** ("compose, never widen"): a higher-level switch
+never grants a lower-level capability. Secrets are referenced **by name**; their
+values are redacted from every text surface. Large artifacts (doc bodies, traces,
+screenshots, reference lists) are returned **by resource handle**
+(`sackville://…`), never inlined.
+
+---
+
+## Architecture at a glance — and the *why*
+
+- **Polyglot core.** TypeScript owns the MCP server, CLI, and the API/browser
+  engines (the native home of the MCP SDK, Playwright, and the Bruno ecosystem).
+  **Python owns documentation ingestion** (scraping, parsing, embeddings), where
+  its libraries are strongest.
+- **The boundary is a file, not a service.** Python builds a SQLite index; the
+  TypeScript server opens it read-only at query time. *Why:* each language keeps
+  an independent, always-green test gate; ingestion is reproducible and cacheable;
+  and "pick up where we left off" reduces to "the index is built or it isn't."
+  See [ADR 0001](./docs/decisions/0001-foundational-choices.md).
+
+### Toolchain choices
+
+| Choice | Why |
+| --- | --- |
+| **pnpm** (workspaces) | Strict, content-addressed `node_modules` keeps the 18-package graph honest about its dependencies — no phantom imports — and `workspace:*` links are rewritten to real versions only at publish. |
+| **Biome** | One fast Rust tool for lint **and** format across all TypeScript, replacing the ESLint + Prettier pair. Faster CI, one config, no plugin drift. |
+| **Vitest** (+ v8 coverage) | The native ESM/TypeScript test runner that powers the red→green TDD loop; its coverage output is what the `coverage` pillar consumes. |
+| **tsdown** | Emits clean ESM + `.d.ts` (and a shebang CLI bin) per package. Sackville is **ESM-only** by design. |
+| **better-sqlite3** | Synchronous, fast, and — unlike Node 22's built-in `node:sqlite` — able to load the `sqlite-vec` extension (which `node:sqlite` only supports on Node ≥ 23.5). |
+| **sqlite-vec + FTS5** | Vector KNN *and* full-text search in one embedded file — no vector-DB service to run. Hybrid ranking (RRF) fuses both. |
+| **transformers.js** | Lets the Node server embed queries with the *same* model (`bge-small-en-v1.5`) the Python side used for documents (verified cosine 1.0) — so there's **no Python in the serve path**. |
+| **uv** (Python) | Fast, reproducible project + lockfile + pinned interpreter. Critically, it provides a CPython whose `sqlite3` allows `enable_load_extension` — the distro-Python build often does not, which is the #1 setup footgun. |
+| **Ruff** | One fast Rust tool for Python lint **and** format — the Python mirror of the Biome decision. |
+| **fastembed** (ONNX) | Local, offline embeddings after a one-time model download; no embedding API or GPU required. |
+| **playwright-core** (pinned) | The browser pillar wraps stable `playwright-core` directly rather than `@playwright/mcp`, so it controls the launch/SSRF/redaction seam. Pinned because the engine relies on internal snapshot behavior. |
+
+Sackville is **headless-only**: developer live-view was deliberately dropped in
+favor of LLM-first observability — trace/HAR/console/video artifacts let an agent
+answer "what happened on this page" better than a human watching it render
+([ADR 0008](./docs/decisions/0008-headless-only-llm-first-observability.md)).
+
+---
+
+## Repo map
+
+| Path | What |
+| --- | --- |
+| [`packages/`](./packages) | The TypeScript workspace (18 packages: pillar engines, shared cores, the `mcp` server, the `cli`). |
+| [`py/sackville_ingest/`](./py/sackville_ingest) | The Python documentation ingester (uv-managed). |
+| [`schema/`](./schema) | The SQLite contract (`*.sql` + `*.json`) both languages honor. |
+| [`examples/`](./examples) | Runnable samples (API collection, browser flow, LSP projects, MCP config). |
+| [`docs/decisions/`](./docs/decisions) | The 19 Architecture Decision Records. |
+| [`CLAUDE.md`](./CLAUDE.md) | How work is done here (TDD, the always-green gate, milestone discipline). |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Technical design and the exact stack. |
+| [`STATUS.md`](./STATUS.md) | **Current phase + how to resume. Always current.** |
+| [`ROADMAP.md`](./ROADMAP.md) | The phased plan. |
+| [`RELEASING.md`](./RELEASING.md) | How packages get published (Changesets + OIDC). |
+
+---
+
+## For contributors & agents
+
+Read [`CLAUDE.md`](./CLAUDE.md) first — it is the contract for how work is done
+here (test-first, the always-green `pnpm gate`, commit discipline, and how to
+resume cold). The development gate is:
+
+```bash
+pnpm gate     # Biome + tsc + Vitest, then Ruff + pytest — must be 100% green
+```
+
+If you're using Claude Code in this repo, the bundled skill at
+[`.claude/skills/sackville/SKILL.md`](./.claude/skills/sackville) teaches the agent
+to use Sackville's own tools (semantic LSP navigation over `grep`/`find`,
+version-pinned docs search, change verification) and is picked up automatically on
+clone.
 
 ## License
 
