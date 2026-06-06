@@ -15,10 +15,10 @@
  *    runner — no real spawn in the green gate.
  */
 
-import { execFile } from 'node:child_process'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { type SpawnedRunner, spawnRunner } from '@sackville-mcp/spawn'
 import type { FlakeVerdict } from './classify.js'
 import type { PytestJsonReport } from './pytest.js'
 import type { ParseReportOptions, VitestJsonReport } from './report.js'
@@ -58,10 +58,7 @@ export interface RunAndRecordInput {
 }
 
 /** Injected command runner — executes `vitest <argv>` and yields its exit status. */
-export type TestRunner = (
-  argv: string[],
-  opts: { cwd: string; timeoutMs?: number },
-) => Promise<{ exitCode: number; stdout: string; stderr: string }>
+export type TestRunner = SpawnedRunner
 
 export interface RunAndRecordResult {
   /** False only when repeat <= 0 (the runner was never invoked). */
@@ -86,47 +83,6 @@ function vitestArgv(files: string[], outFile: string): string[] {
  */
 function pytestArgv(files: string[], outFile: string): string[] {
   return ['--json-report', `--json-report-file=${outFile}`, ...files]
-}
-
-/**
- * Build the child env for a spawned test runner: prepend the project's own
- * `<cwd>/node_modules/.bin` to PATH, so a bare `vitest`/`pytest` is found even
- * when `sackville-cli flake run` is invoked from a **global** install (whose
- * PATH lacks the target project's `.bin`). Mirrors `@sackville-mcp/coverage`'s
- * `runnerEnv`. Returns a fresh env; never mutates input.
- */
-export function runnerEnv(cwd: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const localBin = resolve(cwd, 'node_modules', '.bin')
-  const sep = process.platform === 'win32' ? ';' : ':'
-  const current = env.PATH
-  return { ...env, PATH: current ? `${localBin}${sep}${current}` : localBin }
-}
-
-/** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
-function spawnRunner(command: string): TestRunner {
-  return (argv, opts) =>
-    new Promise((res) => {
-      execFile(
-        command,
-        argv,
-        {
-          cwd: opts.cwd,
-          timeout: opts.timeoutMs,
-          maxBuffer: 64 * 1024 * 1024,
-          env: runnerEnv(opts.cwd),
-        },
-        (err, stdout, stderr) => {
-          // The tool exits non-zero on a test failure — surface the code, don't reject.
-          const code =
-            err && typeof (err as { code?: unknown }).code === 'number'
-              ? (err as { code: number }).code
-              : err
-                ? 1
-                : 0
-          res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
-        },
-      )
-    })
 }
 
 /** Default live runner: spawn the local `vitest` as a subprocess (used by the bin, not the gate). */

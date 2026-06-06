@@ -17,7 +17,6 @@ import {
   runCosmicRay,
   runMutation,
   runMutmut,
-  runnerEnv,
 } from './run.js'
 
 const FIXTURE = resolve(
@@ -365,21 +364,5 @@ describe('runCosmicRay — diff-scoped (ADR 0010 addendum 2)', () => {
     expect(result.ran).toBe(true)
     expect(result.scopedFiles).toEqual(['pkg/calc.py'])
     expect(result.unmatched).toEqual(['gone/y.py'])
-  })
-})
-
-describe('runnerEnv — prepends the project-local node_modules/.bin to PATH', () => {
-  it('puts <cwd>/node_modules/.bin first so a project-local stryker/mutmut/cosmic-ray is found', () => {
-    const env = runnerEnv('/abs/repo', { PATH: '/usr/bin' })
-    const sep = process.platform === 'win32' ? ';' : ':'
-    expect(env.PATH).toBe(`${join('/abs/repo', 'node_modules', '.bin')}${sep}/usr/bin`)
-  })
-
-  it('works when PATH is unset and never mutates the input env', () => {
-    const input = { FOO: 'bar' } as NodeJS.ProcessEnv
-    const env = runnerEnv('/abs/repo', input)
-    expect(env.PATH).toBe(join('/abs/repo', 'node_modules', '.bin'))
-    expect(env.FOO).toBe('bar')
-    expect(input.PATH).toBeUndefined()
   })
 })

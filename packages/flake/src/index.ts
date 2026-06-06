@@ -40,7 +40,6 @@ export {
   type RunHistoryConfig,
   runAndRecord,
   runAndRecordPytest,
-  runnerEnv,
   type TestRunner,
 } from './runner.js'
 export {

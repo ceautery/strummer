@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { CoverageGateError, runnerEnv, runScoped, type TestRunner } from './run.js'
+import { CoverageGateError, runScoped, type TestRunner } from './run.js'
 import type { FileCoverage } from './uncovered.js'
 
 const tmpDirs: string[] = []
@@ -160,21 +160,5 @@ describe('runScoped — gated, impact-scoped vitest run (injected runner)', () =
     expect(err?.message).toMatch(/exit code 127/)
     // The runner's own output is included so the user sees WHY it failed.
     expect(err?.message).toContain('vitest: No such file or directory')
-  })
-})
-
-describe('runnerEnv — prepends the project-local node_modules/.bin to PATH', () => {
-  it('puts <cwd>/node_modules/.bin first so a project-local vitest/pytest is found', () => {
-    const env = runnerEnv('/abs/repo', { PATH: '/usr/bin' })
-    const sep = process.platform === 'win32' ? ';' : ':'
-    expect(env.PATH).toBe(`${join('/abs/repo', 'node_modules', '.bin')}${sep}/usr/bin`)
-  })
-
-  it('works when PATH is unset and never mutates the input env', () => {
-    const input = { FOO: 'bar' } as NodeJS.ProcessEnv
-    const env = runnerEnv('/abs/repo', input)
-    expect(env.PATH).toBe(join('/abs/repo', 'node_modules', '.bin'))
-    expect(env.FOO).toBe('bar')
-    expect(input.PATH).toBeUndefined() // input untouched
   })
 })

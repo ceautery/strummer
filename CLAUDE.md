@@ -172,7 +172,13 @@ vision and `ARCHITECTURE.md` for the technical design.
   scale `Severity`(=`|'none'`)/`SEVERITY_RANK`/`maxSeverity`/`atLeast`; extracted out of
   `deps` so `verdict` (a re-export shim) and `deps` (`SeverityBucket`=`|'unknown'`,
   `BUCKET_RANK`=`{...QUALITATIVE_RANK,unknown:0}`) build on ONE base — the load-bearing
-  `none`≠`unknown` distinction kept, deps' `unknown`→no-signal pillar), `deps` (Phase-4 dependency/version
+  `none`≠`unknown` distinction kept, deps' `unknown`→no-signal pillar), `spawn` (the shared, pure
+  ZERO-dependency child-process helper — `runnerEnv` (prepends `<cwd>/node_modules/.bin` to a
+  spawned tool's PATH so a global `sackville-cli` finds the project's local `vitest`/`pytest`/
+  `stryker`) + `spawnRunner`/`SpawnedRunner`; extracted out of `coverage` once `mutate`+`flake`
+  became 2nd/3rd consumers, mirroring safety/assert/diff/severity — the pillars alias it to
+  their public `TestRunner`/`MutationRunner`; the real spawn stays out of the gate, ADR 0010),
+  `deps` (Phase-4 dependency/version
   intelligence: deprecation/vuln/freshness for the *installed* version; pure offline
   core + on-disk OSV snapshot + `audit_dependency`/`audit_project` MCP surface; plus the
   pure `changedDependencies(diff, ecosystem)` block-aware manifest+lockfile diff over `diff`

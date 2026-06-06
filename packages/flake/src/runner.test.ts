@@ -1,13 +1,6 @@
 import { writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  FlakeGateError,
-  runAndRecord,
-  runAndRecordPytest,
-  runnerEnv,
-  type TestRunner,
-} from './runner.js'
+import { FlakeGateError, runAndRecord, runAndRecordPytest, type TestRunner } from './runner.js'
 import { HistoryStore } from './store.js'
 
 const ROOT = '/abs/project'
@@ -208,20 +201,4 @@ it('exposes default vitest + pytest runners', async () => {
   const mod = await import('./runner.js')
   expect(typeof mod.defaultVitestRunner).toBe('function')
   expect(typeof mod.defaultPytestRunner).toBe('function')
-})
-
-describe('runnerEnv — prepends the project-local node_modules/.bin to PATH', () => {
-  it('puts <cwd>/node_modules/.bin first so a project-local vitest/pytest is found', () => {
-    const env = runnerEnv('/abs/repo', { PATH: '/usr/bin' })
-    const sep = process.platform === 'win32' ? ';' : ':'
-    expect(env.PATH).toBe(`${join('/abs/repo', 'node_modules', '.bin')}${sep}/usr/bin`)
-  })
-
-  it('works when PATH is unset and never mutates the input env', () => {
-    const input = { FOO: 'bar' } as NodeJS.ProcessEnv
-    const env = runnerEnv('/abs/repo', input)
-    expect(env.PATH).toBe(join('/abs/repo', 'node_modules', '.bin'))
-    expect(env.FOO).toBe('bar')
-    expect(input.PATH).toBeUndefined()
-  })
 })

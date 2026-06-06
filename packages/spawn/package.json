@@ -1,5 +1,5 @@
 {
-  "name": "@sackville-mcp/mutate",
+  "name": "@sackville-mcp/spawn",
   "version": "0.0.1-alpha.3",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,10 +17,6 @@
     "build": "tsdown src/index.ts --dts",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@sackville-mcp/spawn": "workspace:*",
-    "smol-toml": "^1.6.1"
-  },
   "publishConfig": {
     "access": "public",
     "types": "./dist/index.d.mts",
@@ -36,6 +32,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ceautery/sackville.git",
-    "directory": "packages/mutate"
+    "directory": "packages/spawn"
   }
 }

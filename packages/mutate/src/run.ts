@@ -19,7 +19,6 @@
  *    it touched, not the whole tree.
  */
 
-import { execFile } from 'node:child_process'
 import {
   cpSync,
   existsSync,
@@ -31,6 +30,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { type SpawnedRunner, spawnRunner } from '@sackville-mcp/spawn'
 import {
   cosmicModulePathRoots,
   mutmutDoNotMutate,
@@ -135,10 +135,7 @@ export interface RunMutationInput {
 }
 
 /** Injected command runner — executes `stryker <argv>` and yields its exit status. */
-export type MutationRunner = (
-  argv: string[],
-  opts: { cwd: string; timeoutMs?: number },
-) => Promise<{ exitCode: number; stdout: string; stderr: string }>
+export type MutationRunner = SpawnedRunner
 
 export interface RunMutationResult {
   ran: boolean
@@ -176,56 +173,14 @@ function runArgv(input: RunMutationInput): string[] {
   return argv
 }
 
-/**
- * Build the child env for a spawned mutation tool: prepend the project's own
- * `<cwd>/node_modules/.bin` to PATH. Without this, a bare `stryker`/`mutmut`/
- * `cosmic-ray` is resolved only from the *invoking* shell's PATH — so running
- * `sackville-cli mutate run` from a **global** install (whose PATH does not
- * include the target project's `.bin`) fails to start the tool and dies with an
- * opaque "did not produce a JSON report". Mirrors `@sackville-mcp/coverage`'s
- * `runnerEnv`. Returns a fresh env; never mutates input.
- */
-export function runnerEnv(cwd: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const localBin = resolve(cwd, 'node_modules', '.bin')
-  const sep = process.platform === 'win32' ? ';' : ':'
-  const current = env.PATH
-  return { ...env, PATH: current ? `${localBin}${sep}${current}` : localBin }
-}
-
-/** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
-function spawnMutationRunner(command: string): MutationRunner {
-  return (argv, opts) =>
-    new Promise((res) => {
-      execFile(
-        command,
-        argv,
-        {
-          cwd: opts.cwd,
-          timeout: opts.timeoutMs,
-          maxBuffer: 64 * 1024 * 1024,
-          env: runnerEnv(opts.cwd),
-        },
-        (err, stdout, stderr) => {
-          const code =
-            err && typeof (err as { code?: unknown }).code === 'number'
-              ? (err as { code: number }).code
-              : err
-                ? 1
-                : 0
-          res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
-        },
-      )
-    })
-}
-
 /** Default live runner: spawn the local `stryker` as a subprocess (used by the bin, not the gate). */
-export const defaultStrykerRunner: MutationRunner = spawnMutationRunner('stryker')
+export const defaultStrykerRunner: MutationRunner = spawnRunner('stryker')
 
 /** Default live runner: spawn the local `mutmut` as a subprocess (used by the bin, not the gate). */
-export const defaultMutmutRunner: MutationRunner = spawnMutationRunner('mutmut')
+export const defaultMutmutRunner: MutationRunner = spawnRunner('mutmut')
 
 /** Default live runner: spawn the local `cosmic-ray` as a subprocess (used by the bin, not the gate). */
-export const defaultCosmicRayRunner: MutationRunner = spawnMutationRunner('cosmic-ray')
+export const defaultCosmicRayRunner: MutationRunner = spawnRunner('cosmic-ray')
 
 function assertAllowed(config: RunMutationConfig): void {
   if (!config.allowRun) {

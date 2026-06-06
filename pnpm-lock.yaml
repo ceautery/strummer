@@ -204,6 +204,9 @@ importers:
       '@sackville-mcp/diff':
         specifier: workspace:*
         version: link:../diff
+      '@sackville-mcp/spawn':
+        specifier: workspace:*
+        version: link:../spawn
 
   packages/deps:
     dependencies:
@@ -240,6 +243,9 @@ importers:
 
   packages/flake:
     dependencies:
+      '@sackville-mcp/spawn':
+        specifier: workspace:*
+        version: link:../spawn
       better-sqlite3:
         specifier: ^12.10.0
         version: 12.10.0
@@ -320,6 +326,9 @@ importers:
 
   packages/mutate:
     dependencies:
+      '@sackville-mcp/spawn':
+        specifier: workspace:*
+        version: link:../spawn
       smol-toml:
         specifier: ^1.6.1
         version: 1.6.1
@@ -331,6 +340,8 @@ importers:
         version: 2.4.0
 
   packages/severity: {}
+
+  packages/spawn: {}
 
   packages/verdict:
     dependencies:

@@ -18,10 +18,10 @@
  *    the green gate).
  */
 
-import { execFile } from 'node:child_process'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { type SpawnedRunner, spawnRunner } from '@sackville-mcp/spawn'
 import { type DiffCoverageReport, uncoveredInDiff } from './report.js'
 import type { FileCoverage } from './uncovered.js'
 
@@ -57,10 +57,7 @@ export interface ScopedRunInput {
 }
 
 /** Injected command runner — executes `vitest <argv>` and yields its exit status. */
-export type TestRunner = (
-  argv: string[],
-  opts: { cwd: string; timeoutMs?: number },
-) => Promise<{ exitCode: number; stdout: string; stderr: string }>
+export type TestRunner = SpawnedRunner
 
 export interface ScopedRunResult {
   /** False when there were no changed files (the runner was not invoked). */
@@ -91,48 +88,6 @@ function scopedArgv(changedFiles: string[], coverageDir: string): string[] {
     '--coverage.reporter=json',
     `--coverage.reportsDirectory=${coverageDir}`,
   ]
-}
-
-/**
- * Build the child env for a spawned runner: prepend the project's own
- * `<cwd>/node_modules/.bin` to PATH. Without this, a bare `vitest`/`pytest` is
- * resolved only from the *invoking* shell's PATH — so running `sackville-cli
- * coverage run-scoped` from a **global** install (whose PATH does not include the
- * target project's `.bin`) fails to start the runner and dies with an opaque
- * "did not produce a coverage report". Returns a fresh env; never mutates input.
- */
-export function runnerEnv(cwd: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const localBin = resolve(cwd, 'node_modules', '.bin')
-  const sep = process.platform === 'win32' ? ';' : ':'
-  const current = env.PATH
-  return { ...env, PATH: current ? `${localBin}${sep}${current}` : localBin }
-}
-
-/** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
-function spawnRunner(command: string): TestRunner {
-  return (argv, opts) =>
-    new Promise((res) => {
-      execFile(
-        command,
-        argv,
-        {
-          cwd: opts.cwd,
-          timeout: opts.timeoutMs,
-          maxBuffer: 64 * 1024 * 1024,
-          env: runnerEnv(opts.cwd),
-        },
-        (err, stdout, stderr) => {
-          // The tool exits non-zero on a test failure — surface the code, don't reject.
-          const code =
-            err && typeof (err as { code?: unknown }).code === 'number'
-              ? (err as { code: number }).code
-              : err
-                ? 1
-                : 0
-          res({ exitCode: code, stdout: String(stdout), stderr: String(stderr) })
-        },
-      )
-    })
 }
 
 /** Default live runner: spawn the local `vitest` as a subprocess (used by the bin, not the gate). */

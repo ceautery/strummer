@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sackville-mcp/diff": "workspace:*"
+    "@sackville-mcp/diff": "workspace:*",
+    "@sackville-mcp/spawn": "workspace:*"
   },
   "publishConfig": {
     "access": "public",
