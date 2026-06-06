@@ -1,0 +1,10 @@
+{
+  "name": "@sackville-tutorial/storefront",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny storefront API + dashboard used by the Sackville onboarding tutorial (level 3: api + browser + verify). Zero dependencies — run with plain Node.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

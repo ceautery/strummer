@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Restore the tutorial to its pristine (intentionally buggy) starting state.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if git -C "$here" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git -C "$here" checkout -- "$here"
+  echo "Reset examples/tutorial/storefront to pristine HEAD."
+else
+  echo "Not a git checkout — discard your edits to account.js manually."
+fi

@@ -1,0 +1,19 @@
+# Sackville browser flow — sign in, then land on the dashboard.
+#
+# Steps key off SEMANTIC locators ({role, name}), never ephemeral per-snapshot
+# refs, so the flow is stable. `{{username}}` is supplied at run time
+# (`--var username=…`); `{{secret:PASSWORD}}` resolves server-side from
+# `SACKVILLE_BROWSER_SECRET_PASSWORD` and is redacted from every result.
+#
+# This flow PASSES against the buggy app: the UI renders a balance and the
+# Dashboard heading appears. That is the lesson — a green end-to-end flow does
+# not prove the API underneath honours its contract.
+steps:
+  - navigate: "{{baseUrl}}/login"
+  - fill: { role: textbox, name: Username, value: "{{username}}" }
+  - fill: { role: textbox, name: Password, value: "{{secret:PASSWORD}}" }
+  - click: { role: button, name: Sign in }
+  - wait_for: { role: heading, name: Dashboard, state: visible }
+  - assert:
+      - { source: url, op: contains, value: /dashboard }
+      - { source: text, role: heading, name: Dashboard, op: contains, value: Dashboard }

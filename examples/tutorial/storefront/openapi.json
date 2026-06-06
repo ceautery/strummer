@@ -1,0 +1,37 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Storefront API",
+    "version": "1.0.0",
+    "description": "The JSON API behind the storefront dashboard. This is the contract the UI is built against."
+  },
+  "paths": {
+    "/account": {
+      "get": {
+        "summary": "The signed-in customer's account",
+        "responses": {
+          "200": {
+            "description": "The account record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "owner", "balance", "currency"],
+                  "properties": {
+                    "id": { "type": "string", "description": "Opaque account id." },
+                    "owner": { "type": "string" },
+                    "balance": {
+                      "type": "integer",
+                      "description": "Account balance in minor units (cents). A NUMBER, not a string."
+                    },
+                    "currency": { "type": "string", "description": "ISO 4217 code." }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

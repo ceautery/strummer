@@ -1,0 +1,7 @@
+{
+  "entries": [
+    { "name": "GET /account", "path": "api/account", "type": "Endpoint" },
+    { "name": "The contract", "path": "guide/contract", "type": "Guide" },
+    { "name": "Money and types", "path": "guide/money", "type": "Guide" }
+  ]
+}

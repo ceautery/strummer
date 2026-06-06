@@ -150,3 +150,66 @@ outside the gate, bundled offline docset, `reset.sh`, two guards).
   point, on code big enough that reading-by-eye stops being enough.
 - Still purely additive: no production code changed; gate green at 1647 TS + 47
   Py after the two new guards.
+
+## Addendum 2 (2026-06-06) — a level-3 api + browser + verify tutorial
+
+Tutorials 1–2 cover the `docs`, `coverage`, `lsp`, `mutate`, and `verify`
+pillars on pure-logic samples. The **api** and **browser** pillars — contract
+validation and browser flows, plus the cross-pillar **capture→contract** bridge
+(ADR 0013 §5e/5f) — had no tutorial. We add a third, reusing every decision above
+(sample outside the gate, bundled offline docset, `reset.sh`, two honesty guards).
+
+### Decisions (level 3)
+
+1. **A zero-dependency storefront** (`examples/tutorial/storefront/`): a plain
+   Node `server.js` (no framework, no `npm install`) serving a JSON API
+   (`GET /account`) and the HTML pages a browser flow walks (`/login` →
+   `/dashboard`), plus its OpenAPI contract (`openapi.json`), a `.bru` api
+   request, a persisted browser flow, and the offline `storefront-core` docset.
+   Both pillars need a *live target*, so unlike tutorials 1–2 the sample is a
+   server you run — but it stays dependency-free so the only prerequisite is Node.
+
+2. **The defect is a contract-type lie invisible to the running app.** `account.js`
+   returns `balance` as the string `'10000'` where the contract declares an
+   integer (cents). The dashboard coerces it (`'10000' / 100`), so the UI renders
+   `$100.00` and a login flow passes — yet the API violates its own contract. This
+   is the deliberate contrast with tutorials 1–2: the bug is not a failing test,
+   an uncovered branch, or an unpinned boundary — it lives in the gap between what
+   the API *sends* and what it *promised*, visible only to a tool that knows the
+   contract.
+
+3. **The teaching arc per tool:** `search_docs` confirms `balance` is an integer
+   (cents); `api run --openapi` catches the drift on the live response **while
+   every assertion passes** (the smoke-test trap); `api validate-capture` finds
+   the same breach in a **committed recording of a passing browser flow** (the
+   capture→contract bridge — "absence is never a pass"); `verify_change` folds it
+   into one verdict. A bonus step drives the live login flow with a real browser
+   (`verify run --flow`). CLI and Claude-Code/MCP passes mirror each other.
+
+4. **The committed HAR makes the headline run without a browser.** The
+   capture→contract step uses a checked-in `storefront.har.zip` (generated from
+   the real server, Playwright-shaped inline-text bodies via `fflate`), so steps
+   1–6 need no browser engine; only the bonus step requires
+   `npx playwright install chromium`. This mirrors the Phase-5a
+   `widgets-capture.har.zip` fixture convention.
+
+5. **Same honesty guards.** A TS guard (`test/tutorial-storefront.test.ts`, main
+   suite) pins the bug two ways — the buggy response and the committed HAR both
+   drift to a `response-schema` finding through the shipped validators, and the
+   corrected (number) response validates clean — plus docset/README sync. A pytest
+   guard (`tests/test_tutorial_storefront.py`) ingests the `storefront-core`
+   docset offline and asserts an FTS search for `balance` finds the page. No
+   spoiler comment beyond `account.js`'s own marker.
+
+### Consequences (level 3)
+
+- **One real product bug fixed (dogfooding).** Driving the bonus
+  `verify run --flow` path live surfaced that the verify **CLI**'s browser-capture
+  runtime (`captureRuntimeFromFlags`) was built incomplete versus `sackville
+  browser run` and the browser MCP server: it threaded no `--allow-unsafe` (so a
+  flow's `fill`/`click` dry-ran and any real flow failed the completeness guard)
+  and wired no secret resolver/redactor (so `{{secret:NAME}}` failed closed). Both
+  fixed TDD (`captureGateOptionsFromFlags` + `browserCaptureSecretsFromEnv`, pure
+  + unit-tested); the MCP path was already correct. So this addendum is *not*
+  purely additive — it carries a small `@sackville-mcp/cli` fix.
+- Gate green at 1700 TS + 48 Py after the two new guards + the CLI fix's tests.

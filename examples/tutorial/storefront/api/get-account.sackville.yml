@@ -1,0 +1,7 @@
+# These assertions PASS against the buggy server: the status is 200 and a
+# `balance` field is present. That is exactly the trap — a green smoke test that
+# never checks the field's TYPE. The contract check (`--openapi`) is what catches
+# that `balance` is a string where the spec says integer.
+assertions:
+  - { source: status, op: equals, value: 200 }
+  - { source: jsonpath, path: "$.balance", op: exists }

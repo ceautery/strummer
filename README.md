@@ -204,6 +204,22 @@ cd examples/tutorial/scheduler && npm install
 # then follow examples/tutorial/scheduler/README.md
 ```
 
+**3. When the UI works but the API is lying —
+[`examples/tutorial/storefront/`](./examples/tutorial/storefront)** (~25 min). A
+zero-dependency storefront API + dashboard whose `GET /account` returns `balance`
+as a string where its OpenAPI contract says integer. The page renders `$100.00`
+and the login flow is green — yet the API violates its own contract. You confirm
+the intended type from the **docs**, catch the drift live (`api run --openapi`,
+every assertion passing) and in a recording of a *passing* browser flow
+(`api validate-capture` — the capture→contract bridge), fold it into one
+**`verify_change`** verdict, and (bonus) drive the live login flow with a real
+browser. No `npm install` — it's plain Node.
+
+```bash
+cd examples/tutorial/storefront && npm start
+# then follow examples/tutorial/storefront/README.md
+```
+
 ## Composability
 
 Sackville is deliberately a graph of small packages rather than a monolith.
