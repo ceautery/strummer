@@ -1349,6 +1349,20 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       MCPB/DXT desktop bundle; Homebrew tap / single-binary CLI; the end-to-end **"verify a PR" GitHub
       Action** (the natural capstone now that the entrypoint is unified).
 
+## Onboarding & docs  *(spike COMPLETE 2026-06-06; design = ADR 0020)*
+
+- [x] **README ground-up rewrite** — guided tour (install/run from npm, drive the MCP from Claude Code,
+      CLI quickstart, composability, the deny-by-default safety model, toolchain *why* table); the run-on
+      development narrative dropped (lives in STATUS + ADRs).
+- [x] **Claude Code skill** (`.claude/skills/sackville/SKILL.md`) — steers the agent to Sackville's own
+      tools (LSP over grep/find, `search_docs`, `verify_change`); ships in-repo, auto-discovered on clone.
+- [x] **Runnable, resettable tutorial** (`examples/tutorial/todo/`, ADR 0020) — a pure-TS TODO-core CLI
+      with one intentional `filter('active')` bug the passing suite hides; find→fix→verify twice (CLI, then
+      MCP); bundled OFFLINE docset (`--embedder fake`) + `reset.sh`. Ships broken OUTSIDE the workspace +
+      root Vitest scope (never reddens the gate); guarded by a TS guard + a pytest ingestion guard.
+- [ ] *(staged, not amputated)* a **web/API/browser tutorial variant** exercising the `api` (OpenAPI
+      contract) + `browser` pillars on a small full-stack TODO; a project documentation site.
+
 ## Ongoing
 
 - [ ] Distribution: Homebrew tap; single-binary CLI for macOS.
