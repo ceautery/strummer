@@ -46,6 +46,15 @@ package's first version over OIDC**: a trusted publisher can only be configured 
 already exists, and there is no "create empty package" UI (unlike PyPI, which allows pre-config;
 see [npm/cli#8544](https://github.com/npm/cli/issues/8544), open).
 
+0. **Wire it into the test workspace FIRST — or the gate false-greens.** Add a source alias for
+   the new package in `vitest.config.ts` (`'@sackville-mcp/<name>' → ./packages/<name>/src/index.ts`)
+   the moment any other workspace package depends on it `workspace:*`. The green gate runs `vitest`
+   **before** any build, so without the alias the import falls through to `exports.default`
+   (`./dist/index.mjs`) — which resolves **only if a stale local `dist/` happens to be on disk**.
+   That is how the `@sackville-mcp/spawn` extraction passed locally yet CI failed with
+   `Failed to resolve entry for package "@sackville-mcp/spawn"`. A guard in `test/packaging.test.ts`
+   ("vitest source-alias coverage") now fails the gate if an internally-consumed package is missing
+   its alias — keep it green before committing.
 1. **Bootstrap-publish it once with a token**, at the *current* group version and on the `alpha`
    tag, from a clean build:
    ```sh

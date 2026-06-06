@@ -40,6 +40,9 @@ export default defineConfig({
       '@sackville-mcp/safety': fileURLToPath(
         new URL('./packages/safety/src/index.ts', import.meta.url),
       ),
+      '@sackville-mcp/spawn': fileURLToPath(
+        new URL('./packages/spawn/src/index.ts', import.meta.url),
+      ),
       '@sackville-mcp/severity': fileURLToPath(
         new URL('./packages/severity/src/index.ts', import.meta.url),
       ),

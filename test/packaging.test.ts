@@ -157,6 +157,40 @@ describe('default-pillar wiring is native-free (ADR 0019 §B; alpha.0 regression
   }
 })
 
+describe('vitest source-alias coverage (no false-green on a clean tree)', () => {
+  // The green gate runs vitest with NO build step, so every internally-consumed
+  // package must alias to its `./src` in vitest.config.ts. A package depended on
+  // `workspace:*` but missing here falls through to its `exports.default`
+  // (`./dist/index.mjs`) — which only resolves if a stale local build happens to
+  // be on disk. That is exactly how the @sackville-mcp/spawn extraction passed
+  // locally yet failed CI with "Failed to resolve entry".
+  const aliasSource = readFileSync(join(repoRoot, 'vitest.config.ts'), 'utf8')
+  const aliasedNames = new Set(
+    [...aliasSource.matchAll(/'(@sackville-mcp\/[^']+)'\s*:/g)].map((m) => m[1]),
+  )
+
+  // Every @sackville-mcp/* package consumed as a `workspace:*` dependency by
+  // ANOTHER workspace package is a name vitest must resolve from source.
+  const consumed = new Set<string>()
+  for (const dir of packageDirs) {
+    // biome-ignore lint/suspicious/noExplicitAny: package.json is untyped JSON.
+    const pkg = readPackageJson(dir) as any
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
+      for (const [name, spec] of Object.entries(pkg[field] ?? {})) {
+        if (name.startsWith('@sackville-mcp/') && String(spec).startsWith('workspace:')) {
+          consumed.add(name)
+        }
+      }
+    }
+  }
+
+  it('aliases every internally-consumed @sackville-mcp/* package to source', () => {
+    expect(consumed.size).toBeGreaterThan(0)
+    const missing = [...consumed].filter((name) => !aliasedNames.has(name)).sort()
+    expect(missing).toEqual([])
+  })
+})
+
 describe('onboarding example .mcp.json (ADR 0019 §14)', () => {
   // biome-ignore lint/suspicious/noExplicitAny: JSON config is untyped.
   const cfg = JSON.parse(readFileSync(join(repoRoot, 'examples/mcp/.mcp.json'), 'utf8')) as any
