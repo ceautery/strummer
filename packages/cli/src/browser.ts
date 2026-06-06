@@ -6,18 +6,15 @@ import {
   ArtifactStore,
   auditA11y,
   type BrowserEngine,
-  BrowserGate,
-  BrowserManager,
-  createSsrfProxy,
-  engineLauncher,
+  browserSecretsFromEnv,
+  buildCaptureRuntime,
   type FlowResult,
   loadFlow,
   PageDriver,
   resolveEngine,
   runFlow,
 } from '@sackville-mcp/browser'
-import { Redactor } from '@sackville-mcp/safety'
-import type { Browser, Page } from 'playwright-core'
+import type { Page } from 'playwright-core'
 import type { CliIO } from './index.js'
 
 /**
@@ -66,17 +63,6 @@ function flagsFrom(values: CommonValues): BrowserFlags {
   }
 }
 
-/** Launch thunk for a `BrowserManager`, honoring the selected engine + the
- * mandatory SSRF proxy (chromium gets the hardening args; firefox/webkit get the
- * proxy + the Tier-1 route allowlist). */
-function launchFor(flags: BrowserFlags, proxyUrl: string): () => Promise<Browser> {
-  return engineLauncher(flags.engine, {
-    headless: !flags.headed,
-    proxyServer: proxyUrl,
-    noSandbox: flags.noSandbox,
-  })
-}
-
 interface SessionContext {
   driver: PageDriver
   store: ArtifactStore
@@ -101,25 +87,25 @@ async function withSession(
     return 1
   }
   // The human typed this URL → auto-allow its host, plus any extra --allow-host.
-  const gate = new BrowserGate({ allowedHosts: [host, ...flags.allowHost] })
-  const proxy = await createSsrfProxy({ allowPrivate: flags.allowPrivate })
-  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-browser-cli-')))
-  const manager = new BrowserManager({
-    gate,
-    launch: launchFor(flags, proxy.url),
+  const runtime = await buildCaptureRuntime({
+    allowedHosts: [host, ...flags.allowHost],
+    allowPrivate: flags.allowPrivate,
+    engine: flags.engine,
+    headless: !flags.headed,
+    noSandbox: flags.noSandbox,
   })
+  const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-browser-cli-')))
   try {
-    const context = await manager.createSession('cli')
+    const context = await runtime.manager.createSession('cli')
     const page = await context.newPage()
-    const driver = new PageDriver(page, { runId: 'cli', store, gate })
+    const driver = new PageDriver(page, { runId: 'cli', store, gate: runtime.gate })
     await driver.navigate(url)
     return await fn({ driver, store, page })
   } catch (err) {
     io.err(`${(err as Error).message}\n`)
     return 1
   } finally {
-    await manager.shutdown()
-    await proxy.close()
+    await runtime.shutdown()
   }
 }
 
@@ -191,42 +177,34 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     return 1
   }
 
-  // Operator secrets from env (SACKVILLE_BROWSER_SECRET_<NAME>); register the
-  // values with a redactor so they never surface, expose them only by NAME.
-  const env = io.env ?? {}
-  const redactor = new Redactor()
-  const secrets = new Map<string, string>()
-  for (const [key, val] of Object.entries(env)) {
-    const m = /^SACKVILLE_BROWSER_SECRET_(.+)$/.exec(key)
-    if (m?.[1] && val) {
-      redactor.register(m[1], val)
-      secrets.set(m[1], val)
-    }
-  }
-
+  // Operator secrets from env (SACKVILLE_BROWSER_SECRET_<NAME>); registered with a
+  // redactor so they never surface, exposed only by NAME. Shared with the verify
+  // CLI + the browser MCP server (one source of truth, `@sackville-mcp/browser`).
+  const { redact, resolveSecret } = browserSecretsFromEnv(io.env ?? {})
   const flags = flagsFrom(values)
-  const gate = new BrowserGate({
-    allowUnsafe: values.unsafe ?? false,
+  const runtime = await buildCaptureRuntime({
     allowedHosts: flags.allowHost,
+    allowUnsafe: values.unsafe ?? false,
+    allowPrivate: flags.allowPrivate,
+    engine: flags.engine,
+    headless: !flags.headed,
+    noSandbox: flags.noSandbox,
+    redact,
+    resolveSecret,
   })
-  const proxy = await createSsrfProxy({ allowPrivate: flags.allowPrivate })
   const store = new ArtifactStore(mkdtempSync(join(tmpdir(), 'sackville-browser-flow-')))
-  const manager = new BrowserManager({
-    gate,
-    launch: launchFor(flags, proxy.url),
-  })
   try {
-    const context = await manager.createSession('cli')
+    const context = await runtime.manager.createSession('cli')
     const page = await context.newPage()
     const driver = new PageDriver(page, {
       runId: 'cli',
       store,
-      gate,
-      redact: (v) => redactor.redact(v),
+      gate: runtime.gate,
+      redact: runtime.redact,
     })
     const result = await runFlow(driver, flow, {
       vars: parseVars(values.var),
-      resolveSecret: (name) => secrets.get(name),
+      resolveSecret: runtime.resolveSecret,
     })
     if (values.json) {
       io.out(`${JSON.stringify(result, null, 2)}\n`)
@@ -238,8 +216,7 @@ async function cmdRun(args: string[], io: CliIO): Promise<number> {
     io.err(`${(err as Error).message}\n`)
     return 1
   } finally {
-    await manager.shutdown()
-    await proxy.close()
+    await runtime.shutdown()
   }
 }
 

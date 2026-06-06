@@ -77,6 +77,12 @@ export {
 } from './recorder.js'
 export { installSafetyRoutes } from './routes.js'
 export {
+  type BrowserSecrets,
+  type BuildCaptureRuntimeOptions,
+  browserSecretsFromEnv,
+  buildCaptureRuntime,
+} from './runtime.js'
+export {
   type AriaSnapshotSource,
   type BuildSnapshotOptions,
   buildSnapshot,

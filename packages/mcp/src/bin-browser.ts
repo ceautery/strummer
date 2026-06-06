@@ -11,13 +11,14 @@ import {
   type BrowserEngine,
   BrowserGate,
   BrowserManager,
+  browserSecretsFromEnv,
   createSsrfProxy,
   engineLauncher,
   engineLaunchOptions,
   resolveEngine,
   type SsrfProxy,
 } from '@sackville-mcp/browser'
-import { Redactor } from '@sackville-mcp/safety'
+import type { Redactor } from '@sackville-mcp/safety'
 import { chromium } from 'playwright-core'
 import { type BrowserToolsOptions, createBrowserServer, registerBrowserTools } from './browser.js'
 import { isMainModule } from './is-main.js'
@@ -59,16 +60,10 @@ export function buildBrowserRedactorFromEnv(env: NodeJS.ProcessEnv = process.env
   httpCredentials?: { username: string; password: string; origin?: string }
 } {
   // SACKVILLE_BROWSER_SECRET_<NAME>=value — register NAME→value; values are never logged
-  // or surfaced (only the NAME appears anywhere).
-  const redactor = new Redactor()
-  const secrets = new Map<string, string>()
-  for (const [key, value] of Object.entries(env)) {
-    const m = /^SACKVILLE_BROWSER_SECRET_(.+)$/.exec(key)
-    if (m?.[1] && value) {
-      redactor.register(m[1], value)
-      secrets.set(m[1], value)
-    }
-  }
+  // or surfaced (only the NAME appears anywhere). The secret parse is the shared
+  // `@sackville-mcp/browser` `browserSecretsFromEnv` (one source of truth with the browser
+  // CLI + the verify CLI); the HTTP-credentials layer below is bin-browser-specific.
+  const { redactor, redact, resolveSecret, secretNames } = browserSecretsFromEnv(env)
   // Origin-scoped HTTP Basic auth (operator-set). Built only when BOTH username +
   // password are present; the password is registered with the redactor so it never
   // leaks via an artifact, and it never appears in the returned config.
@@ -86,9 +81,9 @@ export function buildBrowserRedactorFromEnv(env: NodeJS.ProcessEnv = process.env
   }
   return {
     redactor,
-    redact: (s: string) => redactor.redact(s),
-    resolveSecret: (name: string) => secrets.get(name),
-    secretNames: [...secrets.keys()],
+    redact,
+    resolveSecret,
+    secretNames,
     httpCredentials,
   }
 }

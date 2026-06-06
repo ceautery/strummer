@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { MutationRunner } from '@sackville-mcp/mutate'
 import { describe, expect, it, vi } from 'vitest'
 import { run } from './index.js'
-import { browserCaptureSecretsFromEnv, captureGateOptionsFromFlags, runVerify } from './verify.js'
+import { captureGateOptionsFromFlags, runVerify } from './verify.js'
 
 function capture() {
   const out: string[] = []
@@ -239,18 +239,6 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
     expect(captureGateOptionsFromFlags({ 'allow-host': ['localhost'] }).allowedHosts).toEqual([
       'localhost',
     ])
-  })
-
-  it('--flow capture resolves + redacts SACKVILLE_BROWSER_SECRET_* from env', () => {
-    // Regression: the `--flow` path wired no resolveSecret/redactor, so a
-    // `{{secret:NAME}}` step failed closed and a secret could land in the temp HAR.
-    const { redact, resolveSecret } = browserCaptureSecretsFromEnv({
-      SACKVILLE_BROWSER_SECRET_PASSWORD: 'hunter2',
-      UNRELATED: 'x',
-    })
-    expect(resolveSecret('PASSWORD')).toBe('hunter2')
-    expect(resolveSecret('NOPE')).toBeUndefined()
-    expect(redact('signed in with hunter2 ok')).not.toContain('hunter2')
   })
 
   it('drives the deps pillar via an injected runner — no --allow-run, no network', async () => {

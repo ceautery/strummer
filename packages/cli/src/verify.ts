@@ -11,14 +11,11 @@ import {
 } from '@sackville-mcp/api'
 import { ArtifactStore } from '@sackville-mcp/artifacts'
 import {
-  BrowserGate,
-  BrowserManager,
+  browserSecretsFromEnv,
+  buildCaptureRuntime,
   type CaptureRequest,
   type CaptureRuntime,
-  createSsrfProxy,
   driveBrowserFlowToHar,
-  engineLauncher,
-  resolveEngine,
 } from '@sackville-mcp/browser'
 import { type DiffCoverageReport, runScoped, type TestRunner } from '@sackville-mcp/coverage'
 import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@sackville-mcp/deps'
@@ -430,8 +427,6 @@ function readCaptureContract(values: {
   return contract
 }
 
-/** Build a single-shot CaptureRuntime from the CLI's browser egress flags (mirrors
- * `sackville browser`): a gated, proxy-fronted manager with HAR recording armed. */
 /**
  * BrowserGate options for the `--flow` capture path, from the parsed CLI flags.
  * Exported for testing: a flow with `fill`/`click` steps is a MUTATION, so it
@@ -450,27 +445,13 @@ export function captureGateOptionsFromFlags(values: {
 }
 
 /**
- * Build the secret resolver + redactor for the `--flow` capture path from the
- * `SACKVILLE_BROWSER_SECRET_<NAME>` env — mirrors `sackville browser run` and the
- * browser MCP server. Without it a flow's `{{secret:NAME}}` step fails closed and
- * a secret value could land in the captured HAR. Exported for testing.
+ * Build the `--flow` capture runtime from the CLI's browser egress flags. A thin
+ * adapter over the shared `@sackville-mcp/browser` `buildCaptureRuntime` (one source
+ * of truth across the browser CLI, this path, and the MCP server) — flags map to
+ * the gate/proxy/engine options, `{{secret:NAME}}` resolves from
+ * `SACKVILLE_BROWSER_SECRET_*` via the shared `browserSecretsFromEnv`, and a fresh
+ * temp dir arms HAR recording for `driveBrowserFlowToHar`.
  */
-export function browserCaptureSecretsFromEnv(env: Record<string, string | undefined>): {
-  redact: (value: string) => string
-  resolveSecret: (name: string) => string | undefined
-} {
-  const redactor = new Redactor()
-  const secrets = new Map<string, string>()
-  for (const [key, value] of Object.entries(env)) {
-    const m = /^SACKVILLE_BROWSER_SECRET_(.+)$/.exec(key)
-    if (m?.[1] && value) {
-      redactor.register(m[1], value)
-      secrets.set(m[1], value)
-    }
-  }
-  return { redact: (s) => redactor.redact(s), resolveSecret: (name) => secrets.get(name) }
-}
-
 async function captureRuntimeFromFlags(values: {
   'allow-host'?: string[]
   'allow-unsafe'?: boolean
@@ -479,30 +460,17 @@ async function captureRuntimeFromFlags(values: {
   headed?: boolean
   engine?: string
 }): Promise<CaptureRuntime> {
-  const gate = new BrowserGate(captureGateOptionsFromFlags(values))
-  const proxy = await createSsrfProxy({ allowPrivate: values['allow-private'] ?? false })
-  const harDir = mkdtempSync(join(tmpdir(), 'sackville-verify-har-'))
-  const manager = new BrowserManager({
-    gate,
-    harDir,
-    launch: engineLauncher(resolveEngine(values.engine), {
-      headless: !values.headed,
-      proxyServer: proxy.url,
-      noSandbox: values['no-sandbox'] ?? false,
-    }),
-  })
-  const { redact, resolveSecret } = browserCaptureSecretsFromEnv(process.env)
-  return {
-    manager,
-    gate,
+  const { redact, resolveSecret } = browserSecretsFromEnv(process.env)
+  return buildCaptureRuntime({
+    ...captureGateOptionsFromFlags(values),
+    allowPrivate: values['allow-private'] ?? false,
+    engine: values.engine,
+    headless: !values.headed,
+    noSandbox: values['no-sandbox'] ?? false,
+    harDir: mkdtempSync(join(tmpdir(), 'sackville-verify-har-')),
     redact,
     resolveSecret,
-    config: { harDir },
-    shutdown: async () => {
-      await manager.shutdown()
-      await proxy.close()
-    },
-  }
+  })
 }
 
 function runVerifyCompose(args: string[], io: CliIO): number {
