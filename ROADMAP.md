@@ -1311,7 +1311,7 @@ gate** (validating a HAR is NOT free); **no baked-in policy default**; `@sackvil
       for PyPI/Gem lockfiles; deps `changelog_diff` for PyPI/RubyGems; a mutate cosmic-ray/`runMutmut` adapter;
       LSP recursive/dir delete + the full toolchain cross-version matrix.
 
-## Phase 6 — Packaging & distribution  *(IN PROGRESS — design = ADR 0019, Accepted; turns the monorepo into a product)*
+## Phase 6 — Packaging & distribution  *(COMPLETE — OIDC release pipeline LIVE; only operator branch-protection + Phase-7 staged tails remain. Design = ADR 0019, Accepted; turns the monorepo into a product)*
 
 Goal: one front-door MCP server + a publishable `@sackville-mcp/*` set, so an agent/operator can adopt
 the whole toolkit from a single `.mcp.json` block instead of wiring nine bins. Design forged by the
@@ -1337,7 +1337,7 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       peer-deps + dynamic `import()` per enabled pillar; drop mcp's redundant direct `playwright-core`.
       So bare `npm i sackville` is native-free; docs/flake/browser loud-disable until their engine is
       installed. Asserted on the emitted `.mjs` (build-then-assert CI) + an install-closure test.
-- [x] **npm publish pipeline — manual first-publish DONE; CI-automation (slice 13) deferred.** Published
+- [x] **npm publish pipeline — DONE; OIDC CI-automation (slice 13) LIVE.** First published manually,
       all 18 at `0.0.1-alpha.1` (tag `alpha`, `latest`→alpha.1) under scope **`@sackville-mcp`** (the
       `@sackville` scope is owned by another user) + unscoped aggregate **`sackville-mcp`**, **through pnpm**
       (rewrites `workspace:*`). `private` removed; `repository{url,directory}` case-exact;
@@ -1345,13 +1345,17 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       top-level `types`→dist overlay (the legacy-types fix attw/publint caught). **slice 2 (attw `--profile
       esm-only` + publint on the TARBALL) + slice 10 (aggregate `.mjs` lazy-boundary) shipped as the
       `package-checks` build-then-assert CI job** (`scripts/package-checks.sh` + `assert-lazy-boundary.mjs`).
-      ESM-only. **slice 13 SCAFFOLDED:** Changesets FIXED/lockstep (`.changeset/config.json`) +
+      ESM-only. **slice 13 LIVE + verified end-to-end:** Changesets FIXED/lockstep (`.changeset/config.json`) +
       `release.yml` (Node 22.14.0/npm 11.5.1, `id-token:write`, no token, provenance auto) + `scripts/release.sh`
       (publish via pnpm so `workspace:*` rewrites; prerelease-aware dist-tag avoids the `latest` trap) — the
-      changesets/action opens a Version PR on push and publishes only when that PR is MERGED. **Operator setup
-      remaining (unverifiable in-repo):** enable per-package trusted publishing on npmjs.com + branch protection
-      (required checks = `gate` + `package-checks`) + confirm pnpm OIDC (token fallback documented in the
-      workflow). alpha.0 was broken (npx-symlink + static-optional-peer bugs) → deprecated.
+      changesets/action opens a Version PR on push and publishes only when that PR is MERGED. Multiple OIDC
+      releases shipped through **`0.0.1-alpha.4`** (now 19 packages incl. `@sackville-mcp/spawn`), each with SLSA
+      provenance attached — trusted publishing is confirmed on every package and pnpm OIDC works (no token).
+      A new package needs a one-time token bootstrap before its first OIDC release (npm/cli#8544; see
+      RELEASING.md "Adding a new package"). **Operator setup remaining (unverifiable in-repo):** branch
+      protection on `main` (required checks = `gate` + `package-checks`) — release.yml only builds, so this is
+      where the gate-first guarantee is enforced. alpha.0 was broken (npx-symlink + static-optional-peer bugs)
+      → deprecated.
 - [x] **Distribution / onboarding.** *(README + example `.mcp.json` done; per-pillar browser preflight staged)* `@sackville-mcp/cli` `sackville` bin + a default bin so `npx sackville`
       resolves; a real resolvable `.mcp.json` example (operator-set gate envs only); browser-bin preflight
       diagnostic; README for human + agent operator. stdio only (v1).
