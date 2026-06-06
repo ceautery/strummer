@@ -1,0 +1,25 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "@sackville-mcp/api": "0.0.1-alpha.1",
+    "@sackville-mcp/artifacts": "0.0.1-alpha.1",
+    "@sackville-mcp/assert": "0.0.1-alpha.1",
+    "@sackville-mcp/browser": "0.0.1-alpha.1",
+    "@sackville-mcp/cli": "0.0.1-alpha.1",
+    "@sackville-mcp/core": "0.0.1-alpha.1",
+    "@sackville-mcp/coverage": "0.0.1-alpha.1",
+    "@sackville-mcp/deps": "0.0.1-alpha.1",
+    "@sackville-mcp/diff": "0.0.1-alpha.1",
+    "@sackville-mcp/embed": "0.0.1-alpha.1",
+    "@sackville-mcp/flake": "0.0.1-alpha.1",
+    "@sackville-mcp/lsp": "0.0.1-alpha.1",
+    "sackville-mcp": "0.0.1-alpha.1",
+    "@sackville-mcp/mutate": "0.0.1-alpha.1",
+    "@sackville-mcp/safety": "0.0.1-alpha.1",
+    "@sackville-mcp/severity": "0.0.1-alpha.1",
+    "@sackville-mcp/verdict": "0.0.1-alpha.1",
+    "@sackville-mcp/verify": "0.0.1-alpha.1"
+  },
+  "changesets": []
+}
