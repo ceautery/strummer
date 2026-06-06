@@ -1,5 +1,11 @@
 # @sackville-mcp/verdict
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- @sackville-mcp/severity@0.0.1-alpha.4
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

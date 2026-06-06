@@ -1,4 +1,4 @@
-# @sackville-mcp/mutate
+# @sackville-mcp/spawn
 
 ## 0.0.1-alpha.4
 
@@ -18,14 +18,3 @@
   `TestRunner` / `MutationRunner` type names as aliases of the shared
   `SpawnedRunner`, so this is internal-only (no API change). The spawn seam stays
   out of the green gate (ADR 0010: injected runner; no real spawn).
-
-- Updated dependencies [e2f7eed]
-  - @sackville-mcp/spawn@0.0.1-alpha.4
-
-## 0.0.1-alpha.3
-
-## 0.0.1-alpha.2
-
-### Patch Changes
-
-- 76478c8: canary: verify OIDC trusted publishing end-to-end across all 18 packages (no functional change).

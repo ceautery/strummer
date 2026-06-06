@@ -19,10 +19,12 @@
     "@sackville-mcp/safety": "0.0.1-alpha.1",
     "@sackville-mcp/severity": "0.0.1-alpha.1",
     "@sackville-mcp/verdict": "0.0.1-alpha.1",
-    "@sackville-mcp/verify": "0.0.1-alpha.1"
+    "@sackville-mcp/verify": "0.0.1-alpha.1",
+    "@sackville-mcp/spawn": "0.0.1-alpha.3"
   },
   "changesets": [
     "canary-oidc",
-    "coverage-runner-debuggable"
+    "coverage-runner-debuggable",
+    "mutate-flake-runner-path"
   ]
 }

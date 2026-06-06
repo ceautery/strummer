@@ -1,5 +1,25 @@
 # sackville-mcp
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e2f7eed]
+  - @sackville-mcp/coverage@0.0.1-alpha.4
+  - @sackville-mcp/mutate@0.0.1-alpha.4
+  - @sackville-mcp/flake@0.0.1-alpha.4
+  - @sackville-mcp/verdict@0.0.1-alpha.4
+  - @sackville-mcp/verify@0.0.1-alpha.4
+  - @sackville-mcp/api@0.0.1-alpha.4
+  - @sackville-mcp/artifacts@0.0.1-alpha.4
+  - @sackville-mcp/browser@0.0.1-alpha.4
+  - @sackville-mcp/core@0.0.1-alpha.4
+  - @sackville-mcp/deps@0.0.1-alpha.4
+  - @sackville-mcp/diff@0.0.1-alpha.4
+  - @sackville-mcp/embed@0.0.1-alpha.4
+  - @sackville-mcp/lsp@0.0.1-alpha.4
+  - @sackville-mcp/safety@0.0.1-alpha.4
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes
