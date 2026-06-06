@@ -266,7 +266,9 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
             const r = await runAndRecord(
               store,
               { projectRoot, allowedRoots, allowRun, timeoutMs },
-              { files: changedFiles },
+              // Diff-scope via `vitest related` (changed files are SOURCE files); no change set ⇒
+              // whole suite, unchanged. See the MCP bin-verify flake thunk for the rationale.
+              { files: changedFiles, related: changedFiles.length > 0 },
               { runner: deps.flakeRunner },
             )
             return r.verdicts

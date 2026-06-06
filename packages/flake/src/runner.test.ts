@@ -111,6 +111,42 @@ describe('runAndRecord', () => {
     }
   })
 
+  it('related mode runs `vitest related <changed> --run` (diff-scoping, mirrors coverage runScoped)', async () => {
+    const store = HistoryStore.memory()
+    try {
+      const { runner, argvs } = fakeRunner(() => report(true))
+      await runAndRecord(
+        store,
+        cfg(),
+        { files: ['src/b.ts'], related: true, repeat: 2 },
+        { runner },
+      )
+      // changed SOURCE files become `vitest related` operands, not positional `run` filters.
+      expect(argvs[0]?.[0]).toBe('related')
+      expect(argvs[0]).toContain('src/b.ts')
+      expect(argvs[0]).toContain('--run')
+      expect(argvs[0]).toContain('--reporter=json')
+    } finally {
+      store.close()
+    }
+  })
+
+  it('related mode with no changed files is a pre-spawn noop (ran:false), never spawns', async () => {
+    const store = HistoryStore.memory()
+    try {
+      let called = false
+      const runner: TestRunner = async () => {
+        called = true
+        return { exitCode: 0, stdout: '', stderr: '' }
+      }
+      const result = await runAndRecord(store, cfg(), { related: true, files: [] }, { runner })
+      expect(result.ran).toBe(false)
+      expect(called).toBe(false)
+    } finally {
+      store.close()
+    }
+  })
+
   it('throws when a run produces no report file', async () => {
     const store = HistoryStore.memory()
     try {
@@ -156,6 +192,17 @@ describe('runAndRecordPytest', () => {
       runAndRecordPytest(store, cfg({ allowRun: false }), {}, {}),
     ).rejects.toBeInstanceOf(FlakeGateError)
     store.close()
+  })
+
+  it('refuses related (diff) mode for pytest — vitest-only; pytest scoping is staged', async () => {
+    const store = HistoryStore.memory()
+    try {
+      await expect(
+        runAndRecordPytest(store, cfg(), { related: true, files: ['pkg/x.py'] }, {}),
+      ).rejects.toThrow(/related|vitest/i)
+    } finally {
+      store.close()
+    }
   })
 
   it('runs pytest `repeat` times, ingests the json-report, and classifies (nodeid verbatim)', async () => {

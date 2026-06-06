@@ -192,7 +192,10 @@ function parseVerify(
           const r = await runAndRecord(
             store,
             { projectRoot: ctx.projectRoot, allowedRoots: flakeRoots, allowRun: true, timeoutMs },
-            { files: ctx.changedFiles },
+            // Diff-scope: changed files are SOURCE files, so drive `vitest related` (the tests
+            // depending on them), not positional `run` filters that would match no test file and
+            // silently record nothing. No changed set ⇒ related:false ⇒ whole suite (unchanged).
+            { files: ctx.changedFiles, related: ctx.changedFiles.length > 0 },
             {},
           )
           return r.verdicts

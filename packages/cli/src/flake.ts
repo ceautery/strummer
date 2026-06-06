@@ -229,6 +229,7 @@ async function cmdRun(
       framework: { type: 'string' },
       repeat: { type: 'string' },
       file: { type: 'string', multiple: true },
+      related: { type: 'boolean' },
       'run-group': { type: 'string' },
       'allow-run': { type: 'boolean' },
       'timeout-ms': { type: 'string' },
@@ -255,7 +256,12 @@ async function cmdRun(
         allowRun: values['allow-run'] ?? false,
         timeoutMs: num(values['timeout-ms']),
       },
-      { repeat: num(values.repeat) ?? 1, files: values.file, runGroup: values['run-group'] },
+      {
+        repeat: num(values.repeat) ?? 1,
+        files: values.file,
+        related: values.related,
+        runGroup: values['run-group'],
+      },
       { runner: deps.runner },
     )
     if (values.json) {

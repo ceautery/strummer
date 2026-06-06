@@ -53,6 +53,14 @@ export interface RunAndRecordInput {
   repeat?: number
   /** Positional vitest file filters; default runs the whole suite. */
   files?: string[]
+  /**
+   * Diff-scope the run (vitest only): treat `files` as CHANGED SOURCE files and run
+   * `vitest related <files> --run` — the tests that depend on them — instead of positional
+   * filters, mirroring `@sackville-mcp/coverage`'s `runScoped`. A pre-commit/PR flake check can
+   * then repeat only the tests a change actually touches. `related` with an empty `files` set is a
+   * pre-spawn noop (`ran:false`). REFUSED for pytest (the mirrored-test scope is staged). Default false.
+   */
+  related?: boolean
   /** Batch id; each iteration is recorded under `${runGroup}#<i>`. */
   runGroup?: string
 }
@@ -71,8 +79,16 @@ export interface RunAndRecordResult {
   verdicts: FlakeVerdict[]
 }
 
-/** Build the argv for one vitest suite run with the JSON reporter writing to `outFile`. */
-function vitestArgv(files: string[], outFile: string): string[] {
+/**
+ * Build the argv for one vitest suite run with the JSON reporter writing to `outFile`. When
+ * `related` is set, `files` are CHANGED SOURCE files and we run `vitest related <files> --run`
+ * (the tests depending on them) — the exact `related` invocation `@sackville-mcp/coverage`'s
+ * `runScoped` uses — instead of treating them as positional test-file filters.
+ */
+function vitestArgv(files: string[], outFile: string, related: boolean): string[] {
+  if (related) {
+    return ['related', ...files, '--run', '--reporter=json', `--outputFile=${outFile}`]
+  }
   return ['run', ...files, '--reporter=json', `--outputFile=${outFile}`]
 }
 
@@ -81,7 +97,7 @@ function vitestArgv(files: string[], outFile: string): string[] {
  * (ADR 0010 addendum: json-report now, `pytest-reportlog` staged). No `run` subcommand — pytest
  * takes positional file filters directly. The plugin is an operator-installed dev dependency.
  */
-function pytestArgv(files: string[], outFile: string): string[] {
+function pytestArgv(files: string[], outFile: string, _related: boolean): string[] {
   return ['--json-report', `--json-report-file=${outFile}`, ...files]
 }
 
@@ -98,18 +114,22 @@ export const defaultPytestRunner: TestRunner = spawnRunner('pytest')
  */
 interface FrameworkAdapter {
   defaultRunner: TestRunner
-  buildArgv(files: string[], outFile: string): string[]
+  /** Whether this framework supports `related` (diff) scoping. vitest does; pytest's is staged. */
+  supportsRelated: boolean
+  buildArgv(files: string[], outFile: string, related: boolean): string[]
   ingest(store: HistoryStore, parsed: unknown, opts: ParseReportOptions): number
 }
 
 const VITEST: FrameworkAdapter = {
   defaultRunner: defaultVitestRunner,
+  supportsRelated: true,
   buildArgv: vitestArgv,
   ingest: (store, parsed, opts) => store.ingestReport(parsed as VitestJsonReport, opts),
 }
 
 const PYTEST: FrameworkAdapter = {
   defaultRunner: defaultPytestRunner,
+  supportsRelated: false,
   buildArgv: pytestArgv,
   ingest: (store, parsed, opts) => store.ingestPytestReport(parsed as PytestJsonReport, opts),
 }
@@ -144,15 +164,27 @@ async function runAndRecordWith(
     return { ran: false, iterations: 0, recorded: 0, results: [], verdicts: store.classify() }
   }
 
+  const related = input.related ?? false
+  if (related && !fw.supportsRelated) {
+    throw new Error('related (diff) scoping is vitest-only; pytest mirrored-test scoping is staged')
+  }
+
   const runner = deps.runner ?? fw.defaultRunner
   const reportDir = deps.reportDir ?? mkdtempSync(join(tmpdir(), 'sackville-flake-'))
   const files = input.files ?? []
+
+  // `related` with no changed files would run `vitest related` with no operands — meaningless;
+  // noop without spawning (mirrors coverage's empty-changed-set early return).
+  if (related && files.length === 0) {
+    return { ran: false, iterations: 0, recorded: 0, results: [], verdicts: store.classify() }
+  }
+
   const results: { exitCode: number; passed: boolean }[] = []
   let recorded = 0
 
   for (let i = 0; i < repeat; i++) {
     const outFile = join(reportDir, `report-${i}.json`)
-    const { exitCode } = await runner(fw.buildArgv(files, outFile), {
+    const { exitCode } = await runner(fw.buildArgv(files, outFile, related), {
       cwd: config.projectRoot,
       timeoutMs: config.timeoutMs,
     })

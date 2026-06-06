@@ -124,6 +124,25 @@ describe('sackville flake CLI', () => {
     expect(c.out()).toMatch(/recorded 2/)
   })
 
+  it('run --related drives `vitest related` over the changed files (diff-scoping)', async () => {
+    let argv: string[] | undefined
+    const runner: TestRunner = async (a) => {
+      argv = a
+      const outFile = a.find((x) => x.startsWith('--outputFile='))?.split('=')[1] as string
+      if (outFile) writeFileSync(outFile, JSON.stringify({ testResults: [] }))
+      return { exitCode: 0, stdout: '', stderr: '' }
+    }
+    const c = capture()
+    const code = await runFlake(
+      ['run', dir, '--db', db, '--allow-run', '--related', '--file', 'src/x.ts'],
+      c.io,
+      { runner },
+    )
+    expect(code).toBe(0)
+    expect(argv?.[0]).toBe('related')
+    expect(argv).toContain('src/x.ts')
+  })
+
   it('run --framework pytest drives the pytest runner + ingests its json-report', async () => {
     const runner: TestRunner = async (argv) => {
       // Proves the pytest argv path (no vitest `run`/`--outputFile`).

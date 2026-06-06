@@ -225,7 +225,9 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
           'Run the suite `repeat` times (default 1) with the JSON reporter, recording every ' +
           'outcome into the history store, then classify. Operator-gated and confined to ' +
           'allowlisted project roots. Optional `framework` (vitest|pytest, default vitest), ' +
-          'positional `files` filters and a `runGroup`.',
+          'positional `files` filters and a `runGroup`. Set `related: true` (vitest only) to treat ' +
+          '`files` as CHANGED SOURCE files and repeat only the tests related to them ' +
+          '(`vitest related`), diff-scoping the flake check.',
         inputSchema: {
           projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
           framework: z
@@ -234,6 +236,13 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
             .describe('test framework (default vitest)'),
           repeat: z.number().int().positive().optional(),
           files: z.array(z.string()).optional(),
+          related: z
+            .boolean()
+            .optional()
+            .describe(
+              'vitest only: treat `files` as changed source files and run `vitest related` ' +
+                '(the tests depending on them) instead of positional filters; diff-scopes the check',
+            ),
           runGroup: z.string().optional(),
         },
       },
@@ -248,7 +257,12 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
         const result = await run(
           store,
           config,
-          { repeat: args.repeat, files: args.files, runGroup: args.runGroup },
+          {
+            repeat: args.repeat,
+            files: args.files,
+            related: args.related,
+            runGroup: args.runGroup,
+          },
           { runner: opts.runner },
         )
         const structured = {

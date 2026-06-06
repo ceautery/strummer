@@ -206,4 +206,28 @@ describe('flake MCP surface', () => {
     expect(verdicts.find((v) => v.id === 'src/x.test.ts > x > wobbles')?.state).toBe('flaky')
     fresh.close()
   })
+
+  it('flake_run forwards `related` to the runner (vitest related diff-scoping)', async () => {
+    const fresh = HistoryStore.memory()
+    let argv: string[] | undefined
+    const runner: TestRunner = async (a) => {
+      argv = a
+      const out = a.find((x) => x.startsWith('--outputFile='))?.slice('--outputFile='.length)
+      if (out) writeFileSync(out, JSON.stringify({ testResults: [] }))
+      return { exitCode: 0, stdout: '', stderr: '' }
+    }
+    const client = await connect({
+      store: fresh,
+      runConfig: { allowRun: true, allowedRoots: ['/abs/project'] },
+      runner,
+    })
+    await call(client, 'flake_run', {
+      projectRoot: '/abs/project',
+      files: ['src/x.ts'],
+      related: true,
+    })
+    expect(argv?.[0]).toBe('related')
+    expect(argv).toContain('src/x.ts')
+    fresh.close()
+  })
 })

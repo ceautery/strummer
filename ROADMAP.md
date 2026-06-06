@@ -579,9 +579,14 @@ stage `reportlog`. Pure/zero-spawn slices first.
         (read into `diff`, inline wins), mirroring `run_scoped`; closes the dogfooding-surfaced
         API inconsistency (an agent reusing `diffPath` no longer silently gets a no-signal verdict).
         CLI already took a `--diff` path (2026-06-06).
+  - [x] **flake diff-scoping (vitest)** — `RunAndRecordInput.related` runs `vitest related <changed>
+        --run` (mirrors coverage `runScoped`) so a flake check repeats only the tests a change
+        touches; on MCP `flake_run.related` + CLI `flake run --related`; verify now drives flake with
+        `related` (was a silent no-op — changed source files fed as positional `run` filters matched
+        no tests). pytest `related` refused (mirrored-test scope still staged). 2026-06-06.
   - **Staged beyond this arc:** cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/`
-        cache reuse; flake diff-scoping; src-layout module mapping precision for
-        `reconcileMutmutScope` (currently conservative-safe via suffix match).
+        cache reuse; pytest `related`/mirrored-test flake scoping; src-layout module mapping precision
+        for `reconcileMutmutScope` (currently conservative-safe via suffix match).
 
 - [x] **Dependency/version intelligence** (`@sackville-mcp/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
       Cleanest architectural fit: pure offline verdict core + an operator-provisioned
