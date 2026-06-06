@@ -74,6 +74,12 @@ export interface ScopedRunResult {
   report?: DiffCoverageReport
 }
 
+/** Keep the last `n` non-empty-trimmed lines of a blob — for surfacing a runner's failure tail. */
+function lastLines(text: string, n: number): string {
+  const lines = text.split('\n')
+  return lines.slice(Math.max(0, lines.length - n)).join('\n')
+}
+
 /** Build the `vitest related` argv: run once, scoped to the changed files, with v8 JSON coverage. */
 function scopedArgv(changedFiles: string[], coverageDir: string): string[] {
   return [
@@ -87,6 +93,21 @@ function scopedArgv(changedFiles: string[], coverageDir: string): string[] {
   ]
 }
 
+/**
+ * Build the child env for a spawned runner: prepend the project's own
+ * `<cwd>/node_modules/.bin` to PATH. Without this, a bare `vitest`/`pytest` is
+ * resolved only from the *invoking* shell's PATH — so running `sackville-cli
+ * coverage run-scoped` from a **global** install (whose PATH does not include the
+ * target project's `.bin`) fails to start the runner and dies with an opaque
+ * "did not produce a coverage report". Returns a fresh env; never mutates input.
+ */
+export function runnerEnv(cwd: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const localBin = resolve(cwd, 'node_modules', '.bin')
+  const sep = process.platform === 'win32' ? ';' : ':'
+  const current = env.PATH
+  return { ...env, PATH: current ? `${localBin}${sep}${current}` : localBin }
+}
+
 /** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
 function spawnRunner(command: string): TestRunner {
   return (argv, opts) =>
@@ -94,7 +115,12 @@ function spawnRunner(command: string): TestRunner {
       execFile(
         command,
         argv,
-        { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
+        {
+          cwd: opts.cwd,
+          timeout: opts.timeoutMs,
+          maxBuffer: 64 * 1024 * 1024,
+          env: runnerEnv(opts.cwd),
+        },
         (err, stdout, stderr) => {
           // The tool exits non-zero on a test failure — surface the code, don't reject.
           const code =
@@ -151,15 +177,30 @@ export async function runScoped(
   const coverageDir = deps.coverageDir ?? mkdtempSync(join(tmpdir(), 'sackville-cov-'))
   const argv = scopedArgv(input.changedFiles, coverageDir)
 
-  const { exitCode } = await runner(argv, { cwd: config.projectRoot, timeoutMs: config.timeoutMs })
+  const { exitCode, stdout, stderr } = await runner(argv, {
+    cwd: config.projectRoot,
+    timeoutMs: config.timeoutMs,
+  })
 
   const coveragePath = join(coverageDir, 'coverage-final.json')
   let coverage: Record<string, FileCoverage>
   try {
     coverage = JSON.parse(readFileSync(coveragePath, 'utf8')) as Record<string, FileCoverage>
   } catch {
+    // The runner died before writing coverage. Surface its own output (the tail) and a
+    // hint at the usual cause so the failure is debuggable, not opaque.
+    const tail = lastLines(
+      [stderr, stdout]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('\n'),
+      25,
+    )
     throw new Error(
-      `scoped run did not produce a coverage report at ${coveragePath} (exit code ${exitCode})`,
+      `scoped run did not produce a coverage report at ${coveragePath} (exit code ${exitCode}). ` +
+        'The test runner exited without writing coverage — commonly it failed to start ' +
+        '(is `vitest` installed and resolvable in the project?) or the tests errored.' +
+        (tail ? `\n--- runner output (tail) ---\n${tail}` : ' (the runner produced no output.)'),
     )
   }
 

@@ -39,6 +39,29 @@ where useful, tell the user which `SACKVILLE_*` env var would unlock it.
 | manually checking an API matches its spec | **`validate_response`**, **`validate_request`**, **`validate_capture`** |
 | judging a change by feel | **`verify_change`** — folds coverage/deps/flake/mutate/contract into one verdict |
 
+## Lead with the tool — don't just confirm at the end
+
+The most common failure mode is reaching for Sackville **only** at the very end to
+rubber-stamp a change you already made by `grep`/`read`/manual `vitest`. Flip that:
+let the tools *drive* each step.
+
+- **Confirm intent from the indexed docs — by querying, not by reading the files.**
+  If a docs index is wired up, answer "what should this do?" with **`search_docs`**
+  → **`get_doc`**. Do **not** open the raw `db.json`/`index.json` or the library's
+  source to reconstruct the contract by hand — that's the exact habit the docs
+  pillar replaces, and it loses the version-pinning.
+- **Locate code semantically first.** Even for a file you could skim, start with
+  **`lsp_find_definition`** / **`lsp_find_references`** — it follows imports and
+  re-exports and tells you *every* call site, which a quick read will miss on
+  anything larger than a toy. (On a genuinely tiny single file a direct read is
+  fine — but reach for the tool *first* and fall through, rather than never
+  reaching for it.)
+- **Verify with the verdict, not just one pillar.** "Verify the change" means
+  **`verify_change`** — it folds coverage/deps/flake/mutate/contract into one
+  verdict and enforces *absence is never a pass*. `run_scoped` alone answers "is
+  this line covered?", not "is this change verified?". Use the individual pillar
+  when you want that one signal; use `verify_change` to close the task.
+
 ## How to use them well
 
 **LSP navigation (the big win).** Positions are **1-based** line and column.

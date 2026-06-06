@@ -147,6 +147,13 @@ claude mcp add sackville --env SACKVILLE_INDEX=$SACKVILLE_INDEX -- npx -y sackvi
 > download) — handy for trying things out or for CI. The default `fastembed`
 > backend downloads a ~130 MB ONNX model once, then runs locally.
 
+**Index *your own* project's docs, too.** The docs pillar isn't limited to the
+public DevDocs catalog. Point `--slug` at any published library you depend on, or
+author a small **DevDocs-format pair** (`index.json` + `db.json`) for an internal
+library and pass `--index/--db` — then search your *own* APIs the same way. The
+[tutorial appendix](./examples/tutorial/todo/README.md#appendix-the-docs-format-and-indexing-your-own-app)
+documents the two-file format and how to generate it.
+
 ---
 
 ## Tutorial: find a bug, fix it, prove it

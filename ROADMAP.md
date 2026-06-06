@@ -715,6 +715,16 @@ stage `reportlog`. Pure/zero-spawn slices first.
         gated `run-scoped`; exits 1 when a new line is uncovered.
   - [ ] *(staged)* pin `istanbul-lib-coverage` if `CoverageMap` merging/summaries are needed;
         a Python `run_scoped` (pytest --cov argv) sibling.
+  - [ ] *(staged — DX)* a `--git` convenience flag on the `coverage run-scoped` / `verify run`
+        **CLI** that derives the changed set from `git diff` (vs `HEAD`/a ref) so the human
+        doesn't hand-type `--changed-file`. The engine stays pure (changed set is input, no
+        VCS spawn — ADR 0010); the flag is a thin CLI-side `git` shell-out feeding the existing
+        `--diff`/`changedFiles` path. Surfaced as a footgun in the tutorial (`examples/tutorial/todo`).
+  - [x] **Debuggable runner failures** — `runScoped` now prepends `<project>/node_modules/.bin`
+        to the spawned runner's PATH (so a project-local `vitest`/`pytest` resolves even when
+        `sackville-cli` is a *global* install) and, when no coverage report is produced, surfaces
+        the runner's exit code **and output tail** instead of an opaque message. (`runnerEnv` is a
+        pure, unit-tested seam; the spawn itself stays out of the green gate per ADR 0010.)
 - [x] **Flaky-test detection & quarantine** (`@sackville-mcp/flake`) — **COMPLETE (engine +
       agent surface).** Protects the deterministic green gate. Pure Wilson/binomial
       classifier over a run-history fixture first; quarantine **writes** operator-gated
