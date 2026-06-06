@@ -43,6 +43,16 @@ what you need.
 | **`lsp`** | Where is this symbol defined / referenced? What's its type? Rename it safely. (semantic navigation, not grep) |
 | **`verify`** | Fold all of the above into **one change verdict** — and *absence is never a pass*. |
 
+> **New to mutation testing?** The `mutate` pillar deliberately introduces small
+> faults into your code — a `<` becomes `<=`, a `true` becomes `false` — and re-runs
+> your test suite against each altered copy (a *mutant*). A mutant your tests catch
+> is **killed**; one that slips through **survives**, exposing a behavior no test
+> actually pins down. Where coverage tells you a line *ran*, mutation testing tells
+> you its behavior is *checked* — a green suite full of surviving mutants is
+> asserting far less than it appears. It's an old idea (Lipton, 1971) made practical
+> only recently by cheaper compute. See **[Mutation testing in Sackville](./docs/mutation-testing.md)**
+> for the history and the three engines Sackville drives.
+
 The pillars **compose**: a captured browser/API run's traffic is validated against
 the API contract, then folded together with coverage, deps, flake, and mutation
 signals into a single verdict. See [ADR 0013](./docs/decisions/0013-cross-pillar-verification.md).
