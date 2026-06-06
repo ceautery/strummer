@@ -23,6 +23,7 @@ export {
   runCosmicRay,
   runMutation,
   runMutmut,
+  runnerEnv,
 } from './run.js'
 export {
   type MutationScope,

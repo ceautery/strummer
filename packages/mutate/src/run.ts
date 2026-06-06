@@ -176,6 +176,22 @@ function runArgv(input: RunMutationInput): string[] {
   return argv
 }
 
+/**
+ * Build the child env for a spawned mutation tool: prepend the project's own
+ * `<cwd>/node_modules/.bin` to PATH. Without this, a bare `stryker`/`mutmut`/
+ * `cosmic-ray` is resolved only from the *invoking* shell's PATH — so running
+ * `sackville-cli mutate run` from a **global** install (whose PATH does not
+ * include the target project's `.bin`) fails to start the tool and dies with an
+ * opaque "did not produce a JSON report". Mirrors `@sackville-mcp/coverage`'s
+ * `runnerEnv`. Returns a fresh env; never mutates input.
+ */
+export function runnerEnv(cwd: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const localBin = resolve(cwd, 'node_modules', '.bin')
+  const sep = process.platform === 'win32' ? ';' : ':'
+  const current = env.PATH
+  return { ...env, PATH: current ? `${localBin}${sep}${current}` : localBin }
+}
+
 /** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
 function spawnMutationRunner(command: string): MutationRunner {
   return (argv, opts) =>
@@ -183,7 +199,12 @@ function spawnMutationRunner(command: string): MutationRunner {
       execFile(
         command,
         argv,
-        { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
+        {
+          cwd: opts.cwd,
+          timeout: opts.timeoutMs,
+          maxBuffer: 64 * 1024 * 1024,
+          env: runnerEnv(opts.cwd),
+        },
         (err, stdout, stderr) => {
           const code =
             err && typeof (err as { code?: unknown }).code === 'number'

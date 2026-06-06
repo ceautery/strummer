@@ -88,6 +88,20 @@ function pytestArgv(files: string[], outFile: string): string[] {
   return ['--json-report', `--json-report-file=${outFile}`, ...files]
 }
 
+/**
+ * Build the child env for a spawned test runner: prepend the project's own
+ * `<cwd>/node_modules/.bin` to PATH, so a bare `vitest`/`pytest` is found even
+ * when `sackville-cli flake run` is invoked from a **global** install (whose
+ * PATH lacks the target project's `.bin`). Mirrors `@sackville-mcp/coverage`'s
+ * `runnerEnv`. Returns a fresh env; never mutates input.
+ */
+export function runnerEnv(cwd: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const localBin = resolve(cwd, 'node_modules', '.bin')
+  const sep = process.platform === 'win32' ? ';' : ':'
+  const current = env.PATH
+  return { ...env, PATH: current ? `${localBin}${sep}${current}` : localBin }
+}
+
 /** Spawn a local command as a subprocess, surfacing its exit code (never rejecting on non-zero). */
 function spawnRunner(command: string): TestRunner {
   return (argv, opts) =>
@@ -95,7 +109,12 @@ function spawnRunner(command: string): TestRunner {
       execFile(
         command,
         argv,
-        { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 64 * 1024 * 1024 },
+        {
+          cwd: opts.cwd,
+          timeout: opts.timeoutMs,
+          maxBuffer: 64 * 1024 * 1024,
+          env: runnerEnv(opts.cwd),
+        },
         (err, stdout, stderr) => {
           // The tool exits non-zero on a test failure — surface the code, don't reject.
           const code =
