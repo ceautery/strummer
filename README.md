@@ -15,7 +15,7 @@ Sackville is primarily a **headless [MCP](https://modelcontextprotocol.io) serve
 — every capability is an agent-native tool or resource. Humans drive the same core
 through a **CLI** (`sackville-cli`).
 
-> **Status:** alpha. All packages are published to npm at `0.0.1-alpha.2`. The
+> **Status:** alpha. All packages are published to npm at `0.0.1-alpha.3`. The
 > single source of truth for "what works today" and "what's next" is
 > [`STATUS.md`](./STATUS.md); the design record is the ADR set in
 > [`docs/decisions/`](./docs/decisions/).
