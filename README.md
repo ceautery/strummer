@@ -166,20 +166,42 @@ documents the two-file format and how to generate it.
 
 ---
 
-## Tutorial: find a bug, fix it, prove it
+## Tutorials: find a bug, fix it, prove it
 
-New to Sackville? The hands-on tutorial in
-[`examples/tutorial/todo/`](./examples/tutorial/todo) takes ~15 minutes on a tiny,
-runnable TODO app that ships with one deliberate bug its passing test suite hides.
-You'll **install the app's library docs** into a docs index (offline), then **find
-and fix** the bug **twice** — first with the CLI (`sackville-cli search`,
-`coverage run-scoped`, `verify run`), then with Claude Code through the MCP
-(`search_docs`, `lsp_*`, `verify_change`) — and build the obvious next feature. It
-resets with `./reset.sh`, so you (or a teammate) can run it again.
+New to Sackville? Two hands-on, runnable tutorials each ship a tiny app with one
+deliberate bug its passing test suite hides. You find and fix the bug **twice** —
+first with the CLI, then with Claude Code through the MCP — and each resets with
+`./reset.sh`, so you (or a teammate) can run it again.
+
+**1. Start here — [`examples/tutorial/todo/`](./examples/tutorial/todo)** (~15
+min). A 64-line TODO-core app with a bug in `filter('active')`. You'll **install
+the app's library docs** into a docs index (offline), then find and fix the bug
+with the CLI (`sackville-cli search`, `coverage run-scoped`, `verify run`) and
+again from Claude Code (`search_docs`, `lsp_*`, `verify_change`), then build the
+obvious next feature. Here the bug is an *uncovered* branch — `coverage` catches
+it.
 
 ```bash
 cd examples/tutorial/todo && npm install
 # then follow examples/tutorial/todo/README.md
+```
+
+**2. When semantic tools earn their keep —
+[`examples/tutorial/scheduler/`](./examples/tutorial/scheduler)** (~25 min). A
+larger, **multi-file** meeting-room scheduler (`roomctl`) where `grep` and a quick
+read stop being enough. The bug is a *single character* — `<` where `<=` belongs —
+in an `overlaps()` helper called from three files, so back-to-back bookings are
+wrongly rejected. The twist: the buggy line **executes**, so the passing suite
+**and** the coverage report both miss it. You reason from the **docs**
+(`search_docs` — touching ≠ overlapping), map the helper's blast radius with
+**semantic navigation** (`lsp_find_references` across files, no grep noise), then
+prove the tests are weak with **mutation testing** (`mutate_run` surfaces a
+surviving `<`↔`<=` mutant), fix it, and fold the result into one **`verify_change`**
+verdict.
+
+```bash
+cd examples/tutorial/scheduler && npm install
+# then follow examples/tutorial/scheduler/README.md
 ```
 
 ## Composability
