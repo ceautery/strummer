@@ -203,12 +203,19 @@ sackville-cli mutate run $PWD --file src/interval.ts --allow-run
 ```
 
 Stryker mutates `overlaps` every way it can, re-running your tests against each
-version. Most mutants are **killed** (a test caught them). But the **boundary
-comparison survives**: flipping `<` to `<=` changes nothing your tests assert —
-the suite stays green either way. (You'll see *two* survivors, one per operand of
-the disjoint check; both are the same boundary mistake.) Those surviving mutants
-point straight at the untested boundary — the bug *and* the missing test, in one
-shot.
+version. Most mutants are **killed** (a test caught them). A few **survive** — and
+every survivor is a behavior your tests never pinned:
+
+- two `EqualityOperator` survivors that flip the **boundary comparison** `<` → `<=`
+  (one per operand of the disjoint check) — the suite stays green either way
+  because it never tests two intervals that *touch*. **That is the bug.**
+- a `ConditionalExpression` survivor that drops the second clause of the check
+  (`… || b.end < a.start` → `…`) — it survives because every test puts the first
+  interval *before* the second, so the second clause is never the deciding factor.
+  Your tests only exercise one ordering.
+
+Both findings point at the same hole and the same fix: a boundary test, in **both**
+orderings.
 
 > `mutate run` *runs* your tests many times, so it needs `--allow-run`. It reads
 > Stryker's JSON report from `reports/mutation/mutation.json`; the bundled
@@ -223,8 +230,9 @@ Open `src/interval.ts` and fix `overlaps` so that intervals which merely touch d
 **not** overlap (the half-open rule the docs describe). Then add the assertion the
 suite was missing — a boundary test for `overlaps`. Assert that touching intervals
 do **not** overlap in **both** orders (`overlaps(a, b)` *and* `overlaps(b, a)`),
-since the disjoint check has a clause for each — that's what kills both surviving
-mutants. Ideally add one for `Schedule.book` accepting a back-to-back booking too.
+since the disjoint check has a clause for each — that one test, in both orderings,
+kills every survivor. Ideally add one for `Schedule.book` accepting a back-to-back
+booking too.
 
 Re-run the tools that caught it:
 

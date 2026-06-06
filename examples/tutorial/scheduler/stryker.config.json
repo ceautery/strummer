@@ -1,10 +1,8 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Sackville's `mutate run` passes `--reporters json --mutate <files>` itself; this config sets the test runner and a sensible default scope for a bare `npx stryker run`. We exclude the ConditionalExpression mutator so the lesson stays on the boundary COMPARISON: that mutator replaces a whole condition with true/false, and the Stryker vitest-runner reports those as survived even when a test would catch them — noise for a tutorial.",
+  "_comment": "Sackville's `mutate run` passes `--reporters json --mutate <files>` itself; this config sets the test runner and a sensible default scope for a bare `npx stryker run` / `npm run mutate`.",
   "packageManager": "npm",
   "testRunner": "vitest",
-  "coverageAnalysis": "off",
   "mutate": ["src/interval.ts"],
-  "mutator": { "excludedMutations": ["ConditionalExpression"] },
   "reporters": ["json", "clear-text"]
 }
