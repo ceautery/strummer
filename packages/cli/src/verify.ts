@@ -432,14 +432,54 @@ function readCaptureContract(values: {
 
 /** Build a single-shot CaptureRuntime from the CLI's browser egress flags (mirrors
  * `sackville browser`): a gated, proxy-fronted manager with HAR recording armed. */
+/**
+ * BrowserGate options for the `--flow` capture path, from the parsed CLI flags.
+ * Exported for testing: a flow with `fill`/`click` steps is a MUTATION, so it
+ * needs `--allow-unsafe` — without it every interaction dry-runs and the
+ * flow-completeness guard fails the capture (the human typing the flag is the
+ * operator, exactly as `sackville browser run --unsafe`).
+ */
+export function captureGateOptionsFromFlags(values: {
+  'allow-host'?: string[]
+  'allow-unsafe'?: boolean
+}): { allowedHosts: string[]; allowUnsafe: boolean } {
+  return {
+    allowedHosts: values['allow-host'] ?? [],
+    allowUnsafe: values['allow-unsafe'] ?? false,
+  }
+}
+
+/**
+ * Build the secret resolver + redactor for the `--flow` capture path from the
+ * `SACKVILLE_BROWSER_SECRET_<NAME>` env — mirrors `sackville browser run` and the
+ * browser MCP server. Without it a flow's `{{secret:NAME}}` step fails closed and
+ * a secret value could land in the captured HAR. Exported for testing.
+ */
+export function browserCaptureSecretsFromEnv(env: Record<string, string | undefined>): {
+  redact: (value: string) => string
+  resolveSecret: (name: string) => string | undefined
+} {
+  const redactor = new Redactor()
+  const secrets = new Map<string, string>()
+  for (const [key, value] of Object.entries(env)) {
+    const m = /^SACKVILLE_BROWSER_SECRET_(.+)$/.exec(key)
+    if (m?.[1] && value) {
+      redactor.register(m[1], value)
+      secrets.set(m[1], value)
+    }
+  }
+  return { redact: (s) => redactor.redact(s), resolveSecret: (name) => secrets.get(name) }
+}
+
 async function captureRuntimeFromFlags(values: {
   'allow-host'?: string[]
+  'allow-unsafe'?: boolean
   'allow-private'?: boolean
   'no-sandbox'?: boolean
   headed?: boolean
   engine?: string
 }): Promise<CaptureRuntime> {
-  const gate = new BrowserGate({ allowedHosts: values['allow-host'] ?? [] })
+  const gate = new BrowserGate(captureGateOptionsFromFlags(values))
   const proxy = await createSsrfProxy({ allowPrivate: values['allow-private'] ?? false })
   const harDir = mkdtempSync(join(tmpdir(), 'sackville-verify-har-'))
   const manager = new BrowserManager({
@@ -451,10 +491,12 @@ async function captureRuntimeFromFlags(values: {
       noSandbox: values['no-sandbox'] ?? false,
     }),
   })
+  const { redact, resolveSecret } = browserCaptureSecretsFromEnv(process.env)
   return {
     manager,
     gate,
-    redact: (s) => s,
+    redact,
+    resolveSecret,
     config: { harDir },
     shutdown: async () => {
       await manager.shutdown()

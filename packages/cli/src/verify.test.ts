@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { MutationRunner } from '@sackville-mcp/mutate'
 import { describe, expect, it, vi } from 'vitest'
 import { run } from './index.js'
-import { runVerify } from './verify.js'
+import { browserCaptureSecretsFromEnv, captureGateOptionsFromFlags, runVerify } from './verify.js'
 
 function capture() {
   const out: string[] = []
@@ -228,6 +228,29 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
     const c = capture()
     expect(await runVerify(['run', '/repo', '--request', 'r', '--flow', 'f'], c.io)).toBe(2)
     expect(c.err()).toMatch(/mutually exclusive|either/i)
+  })
+
+  it('--flow capture enables browser mutations only with --allow-unsafe', () => {
+    // Regression: the `--flow` path built its BrowserGate without threading
+    // --allow-unsafe, so every `fill`/`click` dry-ran and the flow-completeness
+    // guard failed any real login flow. A flow with mutation steps needs it.
+    expect(captureGateOptionsFromFlags({}).allowUnsafe).toBe(false)
+    expect(captureGateOptionsFromFlags({ 'allow-unsafe': true }).allowUnsafe).toBe(true)
+    expect(captureGateOptionsFromFlags({ 'allow-host': ['localhost'] }).allowedHosts).toEqual([
+      'localhost',
+    ])
+  })
+
+  it('--flow capture resolves + redacts SACKVILLE_BROWSER_SECRET_* from env', () => {
+    // Regression: the `--flow` path wired no resolveSecret/redactor, so a
+    // `{{secret:NAME}}` step failed closed and a secret could land in the temp HAR.
+    const { redact, resolveSecret } = browserCaptureSecretsFromEnv({
+      SACKVILLE_BROWSER_SECRET_PASSWORD: 'hunter2',
+      UNRELATED: 'x',
+    })
+    expect(resolveSecret('PASSWORD')).toBe('hunter2')
+    expect(resolveSecret('NOPE')).toBeUndefined()
+    expect(redact('signed in with hunter2 ok')).not.toContain('hunter2')
   })
 
   it('drives the deps pillar via an injected runner — no --allow-run, no network', async () => {
