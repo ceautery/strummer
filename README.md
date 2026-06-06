@@ -149,6 +149,22 @@ claude mcp add sackville --env SACKVILLE_INDEX=$SACKVILLE_INDEX -- npx -y sackvi
 
 ---
 
+## Tutorial: find a bug, fix it, prove it
+
+New to Sackville? The hands-on tutorial in
+[`examples/tutorial/todo/`](./examples/tutorial/todo) takes ~15 minutes on a tiny,
+runnable TODO app that ships with one deliberate bug its passing test suite hides.
+You'll **install the app's library docs** into a docs index (offline), then **find
+and fix** the bug **twice** — first with the CLI (`sackville-cli search`,
+`coverage run-scoped`, `verify run`), then with Claude Code through the MCP
+(`search_docs`, `lsp_*`, `verify_change`) — and build the obvious next feature. It
+resets with `./reset.sh`, so you (or a teammate) can run it again.
+
+```bash
+cd examples/tutorial/todo && npm install
+# then follow examples/tutorial/todo/README.md
+```
+
 ## Composability
 
 Sackville is deliberately a graph of small packages rather than a monolith.
