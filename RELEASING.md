@@ -1,6 +1,6 @@
 # Releasing Sackville
 
-How `sackville-mcp` + the 18 `@sackville-mcp/*` packages get published to npm. The pipeline
+How the unscoped `sackville-mcp` aggregate + the 18 `@sackville-mcp/*` packages (19 in all) get published to npm. The pipeline
 is **Changesets** (fixed/lockstep) + a GitHub Actions workflow (`.github/workflows/release.yml`)
 that publishes via **pnpm over OIDC trusted publishing** (no npm token, SLSA provenance attached).
 
@@ -13,13 +13,13 @@ that publishes via **pnpm over OIDC trusted publishing** (no npm token, SLSA pro
 
 These are not in the repo and must be done by an account owner:
 
-1. **Trusted publishing — per package (all 18).** On npmjs.com, for each package's
+1. **Trusted publishing — per package (all 19).** On npmjs.com, for each package's
    *Settings → Publishing access → Trusted Publisher → GitHub Actions*:
    - Repository: `ceautery/sackville`
    - Workflow: `release.yml`
    - Environment: `npm`
 
-   The 17 `@sackville-mcp/*` packages live under the **org** (`npmjs.com/org/sackville-mcp`);
+   The 18 `@sackville-mcp/*` packages live under the **org** (`npmjs.com/org/sackville-mcp`);
    the unscoped `sackville-mcp` is under your **user** account — both need configuring. There is
    no org-wide bulk setting; it's per-package.
 2. **GitHub Actions environment** named `npm` (repo *Settings → Environments*). No protection
@@ -38,16 +38,45 @@ makes npm ignore OIDC, so don't set it if you want to keep using/verifying trust
 
 ---
 
+## Adding a new package
+
+When the package graph grows a new `@sackville-mcp/*` package (e.g. `@sackville-mcp/spawn`),
+it needs a **one-time bootstrap before its first OIDC release** — because npm **cannot publish a
+package's first version over OIDC**: a trusted publisher can only be configured on a package that
+already exists, and there is no "create empty package" UI (unlike PyPI, which allows pre-config;
+see [npm/cli#8544](https://github.com/npm/cli/issues/8544), open).
+
+1. **Bootstrap-publish it once with a token**, at the *current* group version and on the `alpha`
+   tag, from a clean build:
+   ```sh
+   pnpm -r build
+   cd packages/<name>
+   npm publish --tag alpha --access public   # token needs publish + "Bypass 2FA" on @sackville-mcp
+   ```
+   Do this **before** the next Version-PR merge — otherwise `release.yml`'s OIDC publish reaches a
+   package that doesn't exist yet and the release job fails mid-run. (A first publish also sets
+   `latest`; that's fine — it matches the siblings' current `latest`.)
+2. **Configure its trusted publisher** on npmjs.com with the *same* values as every other package
+   (repo `ceautery/sackville`, workflow `release.yml`, environment `npm`). Org-scoped package →
+   under the org; the bootstrap above created it there.
+3. **Nothing else.** The package is already in the fixed group (the `@sackville-mcp/*` glob), so
+   `changeset version` bumps it with the set **and auto-adds it to `pre.json.initialVersions`** —
+   no manual `pre.json` edit. From the next release on, it publishes over OIDC like the rest.
+   (Hygiene: glance at the "Version Packages" PR to confirm the new package is listed at the same
+   `alpha.N` as the group before merging.)
+
+---
+
 ## Cutting a release
 
 ### Alpha / prerelease (current channel)
 
 ```sh
 pnpm changeset pre enter alpha     # once, to enter pre mode (commits .changeset/pre.json)
-pnpm changeset                     # describe the change; pick bump levels (fixed → all 18 move together)
+pnpm changeset                     # describe the change; pick bump levels (fixed → all 19 move together)
 git add -A && git commit -m "..." && git push origin main
 # → release.yml opens a "Version Packages (alpha)" PR
-# review it (it bumps all 18 + writes CHANGELOGs), then MERGE it
+# review it (it bumps all 19 + writes CHANGELOGs), then MERGE it
 # → release.yml publishes 0.0.1-alpha.<n> to the `alpha` dist-tag, over OIDC
 ```
 
@@ -62,7 +91,7 @@ git add -A && git commit -m "..." && git push origin main
 
 ### Fixed / lockstep
 
-`.changeset/config.json` has `"fixed": [["sackville-mcp", "@sackville-mcp/*"]]`, so **all 18
+`.changeset/config.json` has `"fixed": [["sackville-mcp", "@sackville-mcp/*"]]`, so **all 19
 version together** — a changeset touching any one bumps the whole set to the same version. You
 can list one package or all; the result is identical.
 
@@ -100,7 +129,7 @@ npm view @sackville-mcp/verdict@<version> --json | jq .dist.attestations
 npx -y sackville-mcp@alpha    # prints: sackville-mcp: enabled [api, deps, verify]; disabled [docs]
 ```
 
-Local pre-publish packaging audit (no publish): `pnpm package-checks` — packs all 18, runs
+Local pre-publish packaging audit (no publish): `pnpm package-checks` — packs all 19, runs
 `attw --profile esm-only` + `publint` on each tarball, and asserts the aggregate `bin.mjs`
 startup closure is native-free.
 
