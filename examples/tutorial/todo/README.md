@@ -202,9 +202,8 @@ npm run todo -- ls --active
 
 ## 4. Prove the change — one verdict
 
-`verify run` drives the pillars you ask for and folds them into a single verdict.
-Its rule is **absence is never a pass**: a pillar with no signal is
-`inconclusive`, never green.
+`verify run` drives the pillars you ask for and folds them into one verdict whose
+rule is **absence is never a pass**:
 
 ```bash
 sackville-cli verify run $PWD \
@@ -212,7 +211,21 @@ sackville-cli verify run $PWD \
   --allow-run
 ```
 
-Exit `0` = pass, `1` = fail, `2` = inconclusive.
+```
+verdict: INCONCLUSIVE (worst severity none)
+  contract: missing — no input supplied
+  coverage: pass — all N new executable line(s) covered
+  deps:     missing — no input supplied
+  flake:    missing — no input supplied
+  mutate:   missing — no input supplied
+```
+
+Read the **per-pillar breakdown** — that's the primary output: `coverage: pass`
+once your new test covers the `active` branch. The **overall** verdict is
+`INCONCLUSIVE` (exit `2`), and that's correct: you only ran one pillar, so verify
+treats the others as unchecked (absence is never a pass, applied across pillars).
+The composite goes green only when every dimension you care about has been checked.
+Exit codes: `0` pass, `1` fail, `2` inconclusive.
 
 ---
 

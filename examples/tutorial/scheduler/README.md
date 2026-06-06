@@ -250,17 +250,32 @@ booked #2 Oak  10:00–11:00  retro
 
 ## 6. Prove the change — one verdict
 
-`verify run` drives the pillars you ask for and folds them into a single verdict.
-Its rule is **absence is never a pass**: a pillar with no signal is
-`inconclusive`, never green.
+`verify run` drives the pillars you ask for and folds them into one verdict whose
+rule is **absence is never a pass**:
 
 ```bash
 sackville-cli verify run $PWD --mutate --mutate-tool stryker --allow-run
 ```
 
-Exit `0` = pass, `1` = fail, `2` = inconclusive. With the boundary test added, the
-mutation pillar now reports its survivor killed, and the verdict is a real pass —
-not "the tests happened to be green."
+```
+verdict: INCONCLUSIVE (worst severity none)
+  contract: missing — no input supplied
+  coverage: missing — no input supplied
+  deps:     missing — no input supplied
+  flake:    missing — no input supplied
+  mutate:   pass — all valid mutants detected
+```
+
+Read the **per-pillar breakdown** — that's the primary output. `mutate: pass` is
+your proof: with the boundary test added, every mutant is now killed.
+
+The **overall** verdict is `INCONCLUSIVE` (exit `2`), and that's correct, not a
+failure: you only ran one pillar, so verify treats the four you *didn't* run as
+unchecked — absence is never a pass, applied across pillars. The composite goes
+green only when every dimension has been affirmatively checked; a single-pillar
+run tells you about that pillar, not the whole change. (Exit codes: `0` pass, `1`
+fail, `2` inconclusive — so a CI gate on the *composite* would supply every pillar
+relevant to the change.)
 
 ---
 
