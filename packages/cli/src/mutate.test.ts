@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -77,6 +77,9 @@ describe('sackville mutate CLI', () => {
 
   it('run executes the injected runner and reports metrics with --allow-run', async () => {
     const reportPath = join(dir, 'mutation.json')
+    // The diff scope is existence-checked, so the requested file must exist on disk.
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'src/math.ts'), 'export const add = (a, b) => a + b\n')
     const runner: MutationRunner = async (argv) => {
       // Stryker would emit the JSON report; the fake stages the golden in its place.
       expect(argv).toContain('run')

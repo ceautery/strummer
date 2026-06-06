@@ -56,6 +56,25 @@ describe('selectMutationScope (ADR 0010 addendum 2, slice A)', () => {
     expect(r.files).toEqual([])
     expect(r.unmatched).toEqual(['src/a.py'])
   })
+
+  it('honors a custom isMutableSource predicate (Stryker JS/TS, not .py)', () => {
+    const isTs = (p: string) => /\.(?:[cm]?js|[cm]?ts)x?$/.test(p) && !p.endsWith('.d.ts')
+    const r = selectMutationScope(
+      ['src/a.ts', 'src/b.tsx', 'src/c.py', 'src/d.d.ts', 'README.md'],
+      ['src'],
+      allExist,
+      isTs,
+    )
+    expect(r.files).toEqual(['src/a.ts', 'src/b.tsx']) // .py/.d.ts/.md all dropped by the predicate
+    expect(r.unmatched).toEqual([])
+  })
+
+  it("an ownedRoot of '.' means whole-project (no subtree confinement)", () => {
+    const isTs = (p: string) => p.endsWith('.ts')
+    const r = selectMutationScope(['src/a.ts', 'vendor/b.ts'], ['.'], allExist, isTs)
+    expect(r.files).toEqual(['src/a.ts', 'vendor/b.ts'])
+    expect(r.unmatched).toEqual([])
+  })
 })
 
 describe('reconcileScope — partial-under-scope guard (ADR 0010 addendum 2, slice D)', () => {

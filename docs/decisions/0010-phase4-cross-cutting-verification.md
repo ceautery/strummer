@@ -346,8 +346,16 @@ no real-tool dependency, gate stays green:
 unchanged; the verify selector (Fork D). All verified end-to-end against the real tools (commits
 15920b9 / d23c86e / 25b7b65 / bb85f8f / accd284). The Stryker-under-verify total-zero path was
 verified already-safe (folds `mutationScore===null` → `no-signal` → inconclusive via
-`fromMutationSummary`/`composeVerdict`); Stryker PARTIAL-scope reconciliation remains staged
-(different `--mutate` mechanism).
+`fromMutationSummary`/`composeVerdict`). **Stryker PARTIAL-scope reconciliation LANDED (2026-06-06):**
+`runMutation` now mirrors `runCosmicRay` — `selectMutationScope` (generalized with an optional
+`isMutableSource` predicate, default `.py`; Stryker passes JS/TS minus `.d.ts`+test files; an
+`ownedRoots` of `'.'` = whole-project) then post-spawn `reconcileScope`. Slice-0 capture: real
+Stryker 9.6.1 OMITS a zero-mutant `--mutate` file from its report `files` map (mutmut Fork-B2 shape,
+not cosmic-ray's seen-but-empty), so `reconcileScope` is reused as-is — a selected file absent from
+the report ⇒ `missing` ⇒ inconclusive (conservative, zero false-passes; precision loss inherent to
+Stryker's report format). `scopedFiles` is now the actually-mutated set (was the requested set);
+`requestedFiles`/`unmatched`/`scopeEmpty` added. Whole-project path (`mutateFiles===undefined`)
+byte-identical.
 
 Invariants held throughout: under-scoping (total OR partial) never silent-passes;
 absence-never-a-pass; no real spawn in `pnpm gate` (pure synthesis + injected runner);

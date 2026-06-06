@@ -173,6 +173,19 @@ function runArgv(input: RunMutationInput): string[] {
   return argv
 }
 
+/**
+ * The mutable-source predicate for Stryker's diff scope: JS/TS source extensions, EXCLUDING
+ * `.d.ts` (declaration-only) and test files. Both reliably yield zero mutants, and Stryker OMITS a
+ * zero-mutant file from its report (slice-0 capture), so passing one to `--mutate` would make
+ * {@link reconcileScope} flag it as never-mutated ⇒ a spurious under-scope inconclusive. Dropping
+ * them is sound: a changed `.d.ts`/test/doc is not a mutation coverage gap.
+ */
+function isStrykerMutableSource(p: string): boolean {
+  if (p.endsWith('.d.ts')) return false
+  if (/\.(?:test|spec)\.(?:[cm]?[jt])sx?$/.test(p)) return false
+  return /\.(?:[cm]?js|[cm]?ts)x?$/.test(p)
+}
+
 /** Default live runner: spawn the local `stryker` as a subprocess (used by the bin, not the gate). */
 export const defaultStrykerRunner: MutationRunner = spawnRunner('stryker')
 
@@ -202,36 +215,99 @@ function assertAllowed(config: RunMutationConfig): void {
 export async function runMutation(
   config: RunMutationConfig,
   input: RunMutationInput,
-  deps: { runner?: MutationRunner; reportPath?: string } = {},
+  deps: {
+    runner?: MutationRunner
+    reportPath?: string
+    /** Existence check for the selected files (FS by default; injected in tests). */
+    exists?: (path: string) => boolean
+  } = {},
 ): Promise<RunMutationResult> {
   assertAllowed(config)
 
   const runner = deps.runner ?? defaultStrykerRunner
   const reportPath = deps.reportPath ?? defaultReportPath(config.projectRoot)
-  const argv = runArgv(input)
 
-  const { exitCode } = await runner(argv, {
+  const readReport = (exitCode: number): MutationReport => {
+    try {
+      return JSON.parse(readFileSync(reportPath, 'utf8')) as MutationReport
+    } catch {
+      throw new Error(
+        `mutation run did not produce a JSON report at ${reportPath} (exit code ${exitCode}); ` +
+          'ensure the project enables the Stryker `json` reporter',
+      )
+    }
+  }
+
+  // Whole-project (no scope requested): behavior-identical to before — no selection/reconciliation.
+  if (input.mutateFiles === undefined) {
+    const { exitCode } = await runner(runArgv(input), {
+      cwd: config.projectRoot,
+      timeoutMs: config.timeoutMs,
+    })
+    return {
+      ran: true,
+      exitCode,
+      scopedFiles: [],
+      tool: 'stryker',
+      reportPath,
+      summary: summarizeMutation(readReport(exitCode)),
+    }
+  }
+
+  // Diff-scoped: select mutable, existing, in-tree source files. The diff's changed files are
+  // already in-repo, so the default owned tree is the whole project ('.'); the operator may
+  // confine it via `ownedRoots`. Files the predicate rejects (docs/config/.d.ts/tests) are
+  // dropped; out-of-tree/deleted source is `unmatched` (a report-gap, never silently scoped).
+  const ownedRoots = input.ownedRoots ?? ['.']
+  const exists = deps.exists ?? ((p: string) => existsSync(join(config.projectRoot, p)))
+  const { files, unmatched } = selectMutationScope(
+    input.mutateFiles,
+    ownedRoots,
+    exists,
+    isStrykerMutableSource,
+  )
+  const unmatchedOut = unmatched.length > 0 ? unmatched : undefined
+
+  // Case (a): a scope was requested but nothing mutable in-tree remains — DO NOT spawn (noop).
+  if (files.length === 0) {
+    return {
+      ran: false,
+      exitCode: 0,
+      scopedFiles: [],
+      tool: 'stryker',
+      reportPath,
+      summary: emptyMutationSummary(),
+      scopeEmpty: true,
+      unmatched: unmatchedOut,
+      requestedFiles: [],
+    }
+  }
+
+  const { exitCode } = await runner(runArgv({ ...input, mutateFiles: files }), {
     cwd: config.projectRoot,
     timeoutMs: config.timeoutMs,
   })
+  const summary = summarizeMutation(readReport(exitCode))
 
-  let report: MutationReport
-  try {
-    report = JSON.parse(readFileSync(reportPath, 'utf8')) as MutationReport
-  } catch {
+  // Case (c): a selected source file Stryker never mutated is ABSENT from the report (slice-0
+  // capture: Stryker omits zero-mutant files), so `reconcileScope` flags it `missing` ⇒
+  // partial under-scope ⇒ inconclusive (never a clean pass on a silently-unmutated changed file).
+  const { mutatedFiles, missing } = reconcileScope(files, summary)
+  if (missing.length > 0) {
     throw new Error(
-      `mutation run did not produce a JSON report at ${reportPath} (exit code ${exitCode}); ` +
-        'ensure the project enables the Stryker `json` reporter',
+      `stryker under-scoped: ${missing.join(', ')} selected but never mutated — inconclusive`,
     )
   }
-
+  // Case (d): clean scoped run — report what was GENUINELY mutated, not what was requested.
   return {
     ran: true,
     exitCode,
-    scopedFiles: input.mutateFiles ?? [],
+    scopedFiles: mutatedFiles,
     tool: 'stryker',
     reportPath,
-    summary: summarizeMutation(report),
+    summary,
+    requestedFiles: files,
+    unmatched: unmatchedOut,
   }
 }
 

@@ -84,12 +84,20 @@ describe('runMutation', () => {
     expect(result.exitCode).toBe(0)
   })
 
-  it('scopes to changed files via --mutate (diff-scoped)', async () => {
+  it('scopes to changed files via --mutate (diff-scoped, reconciled)', async () => {
     const { runner, argvs } = fakeRunner()
-    await runMutation(cfg(), { mutateFiles: ['src/a.ts', 'src/b.ts'] }, { runner, reportPath })
+    // The golden fixture reports src/math.ts + src/util.ts, so select those (both have mutants ⇒
+    // reconcileScope passes). `exists` is injected since the fake project has no files on disk.
+    const result = await runMutation(
+      cfg(),
+      { mutateFiles: ['src/math.ts', 'src/util.ts'] },
+      { runner, reportPath, exists: () => true },
+    )
     const mIdx = argvs[0]?.indexOf('--mutate') ?? -1
     expect(mIdx).toBeGreaterThanOrEqual(0)
-    expect(argvs[0]?.[mIdx + 1]).toBe('src/a.ts,src/b.ts')
+    expect(argvs[0]?.[mIdx + 1]).toBe('src/math.ts,src/util.ts')
+    expect(result.scopedFiles).toEqual(['src/math.ts', 'src/util.ts'])
+    expect(result.requestedFiles).toEqual(['src/math.ts', 'src/util.ts'])
   })
 
   it('adds --incremental when requested', async () => {
@@ -107,6 +115,113 @@ describe('runMutation', () => {
   it('throws when stryker produced no report', async () => {
     const runner: MutationRunner = async () => ({ exitCode: 0, stdout: '', stderr: '' })
     await expect(runMutation(cfg(), {}, { runner, reportPath })).rejects.toThrow(/report/i)
+  })
+})
+
+/** A fake stryker that writes an arbitrary mutation report (keyed by the files it "mutated"). */
+function reportRunner(
+  filePaths: string[],
+  exitCode = 0,
+): { runner: MutationRunner; argvs: string[][] } {
+  const argvs: string[][] = []
+  const report = {
+    schemaVersion: '1.0',
+    files: Object.fromEntries(
+      filePaths.map((p) => [
+        p,
+        {
+          mutants: [
+            { id: '1', mutatorName: 'X', status: 'Killed', location: { start: { line: 1 } } },
+          ],
+        },
+      ]),
+    ),
+  }
+  const runner: MutationRunner = async (argv) => {
+    argvs.push(argv)
+    writeFileSync(reportPath, JSON.stringify(report))
+    return { exitCode, stdout: '', stderr: '' }
+  }
+  return { runner, argvs }
+}
+
+describe('runMutation — diff-scoped partial-scope reconciliation (Stryker, ADR 0010 addendum 2)', () => {
+  it('reports what was genuinely mutated, not merely what was requested', async () => {
+    const { runner } = reportRunner(['src/a.ts', 'src/b.ts'])
+    const r = await runMutation(
+      cfg(),
+      { mutateFiles: ['src/a.ts', 'src/b.ts'] },
+      { runner, reportPath, exists: () => true },
+    )
+    expect(r.ran).toBe(true)
+    expect(r.scopedFiles).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(r.requestedFiles).toEqual(['src/a.ts', 'src/b.ts'])
+  })
+
+  it('PARTIAL under-scope: a selected source file Stryker never mutated ⇒ inconclusive', async () => {
+    // Slice-0 capture: Stryker OMITS a zero-mutant file from its report, so b.ts is simply absent.
+    // reconcileScope flags it `missing` ⇒ throw (never a clean pass on a silently-unmutated file).
+    const { runner } = reportRunner(['src/a.ts'])
+    await expect(
+      runMutation(
+        cfg(),
+        { mutateFiles: ['src/a.ts', 'src/b.ts'] },
+        { runner, reportPath, exists: () => true },
+      ),
+    ).rejects.toThrow(/under-scoped|inconclusive/i)
+  })
+
+  it('a deleted source file is flagged unmatched (report-gap), not scoped', async () => {
+    const { runner, argvs } = reportRunner(['src/a.ts'])
+    const r = await runMutation(
+      cfg(),
+      { mutateFiles: ['src/a.ts', 'src/gone.ts'] },
+      { runner, reportPath, exists: (p) => p.endsWith('a.ts') },
+    )
+    const mIdx = argvs[0]?.indexOf('--mutate') ?? -1
+    expect(argvs[0]?.[mIdx + 1]).toBe('src/a.ts')
+    expect(r.scopedFiles).toEqual(['src/a.ts'])
+    expect(r.unmatched).toEqual(['src/gone.ts'])
+  })
+
+  it('drops non-mutable changed files (docs/config, .d.ts, tests) from the mutate scope', async () => {
+    const { runner, argvs } = reportRunner(['src/a.ts'])
+    const r = await runMutation(
+      cfg(),
+      { mutateFiles: ['src/a.ts', 'README.md', 'src/types.d.ts', 'src/a.test.ts'] },
+      { runner, reportPath, exists: () => true },
+    )
+    const mIdx = argvs[0]?.indexOf('--mutate') ?? -1
+    expect(argvs[0]?.[mIdx + 1]).toBe('src/a.ts')
+    expect(r.scopedFiles).toEqual(['src/a.ts'])
+    expect(r.unmatched).toBeUndefined() // non-source is dropped silently, not a gap
+  })
+
+  it('a change with no mutable source files is a pre-spawn noop (ran:false, scopeEmpty), never spawns', async () => {
+    let called = false
+    const runner: MutationRunner = async () => {
+      called = true
+      return { exitCode: 0, stdout: '', stderr: '' }
+    }
+    const r = await runMutation(
+      cfg(),
+      { mutateFiles: ['README.md', 'docs/x.md'] },
+      { runner, reportPath, exists: () => true },
+    )
+    expect(r.ran).toBe(false)
+    expect(r.scopeEmpty).toBe(true)
+    expect(called).toBe(false)
+  })
+
+  it('confines to ownedRoots when set: an out-of-tree source file is unmatched, not scoped', async () => {
+    const { runner } = reportRunner(['src/a.ts'])
+    const r = await runMutation(
+      cfg(),
+      { mutateFiles: ['src/a.ts', 'vendor/x.ts'], ownedRoots: ['src'] },
+      { runner, reportPath, exists: () => true },
+    )
+    expect(r.scopedFiles).toEqual(['src/a.ts'])
+    expect(r.unmatched).toEqual(['vendor/x.ts'])
   })
 })
 

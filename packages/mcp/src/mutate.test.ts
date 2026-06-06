@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -79,18 +79,21 @@ describe('mutate MCP surface', () => {
   })
 
   it('mutate_run runs the injected runner, scopes, and returns metrics', async () => {
+    // The diff scope is existence-checked, so the requested file must exist on disk.
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'src/math.ts'), 'export const add = (a, b) => a + b\n')
     const runner: MutationRunner = async () => {
       copyFileSync(FIXTURE, reportPath)
       return { exitCode: 0, stdout: '', stderr: '' }
     }
     const client = await connect({
       allowRun: true,
-      allowedRoots: ['/abs/project'],
+      allowedRoots: [dir],
       reportPath,
       runner,
     })
     const res = await call(client, 'mutate_run', {
-      projectRoot: '/abs/project',
+      projectRoot: dir,
       mutateFiles: ['src/math.ts'],
     })
     expect(res.structuredContent?.scopedFiles).toEqual(['src/math.ts'])

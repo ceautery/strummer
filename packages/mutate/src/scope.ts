@@ -31,27 +31,36 @@ export interface MutationScope {
   unmatched: string[]
 }
 
+/** Default mutable-source predicate: Python source files (the cosmic-ray/mutmut callers). */
+const isPythonSource = (p: string): boolean => p.endsWith('.py')
+
 /**
  * Derive the mutation scope from the changed files. A changed file is selected only when it is a
- * `.py` file, lives under one of the operator's `ownedRoots`, AND exists on disk (`exists`,
- * injected — FS by default in the runner, faked in tests, mirroring `selectPytestScope`'s
- * `testExists`). A `.py` file that is out-of-tree or non-existent (deleted/renamed/typo) is
- * `unmatched`, never scoped. Non-`.py` files are irrelevant to mutation and dropped. Pure given
- * `exists`. Whole-project fallback is NOT decided here — it is the caller's (`mutateFiles ===
- * undefined`) or the cosmic-ray emitter's (`no-scope` on the base config) concern.
+ * mutable source file (`isMutableSource` — `.py` by default for the Python callers; the Stryker
+ * caller passes a JS/TS predicate), lives under one of the operator's `ownedRoots`, AND exists on
+ * disk (`exists`, injected — FS by default in the runner, faked in tests, mirroring
+ * `selectPytestScope`'s `testExists`). A mutable file that is out-of-tree or non-existent
+ * (deleted/renamed/typo) is `unmatched`, never scoped. Files the predicate rejects (docs, config,
+ * a different language, `.d.ts`, tests) are irrelevant to mutation and dropped silently — they are
+ * not a coverage gap. An `ownedRoots` entry of `'.'` (or `''`) means the WHOLE project (no subtree
+ * confinement) — what the Stryker caller passes when the operator named no roots, since the diff's
+ * changed files are already in-repo. Pure given `exists`. Whole-project fallback (`mutateFiles ===
+ * undefined`) is the caller's concern, not decided here.
  */
 export function selectMutationScope(
   mutateFiles: string[],
   ownedRoots: string[],
   exists: (path: string) => boolean,
+  isMutableSource: (path: string) => boolean = isPythonSource,
 ): MutationScope {
   const roots = ownedRoots.map(normalizePath)
-  const underRoot = (p: string): boolean => roots.some((r) => p === r || p.startsWith(`${r}/`))
+  const underRoot = (p: string): boolean =>
+    roots.some((r) => r === '' || r === '.' || p === r || p.startsWith(`${r}/`))
   const files = new Set<string>()
   const unmatched = new Set<string>()
   for (const raw of mutateFiles) {
     const p = normalizePath(raw)
-    if (!p.endsWith('.py')) continue // not a Python source file — irrelevant to mutation
+    if (!isMutableSource(p)) continue // not a mutable source file — irrelevant to mutation
     if (!underRoot(p) || !exists(p)) {
       unmatched.add(p) // out-of-tree, deleted, renamed, or typo'd — a gap, never scoped
       continue

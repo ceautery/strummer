@@ -569,9 +569,16 @@ stage `reportlog`. Pure/zero-spawn slices first.
   - [x] **verify selector (Fork D)** — `SACKVILLE_MUTATE_TOOL` + `SACKVILLE_MUTATE_CONFIG_PATH`
         (bin-verify) + `--mutate-tool`/`--mutate-config` (verify CLI); routes `changedFiles`
         (commit accd284).
+  - [x] **Stryker PARTIAL-scope reconciliation** — `runMutation` now selects (generalized
+        `selectMutationScope` with an `isMutableSource` predicate + `'.'`=whole-project) then
+        post-spawn `reconcileScope`s like `runCosmicRay`; a changed source file Stryker never
+        mutated ⇒ inconclusive (slice-0 capture: Stryker OMITS zero-mutant files, mutmut-Fork-B2
+        shape ⇒ conservative reuse of `reconcileScope`, zero false-passes). `scopedFiles` is now
+        the actually-mutated set; `requestedFiles`/`unmatched` added (2026-06-06, dogfooding pass).
   - **Staged beyond this arc:** cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/`
-        cache reuse; Stryker PARTIAL-scope reconciliation; flake diff-scoping; src-layout module
-        mapping precision for `reconcileMutmutScope` (currently conservative-safe via suffix match).
+        cache reuse; flake diff-scoping; src-layout module mapping precision for
+        `reconcileMutmutScope` (currently conservative-safe via suffix match); `verify_change`
+        `diffPath` input (mirror `run_scoped`; surfaced by the dogfooding pass).
 
 - [x] **Dependency/version intelligence** (`@sackville-mcp/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
       Cleanest architectural fit: pure offline verdict core + an operator-provisioned

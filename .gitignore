@@ -58,3 +58,6 @@ venv/
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Local Sackville MCP artifact/db dirs (dogfooding the aggregate server against this repo)
+.sackville/
