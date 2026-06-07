@@ -10,10 +10,9 @@
 ## Current phase
 
 **SHIPPED & STABLE — all pillars complete, published to npm at `0.0.1-alpha.5`.**
-Gate green **1704 TS + 48 Py**; npm `latest` **and** `alpha` both = `0.0.1-alpha.5`
-on all 19 packages (OIDC, SLSA provenance). **Local `main` is 2 commits ahead of
-`origin`** (cbce786 alpha.5 doc-sync + e40131c tutorial-3 teeth) — unpushed by
-design; rides up with the next milestone push.
+Gate green **1704 TS + 48 Py**; `main` HEAD pushed to `origin` (CI mirrors the gate);
+npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all 19 packages (OIDC, SLSA
+provenance).
 
 The product is feature-complete across **Phases 0–6**: docs search (version-pinned,
 hybrid FTS+vector), API testing (`.bru` + contract validation + capture→contract
