@@ -173,8 +173,8 @@ vision and `ARCHITECTURE.md` for the technical design.
   `mirroredTestCandidates`; extracted out of `coverage` once `flake` became a 2nd consumer
   (the diff/severity/spawn discipline), so a consumer maps changed files → tests WITHOUT
   importing a sibling pillar's run/spawn code; consumed by `coverage` (re-export, surface
-  unchanged) + `flake` pytest related-scoping. The 20th package — UNPUBLISHED until the
-  RELEASING first-publish bootstrap), `severity` (the shared, pure
+  unchanged) + `flake` pytest related-scoping. The 20th package — first-published to npm
+  2026-06-07 via the token bootstrap, OIDC handles future releases), `severity` (the shared, pure
   ZERO-dependency severity scale — `QualitativeSeverity`/`QUALITATIVE_RANK` + the verdict
   scale `Severity`(=`|'none'`)/`SEVERITY_RANK`/`maxSeverity`/`atLeast`; extracted out of
   `deps` so `verdict` (a re-export shim) and `deps` (`SeverityBucket`=`|'unknown'`,

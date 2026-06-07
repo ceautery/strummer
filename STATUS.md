@@ -11,17 +11,19 @@
 
 **SHIPPED & STABLE — all pillars complete, published to npm at `0.0.1-alpha.5`.**
 Gate green **1725 TS + 48 Py**; npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all
-19 *published* packages (OIDC, SLSA provenance). **`main` has local commits ahead of
-`origin`** (the `@sackville-mcp/pyscope` extraction + flake pytest related-scoping) —
-held unpushed at the user's request; they ride up with the next push.
+**20** published packages (the 19 fleet have OIDC/SLSA provenance; `@sackville-mcp/pyscope`
+was first-published 2026-06-07 via the token bootstrap — no provenance on this one publish,
+OIDC takes over at the next release). **`main` has local commits ahead of `origin`** (the
+pyscope extraction + flake pytest related-scoping) — held unpushed at the user's request;
+note pyscope's CODE is on npm but not yet on `origin`. They ride up with the next push.
 
 The product is feature-complete across **Phases 0–6**: docs search (version-pinned,
 hybrid FTS+vector), API testing (`.bru` + contract validation + capture→contract
 bridge), browser/UI testing (flows, a11y, HAR, visual), cross-cutting verification
 (coverage / deps / flake / mutate / LSP), the cross-pillar `verify` verdict, and
-packaging/distribution (automated Changesets→OIDC release). **20 workspace packages**
-now (the 20th, `@sackville-mcp/pyscope`, is unpublished — pending the first-publish
-bootstrap in RELEASING.md "Adding a new package"). Diff-scoping is complete across every
+packaging/distribution (automated Changesets→OIDC release). **20 workspace packages**, all
+published (the 20th, `@sackville-mcp/pyscope`, first-published 2026-06-07 via token bootstrap;
+OIDC handles its future releases). Diff-scoping is complete across every
 run-driving pillar (coverage / mutate / flake — **incl. pytest** now, both frameworks).
 
 **Tutorial 3 now has teeth (DONE 2026-06-07, e40131c).** The old storefront bug
@@ -44,7 +46,8 @@ No open tutorial-3 work; see *Standing items* for what's next.
   sources→mirrored tests via the leaf; empty mapping ⇒ no-op (NEVER the whole suite),
   `widen` opt-in; unmatched sources surfaced as a gap. Wired through `flake_run` (drops the
   "vitest only" note, adds `scopeMode`) + CLI `flake run --scope-mode`. Gate 1704→1725 TS.
-  pyscope is **unpublished** (needs the RELEASING first-publish bootstrap at next release).
+  **pyscope first-published to npm 2026-06-07** (`0.0.1-alpha.5`, both tags; token bootstrap,
+  no provenance on this publish — OIDC takes over next release). Its CODE is unpushed to `origin`.
 - **CI Node-20 deprecations cleared** (2026-06-07): `actions/checkout`+`setup-node` v4→v5,
   `astral-sh/setup-uv` v6→v7 (no moving v8 tag), and the tsdown `external`→`deps.neverBundle`
   build warning in `verdict`/`verify`. CI green, zero deprecation annotations.
