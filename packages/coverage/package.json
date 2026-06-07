@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@sackville-mcp/diff": "workspace:*",
+    "@sackville-mcp/pyscope": "workspace:*",
     "@sackville-mcp/spawn": "workspace:*"
   },
   "publishConfig": {

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CoverageGateError, type TestRunner } from './run.js'
-import { runScopedPython, selectPytestScope } from './run-python.js'
+import { runScopedPython } from './run-python.js'
 
 const FIXTURE = resolve(dirname(fileURLToPath(import.meta.url)), '../test/fixtures/coverage.json')
 const ROOT = '/abs/project'
@@ -48,39 +48,8 @@ function fakeRunner(exitCode = 0): { runner: TestRunner; argvs: string[][] } {
   return { runner, argvs }
 }
 
-describe('selectPytestScope', () => {
-  const isTest = (p: string) => p === 'tests/test_calc.py'
-
-  it('selects a changed test file directly', () => {
-    const scope = selectPytestScope(['tests/test_calc.py'], 'report-gap', isTest)
-    expect(scope.selectors).toEqual(['tests/test_calc.py'])
-    expect(scope.unmatched).toEqual([])
-  })
-
-  it('maps a changed source file to its mirrored test', () => {
-    const scope = selectPytestScope(['calc.py'], 'report-gap', (p) => p === 'tests/test_calc.py')
-    expect(scope.selectors).toContain('tests/test_calc.py')
-    expect(scope.unmatched).toEqual([])
-  })
-
-  it('report-gap mode: a source with no test is reported as a gap, matched tests still run', () => {
-    const scope = selectPytestScope(
-      ['calc.py', 'orphan.py'],
-      'report-gap',
-      (p) => p === 'tests/test_calc.py',
-    )
-    expect(scope.selectors).toContain('tests/test_calc.py')
-    expect(scope.unmatched).toEqual(['orphan.py'])
-    expect(scope.widened).toBe(false)
-  })
-
-  it('widen mode: a source with no test widens to the whole suite (no selectors)', () => {
-    const scope = selectPytestScope(['orphan.py'], 'widen', () => false)
-    expect(scope.selectors).toEqual([])
-    expect(scope.widened).toBe(true)
-    expect(scope.unmatched).toEqual(['orphan.py'])
-  })
-})
+// The pure `selectPytestScope` unit tests live with the heuristic in @sackville-mcp/pyscope.
+// Here we exercise it only through `runScopedPython` (the integration path) below.
 
 describe('runScopedPython gate', () => {
   it('denies when allowRun is false', async () => {

@@ -194,12 +194,63 @@ describe('runAndRecordPytest', () => {
     store.close()
   })
 
-  it('refuses related (diff) mode for pytest — vitest-only; pytest scoping is staged', async () => {
+  it('related (diff) mode maps changed sources to mirrored pytest tests (report-gap)', async () => {
     const store = HistoryStore.memory()
     try {
-      await expect(
-        runAndRecordPytest(store, cfg(), { related: true, files: ['pkg/x.py'] }, {}),
-      ).rejects.toThrow(/related|vitest/i)
+      const { runner, argvs } = fakePytestRunner(() => pytestReport(true))
+      const result = await runAndRecordPytest(
+        store,
+        cfg(),
+        { files: ['pkg/calc.py', 'pkg/orphan.py'], related: true, repeat: 2 },
+        { runner, testExists: (p) => p === 'pkg/test_calc.py' },
+      )
+      expect(result.ran).toBe(true)
+      expect(result.iterations).toBe(2)
+      // the MIRRORED TEST is the pytest operand — not the changed source file.
+      expect(argvs[0]).toContain('pkg/test_calc.py')
+      expect(argvs[0]).not.toContain('pkg/calc.py')
+      // no vitest `related` subcommand leaks into the pytest argv.
+      expect(argvs[0]?.[0]).not.toBe('related')
+      expect(argvs[0]).toContain('--json-report')
+      // a changed source with no mirrored test is surfaced as a gap (no silent drop).
+      expect(result.unmatched).toEqual(['pkg/orphan.py'])
+    } finally {
+      store.close()
+    }
+  })
+
+  it('related (diff) mode is a no-op — NEVER the whole suite — when no source maps to a test', async () => {
+    const store = HistoryStore.memory()
+    try {
+      const { runner, argvs } = fakePytestRunner(() => pytestReport(true))
+      const result = await runAndRecordPytest(
+        store,
+        cfg(),
+        { files: ['pkg/orphan.py'], related: true, repeat: 3 },
+        { runner, testExists: () => false },
+      )
+      expect(result.ran).toBe(false)
+      expect(argvs).toHaveLength(0) // crucially: pytest was NEVER spawned (no whole-suite fallback)
+      expect(result.unmatched).toEqual(['pkg/orphan.py'])
+    } finally {
+      store.close()
+    }
+  })
+
+  it('related (diff) mode with scopeMode:widen runs the whole suite on an unmatched source', async () => {
+    const store = HistoryStore.memory()
+    try {
+      const { runner, argvs } = fakePytestRunner(() => pytestReport(true))
+      const result = await runAndRecordPytest(
+        store,
+        cfg(),
+        { files: ['pkg/orphan.py'], related: true, scopeMode: 'widen', repeat: 1 },
+        { runner, testExists: () => false },
+      )
+      expect(result.ran).toBe(true)
+      // whole suite = the json-report flags with NO positional test selectors.
+      expect(argvs[0]).toEqual(['--json-report', expect.stringMatching(/^--json-report-file=/)])
+      expect(result.unmatched).toEqual(['pkg/orphan.py'])
     } finally {
       store.close()
     }

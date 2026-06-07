@@ -23,7 +23,8 @@
 
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
+import { type PytestScope, type ScopeMode, selectPytestScope } from '@sackville-mcp/pyscope'
 import { type CoveragePyReport, coveragePyToIstanbul } from './coveragepy.js'
 import { uncoveredInDiff } from './report.js'
 import {
@@ -36,8 +37,10 @@ import {
 } from './run.js'
 import type { FileCoverage } from './uncovered.js'
 
-/** Fallback when a changed source file maps to no confident test (operator-visible, ADR 0010 addendum). */
-export type ScopeMode = 'report-gap' | 'widen'
+// The pytest "mirrored-test" scope heuristic now lives in the zero-dep @sackville-mcp/pyscope leaf
+// (shared with @sackville-mcp/flake). Re-export the public primitives so coverage's surface
+// (src/index.ts) is unchanged.
+export { type PytestScope, type ScopeMode, selectPytestScope }
 
 export interface ScopedPythonInput extends ScopedRunInput {
   /** coverage.py measurement targets (`--cov=<target>`). Required — coverage.py needs explicit scope. */
@@ -53,66 +56,6 @@ export interface ScopedPythonResult extends ScopedRunResult {
   unmatched?: string[]
   /** True when the no-test fallback widened the run to the whole suite. */
   widened?: boolean
-}
-
-/** A pytest test selection derived from a change. */
-export interface PytestScope {
-  /** pytest positional test targets (files). Empty ⇒ run the whole suite. */
-  selectors: string[]
-  /** Changed source files with no confident mirrored test. */
-  unmatched: string[]
-  /** True when the run was widened to the whole suite (the `widen` fallback). */
-  widened: boolean
-}
-
-const TEST_FILE = /(?:^|\/)(?:test_[^/]+|[^/]+_test)\.py$/
-const IN_TEST_DIR = /(?:^|\/)tests?\//
-
-function isTestFile(path: string): boolean {
-  return TEST_FILE.test(path) || (IN_TEST_DIR.test(path) && path.endsWith('.py'))
-}
-
-/** Candidate mirrored-test paths for a changed source file (same dir + a `tests/` sibling). */
-function mirroredTestCandidates(srcPath: string): string[] {
-  if (!srcPath.endsWith('.py')) return []
-  const slash = srcPath.lastIndexOf('/')
-  const dir = slash === -1 ? '' : srcPath.slice(0, slash + 1)
-  const stem = basename(srcPath).slice(0, -'.py'.length)
-  return [
-    `${dir}test_${stem}.py`,
-    `${dir}${stem}_test.py`,
-    `${dir}tests/test_${stem}.py`,
-    `tests/test_${stem}.py`,
-  ]
-}
-
-/**
- * Derive a pytest test scope from the changed files. A changed test file is a selector; a changed
- * source file maps to its mirrored test when `testExists` confirms one. A source with no test is
- * `unmatched`; the `mode` decides whether that widens to the whole suite (`widen`) or is reported
- * as a gap while the matched tests still run (`report-gap`). Pure (FS access via `testExists`).
- */
-export function selectPytestScope(
-  changedFiles: string[],
-  mode: ScopeMode,
-  testExists: (path: string) => boolean,
-): PytestScope {
-  const selectors = new Set<string>()
-  const unmatched: string[] = []
-  for (const file of changedFiles) {
-    if (isTestFile(file)) {
-      selectors.add(file)
-      continue
-    }
-    if (!file.endsWith('.py')) continue // a non-Python change can't be coverage-scoped
-    const found = mirroredTestCandidates(file).filter(testExists)
-    if (found.length > 0) for (const t of found) selectors.add(t)
-    else unmatched.push(file)
-  }
-  if (unmatched.length > 0 && mode === 'widen') {
-    return { selectors: [], unmatched, widened: true }
-  }
-  return { selectors: [...selectors], unmatched, widened: false }
 }
 
 /** Build the `pytest --cov` argv with a JSON report at `jsonPath` and the selected test targets. */

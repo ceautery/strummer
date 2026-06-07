@@ -230,6 +230,7 @@ async function cmdRun(
       repeat: { type: 'string' },
       file: { type: 'string', multiple: true },
       related: { type: 'boolean' },
+      'scope-mode': { type: 'string' },
       'run-group': { type: 'string' },
       'allow-run': { type: 'boolean' },
       'timeout-ms': { type: 'string' },
@@ -246,6 +247,11 @@ async function cmdRun(
     io.err(`unknown framework: ${framework} (expected vitest|pytest)\n`)
     return 1
   }
+  const scopeMode = values['scope-mode']
+  if (scopeMode !== undefined && scopeMode !== 'report-gap' && scopeMode !== 'widen') {
+    io.err(`unknown scope mode: ${scopeMode} (expected report-gap|widen)\n`)
+    return 1
+  }
   try {
     const run = framework === 'pytest' ? runAndRecordPytest : runAndRecord
     const result = await run(
@@ -260,6 +266,7 @@ async function cmdRun(
         repeat: num(values.repeat) ?? 1,
         files: values.file,
         related: values.related,
+        scopeMode,
         runGroup: values['run-group'],
       },
       { runner: deps.runner },
@@ -269,6 +276,9 @@ async function cmdRun(
       return 0
     }
     io.out(`ran ${result.iterations} iteration(s); recorded ${result.recorded} run(s)\n`)
+    if (result.unmatched.length > 0) {
+      io.out(`unmatched (no mirrored test — not flake-checked): ${result.unmatched.join(', ')}\n`)
+    }
     for (const v of result.verdicts) printVerdict(io, v)
     return 0
   } catch (e) {

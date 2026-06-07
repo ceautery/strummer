@@ -225,9 +225,10 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
           'Run the suite `repeat` times (default 1) with the JSON reporter, recording every ' +
           'outcome into the history store, then classify. Operator-gated and confined to ' +
           'allowlisted project roots. Optional `framework` (vitest|pytest, default vitest), ' +
-          'positional `files` filters and a `runGroup`. Set `related: true` (vitest only) to treat ' +
-          '`files` as CHANGED SOURCE files and repeat only the tests related to them ' +
-          '(`vitest related`), diff-scoping the flake check.',
+          'positional `files` filters and a `runGroup`. Set `related: true` to treat `files` as ' +
+          'CHANGED SOURCE files and repeat only the tests they touch — `vitest related` for vitest, ' +
+          'or the mirrored-test mapping for pytest — diff-scoping the flake check. For pytest, ' +
+          '`scopeMode` controls the no-mirrored-test fallback (report-gap | widen).',
         inputSchema: {
           projectRoot: z.string().describe('absolute project root (must be operator-allowlisted)'),
           framework: z
@@ -240,8 +241,16 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
             .boolean()
             .optional()
             .describe(
-              'vitest only: treat `files` as changed source files and run `vitest related` ' +
-                '(the tests depending on them) instead of positional filters; diff-scopes the check',
+              'treat `files` as changed source files and repeat only the tests they touch ' +
+                '(vitest: `vitest related`; pytest: mirrored-test mapping) instead of positional ' +
+                'filters; diff-scopes the check',
+            ),
+          scopeMode: z
+            .enum(['report-gap', 'widen'])
+            .optional()
+            .describe(
+              'pytest related-scoping fallback when a changed source maps to no test: ' +
+                'report-gap (default; run matched tests, report the gap) or widen (run the whole suite)',
             ),
           runGroup: z.string().optional(),
         },
@@ -261,6 +270,7 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
             repeat: args.repeat,
             files: args.files,
             related: args.related,
+            scopeMode: args.scopeMode,
             runGroup: args.runGroup,
           },
           { runner: opts.runner },
@@ -270,6 +280,8 @@ export function registerFlakeTools(server: McpServer, opts: FlakeToolsOptions): 
           iterations: result.iterations,
           recorded: result.recorded,
           results: result.results,
+          // changed sources that mapped to no test under related-scoping — a surfaced gap.
+          unmatched: result.unmatched,
           verdicts: result.verdicts.map(compactVerdict),
         }
         return { content: [text(structured)], structuredContent: structured }

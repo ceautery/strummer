@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TestRunner } from '@sackville-mcp/flake'
@@ -163,6 +163,51 @@ describe('sackville flake CLI', () => {
     )
     expect(code).toBe(0)
     expect(c.out()).toMatch(/recorded 1/)
+  })
+
+  it('run --framework pytest --related maps changed sources to their mirrored tests', async () => {
+    // A mirrored test exists on disk for src/x.py, but not for src/orphan.py.
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'tests/test_x.py'), 'def test_x(): pass\n')
+    let argv: string[] | undefined
+    const runner: TestRunner = async (a) => {
+      argv = a
+      const outFile = a.find((x) => x.startsWith('--json-report-file='))?.split('=')[1] as string
+      if (outFile) writeFileSync(outFile, JSON.stringify({ tests: [] }))
+      return { exitCode: 0, stdout: '', stderr: '' }
+    }
+    const c = capture()
+    const code = await runFlake(
+      [
+        'run',
+        dir,
+        '--db',
+        db,
+        '--allow-run',
+        '--framework',
+        'pytest',
+        '--related',
+        '--file',
+        'src/x.py',
+        '--file',
+        'src/orphan.py',
+      ],
+      c.io,
+      { runner },
+    )
+    expect(code).toBe(0)
+    // the mirrored test is the operand; the changed source itself is not.
+    expect(argv).toContain('tests/test_x.py')
+    expect(argv).not.toContain('src/x.py')
+    expect(argv?.[0]).not.toBe('related') // not the vitest path
+    // the source with no mirrored test is surfaced as a gap, not silently dropped.
+    expect(c.out()).toMatch(/unmatched.*src\/orphan\.py/)
+  })
+
+  it('run rejects an unknown --scope-mode', async () => {
+    const c = capture()
+    expect(await runFlake(['run', dir, '--db', db, '--scope-mode', 'nope'], c.io)).toBe(1)
+    expect(c.err()).toMatch(/unknown scope mode/i)
   })
 
   it('run rejects an unknown --framework', async () => {

@@ -1,5 +1,5 @@
 {
-  "name": "@sackville-mcp/flake",
+  "name": "@sackville-mcp/pyscope",
   "version": "0.0.1-alpha.5",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,14 +17,6 @@
     "build": "tsdown src/index.ts --dts",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@sackville-mcp/pyscope": "workspace:*",
-    "@sackville-mcp/spawn": "workspace:*",
-    "better-sqlite3": "^12.10.0"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
-  },
   "publishConfig": {
     "access": "public",
     "types": "./dist/index.d.mts",
@@ -40,6 +32,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ceautery/sackville.git",
-    "directory": "packages/flake"
+    "directory": "packages/pyscope"
   }
 }

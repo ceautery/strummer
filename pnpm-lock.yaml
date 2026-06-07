@@ -204,6 +204,9 @@ importers:
       '@sackville-mcp/diff':
         specifier: workspace:*
         version: link:../diff
+      '@sackville-mcp/pyscope':
+        specifier: workspace:*
+        version: link:../pyscope
       '@sackville-mcp/spawn':
         specifier: workspace:*
         version: link:../spawn
@@ -243,6 +246,9 @@ importers:
 
   packages/flake:
     dependencies:
+      '@sackville-mcp/pyscope':
+        specifier: workspace:*
+        version: link:../pyscope
       '@sackville-mcp/spawn':
         specifier: workspace:*
         version: link:../spawn
@@ -332,6 +338,8 @@ importers:
       smol-toml:
         specifier: ^1.6.1
         version: 1.6.1
+
+  packages/pyscope: {}
 
   packages/safety:
     dependencies:

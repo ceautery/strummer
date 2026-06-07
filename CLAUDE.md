@@ -167,7 +167,14 @@ vision and `ARCHITECTURE.md` for the technical design.
   pure, ZERO-dependency `parseUnifiedDiff` (per-file new-side added lines) + `changedFiles`
   (all non-deleted touched paths, the scope primitive); extracted out of `coverage` the moment
   a 2nd consumer appeared, mirroring safety/assert/artifacts — its zero deps are what let
-  `verify` consume it without dragging in spawn code), `severity` (the shared, pure
+  `verify` consume it without dragging in spawn code), `pyscope` (shared, pure
+  ZERO-dependency pytest test-selection — the `selectPytestScope` "mirrored-test" heuristic
+  (a changed source maps to `test_*.py`/`*_test.py`/`tests/test_*.py`) + `isTestFile`/
+  `mirroredTestCandidates`; extracted out of `coverage` once `flake` became a 2nd consumer
+  (the diff/severity/spawn discipline), so a consumer maps changed files → tests WITHOUT
+  importing a sibling pillar's run/spawn code; consumed by `coverage` (re-export, surface
+  unchanged) + `flake` pytest related-scoping. The 20th package — UNPUBLISHED until the
+  RELEASING first-publish bootstrap), `severity` (the shared, pure
   ZERO-dependency severity scale — `QualitativeSeverity`/`QUALITATIVE_RANK` + the verdict
   scale `Severity`(=`|'none'`)/`SEVERITY_RANK`/`maxSeverity`/`atLeast`; extracted out of
   `deps` so `verdict` (a re-export shim) and `deps` (`SeverityBucket`=`|'unknown'`,
@@ -188,7 +195,8 @@ vision and `ARCHITECTURE.md` for the technical design.
   `coverage` (Phase-4 track A: the forgotten-assertion catch — `uncoveredNewLines` +
   `uncoveredInDiff` pure differs over `@sackville-mcp/diff`'s `parseUnifiedDiff`, plus gated impact-scoped
   `runScoped` (vitest) AND `runScopedPython` (pytest + coverage.py via `coveragePyToIstanbul`;
-  `selectPytestScope` mirrored-test heuristic + report-gap/widen fallback; pytest exit 5/2/3/4 →
+  `selectPytestScope` mirrored-test heuristic — now the shared `@sackville-mcp/pyscope` leaf,
+  re-exported here — + report-gap/widen fallback; pytest exit 5/2/3/4 →
   inconclusive; ADR 0010 addendum); `uncovered_in_diff`/`run_scoped`/`py_run_scoped` MCP surface),
   `flake` (Phase-4 test-quality chain, COMPLETE: flaky-test detection — pure Wilson/binomial
   `classifyHistory` → `flaky`/`reliable`/`broken`/`insufficient-data` + `flakeScore`; a private
@@ -196,7 +204,9 @@ vision and `ARCHITECTURE.md` for the technical design.
   `ingestReport` (+ pure `parsePytestJson`); operator-gated `Quarantine` (mandatory expiry); gated
   `runAndRecord` (vitest) AND `runAndRecordPytest` (pytest `--json-report`, whole-suite repeats; ADR
   0010 addendum) over a framework-agnostic core; `flake_status`/`flake_candidates`/`flake_release`/
-  `flake_run` (`framework: vitest|pytest`)/`flake_quarantine` MCP surface),
+  `flake_run` (`framework: vitest|pytest`; `related` diff-scopes BOTH frameworks now — vitest
+  `related`, pytest via `@sackville-mcp/pyscope` `selectPytestScope` → mirrored tests, empty
+  mapping ⇒ no-op NEVER whole-suite, `scopeMode` report-gap|widen)/`flake_quarantine` MCP surface),
   `mutate` (Phase-4 test-quality chain, COMPLETE: mutation testing — "are the tests
   meaningful?"; pure `summarizeMutation` over the mutation-testing-elements report schema
   (no `@stryker-mutator` import) → mutationScore + survivors; gated diff-scoped `runMutation`

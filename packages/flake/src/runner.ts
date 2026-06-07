@@ -15,9 +15,10 @@
  *    runner — no real spawn in the green gate.
  */
 
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { type ScopeMode, selectPytestScope } from '@sackville-mcp/pyscope'
 import { type SpawnedRunner, spawnRunner } from '@sackville-mcp/spawn'
 import type { FlakeVerdict } from './classify.js'
 import type { PytestJsonReport } from './pytest.js'
@@ -54,13 +55,22 @@ export interface RunAndRecordInput {
   /** Positional vitest file filters; default runs the whole suite. */
   files?: string[]
   /**
-   * Diff-scope the run (vitest only): treat `files` as CHANGED SOURCE files and run
-   * `vitest related <files> --run` — the tests that depend on them — instead of positional
-   * filters, mirroring `@sackville-mcp/coverage`'s `runScoped`. A pre-commit/PR flake check can
-   * then repeat only the tests a change actually touches. `related` with an empty `files` set is a
-   * pre-spawn noop (`ran:false`). REFUSED for pytest (the mirrored-test scope is staged). Default false.
+   * Diff-scope the run: treat `files` as CHANGED SOURCE files and repeat only the tests they
+   * touch, instead of positional filters — a pre-commit/PR flake check then exercises only the
+   * tests a change actually affects (mirrors `@sackville-mcp/coverage`'s `runScoped`). For vitest
+   * this is the native `vitest related <files> --run`; for pytest (no native equivalent) the
+   * changed sources are mapped to their mirrored tests via `@sackville-mcp/pyscope`
+   * `selectPytestScope`. `related` with an empty `files` set — or, for pytest in the default
+   * `report-gap` mode, one where NO source maps to a test — is a pre-spawn noop (`ran:false`),
+   * NEVER a whole-suite run. Default false.
    */
   related?: boolean
+  /**
+   * pytest related-scoping only: the fallback when a changed source maps to no mirrored test.
+   * `report-gap` (default) repeats the matched tests and surfaces the unmatched source in
+   * `unmatched`; `widen` repeats the whole suite. Ignored by vitest (its `related` is native).
+   */
+  scopeMode?: ScopeMode
   /** Batch id; each iteration is recorded under `${runGroup}#<i>`. */
   runGroup?: string
 }
@@ -69,8 +79,10 @@ export interface RunAndRecordInput {
 export type TestRunner = SpawnedRunner
 
 export interface RunAndRecordResult {
-  /** False only when repeat <= 0 (the runner was never invoked). */
+  /** False when the runner was never invoked (repeat <= 0, or a related run that mapped to no test). */
   ran: boolean
+  /** Diff-scoped changed sources that mapped to no test (pytest report-gap) — surfaced, never dropped. */
+  unmatched: string[]
   iterations: number
   /** Total runs recorded across all iterations. */
   recorded: number
@@ -112,24 +124,49 @@ export const defaultPytestRunner: TestRunner = spawnRunner('pytest')
  * a per-iteration report file, and how to ingest the parsed report into the store. Everything else
  * (gate, repeat loop, report-file plumbing, classification) is framework-agnostic.
  */
+/** The operands + gap for a related (diff-scoped) run, derived from changed SOURCE files. */
+interface RelatedScope {
+  /** What to hand the runner: vitest = the changed sources (native `related`); pytest = mirrored tests. */
+  operands: string[]
+  /** Changed sources with no confident mirrored test (pytest report-gap). */
+  unmatched: string[]
+  /** True when the no-test fallback widened to the whole suite. */
+  widened: boolean
+}
+
+/** FS + mode context for resolving a related scope (the predicate is injected so the gate never hits disk). */
+interface ResolveScopeDeps {
+  projectRoot: string
+  mode: ScopeMode
+  testExists: (path: string) => boolean
+}
+
 interface FrameworkAdapter {
   defaultRunner: TestRunner
-  /** Whether this framework supports `related` (diff) scoping. vitest does; pytest's is staged. */
-  supportsRelated: boolean
+  /**
+   * Resolve a related (diff-scoped) run's operands from CHANGED SOURCE files. Omitted ⇒ identity
+   * (vitest: its native `related <sources>` resolves the dependency graph itself). pytest maps
+   * sources → their mirrored tests via `selectPytestScope`. Only called when `related` is set.
+   */
+  resolveRelated?(files: string[], deps: ResolveScopeDeps): RelatedScope
   buildArgv(files: string[], outFile: string, related: boolean): string[]
   ingest(store: HistoryStore, parsed: unknown, opts: ParseReportOptions): number
 }
 
 const VITEST: FrameworkAdapter = {
   defaultRunner: defaultVitestRunner,
-  supportsRelated: true,
   buildArgv: vitestArgv,
   ingest: (store, parsed, opts) => store.ingestReport(parsed as VitestJsonReport, opts),
 }
 
 const PYTEST: FrameworkAdapter = {
   defaultRunner: defaultPytestRunner,
-  supportsRelated: false,
+  // pytest has no native `related`, so map changed sources → mirrored tests (the same shared
+  // heuristic `@sackville-mcp/coverage` uses). The resolved tests become pytest's positional operands.
+  resolveRelated: (files, deps) => {
+    const scope = selectPytestScope(files, deps.mode, deps.testExists)
+    return { operands: scope.selectors, unmatched: scope.unmatched, widened: scope.widened }
+  },
   buildArgv: pytestArgv,
   ingest: (store, parsed, opts) => store.ingestPytestReport(parsed as PytestJsonReport, opts),
 }
@@ -155,28 +192,46 @@ async function runAndRecordWith(
   store: HistoryStore,
   config: RunHistoryConfig,
   input: RunAndRecordInput,
-  deps: { runner?: TestRunner; reportDir?: string },
+  deps: { runner?: TestRunner; reportDir?: string; testExists?: (path: string) => boolean },
 ): Promise<RunAndRecordResult> {
   assertAllowed(config)
 
-  const repeat = input.repeat ?? 1
-  if (repeat <= 0) {
-    return { ran: false, iterations: 0, recorded: 0, results: [], verdicts: store.classify() }
-  }
+  // A run that never spawns the suite. `unmatched` carries any diff-scoped sources that mapped to
+  // no test, so the caller still sees the gap — never a silent drop, never a whole-suite fallback.
+  const noop = (unmatched: string[] = []): RunAndRecordResult => ({
+    ran: false,
+    unmatched,
+    iterations: 0,
+    recorded: 0,
+    results: [],
+    verdicts: store.classify(),
+  })
 
-  const related = input.related ?? false
-  if (related && !fw.supportsRelated) {
-    throw new Error('related (diff) scoping is vitest-only; pytest mirrored-test scoping is staged')
-  }
+  const repeat = input.repeat ?? 1
+  if (repeat <= 0) return noop()
 
   const runner = deps.runner ?? fw.defaultRunner
   const reportDir = deps.reportDir ?? mkdtempSync(join(tmpdir(), 'sackville-flake-'))
-  const files = input.files ?? []
 
-  // `related` with no changed files would run `vitest related` with no operands — meaningless;
-  // noop without spawning (mirrors coverage's empty-changed-set early return).
-  if (related && files.length === 0) {
-    return { ran: false, iterations: 0, recorded: 0, results: [], verdicts: store.classify() }
+  const related = input.related ?? false
+  let files = input.files ?? []
+  let unmatched: string[] = []
+  if (related) {
+    // `related` with no changed files would run with no operands — meaningless; noop without spawning.
+    if (files.length === 0) return noop()
+    if (fw.resolveRelated) {
+      const testExists = deps.testExists ?? ((p: string) => existsSync(join(config.projectRoot, p)))
+      const scope = fw.resolveRelated(files, {
+        projectRoot: config.projectRoot,
+        mode: input.scopeMode ?? 'report-gap',
+        testExists,
+      })
+      unmatched = scope.unmatched
+      // Mapped to ZERO tests and not widening ⇒ noop. Crucially NOT a whole-suite run (pytest with
+      // no positional selectors = every test — the opposite of diff-scoping).
+      if (!scope.widened && scope.operands.length === 0) return noop(unmatched)
+      files = scope.operands // [] only when widened ⇒ deliberately the whole suite
+    }
   }
 
   const results: { exitCode: number; passed: boolean }[] = []
@@ -204,7 +259,7 @@ async function runAndRecordWith(
     results.push({ exitCode, passed: exitCode === 0 })
   }
 
-  return { ran: true, iterations: repeat, recorded, results, verdicts: store.classify() }
+  return { ran: true, unmatched, iterations: repeat, recorded, results, verdicts: store.classify() }
 }
 
 /**
@@ -216,7 +271,7 @@ export async function runAndRecord(
   store: HistoryStore,
   config: RunHistoryConfig,
   input: RunAndRecordInput,
-  deps: { runner?: TestRunner; reportDir?: string } = {},
+  deps: { runner?: TestRunner; reportDir?: string; testExists?: (path: string) => boolean } = {},
 ): Promise<RunAndRecordResult> {
   return runAndRecordWith(VITEST, store, config, input, deps)
 }
@@ -231,7 +286,7 @@ export async function runAndRecordPytest(
   store: HistoryStore,
   config: RunHistoryConfig,
   input: RunAndRecordInput,
-  deps: { runner?: TestRunner; reportDir?: string } = {},
+  deps: { runner?: TestRunner; reportDir?: string; testExists?: (path: string) => boolean } = {},
 ): Promise<RunAndRecordResult> {
   return runAndRecordWith(PYTEST, store, config, input, deps)
 }

@@ -32,6 +32,9 @@ export default defineConfig({
       '@sackville-mcp/mutate': fileURLToPath(
         new URL('./packages/mutate/src/index.ts', import.meta.url),
       ),
+      '@sackville-mcp/pyscope': fileURLToPath(
+        new URL('./packages/pyscope/src/index.ts', import.meta.url),
+      ),
       '@sackville-mcp/lsp': fileURLToPath(new URL('./packages/lsp/src/index.ts', import.meta.url)),
       '@sackville-mcp/api': fileURLToPath(new URL('./packages/api/src/index.ts', import.meta.url)),
       '@sackville-mcp/browser': fileURLToPath(

@@ -10,16 +10,19 @@
 ## Current phase
 
 **SHIPPED & STABLE — all pillars complete, published to npm at `0.0.1-alpha.5`.**
-Gate green **1704 TS + 48 Py**; `main` HEAD pushed to `origin` (CI mirrors the gate);
-npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all 19 packages (OIDC, SLSA
-provenance).
+Gate green **1725 TS + 48 Py**; npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all
+19 *published* packages (OIDC, SLSA provenance). **`main` has local commits ahead of
+`origin`** (the `@sackville-mcp/pyscope` extraction + flake pytest related-scoping) —
+held unpushed at the user's request; they ride up with the next push.
 
 The product is feature-complete across **Phases 0–6**: docs search (version-pinned,
 hybrid FTS+vector), API testing (`.bru` + contract validation + capture→contract
 bridge), browser/UI testing (flows, a11y, HAR, visual), cross-cutting verification
 (coverage / deps / flake / mutate / LSP), the cross-pillar `verify` verdict, and
-packaging/distribution (19 packages, automated Changesets→OIDC release). Diff-scoping
-is complete across every run-driving pillar (coverage / mutate / flake).
+packaging/distribution (automated Changesets→OIDC release). **20 workspace packages**
+now (the 20th, `@sackville-mcp/pyscope`, is unpublished — pending the first-publish
+bootstrap in RELEASING.md "Adding a new package"). Diff-scoping is complete across every
+run-driving pillar (coverage / mutate / flake — **incl. pytest** now, both frameworks).
 
 **Tutorial 3 now has teeth (DONE 2026-06-07, e40131c).** The old storefront bug
 (`balance` string-vs-integer, UI-coerced to `$100.00`) had no observable consequence.
@@ -33,6 +36,18 @@ No open tutorial-3 work; see *Standing items* for what's next.
 
 ## Recently shipped (newest first)
 
+- **flake pytest related-scoping + `@sackville-mcp/pyscope` (20th package)** (2026-06-07,
+  local/unpushed): `flake run --related` now diff-scopes pytest too (was vitest-only). The
+  pure "mirrored-test" scope heuristic (`selectPytestScope`) was extracted from `coverage`
+  into a new zero-dep leaf `@sackville-mcp/pyscope` (the diff/severity/spawn discipline — 2nd
+  consumer ⇒ extract); coverage re-exports it (surface unchanged). pytest maps changed
+  sources→mirrored tests via the leaf; empty mapping ⇒ no-op (NEVER the whole suite),
+  `widen` opt-in; unmatched sources surfaced as a gap. Wired through `flake_run` (drops the
+  "vitest only" note, adds `scopeMode`) + CLI `flake run --scope-mode`. Gate 1704→1725 TS.
+  pyscope is **unpublished** (needs the RELEASING first-publish bootstrap at next release).
+- **CI Node-20 deprecations cleared** (2026-06-07): `actions/checkout`+`setup-node` v4→v5,
+  `astral-sh/setup-uv` v6→v7 (no moving v8 tag), and the tsdown `external`→`deps.neverBundle`
+  build warning in `verdict`/`verify`. CI green, zero deprecation annotations.
 - **Tutorial 3 revamp — the breach got teeth** (2026-06-07, e40131c): storefront bug
   changed from a no-consequence type nit to a dropped-required-`currency` field whose
   loss silently corrupts a downstream USD ledger export (EUR under-reported by the FX
@@ -65,8 +80,7 @@ No open tutorial-3 work; see *Standing items* for what's next.
   This is the last piece of the §18 "green gate before publish" guarantee.
 - **Deferred technical tails**: cosmic-ray `cr-filter-git` (line-precise mutation scope);
   mutmut `mutants/` cache reuse; src-layout `reconcileMutmutScope` precision; ecosystem-aware
-  changelog heading regex; LSP recursive/dir delete + the full toolchain cross-version matrix;
-  pytest related-scoping for flake (`supportsRelated`).
+  changelog heading regex; LSP recursive/dir delete + the full toolchain cross-version matrix.
 - **Aspirational browser bucket**: `@playwright/mcp` embed, autonomous self-healing.
 
 ## How to resume cold
