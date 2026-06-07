@@ -31,14 +31,14 @@ jobs:
     # merging the "Version Packages" PR is already the human gate.)
     environment: npm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # changeset tag needs full history
 
       - name: Enable corepack
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           # Latest 22.x — satisfies ADR 0019 §18's OIDC floor (Node >= 22.14.0) AND is new enough
           # for tsdown to load configs natively. Pinning the exact floor (22.14.0) is too old:

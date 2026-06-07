@@ -63,8 +63,6 @@ No open tutorial-3 work; see *Standing items* for what's next.
 - **Branch protection on `main`** (OPERATOR — needs an Admin-scoped token; the working
   PAT lacks the *Administration* permission). Required checks: `gate` + `package-checks`.
   This is the last piece of the §18 "green gate before publish" guarantee.
-- **CI Node-20 action deprecation** (cosmetic; GitHub forces Node 24 on `actions/checkout@v4`
-  + `setup-node@v4` from 2026-06-16) — bump the action versions in `.github/workflows/`.
 - **Deferred technical tails**: cosmic-ray `cr-filter-git` (line-precise mutation scope);
   mutmut `mutants/` cache reuse; src-layout `reconcileMutmutScope` precision; ecosystem-aware
   changelog heading regex; LSP recursive/dir delete + the full toolchain cross-version matrix;
