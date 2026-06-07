@@ -16,7 +16,7 @@ import {
 } from '@sackville-mcp/artifacts'
 import { runScoped } from '@sackville-mcp/coverage'
 import { changedDependencies } from '@sackville-mcp/deps'
-import { runCosmicRay, runMutation, runMutmut } from '@sackville-mcp/mutate'
+import { changedLinesFromDiff, runCosmicRay, runMutation, runMutmut } from '@sackville-mcp/mutate'
 import { Redactor } from '@sackville-mcp/safety'
 import { gateDenied } from '@sackville-mcp/verify'
 import { type AggregateMode, apiSafetyGateFromEnv, apiSecretPrefix } from './bin-api.js'
@@ -223,7 +223,15 @@ function parseVerify(
           allowRun: true,
           timeoutMs,
         }
-        const input = { mutateFiles: ctx.changedFiles, configPath }
+        // cosmic-ray line-scopes its summary to the diff's changed lines (cr-filter-git parity),
+        // the line-precise sibling of the file-level `mutateFiles` scope; other tools lack per-line dumps.
+        const input = {
+          mutateFiles: ctx.changedFiles,
+          configPath,
+          ...(tool === 'cosmic-ray' && ctx.diff
+            ? { changedLines: changedLinesFromDiff(ctx.diff) }
+            : {}),
+        }
         const r =
           tool === 'cosmic-ray'
             ? await runCosmicRay(cfg, input)

@@ -30,6 +30,7 @@ interface CosmicMutation {
   module_path?: string
   operator_name?: string
   start_pos?: [number, number] | { line?: number; column?: number }
+  end_pos?: [number, number] | { line?: number; column?: number }
 }
 interface CosmicWorkItem {
   mutations?: CosmicMutation[]
@@ -93,7 +94,12 @@ export function parseCosmicRayDump(jsonl: string): MutationReport {
       mutatorName: mutation.operator_name ?? 'unknown',
       status,
     }
-    if (loc) mutant.location = { start: loc }
+    if (loc) {
+      // Capture end_pos too so the diff line-scope filter range-intersects [start..end] exactly
+      // as cosmic-ray's own cr-filter-git does (most mutations are single-line: end === start).
+      const end = lineColOf(mutation.end_pos)
+      mutant.location = end ? { start: loc, end } : { start: loc }
+    }
     const entry = files[path] ?? { language: 'python', mutants: [] }
     entry.mutants.push(mutant)
     files[path] = entry

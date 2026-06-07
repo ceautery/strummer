@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sackville-mcp/diff": "workspace:*",
     "@sackville-mcp/spawn": "workspace:*",
     "smol-toml": "^1.6.1"
   },

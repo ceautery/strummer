@@ -21,6 +21,7 @@ import { type DiffCoverageReport, runScoped, type TestRunner } from '@sackville-
 import { changedDependencies, type DependencyAudit, type OsvEcosystem } from '@sackville-mcp/deps'
 import { type FlakeVerdict, HistoryStore, runAndRecord } from '@sackville-mcp/flake'
 import {
+  changedLinesFromDiff,
   type MutationRunner,
   type MutationSummary,
   runCosmicRay,
@@ -235,7 +236,15 @@ async function cmdVerifyRun(args: string[], io: CliIO, deps: VerifyRunDeps): Pro
         ? () => ovr(ctx)
         : async () => {
             const cfg = { projectRoot, allowedRoots, allowRun, timeoutMs }
-            const mInput = { mutateFiles: changedFiles, configPath }
+            // cosmic-ray line-scopes its summary to the diff's changed lines (cr-filter-git parity);
+            // the other tools have no per-line dump, so changedLines is a cosmic-ray-only refinement.
+            const mInput = {
+              mutateFiles: changedFiles,
+              configPath,
+              ...(tool === 'cosmic-ray' && diff
+                ? { changedLines: changedLinesFromDiff(diff) }
+                : {}),
+            }
             const r =
               tool === 'cosmic-ray'
                 ? await runCosmicRay(cfg, mInput, { runner: deps.mutateRunner })

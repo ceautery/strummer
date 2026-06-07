@@ -165,6 +165,51 @@ describe('cli verify run (run-driving, ADR 0013 Addendum slice 6)', () => {
     // (overall is inconclusive — the OTHER pillars weren't run — which is the absence-never-a-pass default)
   })
 
+  it('--diff line-scopes the cosmic-ray verdict: a survivor on an unchanged line of the file is excluded', async () => {
+    const proj = mkdtempSync(join(tmpdir(), 'sackville-verify-crline-'))
+    mkdirSync(join(proj, 'pkg'), { recursive: true })
+    writeFileSync(join(proj, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
+    writeFileSync(
+      join(proj, 'cosmic-ray.toml'),
+      '[cosmic-ray]\nmodule-path = "pkg"\ntimeout = 30.0\nexcluded-modules = []\ntest-command = "x"\n\n[cosmic-ray.distributor]\nname = "local"\n',
+    )
+    // The diff touches only line 2 of pkg/calc.py.
+    const diffPath = join(proj, 'change.diff')
+    writeFileSync(
+      diffPath,
+      '--- a/pkg/calc.py\n+++ b/pkg/calc.py\n@@ -2 +2 @@\n-    return a + b\n+    return a - b\n',
+    )
+    // A survivor on line 1 (out-of-diff) and a killed mutant on line 2 (the changed line).
+    const dump = [
+      '[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[1,5],"end_pos":[1,6]}]},{"worker_outcome":"normal","test_outcome":"survived"}]',
+      '[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[2,5],"end_pos":[2,6]}]},{"worker_outcome":"normal","test_outcome":"killed"}]',
+    ].join('\n')
+    const mutateRunner: MutationRunner = async (argv) => ({
+      exitCode: 0,
+      stdout: argv[0] === 'dump' ? dump : '',
+      stderr: '',
+    })
+    const c = capture()
+    await runVerify(
+      [
+        'run',
+        proj,
+        '--mutate',
+        '--mutate-tool',
+        'cosmic-ray',
+        '--changed-file',
+        'pkg/calc.py',
+        '--diff',
+        diffPath,
+        '--allow-run',
+      ],
+      c.io,
+      { mutateRunner },
+    )
+    // The line-1 survivor is out-of-diff ⇒ excluded; only the killed line-2 mutant counts ⇒ pass.
+    expect(c.out()).toContain('mutate: pass')
+  })
+
   it('drives a --flow contract capture via an injected runner — no browser spawn', async () => {
     // The human is the operator; --flow drives a live capture gated by browser egress flags,
     // not --allow-run. The injected contract runner keeps the suite offline.

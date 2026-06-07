@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+  changedLinesFromDiff,
   type MutationReport,
   type MutationRunner,
   parseMutmutResults,
@@ -125,6 +126,12 @@ export function registerMutateTools(server: McpServer, opts: MutateToolsOptions 
             .string()
             .optional()
             .describe('cosmic-ray config path relative to projectRoot (default cosmic-ray.toml)'),
+          diff: z
+            .string()
+            .optional()
+            .describe(
+              'unified diff: line-scopes the cosmic-ray summary to changed lines (cr-filter-git parity, cosmic-ray only)',
+            ),
         },
       },
       async (args) => {
@@ -138,6 +145,11 @@ export function registerMutateTools(server: McpServer, opts: MutateToolsOptions 
           mutateFiles: args.mutateFiles,
           incremental: args.incremental,
           configPath: args.configPath,
+          // cosmic-ray line-scopes its summary to the diff's changed lines (cr-filter-git parity);
+          // other tools have no per-line dump, so this is a cosmic-ray-only refinement.
+          ...(args.tool === 'cosmic-ray' && args.diff
+            ? { changedLines: changedLinesFromDiff(args.diff) }
+            : {}),
         }
         const result =
           args.tool === 'mutmut'
@@ -155,6 +167,7 @@ export function registerMutateTools(server: McpServer, opts: MutateToolsOptions 
           reportPath: result.reportPath,
           metrics: result.summary.metrics,
           survivors: result.summary.survivors,
+          ...(result.lineScoped ? { lineScoped: true } : {}),
         }
         return { content: [text(structured)], structuredContent: structured }
       },

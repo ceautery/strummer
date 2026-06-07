@@ -127,6 +127,59 @@ describe('sackville mutate CLI', () => {
     expect(c.out()).toMatch(/cosmic-ray/)
   })
 
+  it('run --tool cosmic-ray --diff line-scopes a --file-scoped summary to the changed lines', async () => {
+    mkdirSync(join(dir, 'pkg'), { recursive: true })
+    writeFileSync(join(dir, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
+    writeFileSync(
+      join(dir, 'cosmic-ray.toml'),
+      '[cosmic-ray]\nmodule-path = "pkg"\ntimeout = 30.0\nexcluded-modules = []\ntest-command = "x"\n\n[cosmic-ray.distributor]\nname = "local"\n',
+    )
+    const diffPath = join(dir, 'change.diff')
+    writeFileSync(
+      diffPath,
+      '--- a/pkg/calc.py\n+++ b/pkg/calc.py\n@@ -2 +2 @@\n-    return a + b\n+    return a - b\n',
+    )
+    // A survivor on line 1 (out-of-diff) + a killed mutant on line 2 (the changed line).
+    const dump = [
+      '[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[1,5],"end_pos":[1,6]}]},{"worker_outcome":"normal","test_outcome":"survived"}]',
+      '[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[2,5],"end_pos":[2,6]}]},{"worker_outcome":"normal","test_outcome":"killed"}]',
+    ].join('\n')
+    const runner: MutationRunner = async (argv) =>
+      argv[0] === 'dump'
+        ? { exitCode: 0, stdout: dump, stderr: '' }
+        : { exitCode: 0, stdout: '', stderr: '' }
+
+    // Without --diff: the whole-file summary is 50% (1 killed, 1 survivor).
+    const plain = capture()
+    await runMutate(
+      ['run', dir, '--allow-run', '--tool', 'cosmic-ray', '--file', 'pkg/calc.py'],
+      plain.io,
+      { runner },
+    )
+    expect(plain.out()).toMatch(/50\.0%/)
+    expect(plain.out()).toMatch(/survivors \(1\)/)
+
+    // With --diff (line 2 only): the line-1 survivor is excluded ⇒ 100%, no survivors.
+    const scoped = capture()
+    await runMutate(
+      [
+        'run',
+        dir,
+        '--allow-run',
+        '--tool',
+        'cosmic-ray',
+        '--file',
+        'pkg/calc.py',
+        '--diff',
+        diffPath,
+      ],
+      scoped.io,
+      { runner },
+    )
+    expect(scoped.out()).toMatch(/100\.0%/)
+    expect(scoped.out()).not.toMatch(/survivors \(1\)/)
+  })
+
   it('run rejects an unknown --tool', async () => {
     const c = capture()
     expect(await runMutate(['run', dir, '--tool', 'pitest'], c.io)).toBe(1)

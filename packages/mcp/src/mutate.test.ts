@@ -100,4 +100,35 @@ describe('mutate MCP surface', () => {
     expect((res.structuredContent?.metrics as { detected: number }).detected).toBe(2)
     expect(res.structuredContent?.survivors).toHaveLength(3)
   })
+
+  it('mutate_run cosmic-ray + diff line-scopes the summary to the changed lines', async () => {
+    mkdirSync(join(dir, 'pkg'), { recursive: true })
+    writeFileSync(join(dir, 'pkg', 'calc.py'), 'def add(a, b):\n    return a + b\n')
+    writeFileSync(
+      join(dir, 'cosmic-ray.toml'),
+      '[cosmic-ray]\nmodule-path = "pkg"\ntimeout = 30.0\nexcluded-modules = []\ntest-command = "x"\n\n[cosmic-ray.distributor]\nname = "local"\n',
+    )
+    // A survivor on line 1 (out-of-diff) + a killed mutant on line 2 (the changed line).
+    const dump = [
+      '[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[1,5],"end_pos":[1,6]}]},{"worker_outcome":"normal","test_outcome":"survived"}]',
+      '[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[2,5],"end_pos":[2,6]}]},{"worker_outcome":"normal","test_outcome":"killed"}]',
+    ].join('\n')
+    const runner: MutationRunner = async (argv) =>
+      argv[0] === 'dump'
+        ? { exitCode: 0, stdout: dump, stderr: '' }
+        : { exitCode: 0, stdout: '', stderr: '' }
+    const client = await connect({ allowRun: true, allowedRoots: [dir], runner })
+    const diff =
+      '--- a/pkg/calc.py\n+++ b/pkg/calc.py\n@@ -2 +2 @@\n-    return a + b\n+    return a - b\n'
+    const res = await call(client, 'mutate_run', {
+      projectRoot: dir,
+      tool: 'cosmic-ray',
+      mutateFiles: ['pkg/calc.py'],
+      diff,
+    })
+    expect(res.structuredContent?.lineScoped).toBe(true)
+    // The line-1 survivor is out-of-diff ⇒ excluded; only the killed line-2 mutant counts.
+    expect(res.structuredContent?.survivors).toHaveLength(0)
+    expect((res.structuredContent?.metrics as { detected: number }).detected).toBe(1)
+  })
 })

@@ -332,6 +332,9 @@ importers:
 
   packages/mutate:
     dependencies:
+      '@sackville-mcp/diff':
+        specifier: workspace:*
+        version: link:../diff
       '@sackville-mcp/spawn':
         specifier: workspace:*
         version: link:../spawn

@@ -34,6 +34,8 @@ describe('parseCosmicRayDump', () => {
     const report = parseCosmicRayDump(readFileSync(FIXTURE, 'utf8'))
     const survived = report.files['calc.py']?.mutants.find((m) => m.status === 'Survived')
     expect(survived?.location?.start).toEqual({ line: 10, column: 13 })
+    // end_pos is captured too, so the line-scope filter can range-intersect [start..end] (cr-filter-git parity).
+    expect(survived?.location?.end).toEqual({ line: 10, column: 14 })
     expect(survived?.mutatorName).toBe('core/ReplaceBinaryOperator_Mul_Add')
   })
 

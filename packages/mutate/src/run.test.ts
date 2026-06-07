@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { changedLinesByFile } from './line-scope.js'
 import {
   MutateGateError,
   type MutationRunner,
@@ -479,5 +480,56 @@ describe('runCosmicRay — diff-scoped (ADR 0010 addendum 2)', () => {
     expect(result.ran).toBe(true)
     expect(result.scopedFiles).toEqual(['pkg/calc.py'])
     expect(result.unmatched).toEqual(['gone/y.py'])
+  })
+
+  // A two-mutant dump for one file: a survivor on line 1, a killed mutant on line 2.
+  const twoLineDump = [
+    `[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[1,5],"end_pos":[1,6]}]},{"worker_outcome":"normal","test_outcome":"survived"}]`,
+    `[{"mutations":[{"module_path":"pkg/calc.py","operator_name":"core/Op","start_pos":[2,5],"end_pos":[2,6]}]},{"worker_outcome":"normal","test_outcome":"killed"}]`,
+  ].join('\n')
+
+  it('LINE-SCOPES the reported summary to the diff: a survivor on an unchanged line of a touched file is excluded', async () => {
+    const { runner } = byVerb({ init: {}, exec: {}, dump: { stdout: twoLineDump } })
+    const result = await runCosmicRay(
+      pcfg(),
+      {
+        mutateFiles: ['pkg/calc.py'],
+        changedLines: changedLinesByFile([{ path: 'pkg/calc.py', addedLines: [2] }]),
+      },
+      { runner, sessionDir: dir },
+    )
+    expect(result.ran).toBe(true)
+    expect(result.lineScoped).toBe(true)
+    // Only the line-2 (killed) mutant counts; the line-1 survivor is out-of-diff (cr-filter-git parity).
+    expect(result.summary.metrics.counts).toMatchObject({ killed: 1, survived: 0 })
+    expect(result.summary.survivors).toEqual([])
+    // The under-scope/completeness guards still ran on the FULL dump, so calc.py is genuinely mutated.
+    expect(result.scopedFiles).toEqual(['pkg/calc.py'])
+  })
+
+  it('without a changedLines map the summary is whole-file (line-scoping is opt-in)', async () => {
+    const { runner } = byVerb({ init: {}, exec: {}, dump: { stdout: twoLineDump } })
+    const result = await runCosmicRay(
+      pcfg(),
+      { mutateFiles: ['pkg/calc.py'] },
+      { runner, sessionDir: dir },
+    )
+    expect(result.lineScoped).toBeUndefined()
+    expect(result.summary.metrics.counts).toMatchObject({ killed: 1, survived: 1 })
+  })
+
+  it('a diff that touches only unmutated lines of a scoped file ⇒ empty scoped summary (no-signal ⇒ inconclusive upstream)', async () => {
+    const { runner } = byVerb({ init: {}, exec: {}, dump: { stdout: twoLineDump } })
+    const result = await runCosmicRay(
+      pcfg(),
+      {
+        mutateFiles: ['pkg/calc.py'],
+        changedLines: changedLinesByFile([{ path: 'pkg/calc.py', addedLines: [99] }]),
+      },
+      { runner, sessionDir: dir },
+    )
+    expect(result.lineScoped).toBe(true)
+    expect(result.summary.metrics.counts).toMatchObject({ killed: 0, survived: 0 })
+    expect(result.summary.metrics.valid).toBe(0) // folds to no-signal in the verdict adapter
   })
 })

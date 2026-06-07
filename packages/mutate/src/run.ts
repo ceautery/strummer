@@ -40,6 +40,7 @@ import {
   synthesizeScopedMutmutPyproject,
 } from './config.js'
 import { parseCosmicRayDump } from './cosmic-ray.js'
+import { type ChangedLines, filterToChangedLines } from './line-scope.js'
 import { parseMutmutResults } from './mutmut.js'
 import { reconcileMutmutScope, reconcileScope, selectMutationScope } from './scope.js'
 import { type MutationReport, type MutationSummary, summarizeMutation } from './summarize.js'
@@ -132,6 +133,15 @@ export interface RunMutationInput {
    * (cosmic-ray `module-path`).
    */
   ownedRoots?: string[]
+  /**
+   * OPTIONAL per-file changed-line map (from `parseUnifiedDiff` via {@link changedLinesByFile}) that
+   * line-scopes the cosmic-ray summary: a surviving mutant on an UNCHANGED line of a touched file is
+   * excluded, the line-precise sibling of file-level `mutateFiles` (mirrors cosmic-ray's own
+   * `cr-filter-git`, driven by the supplied diff). Applied AFTER the completeness/under-scope guards
+   * run on the full report, so it can never turn a swallowed-tool inconclusive into a pass. cosmic-ray
+   * only — its dump carries real `start_pos`/`end_pos`.
+   */
+  changedLines?: ChangedLines
 }
 
 /** Injected command runner — executes `stryker <argv>` and yields its exit status. */
@@ -156,6 +166,8 @@ export interface RunMutationResult {
   unmatched?: string[]
   /** The files the run was SELECTED to mutate (before reconciliation) — what we asked the tool for. */
   requestedFiles?: string[]
+  /** True when `summary` was line-scoped to a supplied diff (cosmic-ray `changedLines`) — see {@link RunMutationInput.changedLines}. */
+  lineScoped?: boolean
 }
 
 /** Stryker's default JSON-report location, relative to the project root. */
@@ -491,24 +503,34 @@ export async function runCosmicRay(
     await runner(['init', scopedName, session], opts)
     const exec = await runner(['exec', scopedName, session], opts)
     const { stdout } = await runner(['dump', session], opts)
-    const summary = summarizeMutation(parseCosmicRayDump(stdout))
+    const report = parseCosmicRayDump(stdout)
+    const summary = summarizeMutation(report)
     assertComplete('cosmic-ray', summary) // case (b): total-zero / pending ⇒ inconclusive
     // Case (c): a selected file the tool never SAW was silently never mutated ⇒ inconclusive.
+    // Reconcile (and the completeness guard above) run on the FULL report — line-scoping below is a
+    // reporting refinement that must never resurrect a swallowed-tool inconclusive into a pass.
     const { mutatedFiles, missing } = reconcileScope(files, summary)
     if (missing.length > 0) {
       throw new Error(
         `cosmic-ray under-scoped: ${missing.join(', ')} selected but never mutated — inconclusive`,
       )
     }
-    // Case (d): clean scoped run — report what was GENUINELY mutated, not what was requested.
+    // Case (d): clean scoped run — report what was GENUINELY mutated, not what was requested. When a
+    // changed-line map is supplied, narrow the reported summary to mutants on changed lines (the
+    // line-precise sibling of file-level scope — cr-filter-git parity, driven by the supplied diff).
+    const lineScoped = input.changedLines !== undefined
+    const reportedSummary = lineScoped
+      ? summarizeMutation(filterToChangedLines(report, input.changedLines as ChangedLines))
+      : summary
     return {
       ran: true,
       exitCode: exec.exitCode,
       scopedFiles: mutatedFiles,
       tool: 'cosmic-ray',
-      summary,
+      summary: reportedSummary,
       requestedFiles: files,
       unmatched: unmatchedOut,
+      ...(lineScoped ? { lineScoped: true } : {}),
     }
   } finally {
     rmSync(scopedAbs, { force: true })

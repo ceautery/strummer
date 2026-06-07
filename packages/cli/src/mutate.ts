@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
+  changedLinesFromDiff,
   MutateGateError,
   type MutationReport,
   type MutationRunner,
@@ -110,6 +111,7 @@ async function cmdRun(
       file: { type: 'string', multiple: true },
       incremental: { type: 'boolean' },
       'config-path': { type: 'string' },
+      diff: { type: 'string' },
       'allow-run': { type: 'boolean' },
       'timeout-ms': { type: 'string' },
       'report-path': { type: 'string' },
@@ -138,10 +140,14 @@ async function cmdRun(
       allowRun: values['allow-run'] ?? false,
       timeoutMs: timeoutMs !== undefined && Number.isFinite(timeoutMs) ? timeoutMs : undefined,
     }
+    // --diff line-scopes the cosmic-ray summary to the changed lines (cr-filter-git parity); it only
+    // refines a --file-scoped cosmic-ray run (the other tools have no per-line dump to narrow).
+    const diff = values.diff !== undefined ? readFileSync(values.diff, 'utf8') : undefined
     const input = {
       mutateFiles: values.file,
       incremental: values.incremental ?? false,
       configPath: values['config-path'],
+      ...(tool === 'cosmic-ray' && diff ? { changedLines: changedLinesFromDiff(diff) } : {}),
     }
     const result =
       tool === 'mutmut'

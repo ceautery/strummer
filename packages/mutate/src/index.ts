@@ -10,6 +10,12 @@ export {
   synthesizeScopedMutmutPyproject,
 } from './config.js'
 export { parseCosmicRayDump } from './cosmic-ray.js'
+export {
+  type ChangedLines,
+  changedLinesByFile,
+  changedLinesFromDiff,
+  filterToChangedLines,
+} from './line-scope.js'
 export { parseMutmutResults } from './mutmut.js'
 export {
   defaultCosmicRayRunner,

@@ -587,8 +587,15 @@ stage `reportlog`. Pure/zero-spawn slices first.
         no tests). pytest `related` was later added (2026-06-07) via the `@sackville-mcp/pyscope`
         mirrored-test scope (`selectPytestScope`); `flake run --related` + `flake_run` diff-scope pytest
         too, empty mapping ⇒ no-op (never the whole suite), `scopeMode` report-gap|widen. 2026-06-06.
-  - **Staged beyond this arc:** cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/`
-        cache reuse; src-layout module mapping precision
+  - [x] **cosmic-ray line-precise scope** — *DONE 2026-06-07.* An optional supplied diff
+        line-scopes the cosmic-ray summary (pure `filterToChangedLines`/`changedLinesFromDiff` in
+        `line-scope.ts`; `parseCosmicRayDump` now captures `end_pos`), reproducing `cr-filter-git`'s
+        `[start..end]`∩changed-lines intersection in TS — driven by the SUPPLIED diff (no git-state
+        coupling), applied AFTER the completeness/reconcile guards (a reporting refinement, never a
+        new pass). Wired through `runCosmicRay`, the verify path (`bin-verify`/`verify run` via
+        `ctx.diff`), and standalone `mutate_run` (`diff`)/`mutate run` (`--diff`). **Oracle-verified
+        byte-identical to real `cr-filter-git` 8.4.6** (24/24 keep-set). See [[strummer-python-mutation-tools]].
+  - **Staged beyond this arc:** mutmut `mutants/` cache reuse; src-layout module mapping precision
         for `reconcileMutmutScope` (currently conservative-safe via suffix match).
 
 - [x] **Dependency/version intelligence** (`@sackville-mcp/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*

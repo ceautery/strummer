@@ -10,7 +10,8 @@
 ## Current phase
 
 **SHIPPED & STABLE — all pillars complete, published to npm at `0.0.1-alpha.5`.**
-Gate green **1732 TS + 48 Py**; `main` HEAD (`ac2c409`) pushed to `origin`, CI green, in sync.
+Gate green **1746 TS + 48 Py**; `origin/main` at `ac2c409` + local unpushed work (housekeeping
+`f87a1ea` + the cosmic-ray line-precise scope below), CI green on what's pushed.
 npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all **20** published packages (the 19
 fleet have OIDC/SLSA provenance; `@sackville-mcp/pyscope` was first-published 2026-06-07 via the
 token bootstrap — no provenance on that one publish, OIDC takes over at its next release).
@@ -36,6 +37,23 @@ No open tutorial-3 work; see *Standing items* for what's next.
 
 ## Recently shipped (newest first)
 
+- **cosmic-ray line-precise mutation scope** (2026-06-07, local/unpushed): a deferred tail —
+  cosmic-ray scoping was whole-FILE; now an optional supplied diff line-scopes the reported
+  summary so a surviving mutant on an UNCHANGED line of a touched file is excluded. Pure
+  `filterToChangedLines`/`changedLinesByFile`/`changedLinesFromDiff` in new
+  `packages/mutate/src/line-scope.ts` (mirrors coverage's `uncoveredInDiff`; the `[start..end]`
+  span intersects the diff's added lines exactly as cosmic-ray's own `cr-filter-git` does, but
+  driven by the SUPPLIED diff — no git-state coupling). It's a REPORTING refinement: the
+  completeness/under-scope guards still run on the FULL report first, so line-filtering can
+  never turn a swallowed-tool inconclusive into a pass; a diff that touches only unmutated lines
+  ⇒ empty summary ⇒ no-signal ⇒ inconclusive. `parseCosmicRayDump` now also captures `end_pos`.
+  Wired `changedLines` through `runCosmicRay` + the verify path (`bin-verify`/`verify run`, from
+  `ctx.diff`) + standalone `mutate_run` (`diff`) / `mutate run` (`--diff`); mutate gained a
+  `@sackville-mcp/diff` dep for the `changedLinesFromDiff` convenience. **VERIFIED against the
+  real `cr-filter-git` 8.4.6**: on a live session our keep-set was byte-identical (24/24, zero
+  false keeps/drops). Gate 1732→1746 TS. (Bonus finding: `cosmic-ray dump` crashes on a
+  cr-filter-git-SKIPPED result — `test_outcome=None` — another point for the pure-TS approach,
+  which never touches the session DB.) See [[strummer-python-mutation-tools]].
 - **Ecosystem-aware changelog heading detection** (2026-06-07, local/unpushed): deps
   `changelog_diff` now detects PyPI (PEP 440 two-segment `1.0` / letter-prerelease `1.0rc1`) and
   RubyGems (N-segment `1.2.3.4` / `.pre` segments) version headings, not just semver-shaped ones.
@@ -86,9 +104,9 @@ No open tutorial-3 work; see *Standing items* for what's next.
 - **Branch protection on `main`** (OPERATOR — needs an Admin-scoped token; the working
   PAT lacks the *Administration* permission). Required checks: `gate` + `package-checks`.
   This is the last piece of the §18 "green gate before publish" guarantee.
-- **Deferred technical tails**: cosmic-ray `cr-filter-git` (line-precise mutation scope);
-  mutmut `mutants/` cache reuse; src-layout `reconcileMutmutScope` precision;
-  LSP recursive/dir delete + the full toolchain cross-version matrix.
+- **Deferred technical tails**: ~~cosmic-ray `cr-filter-git` (line-precise mutation scope)~~
+  (DONE 2026-06-07, see Recently shipped); mutmut `mutants/` cache reuse; src-layout
+  `reconcileMutmutScope` precision; LSP recursive/dir delete + the full toolchain cross-version matrix.
 - **Aspirational browser bucket**: `@playwright/mcp` embed, autonomous self-healing.
 
 ## How to resume cold
