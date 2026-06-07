@@ -492,9 +492,10 @@ stage `reportlog`. Pure/zero-spawn slices first.
       `comparatorFor(ecosystem)`. Both `makeChangelogFetcher`s resolve the repo per ecosystem (npm
       packument; PyPI `<base>/<name>/json` project_urls; RubyGems a SEPARATE `<base>/gems/<name>.json`
       — the packument fetch stays on the versions array for freshness), then the SSRF-pinned
-      raw.githubusercontent HEAD loop (unchanged). *(Staged: the ecosystem-aware heading-token regex
-      — `SEMVER_TOKEN` still detects only X.Y.Z headings, so a PEP 440 `1.0rc1` / two-segment heading
-      is missed; a detected heading is always semver-valid so every comparator orders it.)*
+      raw.githubusercontent HEAD loop (unchanged). *(DONE 2026-06-07: ecosystem-aware heading
+      detection via the optional `VersionComparator.versionTokens` extractor — pep440 + gem surface
+      PEP 440 two-segment/`1.0rc1` + Gem N-segment headings; npm keeps the strict semver token, and
+      `isValid` stays the final authority. Extractors require ≥2 numeric segments so dates aren't versions.)*
 - [x] **Slice 3 — mutate `parseCosmicRayDump`** (pure) — `cosmic-ray dump` JSON-lines → MTE
       `MutationReport`, keyed by the REAL `module_path` with real line+operator (actionable
       survivors, unlike mutmut's line:0). Each line is `[work_item, work_result|null]`; the
@@ -583,9 +584,11 @@ stage `reportlog`. Pure/zero-spawn slices first.
         --run` (mirrors coverage `runScoped`) so a flake check repeats only the tests a change
         touches; on MCP `flake_run.related` + CLI `flake run --related`; verify now drives flake with
         `related` (was a silent no-op — changed source files fed as positional `run` filters matched
-        no tests). pytest `related` refused (mirrored-test scope still staged). 2026-06-06.
+        no tests). pytest `related` was later added (2026-06-07) via the `@sackville-mcp/pyscope`
+        mirrored-test scope (`selectPytestScope`); `flake run --related` + `flake_run` diff-scope pytest
+        too, empty mapping ⇒ no-op (never the whole suite), `scopeMode` report-gap|widen. 2026-06-06.
   - **Staged beyond this arc:** cosmic-ray `cr-filter-git` line-precise mode; mutmut `mutants/`
-        cache reuse; pytest `related`/mirrored-test flake scoping; src-layout module mapping precision
+        cache reuse; src-layout module mapping precision
         for `reconcileMutmutScope` (currently conservative-safe via suffix match).
 
 - [x] **Dependency/version intelligence** (`@sackville-mcp/deps`) — *track B, COMPLETE (npm + PyPI + RubyGems).*
@@ -1364,8 +1367,10 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       `release.yml` (Node 22.14.0/npm 11.5.1, `id-token:write`, no token, provenance auto) + `scripts/release.sh`
       (publish via pnpm so `workspace:*` rewrites; prerelease-aware dist-tag avoids the `latest` trap) — the
       changesets/action opens a Version PR on push and publishes only when that PR is MERGED. Multiple OIDC
-      releases shipped through **`0.0.1-alpha.5`** (now 19 packages incl. `@sackville-mcp/spawn`; `latest` + `alpha` both at alpha.5), each with SLSA
-      provenance attached — trusted publishing is confirmed on every package and pnpm OIDC works (no token).
+      releases shipped through **`0.0.1-alpha.5`** (now 20 packages incl. `@sackville-mcp/spawn` +
+      `@sackville-mcp/pyscope` — the latter token-bootstrapped 2026-06-07, its first OIDC release pending;
+      `latest` + `alpha` both at alpha.5), each with SLSA
+      provenance attached — trusted publishing is confirmed on every OIDC-released package and pnpm OIDC works (no token).
       A new package needs a one-time token bootstrap before its first OIDC release (npm/cli#8544; see
       RELEASING.md "Adding a new package"). **Operator setup remaining (unverifiable in-repo):** branch
       protection on `main` (required checks = `gate` + `package-checks`) — release.yml only builds, so this is

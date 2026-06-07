@@ -10,12 +10,10 @@
 ## Current phase
 
 **SHIPPED & STABLE — all pillars complete, published to npm at `0.0.1-alpha.5`.**
-Gate green **1725 TS + 48 Py**; npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all
-**20** published packages (the 19 fleet have OIDC/SLSA provenance; `@sackville-mcp/pyscope`
-was first-published 2026-06-07 via the token bootstrap — no provenance on this one publish,
-OIDC takes over at the next release). **`main` has local commits ahead of `origin`** (the
-pyscope extraction + flake pytest related-scoping) — held unpushed at the user's request;
-note pyscope's CODE is on npm but not yet on `origin`. They ride up with the next push.
+Gate green **1732 TS + 48 Py**; `main` HEAD (`ac2c409`) pushed to `origin`, CI green, in sync.
+npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all **20** published packages (the 19
+fleet have OIDC/SLSA provenance; `@sackville-mcp/pyscope` was first-published 2026-06-07 via the
+token bootstrap — no provenance on that one publish, OIDC takes over at its next release).
 
 The product is feature-complete across **Phases 0–6**: docs search (version-pinned,
 hybrid FTS+vector), API testing (`.bru` + contract validation + capture→contract
