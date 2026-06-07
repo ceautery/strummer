@@ -327,7 +327,9 @@ vision and `ARCHITECTURE.md` for the technical design.
   `sackville lsp` quickstart, and `examples/lsp/pygreeter` — its Python counterpart
   (drives `pyright-langserver`; the engine is language-agnostic)), used by the
   `@sackville-mcp/cli` quickstarts; each guarded by an offline test so the sample + its docs
-  can't drift.
+  can't drift. Plus the THREE onboarding tutorials under `examples/tutorial/` (ADR 0020):
+  `todo` (coverage), `scheduler` (lsp + mutate), `storefront` (api + browser + verify
+  contract-drift) — each ships intentionally broken outside the gate, with a TS + pytest guard.
 - `.github/workflows/ci.yml` — CI mirroring `pnpm gate` on push/PR.
 - The Linux dev-container harness (`docker/`, `docker-compose.yml`) that hosts
   Claude Code is **untracked** (gitignored) — local tooling for creating the

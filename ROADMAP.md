@@ -1364,7 +1364,7 @@ peer-deps); **fixed/lockstep** versioning. Hold "compose, never widen" + no-heav
       `release.yml` (Node 22.14.0/npm 11.5.1, `id-token:write`, no token, provenance auto) + `scripts/release.sh`
       (publish via pnpm so `workspace:*` rewrites; prerelease-aware dist-tag avoids the `latest` trap) — the
       changesets/action opens a Version PR on push and publishes only when that PR is MERGED. Multiple OIDC
-      releases shipped through **`0.0.1-alpha.4`** (now 19 packages incl. `@sackville-mcp/spawn`), each with SLSA
+      releases shipped through **`0.0.1-alpha.5`** (now 19 packages incl. `@sackville-mcp/spawn`; `latest` + `alpha` both at alpha.5), each with SLSA
       provenance attached — trusted publishing is confirmed on every package and pnpm OIDC works (no token).
       A new package needs a one-time token bootstrap before its first OIDC release (npm/cli#8544; see
       RELEASING.md "Adding a new package"). **Operator setup remaining (unverifiable in-repo):** branch

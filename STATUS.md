@@ -20,7 +20,15 @@ bridge), browser/UI testing (flows, a11y, HAR, visual), cross-cutting verificati
 packaging/distribution (19 packages, automated Changesets→OIDC release). Diff-scoping
 is complete across every run-driving pillar (coverage / mutate / flake).
 
-**There is no in-flight task.** Pick a direction with the human (see *Standing items*).
+**Next session — REVISIT TUTORIAL 3** (Curtis, 2026-06-07): its bug (a contract
+violation with *no observable side-effect* — `balance` string-vs-integer that the UI
+coerces to `$100.00` fine) isn't severe enough; a dev wouldn't chase a no-consequence
+type nit. Give the breach **teeth** — make the contract violation map to a real,
+demonstrable downstream bug (e.g. a lexicographic sort / string-concat sum on the
+mis-typed field, or a missing-required-field silent data loss), so contract validation
+visibly catches a defect *before it ships*. Mechanics (server, committed HAR, guards,
+README arc) stay; only the bug + its demonstrated consequence change. Full critique +
+candidate directions: [[sackville-onboarding-docs]]. Otherwise see *Standing items*.
 
 ## Recently shipped (newest first)
 
