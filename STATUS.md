@@ -10,8 +10,10 @@
 ## Current phase
 
 **SHIPPED & STABLE — all pillars complete, published to npm at `0.0.1-alpha.5`.**
-Gate green **1703 TS + 48 Py**; `main` HEAD pushed + CI green; npm `latest` **and**
-`alpha` both = `0.0.1-alpha.5` on all 19 packages (OIDC, SLSA provenance).
+Gate green **1704 TS + 48 Py**; npm `latest` **and** `alpha` both = `0.0.1-alpha.5`
+on all 19 packages (OIDC, SLSA provenance). **Local `main` is 2 commits ahead of
+`origin`** (cbce786 alpha.5 doc-sync + e40131c tutorial-3 teeth) — unpushed by
+design; rides up with the next milestone push.
 
 The product is feature-complete across **Phases 0–6**: docs search (version-pinned,
 hybrid FTS+vector), API testing (`.bru` + contract validation + capture→contract
@@ -20,18 +22,23 @@ bridge), browser/UI testing (flows, a11y, HAR, visual), cross-cutting verificati
 packaging/distribution (19 packages, automated Changesets→OIDC release). Diff-scoping
 is complete across every run-driving pillar (coverage / mutate / flake).
 
-**Next session — REVISIT TUTORIAL 3** (Curtis, 2026-06-07): its bug (a contract
-violation with *no observable side-effect* — `balance` string-vs-integer that the UI
-coerces to `$100.00` fine) isn't severe enough; a dev wouldn't chase a no-consequence
-type nit. Give the breach **teeth** — make the contract violation map to a real,
-demonstrable downstream bug (e.g. a lexicographic sort / string-concat sum on the
-mis-typed field, or a missing-required-field silent data loss), so contract validation
-visibly catches a defect *before it ships*. Mechanics (server, committed HAR, guards,
-README arc) stay; only the bug + its demonstrated consequence change. Full critique +
-candidate directions: [[sackville-onboarding-docs]]. Otherwise see *Standing items*.
+**Tutorial 3 now has teeth (DONE 2026-06-07, e40131c).** The old storefront bug
+(`balance` string-vs-integer, UI-coerced to `$100.00`) had no observable consequence.
+Replaced with a **missing-required-field** breach: `GET /account` silently drops the
+required `currency`; the account is EUR, so a USD-defaulting dashboard still renders
+and the login flow still passes, but the `GET /ledger` USD export defaults to USD too
+and silently under-reports every euro balance ($100.00 vs ~$108.00) — caught by
+`api run --openapi` / `validate-capture` / `verify run` before it ships. Finding stays
+`response-schema` (missing property), guard churn minimal. See [[sackville-onboarding-docs]].
+No open tutorial-3 work; see *Standing items* for what's next.
 
 ## Recently shipped (newest first)
 
+- **Tutorial 3 revamp — the breach got teeth** (2026-06-07, e40131c): storefront bug
+  changed from a no-consequence type nit to a dropped-required-`currency` field whose
+  loss silently corrupts a downstream USD ledger export (EUR under-reported by the FX
+  spread). Mechanics unchanged; finding stays `response-schema`. README/curl outputs
+  re-verified live. Gate 1703→1704 TS.
 - **`0.0.1-alpha.5` published** (2026-06-06/07): diff-scoping completion + the browser
   capture-runtime consolidation (below). `latest` repointed alpha.4→alpha.5 on all 19
   (manual `npm dist-tag` as `ceautery`; pre-mode never moves `latest`).
