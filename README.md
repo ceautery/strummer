@@ -66,8 +66,8 @@ package) plus a library graph and CLI under the **`@sackville-mcp/*`** scope.
 
 ### Drive the MCP server from Claude Code
 
-The aggregate server runs straight from npm with `npx` — no local install needed.
-The quickest path:
+The aggregate server runs straight from npm with `npx` — no local install step
+needed (npx caches the package under `~/.npm/_npx`). The quickest path:
 
 ```bash
 claude mcp add sackville -- npx -y sackville-mcp
