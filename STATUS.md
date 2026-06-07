@@ -10,8 +10,7 @@
 ## Current phase
 
 **SHIPPED & STABLE — all pillars complete, published to npm at `0.0.1-alpha.5`.**
-Gate green **1746 TS + 48 Py**; `origin/main` at `ac2c409` + local unpushed work (housekeeping
-`f87a1ea` + the cosmic-ray line-precise scope below), CI green on what's pushed.
+Gate green **1746 TS + 48 Py**; `main` HEAD (`1958341`) pushed to `origin`, CI green, in sync.
 npm `latest` **and** `alpha` both = `0.0.1-alpha.5` on all **20** published packages (the 19
 fleet have OIDC/SLSA provenance; `@sackville-mcp/pyscope` was first-published 2026-06-07 via the
 token bootstrap — no provenance on that one publish, OIDC takes over at its next release).
@@ -37,7 +36,7 @@ No open tutorial-3 work; see *Standing items* for what's next.
 
 ## Recently shipped (newest first)
 
-- **cosmic-ray line-precise mutation scope** (2026-06-07, local/unpushed): a deferred tail —
+- **cosmic-ray line-precise mutation scope** (2026-06-07, pushed `4f2d17f`): a deferred tail —
   cosmic-ray scoping was whole-FILE; now an optional supplied diff line-scopes the reported
   summary so a surviving mutant on an UNCHANGED line of a touched file is excluded. Pure
   `filterToChangedLines`/`changedLinesByFile`/`changedLinesFromDiff` in new
