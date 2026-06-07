@@ -44,4 +44,12 @@ describe('gemComparator', () => {
     expect(c.releaseComponents('1.0')).toEqual([1, 0])
     expect(c.releaseComponents('not a version')).toBeNull()
   })
+
+  it('versionTokens surfaces Gem heading shapes (N-segment, letter prerelease; ≥2 segments)', () => {
+    expect(c.versionTokens?.('## 1.2.3.4 - 2024-01-15')).toEqual(['1.2.3.4'])
+    expect(c.versionTokens?.('## 1.0.0.pre.1')).toEqual(['1.0.0.pre.1'])
+    expect(c.versionTokens?.('## v2.0.0.beta')).toEqual(['2.0.0.beta'])
+    // a bare year / single numeric segment is never a candidate
+    expect(c.versionTokens?.('## Released 2024')).toEqual([])
+  })
 })

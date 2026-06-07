@@ -23,6 +23,16 @@ function explain(version: string): Pep440Explained | null {
   return (pep440.explain(version) as Pep440Explained | null) ?? null
 }
 
+/**
+ * Candidate PEP 440 version tokens in a changelog heading — a superset `pep440.valid` then filters.
+ * Requires ≥2 numeric segments (so a bare year like `2024` in a date is never a candidate), and
+ * accepts the PEP 440 shapes a strict semver token misses: an optional `N!` epoch, two-segment
+ * releases (`1.0`), letter pre-releases with or without a separator (`1.0rc1`, `2.0.0a1`),
+ * post/dev releases, and a `+local` label. Case-insensitive (`2.0.0RC1`).
+ */
+const PEP440_TOKEN =
+  /(?:\d+!)?\d+(?:\.\d+)+(?:[._-]?(?:preview|alpha|beta|post|rev|dev|pre|rc|a|b|c)\.?\d*)*(?:\+[0-9A-Za-z][0-9A-Za-z.]*)?/gi
+
 export const pep440Comparator: VersionComparator = {
   isValid: (v) => pep440.valid(v) !== null,
   // PEP 440 has no lenient "coerce"; a version is comparable iff it is valid.
@@ -36,4 +46,5 @@ export const pep440Comparator: VersionComparator = {
   // The release tuple (epoch-independent). Variable length — behindBy reads [0..2] and
   // floors missing components at 0, so a 2-segment release degrades cleanly.
   releaseComponents: (v) => explain(v)?.release ?? null,
+  versionTokens: (headingText) => headingText.match(PEP440_TOKEN) ?? [],
 }

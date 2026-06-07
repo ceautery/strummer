@@ -74,4 +74,13 @@ describe('pep440Comparator', () => {
     expect(c.releaseComponents('1.0')).toEqual([1, 0])
     expect(c.releaseComponents('nope')).toBeNull()
   })
+
+  it('versionTokens surfaces PEP 440 heading shapes (≥2 segments; no bare years)', () => {
+    expect(c.versionTokens?.('## 1.0 - 2024-01-15')).toEqual(['1.0'])
+    expect(c.versionTokens?.('## 2.0.0rc1')).toEqual(['2.0.0rc1'])
+    expect(c.versionTokens?.('## 2.0.0a1 (alpha)')).toEqual(['2.0.0a1'])
+    expect(c.versionTokens?.('## 1!2.3.4')).toEqual(['1!2.3.4'])
+    // a bare year / single numeric segment is never a candidate
+    expect(c.versionTokens?.('## Released 2024')).toEqual([])
+  })
 })

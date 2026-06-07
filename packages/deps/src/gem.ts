@@ -14,6 +14,14 @@
 import * as gem from '@renovatebot/ruby-semver'
 import type { VersionComparator } from './comparator.js'
 
+/**
+ * Candidate `Gem::Version` tokens in a changelog heading — a superset `gem.valid` then filters.
+ * A Gem version is dot-separated segments of digit- OR letter-runs (`1.2.3.4`, `1.0.0.pre.1`,
+ * `2.0.0.beta`); requiring ≥2 segments keeps a bare year out. The leading segment is numeric
+ * (a `v` prefix, if present, is skipped — the match starts at the first digit).
+ */
+const GEM_TOKEN = /\d+(?:\.[0-9A-Za-z]+)+/g
+
 export const gemComparator: VersionComparator = {
   isValid: (v) => gem.valid(v) !== null,
   // Gem::Version has no lenient coerce; a version is comparable iff it is valid.
@@ -31,4 +39,5 @@ export const gemComparator: VersionComparator = {
       (n): n is number => typeof n === 'number',
     )
   },
+  versionTokens: (headingText) => headingText.match(GEM_TOKEN) ?? [],
 }

@@ -116,6 +116,50 @@ describe('sliceChangelog — injected ecosystem comparator', () => {
     expect(slice.entries.map((e) => e.version)).toEqual(['2.32.0', '2.31.1'])
   })
 
+  it('detects PEP 440 two-segment headings (## 1.0) — PyPI', () => {
+    const md = `## 1.2\n- newer\n\n## 1.1\n- mid\n\n## 1.0\n- base\n`
+    const slice = sliceChangelog(md, { from: '1.0', to: '1.2', comparator: comparatorFor('PyPI') })
+    expect(slice.entries.map((e) => e.version)).toEqual(['1.2', '1.1'])
+  })
+
+  it('detects PEP 440 letter-prerelease headings (## 2.0.0rc1 / ## 2.0.0a1) — PyPI', () => {
+    // Without ecosystem-aware detection, `2.0.0rc1` is silently misread as `2.0.0` (the strict
+    // semver token stops at the third segment), colliding with the real `## 2.0.0` section.
+    const md = `## 2.0.0\n- final\n\n## 2.0.0rc1\n- release candidate\n\n## 2.0.0a1\n- alpha\n`
+    const c = comparatorFor('PyPI')
+    const all = sliceChangelog(md, { from: '0', comparator: c })
+    expect(all.allVersions).toEqual(['2.0.0', '2.0.0rc1', '2.0.0a1'])
+    const slice = sliceChangelog(md, { from: '2.0.0a1', to: '2.0.0rc1', comparator: c })
+    expect(slice.entries.map((e) => e.version)).toEqual(['2.0.0rc1'])
+  })
+
+  it('detects RubyGems N-segment headings (## 1.2.3.4) — RubyGems', () => {
+    // The strict semver token would stop at `1.2.3`, collapsing every 4-segment heading together.
+    const md = `## 1.2.3.4\n- four\n\n## 1.2.3.3\n- three\n\n## 1.2.3.2\n- base\n`
+    const slice = sliceChangelog(md, {
+      from: '1.2.3.2',
+      to: '1.2.3.4',
+      comparator: comparatorFor('RubyGems'),
+    })
+    expect(slice.entries.map((e) => e.version)).toEqual(['1.2.3.4', '1.2.3.3'])
+  })
+
+  it('detects RubyGems letter-segment prerelease headings (## 1.0.0.pre.2) — RubyGems', () => {
+    const md = `## 1.0.0\n- final\n\n## 1.0.0.pre.2\n- pre 2\n\n## 1.0.0.pre.1\n- pre 1\n`
+    const slice = sliceChangelog(md, {
+      from: '1.0.0.pre.1',
+      to: '1.0.0.pre.2',
+      comparator: comparatorFor('RubyGems'),
+    })
+    expect(slice.entries.map((e) => e.version)).toEqual(['1.0.0.pre.2'])
+  })
+
+  it('does not mistake a date for a version (## 1.0 - 2024-01-15) — PyPI', () => {
+    const md = `## 1.1 - 2024-06-01\n- newer\n\n## 1.0 - 2024-01-15\n- base\n`
+    const slice = sliceChangelog(md, { from: '0', comparator: comparatorFor('PyPI') })
+    expect(slice.allVersions).toEqual(['1.1', '1.0'])
+  })
+
   it('actually consults the injected comparator for the range filter (seam check)', () => {
     // A comparator whose ordering is inverted: `gt`/`lte`/`compare` are flipped, so the `(from, to]`
     // filter selects the OPPOSITE sections — proving the param drives selection, not a hardcoded semver.

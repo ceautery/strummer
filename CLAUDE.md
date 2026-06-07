@@ -191,7 +191,10 @@ vision and `ARCHITECTURE.md` for the technical design.
   pure `changedDependencies(diff, ecosystem)` block-aware manifest+lockfile diff over `diff`
   (npm `package.json` + PyPI pyproject/requirements/TOML-`[[package]]`-lockfiles + RubyGems
   Gemfile/Gemfile.lock, per-file classifiers; ADR 0010 addendum) AND `changelog_diff` for
-  npm/PyPI/RubyGems via the shared `repo.ts` source-repo derivation),
+  npm/PyPI/RubyGems via the shared `repo.ts` source-repo derivation — with ECOSYSTEM-AWARE heading
+  detection via an optional `VersionComparator.versionTokens` extractor (pep440 + gem implement it;
+  npm falls back to the strict 3-part semver token), so PEP 440 two-segment/`1.0rc1` + Gem N-segment
+  `1.2.3.4` headings are detected, `isValid` the final authority),
   `coverage` (Phase-4 track A: the forgotten-assertion catch — `uncoveredNewLines` +
   `uncoveredInDiff` pure differs over `@sackville-mcp/diff`'s `parseUnifiedDiff`, plus gated impact-scoped
   `runScoped` (vitest) AND `runScopedPython` (pytest + coverage.py via `coveragePyToIstanbul`;

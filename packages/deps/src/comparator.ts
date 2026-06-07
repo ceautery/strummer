@@ -36,6 +36,16 @@ export interface VersionComparator {
    * degrade to `undefined` rather than fabricating a triple we cannot read.
    */
   releaseComponents(version: string): number[] | null
+  /**
+   * OPTIONAL ecosystem-aware extractor of candidate version tokens from a changelog HEADING line,
+   * in order of appearance — a *superset* that {@link isValid} then filters (so it can be loose).
+   * Lets the changelog slicer detect this ecosystem's heading shapes that aren't semver-shaped
+   * (PEP 440 two-segment `1.0` / letter-prerelease `1.0rc1`; Gem N-segment `1.2.3.4` / `.pre`
+   * segments). When omitted (npm), the slicer falls back to its strict 3-part semver token, so
+   * existing behaviour is unchanged. Must require ≥2 numeric segments so bare dates/years aren't
+   * mistaken for versions.
+   */
+  versionTokens?(headingText: string): string[]
 }
 
 /** The npm comparator: a thin, behavior-preserving wrap of the existing `semver` pin. */

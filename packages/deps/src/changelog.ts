@@ -40,10 +40,10 @@ export interface SliceOptions {
   /**
    * The ecosystem version algebra (ADR 0010 addendum). Defaults to semver (npm); pass
    * {@link comparatorFor}'s PEP 440 / Gem comparator for PyPI / RubyGems so bounds and section
-   * ordering are correct for those ecosystems. (Heading DETECTION still uses the semver-token
-   * regex — PEP 440 two-segment / `1.0rc1` headings are STAGED — so a detected version is always
-   * semver-valid and every comparator can order it; the comparator matters for the from/to bounds
-   * and the dedupe/sort.)
+   * ordering are correct for those ecosystems. Heading DETECTION is also ecosystem-aware: when the
+   * comparator supplies a `versionTokens` extractor (PyPI/RubyGems do), 2-segment (`1.0`),
+   * letter-prerelease (`1.0rc1`), and Gem N-segment (`1.2.3.4`) headings are detected too — npm
+   * keeps the strict 3-part semver token. The comparator drives from/to bounds + the dedupe/sort.
    */
   comparator?: VersionComparator
 }
@@ -51,10 +51,14 @@ export interface SliceOptions {
 const HEADING = /^#{1,6}\s+(.*)$/
 const SEMVER_TOKEN = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/g
 
-/** Extract the first comparator-valid semver token from a heading line, or null. */
+/**
+ * Extract the first comparator-valid version token from a heading line, or null. Candidate tokens
+ * come from the comparator's own ecosystem-aware extractor when it has one (PyPI/RubyGems surface
+ * 2-segment / letter-prerelease / N-segment headings); npm and any comparator without one fall
+ * back to the strict 3-part semver token. `isValid` is always the final authority.
+ */
 function headingVersion(headingText: string, comparator: VersionComparator): string | null {
-  const tokens = headingText.match(SEMVER_TOKEN)
-  if (!tokens) return null
+  const tokens = comparator.versionTokens?.(headingText) ?? headingText.match(SEMVER_TOKEN) ?? []
   for (const token of tokens) {
     if (comparator.isValid(token)) return token
   }

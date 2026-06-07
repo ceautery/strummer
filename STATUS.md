@@ -38,6 +38,13 @@ No open tutorial-3 work; see *Standing items* for what's next.
 
 ## Recently shipped (newest first)
 
+- **Ecosystem-aware changelog heading detection** (2026-06-07, local/unpushed): deps
+  `changelog_diff` now detects PyPI (PEP 440 two-segment `1.0` / letter-prerelease `1.0rc1`) and
+  RubyGems (N-segment `1.2.3.4` / `.pre` segments) version headings, not just semver-shaped ones.
+  Done by adding an optional `versionTokens(headingText)` extractor to `VersionComparator`
+  (pep440 + gem implement it; the slicer falls back to the strict 3-part semver token, so **npm is
+  unchanged**); `isValid` stays the final authority and both extractors require ≥2 numeric segments
+  so dates aren't mistaken for versions. Gate 1725→1732 TS.
 - **flake pytest related-scoping + `@sackville-mcp/pyscope` (20th package)** (2026-06-07,
   local/unpushed): `flake run --related` now diff-scopes pytest too (was vitest-only). The
   pure "mirrored-test" scope heuristic (`selectPytestScope`) was extracted from `coverage`
@@ -82,8 +89,8 @@ No open tutorial-3 work; see *Standing items* for what's next.
   PAT lacks the *Administration* permission). Required checks: `gate` + `package-checks`.
   This is the last piece of the §18 "green gate before publish" guarantee.
 - **Deferred technical tails**: cosmic-ray `cr-filter-git` (line-precise mutation scope);
-  mutmut `mutants/` cache reuse; src-layout `reconcileMutmutScope` precision; ecosystem-aware
-  changelog heading regex; LSP recursive/dir delete + the full toolchain cross-version matrix.
+  mutmut `mutants/` cache reuse; src-layout `reconcileMutmutScope` precision;
+  LSP recursive/dir delete + the full toolchain cross-version matrix.
 - **Aspirational browser bucket**: `@playwright/mcp` embed, autonomous self-healing.
 
 ## How to resume cold
