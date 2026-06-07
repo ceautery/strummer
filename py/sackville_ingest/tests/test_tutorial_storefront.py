@@ -57,11 +57,11 @@ def test_tutorial_storefront_docset_ingests_offline(
 
     conn = sqlite3.connect(out)
     try:
-        # The page documenting that `balance` is an integer (cents) is findable.
+        # The page documenting that `currency` is a required field is findable.
         (rowid,) = conn.execute(
-            "SELECT rowid FROM docs_fts WHERE docs_fts MATCH 'balance' LIMIT 1"
+            "SELECT rowid FROM docs_fts WHERE docs_fts MATCH 'currency' LIMIT 1"
         ).fetchone()
         (body,) = conn.execute("SELECT body FROM docs WHERE id = ?", (rowid,)).fetchone()
-        assert "balance" in body.lower()
+        assert "currency" in body.lower()
     finally:
         conn.close()

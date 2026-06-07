@@ -36,11 +36,12 @@ const dashboardPage = page(
      fetch('/account')
        .then((r) => r.json())
        .then((a) => {
-         // The UI coerces balance to a number, so a string '10000' renders fine —
-         // which is exactly why the contract bug is invisible here.
+         // The API dropped \`currency\`, so we default it — which is exactly why
+         // the contract bug is invisible here: the page renders a tidy amount
+         // (in the wrong currency) and never errors.
          document.getElementById('balance').textContent = new Intl.NumberFormat('en-US', {
            style: 'currency',
-           currency: a.currency,
+           currency: a.currency ?? 'USD',
          }).format(a.balance / 100)
        })
    </script>`,
@@ -51,6 +52,20 @@ const server = createServer((req, res) => {
   if (url.pathname === '/account') {
     res.writeHead(200, { 'content-type': 'application/json' })
     res.end(JSON.stringify(getAccount()))
+    return
+  }
+  if (url.pathname === '/ledger') {
+    // A second feature built on the SAME /account API: a USD ledger export.
+    // EUR balances must be converted to USD; USD amounts pass through. Because
+    // /account dropped `currency`, the account looks like USD here, so the EUR
+    // balance is exported at face value — silently under-reported by the FX
+    // spread, on a financial document, with no error and no failing test.
+    const a = getAccount()
+    const currency = a.currency ?? 'USD'
+    const EUR_PER_USD = 108 // demo rate ×100: 1 EUR = 1.08 USD
+    const usdCents = currency === 'EUR' ? Math.round((a.balance * EUR_PER_USD) / 100) : a.balance
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ account: a.id, currency, usd: usdCents / 100 }))
     return
   }
   if (url.pathname === '/dashboard') {

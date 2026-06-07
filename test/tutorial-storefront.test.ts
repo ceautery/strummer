@@ -11,10 +11,12 @@ import { describe, expect, it } from 'vitest'
 // (a passing flow over an API that violates its OpenAPI contract) in sync.
 //
 // The bug is NOT a failing test or an uncovered line — it is a CONTRACT
-// violation invisible to the running UI: `GET /account` returns `balance` as a
-// string where openapi.json declares it an integer. We pin it two ways: against
-// the response validator directly, and against the committed HAR via the same
-// capture->contract bridge the tutorial uses.
+// violation invisible to the running UI: `GET /account` silently DROPS the
+// required `currency` field. The stored account is in EUR, but a forgiving
+// client defaults the missing field to USD, so the dashboard still renders and a
+// downstream USD ledger silently under-reports the balance. We pin it two ways:
+// against the response validator directly, and against the committed HAR via the
+// same capture->contract bridge the tutorial uses.
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..', 'examples', 'tutorial', 'storefront')
 
@@ -48,33 +50,38 @@ describe('tutorial(storefront): bundled files exist', () => {
 describe('tutorial(storefront): the intentional contract bug is present', () => {
   // If this block fails because `account.js` was "fixed", the tutorial's whole
   // premise is gone. Update the README and this guard together — the bug is
-  // intentional: `balance` is the string '10000' where the contract says integer.
+  // intentional: `GET /account` omits the required `currency` field.
   const account = readFileSync(join(root, 'account.js'), 'utf8')
+  // Slice from the function declaration so the header comment + the stored
+  // RECORD (which legitimately names the currency) don't pollute the check.
+  const getAccountBody = account.slice(account.indexOf('export function getAccount'))
 
-  it('account.js still returns balance as a STRING (the defect to find)', () => {
-    expect(account).toMatch(/balance:\s*'10000'/)
+  it('getAccount() still DROPS the required currency from the response (the defect to find)', () => {
+    expect(getAccountBody).not.toContain('currency')
   })
 
-  it('the buggy response violates the OpenAPI contract (response-schema drift)', () => {
+  it('the stored record knows the real currency, so the loss is real data (EUR)', () => {
+    expect(account).toMatch(/currency:\s*'EUR'/)
+  })
+
+  it('the buggy response violates the OpenAPI contract (missing required field)', () => {
     const result = validateOpenApiResponse(
       spec,
       { method: 'GET', path: '/account' },
-      {
-        status: 200,
-        body: { id: 'acct-42', owner: 'Ada Lovelace', balance: '10000', currency: 'USD' },
-      },
+      { status: 200, body: { id: 'acct-42', owner: 'Ada Lovelace', balance: 10000 } },
     )
     expect(result.valid).toBe(false)
     expect(result.findings.some((f) => f.kind === 'response-schema')).toBe(true)
+    expect(result.findings.some((f) => /currency/.test(f.message))).toBe(true)
   })
 
-  it('only the type is wrong — the corrected (number) response validates clean', () => {
+  it('adding the required currency back validates clean', () => {
     const result = validateOpenApiResponse(
       spec,
       { method: 'GET', path: '/account' },
       {
         status: 200,
-        body: { id: 'acct-42', owner: 'Ada Lovelace', balance: 10000, currency: 'USD' },
+        body: { id: 'acct-42', owner: 'Ada Lovelace', balance: 10000, currency: 'EUR' },
       },
     )
     expect(result.valid).toBe(true)
@@ -113,10 +120,10 @@ describe('tutorial(storefront): the docset is internally consistent', () => {
     }
   })
 
-  it('documents that balance is an integer number of cents', () => {
+  it('documents that currency is a required field', () => {
     const page = db['api/account'] ?? ''
-    expect(page.toLowerCase()).toContain('balance')
-    expect(page.toLowerCase()).toMatch(/integer|number/)
+    expect(page.toLowerCase()).toContain('currency')
+    expect(page.toLowerCase()).toMatch(/required/)
   })
 })
 

@@ -22,9 +22,12 @@
                     "owner": { "type": "string" },
                     "balance": {
                       "type": "integer",
-                      "description": "Account balance in minor units (cents). A NUMBER, not a string."
+                      "description": "Account balance in minor units (cents) of `currency`. 10000 means 100.00."
                     },
-                    "currency": { "type": "string", "description": "ISO 4217 code." }
+                    "currency": {
+                      "type": "string",
+                      "description": "ISO 4217 code. REQUIRED: a balance is meaningless without it, and consumers that bill or convert assume USD when it is absent."
+                    }
                   }
                 }
               }
