@@ -10,5 +10,8 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: ['src/index.ts'],
   dts: true,
-  external: [/^@sackville-mcp\//],
+  // `deps.neverBundle` (tsdown >=0.22; the base option applies to both the JS bundle
+  // and the dts, so no separate `deps.dts.neverBundle` override is needed). Replaces
+  // the deprecated top-level `external`.
+  deps: { neverBundle: [/^@sackville-mcp\//] },
 })
